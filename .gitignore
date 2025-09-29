@@ -1,0 +1,83 @@
+/tmp/
+/build/
+
+.clinerules/byterover-rules.md
+.kilocode/rules/byterover-rules.md
+.roo/rules/byterover-rules.md
+.windsurf/rules/byterover-rules.md
+.cursor/rules/byterover-rules.mdc
+.kiro/steering/byterover-rules.md
+.qoder/rules/byterover-rules.md
+.augment/rules/byterover-rules.md
+
+# ===============
+# General
+# ===============
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Env files (keep example)
+.env
+.env.*
+!.env.example
+
+# ===============
+# Go backend
+# ===============
+/bin/
+/server.log
+/coverage.out
+*.test
+*.pprof
+*.prof
+
+# ===============
+# Flutter / Dart (frontend)
+# ===============
+frontend/.dart_tool/
+frontend/.packages
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.metadata
+frontend/build/
+frontend/test_cache/
+frontend/coverage/
+
+# iOS/macOS (Flutter)
+frontend/ios/Flutter/.last_build_id
+frontend/ios/Flutter/App.framework
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/ios/Flutter/Generated.xcconfig
+frontend/ios/Flutter/flutter_export_environment.sh
+frontend/ios/.symlinks/
+frontend/ios/Pods/
+frontend/ios/DerivedData/
+frontend/macos/Flutter/ephemeral/
+frontend/macos/Flutter/Flutter-Debug.xcconfig
+frontend/macos/Flutter/Flutter-Release.xcconfig
+frontend/macos/Flutter/Flutter-Profile.xcconfig
+frontend/macos/Flutter/flutter_export_environment.sh
+frontend/macos/**/xcuserdata/
+
+# Android (if added later)
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/**/GeneratedPluginRegistrant.java
+frontend/android/**/build/
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/android/.cxx/
+
+# Windows (Flutter)
+frontend/windows/flutter/ephemeral/
+
+# IDE/editor
+.idea/
+.vscode/
+*.iml

@@ -1,0 +1,19 @@
+name: app_http_client
+description: Http client
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  get_it: ^8.0.2
+  injectable: ^2.5.0
+  modules_basis:
+    path: ../modules_basis
+  dio: ^5.7.0
+  flutter_secure_storage: ^9.2.2
+
+

@@ -1,0 +1,162 @@
+openapi: 3.1.0
+info:
+  title: go-proxy API
+  version: 0.1.0-mvp
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/sessions:
+    get:
+      summary: List sessions
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: target
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+                  total:
+                    type: integer
+  /api/sessions/{id}:
+    get:
+      summary: Get session details
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404': { description: Not Found }
+    delete:
+      summary: Delete session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /api/sessions/{id}/frames:
+    get:
+      summary: List frames of a session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Frame' }
+                  next: { type: string, nullable: true }
+  /api/sessions/{id}/events:
+    get:
+      summary: List events of a session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Event' }
+                  next: { type: string, nullable: true }
+components:
+  schemas:
+    Session:
+      type: object
+      properties:
+        id: { type: string }
+        target: { type: string }
+        clientAddr: { type: string }
+        startedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time, nullable: true }
+        error: { type: string, nullable: true }
+        frames:
+          type: object
+          properties:
+            total: { type: integer }
+            text: { type: integer }
+            binary: { type: integer }
+            control: { type: integer }
+        events:
+          type: object
+          properties:
+            total: { type: integer }
+            sio: { type: integer }
+            raw: { type: integer }
+        evicted: { type: boolean }
+    Frame:
+      type: object
+      properties:
+        id: { type: string }
+        ts: { type: string, format: date-time }
+        direction: { type: string, enum: ["client->upstream", "upstream->client"] }
+        opcode: { type: string, enum: [text, binary, ping, pong, close] }
+        size: { type: integer }
+        preview: { type: string }
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        ts: { type: string, format: date-time }
+        namespace: { type: string }
+        event: { type: string }
+        ackId: { type: integer, nullable: true }
+        argsPreview: { type: string }
+        frameIds:
+          type: array
+          items: { type: string }
+
+

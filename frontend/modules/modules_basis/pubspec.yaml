@@ -1,0 +1,11 @@
+name: modules_basis
+description: The basis for modules
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  get_it: ^8.0.2
+

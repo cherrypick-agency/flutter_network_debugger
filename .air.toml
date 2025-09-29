@@ -1,0 +1,26 @@
+root = "."
+tmp_dir = "./tmp"
+
+[build]
+  cmd = "cd cmd/wsproxy && go build -race -o ../../bin/wsproxy"
+  bin = "./bin/wsproxy"
+  include_ext = ["go"]
+  exclude_dir = ["frontend", "bin", "deploy", "docs", "build", "tmp"]
+  delay = 150
+  kill_delay = 500
+  send_interrupt = true
+  stop_on_error = true
+
+[log]
+  time = true
+
+[color]
+  main = "yellow"
+  watcher = "cyan"
+  build = "green"
+  runner = "magenta"
+
+[env]
+  ADDR = ":9091"
+
+
