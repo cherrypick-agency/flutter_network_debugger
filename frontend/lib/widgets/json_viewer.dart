@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import '../core/hotkeys/hotkeys_service.dart';
+import 'common_search_bar.dart';
 import '../core/di/di.dart';
 // import 'package:json_tree_viewer/json_tree_viewer.dart' as jtv; // no longer used directly
 import '../theme/context_ext.dart';
@@ -24,6 +25,7 @@ class _JsonViewerState extends State<JsonViewer> {
   final FocusNode _searchFocusNode = FocusNode();
   bool _matchCase = false;
   bool _wholeWord = false;
+  bool _useRegex = false;
   int _focusedIndex = 0;
   List<GlobalKey> _matchKeys = const [];
 
@@ -80,14 +82,15 @@ class _JsonViewerState extends State<JsonViewer> {
     }
     return LayoutBuilder(builder: (context, constraints) {
       if (widget.forceTree) {
-        final searchCfgTree = _JsonSearchConfig(
+        final searchCfgTree = JsonSearchConfig(
           query: _searchCtrl.text.trim(),
           matchCase: _matchCase,
           wholeWord: _wholeWord,
+          useRegex: _useRegex,
           focusedIndex: _focusedIndex,
           onRebuilt: _handleMatchesRebuilt,
         );
-        final content = _JsonTreeRich(data: data, search: searchCfgTree);
+        final content = JsonTreeRich(data: data, search: searchCfgTree);
         if (!constraints.hasBoundedHeight) {
           return SizedBox(
             height: widget.treeHeight,
@@ -103,10 +106,11 @@ class _JsonViewerState extends State<JsonViewer> {
         ]);
       }
 
-      final searchCfg = _JsonSearchConfig(
+      final searchCfg = JsonSearchConfig(
         query: _showSearch ? _searchCtrl.text.trim() : '',
         matchCase: _matchCase,
         wholeWord: _wholeWord,
+        useRegex: _useRegex,
         focusedIndex: _focusedIndex,
         onRebuilt: _handleMatchesRebuilt,
       );
@@ -118,7 +122,7 @@ class _JsonViewerState extends State<JsonViewer> {
           child: Stack(children: [
             Positioned.fill(
               child: SingleChildScrollView(
-                child: _JsonPrettyRich(data: data, search: searchCfg),
+                child: JsonPrettyRich(data: data, search: searchCfg),
               ),
             ),
             Positioned(top: 6, right: 0, child: Center(child: _showSearch ? _buildSearchBar(context) : _buildSearchButton(context))),
@@ -127,7 +131,7 @@ class _JsonViewerState extends State<JsonViewer> {
       }
       // Обычный режим с закрепленной панелью по центру сверху
       return Stack(children: [
-        _JsonPrettyRich(data: data, search: searchCfg),
+        JsonPrettyRich(data: data, search: searchCfg),
         Positioned(top: 6, left: 0, right: 0, child: Center(child: _showSearch ? _buildSearchBar(context) : _buildSearchButton(context))),
       ]);
     });
@@ -169,12 +173,13 @@ class _JsonViewerState extends State<JsonViewer> {
     });
     return CallbackShortcuts(
       bindings: handlers,
-      child: _JsonSearchBar(
+      child: CommonSearchBar(
         controller: _searchCtrl,
         focusNode: _searchFocusNode,
         countText: countText,
         matchCase: _matchCase,
         wholeWord: _wholeWord,
+        useRegex: _useRegex,
         canNavigate: _matchKeys.isNotEmpty,
         onChanged: () => setState(() { _focusedIndex = 0; }),
         onNext: _gotoNext,
@@ -182,6 +187,7 @@ class _JsonViewerState extends State<JsonViewer> {
         onClose: _closeSearch,
         onToggleMatchCase: () => setState(() => _matchCase = !_matchCase),
         onToggleWholeWord: () => setState(() => _wholeWord = !_wholeWord),
+        onToggleRegex: () => setState(() => _useRegex = !_useRegex),
       ),
     );
   }
@@ -190,16 +196,16 @@ class _JsonViewerState extends State<JsonViewer> {
 // Kept for reference; pretty/tree rich modes cover tree rendering now
 
 /// Расширенный tree-view с подсветкой и автоматическим раскрытием совпадений
-class _JsonTreeRich extends StatefulWidget {
-  const _JsonTreeRich({required this.data, required this.search});
+class JsonTreeRich extends StatefulWidget {
+  const JsonTreeRich({required this.data, required this.search});
   final dynamic data;
-  final _JsonSearchConfig search;
+  final JsonSearchConfig search;
 
   @override
-  State<_JsonTreeRich> createState() => _JsonTreeRichState();
+  State<JsonTreeRich> createState() => _JsonTreeRichState();
 }
 
-class _JsonTreeRichState extends State<_JsonTreeRich> {
+class _JsonTreeRichState extends State<JsonTreeRich> {
   final Set<String> _userExpanded = <String>{};
 
   bool _containsQuery(String text) {
@@ -505,48 +511,79 @@ class _JsonTreeRichState extends State<_JsonTreeRich> {
     if (query.isEmpty) {
       return [TextSpan(text: text, style: baseStyle)];
     }
-
+    final List<InlineSpan> out = [];
+    if (widget.search.useRegex) {
+      RegExp? re;
+      try {
+        re = RegExp(query, caseSensitive: widget.search.matchCase);
+      } catch (_) {
+        return [TextSpan(text: text, style: baseStyle)];
+      }
+      int last = 0;
+      Iterable<RegExpMatch> matches = re.allMatches(text);
+      bool isWordChar(String ch) {
+        final code = ch.codeUnitAt(0);
+        final isAZ = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+        final is09 = (code >= 48 && code <= 57);
+        return isAZ || is09 || ch == '_';
+      }
+      for (final m in matches) {
+        final s = m.start;
+        final e = m.end;
+        if (widget.search.wholeWord) {
+          final left = s - 1 >= 0 ? text.substring(s - 1, s) : null;
+          final right = e < text.length ? text.substring(e, e + 1) : null;
+          final leftOk = left == null || !isWordChar(left);
+          final rightOk = right == null || !isWordChar(right);
+          if (!(leftOk && rightOk)) {
+            continue;
+          }
+        }
+        if (s > last) {
+          out.add(TextSpan(text: text.substring(last, s), style: baseStyle));
+        }
+        final key = GlobalKey();
+        keys.add(key);
+        out.add(WidgetSpan(child: SizedBox(key: key, width: 0, height: 0)));
+        final isFocused = matchCounter() == widget.search.focusedIndex;
+        out.add(TextSpan(
+          text: text.substring(s, e),
+          style: baseStyle.copyWith(backgroundColor: isFocused ? highlightFocused : highlight),
+        ));
+        incMatchCounter();
+        last = e;
+      }
+      if (last < text.length) {
+        out.add(TextSpan(text: text.substring(last), style: baseStyle));
+      }
+      return out;
+    }
     final String src = widget.search.matchCase ? text : text.toLowerCase();
     final String q = widget.search.matchCase ? query : query.toLowerCase();
     int start = 0;
-    final List<InlineSpan> out = [];
-
     bool isWordChar(String ch) {
       final code = ch.codeUnitAt(0);
       final isAZ = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
       final is09 = (code >= 48 && code <= 57);
       return isAZ || is09 || ch == '_';
     }
-
-    int indexOfNext(int from) {
-      int idx = src.indexOf(q, from);
-      if (idx < 0) return -1;
-      if (!widget.search.wholeWord) return idx;
-      final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
-      final leftOk = left == null || !isWordChar(left);
-      final rightOk = right == null || !isWordChar(right);
-      if (leftOk && rightOk) return idx;
-      int nextStart = idx + 1;
-      while (true) {
-        idx = src.indexOf(q, nextStart);
-        if (idx < 0) return -1;
-        final l = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final r = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
-        final lo = l == null || !isWordChar(l);
-        final ro = r == null || !isWordChar(r);
-        if (lo && ro) return idx;
-        nextStart = idx + 1;
-      }
-    }
-
     while (true) {
-      final idx = indexOfNext(start);
+      final idx = src.indexOf(q, start);
       if (idx < 0) {
         if (start < text.length) {
           out.add(TextSpan(text: text.substring(start), style: baseStyle));
         }
         break;
+      }
+      if (widget.search.wholeWord) {
+        final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
+        final right = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+        final leftOk = left == null || !isWordChar(left);
+        final rightOk = right == null || !isWordChar(right);
+        if (!(leftOk && rightOk)) {
+          start = idx + 1;
+          continue;
+        }
       }
       if (idx > start) {
         out.add(TextSpan(text: text.substring(start, idx), style: baseStyle));
@@ -562,15 +599,14 @@ class _JsonTreeRichState extends State<_JsonTreeRich> {
       incMatchCounter();
       start = idx + q.length;
     }
-
     return out;
   }
 }
 
-class _JsonPrettyRich extends StatelessWidget {
-  const _JsonPrettyRich({required this.data, this.search});
+class JsonPrettyRich extends StatelessWidget {
+  const JsonPrettyRich({required this.data, this.search});
   final dynamic data;
-  final _JsonSearchConfig? search;
+  final JsonSearchConfig? search;
 
   @override
   Widget build(BuildContext context) {
@@ -833,155 +869,23 @@ class _JsonPrettyRich extends StatelessWidget {
   }
 }
 
-class _JsonSearchConfig {
-  const _JsonSearchConfig({
+class JsonSearchConfig {
+  const JsonSearchConfig({
     required this.query,
     required this.matchCase,
     required this.wholeWord,
+    this.useRegex = false,
     required this.focusedIndex,
     required this.onRebuilt,
   });
   final String query;
   final bool matchCase;
   final bool wholeWord;
+  final bool useRegex;
   final int focusedIndex;
   final void Function(int count, List<GlobalKey> keys)? onRebuilt;
 }
 
-class _JsonSearchBar extends StatelessWidget {
-  const _JsonSearchBar({
-    required this.controller,
-    this.focusNode,
-    required this.countText,
-    required this.matchCase,
-    required this.wholeWord,
-    required this.canNavigate,
-    required this.onChanged,
-    required this.onNext,
-    required this.onPrev,
-    required this.onClose,
-    required this.onToggleMatchCase,
-    required this.onToggleWholeWord,
-  });
-  final TextEditingController controller;
-  final FocusNode? focusNode;
-  final String countText;
-  final bool matchCase;
-  final bool wholeWord;
-  final bool canNavigate;
-  final VoidCallback onChanged;
-  final VoidCallback onNext;
-  final VoidCallback onPrev;
-  final VoidCallback onClose;
-  final VoidCallback onToggleMatchCase;
-  final VoidCallback onToggleWholeWord;
-
-  @override
-  Widget build(BuildContext context) {
-    final surface = Theme.of(context).colorScheme.surfaceVariant;
-    final onSurface = Theme.of(context).colorScheme.onSurfaceVariant;
-    final primary = Theme.of(context).colorScheme.primary;
-    final textStyle = Theme.of(context).textTheme.labelSmall ?? const TextStyle(fontSize: 12);
-
-    return Shortcuts(
-      shortcuts: <LogicalKeySet, Intent>{
-        LogicalKeySet(LogicalKeyboardKey.enter): const _NextIntent(),
-        LogicalKeySet(LogicalKeyboardKey.shift, LogicalKeyboardKey.enter): const _PrevIntent(),
-        LogicalKeySet(LogicalKeyboardKey.escape): const _CloseIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          _NextIntent: CallbackAction<_NextIntent>(onInvoke: (_) { if (canNavigate) onNext(); return null; }),
-          _PrevIntent: CallbackAction<_PrevIntent>(onInvoke: (_) { if (canNavigate) onPrev(); return null; }),
-          _CloseIntent: CallbackAction<_CloseIntent>(onInvoke: (_) { onClose(); return null; }),
-        },
-        child: Focus(
-          autofocus: true,
-          child: Material(
-            elevation: 1,
-            borderRadius: BorderRadius.circular(8),
-            color: surface.withValues(alpha: 0.75),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              constraints: const BoxConstraints(minWidth: 220, maxWidth: 320),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.search, size: 16),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: SizedBox(
-                    height: 20,
-                    child: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      focusNode: focusNode,
-                      style: textStyle,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: 'Search',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                      ),
-                      onChanged: (_) => onChanged(),
-                      onSubmitted: (_) => onNext(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(countText, style: textStyle.copyWith(color: onSurface)),
-                const SizedBox(width: 4),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  padding: const EdgeInsets.all(2),
-                  tooltip: 'Previous match',
-                  onPressed: canNavigate ? onPrev : null,
-                  icon: const Icon(Icons.keyboard_arrow_up, size: 18),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  padding: const EdgeInsets.all(2),
-                  tooltip: 'Next match',
-                  onPressed: canNavigate ? onNext : null,
-                  icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  padding: const EdgeInsets.all(2),
-                  tooltip: 'Match case',
-                  onPressed: onToggleMatchCase,
-                  icon: Icon(Icons.abc, size: 18, color: matchCase ? primary : onSurface),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  padding: const EdgeInsets.all(2),
-                  tooltip: 'Match whole word',
-                  onPressed: onToggleWholeWord,
-                  icon: Icon(Icons.format_shapes, size: 18, color: wholeWord ? primary : onSurface),
-                ),
-                const SizedBox(width: 2),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  padding: const EdgeInsets.all(2),
-                  tooltip: 'Close',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close, size: 18),
-                ),
-              ]),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NextIntent extends Intent { const _NextIntent(); }
-class _PrevIntent extends Intent { const _PrevIntent(); }
-class _CloseIntent extends Intent { const _CloseIntent(); }
+// Интенты удалены — используются в CommonSearchBar
 
 

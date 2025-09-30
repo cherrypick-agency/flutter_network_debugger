@@ -109,23 +109,31 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain.Direction) {
     loggedFirst := false
     loggedFirstUpstreamText := false
+    var lastErr error
     defer func() {
         _ = src.Close()
         _ = dst.Close()
-        // close session if both sides closed (best-effort)
-        _ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-        d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-        d.Metrics.ActiveSessions.Dec()
+        // Закрываем сессию один раз, не затирая потенциальную ошибку
+        ctx := contextWithNoCancel()
+        sess, ok, _ := d.Svc.Get(ctx, sessionID)
+        if !ok || sess.ClosedAt == nil {
+            var errPtr *string
+            if lastErr != nil {
+                s := lastErr.Error()
+                errPtr = &s
+            }
+            _ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), errPtr)
+            d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+            d.Metrics.ActiveSessions.Dec()
+        }
         d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Msg("wsproxy: stream closed")
         if d.Live != nil { d.Live.Unregister(sessionID) }
     }()
     for {
         mt, data, err := src.ReadMessage()
-        if err != nil {
-            return
-        }
+        if err != nil { lastErr = err; return }
         _ = dst.SetWriteDeadline(time.Now().Add(15 * time.Second))
-        if err := dst.WriteMessage(mt, data); err != nil { return }
+        if err := dst.WriteMessage(mt, data); err != nil { lastErr = err; return }
 
         // log frame
         opcode := opcodeFromType(mt)

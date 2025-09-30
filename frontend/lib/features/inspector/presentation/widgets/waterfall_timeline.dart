@@ -37,10 +37,11 @@ class WaterfallTimeline extends StatefulWidget {
   State<WaterfallTimeline> createState() => _WaterfallTimelineState();
 }
 
-class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTickerProviderStateMixin {
+class _WaterfallTimelineState extends State<WaterfallTimeline>
+    with SingleTickerProviderStateMixin {
   final ScrollController _hCtrl = ScrollController();
   final ScrollController _vCtrl = ScrollController();
-  
+
   late DateTime _viewStart;
   late DateTime _viewEnd;
   late DateTime _axisStart;
@@ -66,7 +67,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
   // zoom state
   DateTime? _scaleAnchor;
 
-  bool get _isFitAll => widget.onFitAllChanged != null ? (widget.fitAll ?? false) : _autoFitAll;
+  bool get _isFitAll =>
+      widget.onFitAllChanged != null ? (widget.fitAll ?? false) : _autoFitAll;
   void _setFitAll(bool v) {
     if (widget.onFitAllChanged != null) {
       widget.onFitAllChanged!(v);
@@ -78,13 +80,24 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _vCtrl.addListener(() { if (mounted) setState(() {}); });
-    _hCtrl.addListener(() { /* could track user scroll if needed */ });
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
-      ..repeat(reverse: true)
-      ..addListener(() { if (mounted) setState(() {}); });
+    _vCtrl.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _hCtrl.addListener(() {
+      /* could track user scroll if needed */
+    });
+    _pulse =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 220),
+          )
+          ..repeat(reverse: true)
+          ..addListener(() {
+            if (mounted) setState(() {});
+          });
     final now = DateTime.now();
-    if (widget.initialRange != null && widget.initialRange!.end.isAfter(widget.initialRange!.start)) {
+    if (widget.initialRange != null &&
+        widget.initialRange!.end.isAfter(widget.initialRange!.start)) {
       _viewStart = widget.initialRange!.start;
       _viewEnd = widget.initialRange!.end;
     } else {
@@ -92,9 +105,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
       final start = (times.start ?? now);
       final end = (times.end ?? now);
       _viewStart = start;
-      _viewEnd = end.isAfter(_viewStart.add(const Duration(milliseconds: 100)))
-          ? end
-          : _viewStart.add(const Duration(seconds: 10));
+      _viewEnd =
+          end.isAfter(_viewStart.add(const Duration(milliseconds: 100)))
+              ? end
+              : _viewStart.add(const Duration(seconds: 10));
     }
     _axisStart = _viewStart;
   }
@@ -120,8 +134,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
             _viewStart = _viewEnd.subtract(span);
             // auto-scroll to rightmost
             if (_hCtrl.hasClients) {
-              WidgetsBinding.instance.addPostFrameCallback((_){
-                if (!_hCtrl.hasClients) { return; }
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!_hCtrl.hasClients) {
+                  return;
+                }
                 _hCtrl.animateTo(
                   _hCtrl.position.maxScrollExtent,
                   duration: const Duration(milliseconds: 120),
@@ -167,8 +183,15 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
 
   double _pxPerMs(double targetWidthMs) {
     // Keep width comfortable (1.6k-5k px) for horizontal scrolling
-    final totalMs = _viewEnd.difference(_viewStart).inMilliseconds.toDouble().clamp(1000.0, 3600 * 1000.0);
-    final width = math.max(1600.0, math.min(5000.0, totalMs / 8)); // ~8 ms per px by default
+    final totalMs = _viewEnd
+        .difference(_viewStart)
+        .inMilliseconds
+        .toDouble()
+        .clamp(1000.0, 3600 * 1000.0);
+    final width = math.max(
+      1600.0,
+      math.min(5000.0, totalMs / 8),
+    ); // ~8 ms per px by default
     return width / totalMs;
   }
 
@@ -199,9 +222,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
       end = start.add(Duration(milliseconds: minSpanMs));
       if (end.isAfter(maxEnd)) {
         end = maxEnd;
-        start = (end.subtract(Duration(milliseconds: minSpanMs)).isBefore(ds))
-            ? ds
-            : end.subtract(Duration(milliseconds: minSpanMs));
+        start =
+            (end.subtract(Duration(milliseconds: minSpanMs)).isBefore(ds))
+                ? ds
+                : end.subtract(Duration(milliseconds: minSpanMs));
       }
     }
     _viewStart = start;
@@ -227,7 +251,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
         SingleActivator(LogicalKeyboardKey.minus): () => _zoom(1.25),
         SingleActivator(LogicalKeyboardKey.arrowLeft): () => _pan(-0.2),
         SingleActivator(LogicalKeyboardKey.arrowRight): () => _pan(0.2),
-        SingleActivator(LogicalKeyboardKey.escape): () => setState(() {
+        SingleActivator(LogicalKeyboardKey.escape):
+            () => setState(() {
               _dragStart = null;
               _dragCurrent = null;
             }),
@@ -241,33 +266,58 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
               final dataBounds = _timesOf(widget.sessions);
               final dataStart = dataBounds.start ?? _viewStart;
               final dataEnd = dataBounds.end ?? _viewEnd;
-              final fullMs = (dataEnd.difference(dataStart).inMilliseconds.toDouble()).clamp(1.0, 86400000.0);
-              final minContent = math.max(constraints.maxWidth - widget.padding.horizontal, 800.0);
+              final fullMs = (dataEnd
+                      .difference(dataStart)
+                      .inMilliseconds
+                      .toDouble())
+                  .clamp(1.0, 86400000.0);
+              final minContent = math.max(
+                constraints.maxWidth - widget.padding.horizontal,
+                800.0,
+              );
               const double _fitRightTailPx = 12.0;
-              final double fitWidthPx = (minContent - _fitRightTailPx).clamp(1.0, minContent);
+              final double fitWidthPx = (minContent - _fitRightTailPx).clamp(
+                1.0,
+                minContent,
+              );
               // fitAll всегда уважаем, даже при активном прогрессе
               final bool useFitAll = _isFitAll;
-              final double pxPerMs = useFitAll
-                  ? (fullMs > 0 ? (fitWidthPx / fullMs) : 1.0)
-                  : _pxPerMs(_viewEnd.difference(_viewStart).inMilliseconds.toDouble());
-              
+              final double pxPerMs =
+                  useFitAll
+                      ? (fullMs > 0 ? (fitWidthPx / fullMs) : 1.0)
+                      : _pxPerMs(
+                        _viewEnd
+                            .difference(_viewStart)
+                            .inMilliseconds
+                            .toDouble(),
+                      );
+
               final items = _computeLayoutItems(widget.sessions);
-              final lanes = items.isEmpty
-                  ? 1
-                  : (items.map((e) => e.lane).reduce(math.max) + 1);
+              final lanes =
+                  items.isEmpty
+                      ? 1
+                      : (items.map((e) => e.lane).reduce(math.max) + 1);
               // динамическая высота дорожек: чем выше сам таймлайн, тем выше полосы
               double laneHeight = _laneHeight;
-              if (widget.expandToParent && constraints.hasBoundedHeight && lanes > 0) {
-                final available = (constraints.maxHeight - widget.padding.vertical - _axisHeight).clamp(0.0, double.infinity);
+              if (widget.expandToParent &&
+                  constraints.hasBoundedHeight &&
+                  lanes > 0) {
+                final available = (constraints.maxHeight -
+                        widget.padding.vertical -
+                        _axisHeight)
+                    .clamp(0.0, double.infinity);
                 final candidate = (available / lanes) - _laneGap;
-                laneHeight = candidate.clamp(_laneHeight, _maxLaneHeight).toDouble();
+                laneHeight =
+                    candidate.clamp(_laneHeight, _maxLaneHeight).toDouble();
               }
               final lanesHeight = lanes * (laneHeight + _laneGap);
-              final contentHeight = _axisHeight + lanesHeight + widget.padding.vertical;
+              final contentHeight =
+                  _axisHeight + lanesHeight + widget.padding.vertical;
               final vOff = _vCtrl.hasClients ? _vCtrl.offset : 0.0;
-              final contentWidth = useFitAll
-                  ? minContent
-                  : (fullMs * pxPerMs).clamp(minContent, 2000000.0);
+              final contentWidth =
+                  useFitAll
+                      ? minContent
+                      : (fullMs * pxPerMs).clamp(minContent, 2000000.0);
               // Keep mapping origin consistent with painting
               _axisStart = dataStart;
 
@@ -287,7 +337,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                         width: contentWidth + widget.padding.horizontal,
                         height: math.max(
                           (widget.expandToParent
-                              ? (constraints.hasBoundedHeight ? constraints.maxHeight : widget.height)
+                              ? (constraints.hasBoundedHeight
+                                  ? constraints.maxHeight
+                                  : widget.height)
                               : widget.height),
                           contentHeight,
                         ),
@@ -295,39 +347,64 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                           onScaleStart: (d) {
                             // Не отключаем Fit All на старте жеста; только когда реально меняется scale
                             final dx = d.localFocalPoint.dx;
-                            final pxPer = pxPerMs; // согласованный мэппинг как при рендере
+                            final pxPer =
+                                pxPerMs; // согласованный мэппинг как при рендере
                             _scaleAnchor = _xToTime(dx, pxPer);
                           },
                           onScaleUpdate: (d) {
-                             if (_scaleAnchor == null) return;
-                             if (d.scale == 1.0) return;
+                            if (_scaleAnchor == null) return;
+                            if (d.scale == 1.0) return;
                             // Отключаем Fit All только при реальном зуме
                             _setFitAll(false);
                             final raw = (1 / d.scale);
-                             final spanMs = _viewEnd.difference(_viewStart).inMilliseconds;
-                             int div;
-                             if (spanMs <= 2000) div = 8; // супер-мягкий при близком зуме
-                             else if (spanMs <= 5000) div = 6;
-                             else if (spanMs <= 15000) div = 5;
-                             else if (spanMs <= 60000) div = 4;
-                             else div = 3;
-                             final factor = 1 + (raw - 1) / div;
-                             _applyZoomAround(_scaleAnchor!, factor);
-                           },
-                          onScaleEnd: (_) { _scaleAnchor = null; },
+                            final spanMs =
+                                _viewEnd.difference(_viewStart).inMilliseconds;
+                            int div;
+                            if (spanMs <= 2000)
+                              div = 8; // супер-мягкий при близком зуме
+                            else if (spanMs <= 5000)
+                              div = 6;
+                            else if (spanMs <= 15000)
+                              div = 5;
+                            else if (spanMs <= 60000)
+                              div = 4;
+                            else
+                              div = 3;
+                            final factor = 1 + (raw - 1) / div;
+                            _applyZoomAround(_scaleAnchor!, factor);
+                          },
+                          onScaleEnd: (_) {
+                            _scaleAnchor = null;
+                          },
                           child: Listener(
                             onPointerDown: (ev) {
-                              if (ev.kind == PointerDeviceKind.mouse && ev.buttons != kPrimaryMouseButton) return;
-                              if (_suppressSelectionOnce) { _suppressSelectionOnce = false; return; }
+                              if (ev.kind == PointerDeviceKind.mouse &&
+                                  ev.buttons != kPrimaryMouseButton)
+                                return;
+                              if (_suppressSelectionOnce) {
+                                _suppressSelectionOnce = false;
+                                return;
+                              }
                               setState(() {
                                 _resizingStart = false;
                                 _resizingEnd = false;
-                                final pxPer = pxPerMs; // использовать ту же шкалу, что и рендер
+                                final pxPer =
+                                    pxPerMs; // использовать ту же шкалу, что и рендер
                                 if (_selectedRange != null) {
-                                  final sx = _timeToX(_selectedRange!.start, pxPer);
-                                  final ex = _timeToX(_selectedRange!.end, pxPer);
-                                  if ((ev.localPosition.dx - sx).abs() <= 6) { _resizingStart = true; }
-                                  if ((ev.localPosition.dx - ex).abs() <= 6) { _resizingEnd = true; }
+                                  final sx = _timeToX(
+                                    _selectedRange!.start,
+                                    pxPer,
+                                  );
+                                  final ex = _timeToX(
+                                    _selectedRange!.end,
+                                    pxPer,
+                                  );
+                                  if ((ev.localPosition.dx - sx).abs() <= 6) {
+                                    _resizingStart = true;
+                                  }
+                                  if ((ev.localPosition.dx - ex).abs() <= 6) {
+                                    _resizingEnd = true;
+                                  }
                                 }
                                 if (!_resizingStart && !_resizingEnd) {
                                   _dragging = true;
@@ -338,21 +415,36 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                             },
                             onPointerMove: (ev) {
                               setState(() {
-                                final pxPer = pxPerMs; // согласованная конверсия
+                                final pxPer =
+                                    pxPerMs; // согласованная конверсия
                                 if (_resizingStart && _selectedRange != null) {
-                                  final t = _xToTime(ev.localPosition.dx, pxPer);
+                                  final t = _xToTime(
+                                    ev.localPosition.dx,
+                                    pxPer,
+                                  );
                                   if (t.isBefore(_selectedRange!.end)) {
-                                    _selectedRange = DateTimeRange(start: t, end: _selectedRange!.end);
+                                    _selectedRange = DateTimeRange(
+                                      start: t,
+                                      end: _selectedRange!.end,
+                                    );
                                   }
-                                  if (widget.onIntervalSelected != null) widget.onIntervalSelected!(_selectedRange!);
+                                  if (widget.onIntervalSelected != null)
+                                    widget.onIntervalSelected!(_selectedRange!);
                                   return;
                                 }
                                 if (_resizingEnd && _selectedRange != null) {
-                                  final t = _xToTime(ev.localPosition.dx, pxPer);
+                                  final t = _xToTime(
+                                    ev.localPosition.dx,
+                                    pxPer,
+                                  );
                                   if (t.isAfter(_selectedRange!.start)) {
-                                    _selectedRange = DateTimeRange(start: _selectedRange!.start, end: t);
+                                    _selectedRange = DateTimeRange(
+                                      start: _selectedRange!.start,
+                                      end: t,
+                                    );
                                   }
-                                  if (widget.onIntervalSelected != null) widget.onIntervalSelected!(_selectedRange!);
+                                  if (widget.onIntervalSelected != null)
+                                    widget.onIntervalSelected!(_selectedRange!);
                                   return;
                                 }
                                 if (_dragging) {
@@ -361,17 +453,23 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                               });
                             },
                             onPointerUp: (ev) {
-                              if (_suppressSelectionOnce) { _suppressSelectionOnce = false; return; }
+                              if (_suppressSelectionOnce) {
+                                _suppressSelectionOnce = false;
+                                return;
+                              }
                               setState(() {
                                 if (_resizingStart || _resizingEnd) {
-                                  _resizingStart = false; _resizingEnd = false; return;
+                                  _resizingStart = false;
+                                  _resizingEnd = false;
+                                  return;
                                 }
                                 if (_dragging) {
                                   _dragging = false;
                                   final range = _selectionRange(pxPerMs);
                                   if (range != null) {
                                     _selectedRange = range;
-                                    if (widget.onIntervalSelected != null) widget.onIntervalSelected!(range);
+                                    if (widget.onIntervalSelected != null)
+                                      widget.onIntervalSelected!(range);
                                   }
                                   _dragStart = null;
                                   _dragCurrent = null;
@@ -380,7 +478,20 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                             },
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
-                              onDoubleTap: () { setState(() { _selectedRange = null; }); },
+                              onTapUp: (d) {
+                                // Зум в точку клика по таймлайну (кроме полос сессий — они перехватят событие)
+                                _setFitAll(false);
+                                final anchor = _xToTime(
+                                  d.localPosition.dx,
+                                  pxPerMs,
+                                );
+                                _applyZoomAround(anchor, 0.8); // приближение
+                              },
+                              onDoubleTap: () {
+                                setState(() {
+                                  _selectedRange = null;
+                                });
+                              },
                               child: Stack(
                                 clipBehavior: Clip.hardEdge,
                                 children: [
@@ -397,9 +508,19 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                                         pxPerMs: pxPerMs,
                                         axisHeight: _axisHeight,
                                         padding: widget.padding,
-                                        colorScheme: Theme.of(context).colorScheme,
-                                        textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary),
-                                        showMilliseconds: _viewEnd.difference(_viewStart).inMilliseconds <= 5000,
+                                        colorScheme:
+                                            Theme.of(context).colorScheme,
+                                        textStyle: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall?.copyWith(
+                                          color:
+                                              context.appColors.textSecondary,
+                                        ),
+                                        showMilliseconds:
+                                            _viewEnd
+                                                .difference(_viewStart)
+                                                .inMilliseconds <=
+                                            5000,
                                       ),
                                     ),
                                   ),
@@ -412,24 +533,51 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                                         pxPerMs: pxPerMs,
                                         axisHeight: _axisHeight,
                                         padding: widget.padding,
-                                        colorScheme: Theme.of(context).colorScheme,
-                                        textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary),
-                                        showMilliseconds: _viewEnd.difference(_viewStart).inMilliseconds <= 5000,
+                                        colorScheme:
+                                            Theme.of(context).colorScheme,
+                                        textStyle: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall?.copyWith(
+                                          color:
+                                              context.appColors.textSecondary,
+                                        ),
+                                        showMilliseconds:
+                                            _viewEnd
+                                                .difference(_viewStart)
+                                                .inMilliseconds <=
+                                            5000,
                                       ),
                                     ),
                                   ),
                                   // Bars
                                   ...items.map((it) {
-                                    final ts = it.session.startedAt ?? dataStart;
-                                    final startMs = ts.difference(dataStart).inMilliseconds.toDouble();
+                                    final ts =
+                                        it.session.startedAt ?? dataStart;
+                                    final startMs =
+                                        ts
+                                            .difference(dataStart)
+                                            .inMilliseconds
+                                            .toDouble();
                                     // Для активных — правая граница = now
-                                    final endTs = it.session.closedAt ?? DateTime.now();
-                                    final durMs = (endTs.difference(ts).inMilliseconds.toDouble()).clamp(1.0, double.infinity);
-                                    double left = widget.padding.left + (startMs * pxPerMs);
-                                    double width = math.max(2.0, (durMs * pxPerMs));
+                                    final endTs =
+                                        it.session.closedAt ?? DateTime.now();
+                                    final durMs = (endTs
+                                            .difference(ts)
+                                            .inMilliseconds
+                                            .toDouble())
+                                        .clamp(1.0, double.infinity);
+                                    double left =
+                                        widget.padding.left +
+                                        (startMs * pxPerMs);
+                                    double width = math.max(
+                                      2.0,
+                                      (durMs * pxPerMs),
+                                    );
                                     // clip to content bounds to prevent overflow on extreme zoom
-                                    final double contentLeft = widget.padding.left;
-                                    final double contentRight = widget.padding.left + contentWidth;
+                                    final double contentLeft =
+                                        widget.padding.left;
+                                    final double contentRight =
+                                        widget.padding.left + contentWidth;
                                     if (left < contentLeft) {
                                       final delta = contentLeft - left;
                                       width -= delta;
@@ -438,16 +586,36 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                                     if (left + width > contentRight) {
                                       width = contentRight - left;
                                     }
-                                    if (width <= 0) { return const SizedBox.shrink(); }
-                                    final top = widget.padding.top + _axisHeight + it.lane * (laneHeight + _laneGap);
-                                    final isHover = _hoverSessionId == it.session.id;
-                                    final baseColor = _barColor(context, it.session);
-                                    final method = (it.session.httpMeta?['method'] ?? '').toString();
-                                    final tuned = _applyMethodSaturation(baseColor, method);
-                                    final isActive = it.session.closedAt == null;
-                                    final pulse = isActive ? (0.6 + 0.4 * _pulse.value) : 1.0;
+                                    if (width <= 0) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    final top =
+                                        widget.padding.top +
+                                        _axisHeight +
+                                        it.lane * (laneHeight + _laneGap);
+                                    final isHover =
+                                        _hoverSessionId == it.session.id;
+                                    final baseColor = _barColor(
+                                      context,
+                                      it.session,
+                                    );
+                                    final method =
+                                        (it.session.httpMeta?['method'] ?? '')
+                                            .toString();
+                                    final tuned = _applyMethodSaturation(
+                                      baseColor,
+                                      method,
+                                    );
+                                    final isActive =
+                                        it.session.closedAt == null;
+                                    final pulse =
+                                        isActive
+                                            ? (0.6 + 0.4 * _pulse.value)
+                                            : 1.0;
                                     final baseAlpha = isHover ? 0.95 : 0.75;
-                                    final color = tuned.withOpacity((baseAlpha * pulse).clamp(0.0, 1.0));
+                                    final color = tuned.withOpacity(
+                                      (baseAlpha * pulse).clamp(0.0, 1.0),
+                                    );
                                     final borderColor = baseColor;
                                     final tooltip = _sessionLabel(it.session);
                                     return Positioned(
@@ -456,45 +624,84 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                                       width: width,
                                       height: laneHeight,
                                       child: Listener(
-                                        onPointerDown: (_) { _suppressSelectionOnce = true; },
+                                        onPointerDown: (_) {
+                                          _suppressSelectionOnce = true;
+                                        },
                                         child: MouseRegion(
-                                          onEnter: (_) => setState(() { _hoverSessionId = it.session.id; }),
-                                          onExit: (_) => setState(() { _hoverSessionId = null; }),
+                                          onEnter:
+                                              (_) => setState(() {
+                                                _hoverSessionId = it.session.id;
+                                              }),
+                                          onExit:
+                                              (_) => setState(() {
+                                                _hoverSessionId = null;
+                                              }),
                                           cursor: SystemMouseCursors.click,
                                           child: Tooltip(
                                             message: tooltip,
-                                            waitDuration: const Duration(milliseconds: 300),
-                                          child: GestureDetector(
+                                            waitDuration: const Duration(
+                                              milliseconds: 300,
+                                            ),
+                                            child: GestureDetector(
                                               behavior: HitTestBehavior.opaque,
                                               onDoubleTap: () {},
-                                              onTap: () { widget.onSessionSelected?.call(it.session); },
-                                              child: Stack(children: [
-                                                // background bar
-                                                Container(
-                                                  decoration: BoxDecoration(
-                                                    color: color,
-                                                    borderRadius: BorderRadius.circular(4),
-                                                    border: Border.all(color: borderColor, width: 1),
-                                                  ),
-                                                ),
-                                                // label overlay when wide enough
-                                                if (width >= 80)
-                                                  Padding(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                    child: Align(
-                                                      alignment: Alignment.centerLeft,
-                                                      child: Text(
-                                                        _barLabel(it.session),
-                                                        overflow: TextOverflow.fade,
-                                                        softWrap: false,
-                                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                          color: ThemeData.estimateBrightnessForColor(color) == Brightness.dark ? Colors.white : Colors.black,
-                                                        ),
+                                              onTap: () {
+                                                widget.onSessionSelected?.call(
+                                                  it.session,
+                                                );
+                                              },
+                                              child: Stack(
+                                                children: [
+                                                  // background bar
+                                                  Container(
+                                                    decoration: BoxDecoration(
+                                                      color: color,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            4,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: borderColor,
+                                                        width: 1,
                                                       ),
                                                     ),
                                                   ),
-                                                // убрали точку; пульсация самой полосы ускорена выше
-                                              ]),
+                                                  // label overlay when wide enough
+                                                  if (width >= 80)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 4,
+                                                          ),
+                                                      child: Align(
+                                                        alignment:
+                                                            Alignment
+                                                                .centerLeft,
+                                                        child: Text(
+                                                          _barLabel(it.session),
+                                                          overflow:
+                                                              TextOverflow.fade,
+                                                          softWrap: false,
+                                                          style: Theme.of(
+                                                            context,
+                                                          ).textTheme.labelSmall?.copyWith(
+                                                            color:
+                                                                ThemeData.estimateBrightnessForColor(
+                                                                          color,
+                                                                        ) ==
+                                                                        Brightness
+                                                                            .dark
+                                                                    ? Colors
+                                                                        .white
+                                                                    : Colors
+                                                                        .black,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  // убрали точку; пульсация самой полосы ускорена выше
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -503,41 +710,98 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
                                   }).toList(),
                                   // Persistent selection overlay
                                   if (_selectedRange != null) ...[
-                                    Builder(builder: (context) {
-                                      final pxPer = pxPerMs;
-                                      final l = widget.padding.left + (_selectedRange!.start.difference(dataStart).inMilliseconds.toDouble() * pxPer);
-                                      final r = widget.padding.left + (_selectedRange!.end.difference(dataStart).inMilliseconds.toDouble() * pxPer);
-                                      final top = widget.padding.top + _axisHeight;
-                                      return Stack(children: [
-                                        AnimatedPositioned(
-                                          duration: const Duration(milliseconds: 180),
-                                          curve: Curves.easeOutCubic,
-                                          left: l,
-                                          right: contentWidth + widget.padding.horizontal - r,
-                                          top: top,
-                                          bottom: widget.padding.bottom,
-                                          child: IgnorePointer(child: Container(color: Theme.of(context).colorScheme.primary.withOpacity(0.10))),
-                                        ),
-                                        AnimatedPositioned(
-                                          duration: const Duration(milliseconds: 180),
-                                          curve: Curves.easeOutCubic,
-                                          left: l - 3,
-                                          top: top,
-                                          bottom: widget.padding.bottom,
-                                          child: MouseRegion(cursor: SystemMouseCursors.resizeColumn, child: Container(width: 6, color: Theme.of(context).colorScheme.primary.withOpacity(0.35))),
-                                        ),
-                                        AnimatedPositioned(
-                                          duration: const Duration(milliseconds: 180),
-                                          curve: Curves.easeOutCubic,
-                                          left: r - 3,
-                                          top: top,
-                                          bottom: widget.padding.bottom,
-                                          child: MouseRegion(cursor: SystemMouseCursors.resizeColumn, child: Container(width: 6, color: Theme.of(context).colorScheme.primary.withOpacity(0.35))),
-                                        ),
-                                      ]);
-                                    }),
+                                    Builder(
+                                      builder: (context) {
+                                        final pxPer = pxPerMs;
+                                        final l =
+                                            widget.padding.left +
+                                            (_selectedRange!.start
+                                                    .difference(dataStart)
+                                                    .inMilliseconds
+                                                    .toDouble() *
+                                                pxPer);
+                                        final r =
+                                            widget.padding.left +
+                                            (_selectedRange!.end
+                                                    .difference(dataStart)
+                                                    .inMilliseconds
+                                                    .toDouble() *
+                                                pxPer);
+                                        final top =
+                                            widget.padding.top + _axisHeight;
+                                        return Stack(
+                                          children: [
+                                            AnimatedPositioned(
+                                              duration: const Duration(
+                                                milliseconds: 180,
+                                              ),
+                                              curve: Curves.easeOutCubic,
+                                              left: l,
+                                              right:
+                                                  contentWidth +
+                                                  widget.padding.horizontal -
+                                                  r,
+                                              top: top,
+                                              bottom: widget.padding.bottom,
+                                              child: IgnorePointer(
+                                                child: Container(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                      .withOpacity(0.10),
+                                                ),
+                                              ),
+                                            ),
+                                            AnimatedPositioned(
+                                              duration: const Duration(
+                                                milliseconds: 180,
+                                              ),
+                                              curve: Curves.easeOutCubic,
+                                              left: l - 3,
+                                              top: top,
+                                              bottom: widget.padding.bottom,
+                                              child: MouseRegion(
+                                                cursor:
+                                                    SystemMouseCursors
+                                                        .resizeColumn,
+                                                child: Container(
+                                                  width: 6,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                      .withOpacity(0.35),
+                                                ),
+                                              ),
+                                            ),
+                                            AnimatedPositioned(
+                                              duration: const Duration(
+                                                milliseconds: 180,
+                                              ),
+                                              curve: Curves.easeOutCubic,
+                                              left: r - 3,
+                                              top: top,
+                                              bottom: widget.padding.bottom,
+                                              child: MouseRegion(
+                                                cursor:
+                                                    SystemMouseCursors
+                                                        .resizeColumn,
+                                                child: Container(
+                                                  width: 6,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                      .withOpacity(0.35),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
                                   ],
-                                  if (_dragging && _dragStart != null && _dragCurrent != null)
+                                  if (_dragging &&
+                                      _dragStart != null &&
+                                      _dragCurrent != null)
                                     _buildSelectionRect(pxPerMs),
                                 ],
                               ),
@@ -589,19 +853,26 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
 
   String _sessionLabel(Session s) {
     final uri = _safeUri(s.target);
-    final String pathStr = (uri != null && uri.path.isNotEmpty) ? uri.path : s.target;
+    final String pathStr =
+        (uri != null && uri.path.isNotEmpty) ? uri.path : s.target;
     final host = uri?.host ?? '';
-    final method = (s.httpMeta != null ? (s.httpMeta!['method']?.toString() ?? '') : '');
+    final method =
+        (s.httpMeta != null ? (s.httpMeta!['method']?.toString() ?? '') : '');
     final kind = s.kind ?? (method.isEmpty ? 'ws' : 'http');
-    final durMs = _durationOf(s).inMilliseconds;
-    final dur = '${durMs}ms';
+    final dur = _formatDurationBrief(_durationOf(s));
     if (method.isNotEmpty) {
       return '$method $host$pathStr — $dur';
     }
     return '${kind.toUpperCase()} $host$pathStr — $dur';
   }
 
-  Uri? _safeUri(String v) { try { return Uri.parse(v); } catch (_) { return null; } }
+  Uri? _safeUri(String v) {
+    try {
+      return Uri.parse(v);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Duration _durationOf(Session s) {
     final start = s.startedAt ?? DateTime.now();
@@ -611,10 +882,34 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
     return d;
   }
 
+  String _formatDurationBrief(Duration d) {
+    final totalMs = d.inMilliseconds;
+    if (totalMs < 1000) {
+      return '${totalMs}ms';
+    }
+    final secs = totalMs / 1000.0;
+    if (secs < 10) {
+      return '${secs.toStringAsFixed(1)}s';
+    }
+    if (secs < 60) {
+      return '${secs.round()}s';
+    }
+    final totalSeconds = d.inSeconds;
+    final minutes = totalSeconds ~/ 60;
+    final secondsR = totalSeconds % 60;
+    if (minutes < 60) {
+      return secondsR > 0 ? '${minutes}m ${secondsR}s' : '${minutes}m';
+    }
+    final hours = minutes ~/ 60;
+    final minutesR = minutes % 60;
+    return minutesR > 0 ? '${hours}h ${minutesR}m' : '${hours}h';
+  }
+
   List<_LayoutItem> _computeLayoutItems(List<Session> sessions) {
     final items = <_LayoutItem>[];
-    final sorted = sessions.where((s) => s.startedAt != null).toList()
-      ..sort((a, b) => a.startedAt!.compareTo(b.startedAt!));
+    final sorted =
+        sessions.where((s) => s.startedAt != null).toList()
+          ..sort((a, b) => a.startedAt!.compareTo(b.startedAt!));
 
     final laneEnds = <DateTime>[];
 
@@ -626,14 +921,29 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
       bool placed = false;
       for (var i = 0; i < laneEnds.length; i++) {
         final lastEnd = laneEnds[i];
-        if (!start.isBefore(lastEnd)) { lane = i; laneEnds[i] = end; placed = true; break; }
+        if (!start.isBefore(lastEnd)) {
+          lane = i;
+          laneEnds[i] = end;
+          placed = true;
+          break;
+        }
       }
-      if (!placed) { lane = laneEnds.length; laneEnds.add(end); }
+      if (!placed) {
+        lane = laneEnds.length;
+        laneEnds.add(end);
+      }
 
       final startMs = start.difference(_viewStart).inMilliseconds.toDouble();
       final endMs = end.difference(_viewStart).inMilliseconds.toDouble();
       final durationMs = math.max(1.0, endMs - startMs);
-      items.add(_LayoutItem(session: s, lane: lane, startMs: startMs, durationMs: durationMs));
+      items.add(
+        _LayoutItem(
+          session: s,
+          lane: lane,
+          startMs: startMs,
+          durationMs: durationMs,
+        ),
+      );
     }
     return items;
   }
@@ -642,8 +952,12 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
     setState(() {
       _setFitAll(false);
       final span = _viewEnd.difference(_viewStart);
-      final centerMs = _viewStart.millisecondsSinceEpoch + span.inMilliseconds / 2;
-      final newSpanMs = (span.inMilliseconds * factor).clamp(200.0, 6 * 60 * 1000.0);
+      final centerMs =
+          _viewStart.millisecondsSinceEpoch + span.inMilliseconds / 2;
+      final newSpanMs = (span.inMilliseconds * factor).clamp(
+        200.0,
+        6 * 60 * 1000.0,
+      );
       final newStartMs = (centerMs - newSpanMs / 2).round();
       final newEndMs = (centerMs + newSpanMs / 2).round();
       _viewStart = DateTime.fromMillisecondsSinceEpoch(newStartMs);
@@ -666,7 +980,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
   Color _barColor(BuildContext context, Session s) {
     final cs = Theme.of(context).colorScheme;
     final status = int.tryParse((s.httpMeta?['status'] ?? '').toString()) ?? 0;
-    if (s.kind == 'ws' || (s.kind == null && (s.httpMeta?['method'] ?? '').toString().isEmpty)) {
+    if (s.kind == 'ws' ||
+        (s.kind == null && (s.httpMeta?['method'] ?? '').toString().isEmpty)) {
       return cs.primary;
     }
     if (status >= 500) return cs.error;
@@ -679,11 +994,16 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
   Color _applyMethodSaturation(Color base, String method) {
     final m = method.toUpperCase();
     double factor = 1.0;
-    if (m == 'GET') factor = 0.85;
-    else if (m == 'POST') factor = 1.0;
-    else if (m == 'PUT') factor = 0.95;
-    else if (m == 'PATCH') factor = 0.95;
-    else if (m == 'DELETE') factor = 1.1;
+    if (m == 'GET')
+      factor = 0.85;
+    else if (m == 'POST')
+      factor = 1.0;
+    else if (m == 'PUT')
+      factor = 0.95;
+    else if (m == 'PATCH')
+      factor = 0.95;
+    else if (m == 'DELETE')
+      factor = 1.1;
     final hsl = HSLColor.fromColor(base);
     final newSat = (hsl.saturation * factor).clamp(0.0, 1.0);
     return hsl.withSaturation(newSat).toColor();
@@ -692,43 +1012,57 @@ class _WaterfallTimelineState extends State<WaterfallTimeline> with SingleTicker
   String _barLabel(Session s) {
     final method = (s.httpMeta?['method'] ?? '').toString();
     final status = (s.httpMeta?['status'] ?? '').toString();
+    final dur = _formatDurationBrief(_durationOf(s));
     if (method.isNotEmpty) {
-      return status.isNotEmpty ? '$method $status' : method;
+      final left = status.isNotEmpty ? '$method $status' : method;
+      return '$left — $dur';
     }
-    final durMs = _durationOf(s).inMilliseconds;
-    return '${durMs}ms';
+    return dur;
   }
 
   void _applyZoomAround(DateTime anchor, double factor) {
-     setState(() {
-       final span = _viewEnd.difference(_viewStart);
-       final anchorMs = anchor.millisecondsSinceEpoch.toDouble();
-       final startMs = _viewStart.millisecondsSinceEpoch.toDouble();
-       final endMs = _viewEnd.millisecondsSinceEpoch.toDouble();
-       final anchorT = ((anchorMs - startMs) / (endMs - startMs)).clamp(0.0, 1.0);
-       final newSpanMs = (span.inMilliseconds * factor).clamp(200.0, 6 * 60 * 1000.0);
-       final newStartMs = anchorMs - anchorT * newSpanMs;
-       final newEndMs = newStartMs + newSpanMs;
-       _viewStart = DateTime.fromMillisecondsSinceEpoch(newStartMs.round());
-       _viewEnd = DateTime.fromMillisecondsSinceEpoch(newEndMs.round());
-       _clampViewport();
-       // if live, keep rightmost scroll
-       if (_followLive && _hCtrl.hasClients) {
-         WidgetsBinding.instance.addPostFrameCallback((_){
-           if (!_hCtrl.hasClients) { return; }
-           _hCtrl.animateTo(
-             _hCtrl.position.maxScrollExtent,
-             duration: const Duration(milliseconds: 100),
-             curve: Curves.easeOut,
-           );
-         });
-       }
-     });
-   }
+    setState(() {
+      final span = _viewEnd.difference(_viewStart);
+      final anchorMs = anchor.millisecondsSinceEpoch.toDouble();
+      final startMs = _viewStart.millisecondsSinceEpoch.toDouble();
+      final endMs = _viewEnd.millisecondsSinceEpoch.toDouble();
+      final anchorT = ((anchorMs - startMs) / (endMs - startMs)).clamp(
+        0.0,
+        1.0,
+      );
+      final newSpanMs = (span.inMilliseconds * factor).clamp(
+        200.0,
+        6 * 60 * 1000.0,
+      );
+      final newStartMs = anchorMs - anchorT * newSpanMs;
+      final newEndMs = newStartMs + newSpanMs;
+      _viewStart = DateTime.fromMillisecondsSinceEpoch(newStartMs.round());
+      _viewEnd = DateTime.fromMillisecondsSinceEpoch(newEndMs.round());
+      _clampViewport();
+      // if live, keep rightmost scroll
+      if (_followLive && _hCtrl.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_hCtrl.hasClients) {
+            return;
+          }
+          _hCtrl.animateTo(
+            _hCtrl.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOut,
+          );
+        });
+      }
+    });
+  }
 }
 
 class _LayoutItem {
-  _LayoutItem({required this.session, required this.lane, required this.startMs, required this.durationMs});
+  _LayoutItem({
+    required this.session,
+    required this.lane,
+    required this.startMs,
+    required this.durationMs,
+  });
   final Session session;
   final int lane;
   final double startMs;
@@ -762,13 +1096,14 @@ class _GridPainter extends CustomPainter {
     final axisBottom = top + axisHeight;
     final totalMs = end.difference(start).inMilliseconds;
 
-    final gridPaint = Paint()
-      ..color = colorScheme.outlineVariant.withOpacity(0.5)
-      ..strokeWidth = 1;
+    final gridPaint =
+        Paint()
+          ..color = colorScheme.outlineVariant.withOpacity(0.5)
+          ..strokeWidth = 1;
 
     // adaptive grid/labels
-    const double minGridPx = 24;   // minimal px between grid lines
-    const double minLabelPx = 72;  // minimal px between labels
+    const double minGridPx = 24; // minimal px between grid lines
+    const double minLabelPx = 72; // minimal px between labels
     final int minor = _chooseStepMs(totalMs, pxPerMs, minGridPx);
     final int labelStep = _chooseStepMs(totalMs, pxPerMs, minLabelPx);
 
@@ -778,7 +1113,14 @@ class _GridPainter extends CustomPainter {
       final isLabelTick = (ms % labelStep == 0);
       final p = Offset(dx, axisBottom);
       final p2 = Offset(dx, size.height - padding.bottom);
-      canvas.drawLine(p, p2, gridPaint..color = colorScheme.outlineVariant.withOpacity(isLabelTick ? 0.7 : 0.25));
+      canvas.drawLine(
+        p,
+        p2,
+        gridPaint
+          ..color = colorScheme.outlineVariant.withOpacity(
+            isLabelTick ? 0.7 : 0.25,
+          ),
+      );
     }
 
     // labels without overlap
@@ -800,20 +1142,40 @@ class _GridPainter extends CustomPainter {
     }
 
     // axis baseline
-    final axisPaint = Paint()
-      ..color = colorScheme.outline
-      ..strokeWidth = 1.5;
-    canvas.drawLine(Offset(left, axisBottom), Offset(size.width - padding.right, axisBottom), axisPaint);
+    final axisPaint =
+        Paint()
+          ..color = colorScheme.outline
+          ..strokeWidth = 1.5;
+    canvas.drawLine(
+      Offset(left, axisBottom),
+      Offset(size.width - padding.right, axisBottom),
+      axisPaint,
+    );
   }
 
   int _chooseStepMs(int totalMs, double pxPerMs, double minPx) {
     if (totalMs <= 0) return 1;
     const List<int> steps = [
-      1, 2, 5, 10, 20, 50,
-      100, 200, 250, 500,
-      1000, 2000, 5000,
-      10000, 15000, 30000,
-      60000, 120000, 300000, 600000
+      1,
+      2,
+      5,
+      10,
+      20,
+      50,
+      100,
+      200,
+      250,
+      500,
+      1000,
+      2000,
+      5000,
+      10000,
+      15000,
+      30000,
+      60000,
+      120000,
+      300000,
+      600000,
     ];
     for (final s in steps) {
       if (pxPerMs * s >= minPx) return s;
@@ -832,8 +1194,9 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GridPainter old) {
-    return old.start != start || old.end != end || old.pxPerMs != pxPerMs || old.textStyle != textStyle;
+    return old.start != start ||
+        old.end != end ||
+        old.pxPerMs != pxPerMs ||
+        old.textStyle != textStyle;
   }
 }
-
-

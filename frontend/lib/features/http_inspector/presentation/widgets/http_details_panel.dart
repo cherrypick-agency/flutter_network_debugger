@@ -7,9 +7,10 @@ import '../../../../widgets/json_viewer.dart';
 import '../../../../core/di/di.dart';
 
 class HttpDetailsPanel extends StatefulWidget {
-  const HttpDetailsPanel({super.key, required this.sessionId, required this.frames});
+  const HttpDetailsPanel({super.key, required this.sessionId, required this.frames, this.httpMeta});
   final String? sessionId;
   final List<dynamic> frames;
+  final Map<String, dynamic>? httpMeta;
 
   @override
   State<HttpDetailsPanel> createState() => _HttpDetailsPanelState();
@@ -160,9 +161,15 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     // Cache & CORS quick analysis
     final cache = _computeCacheMeta(status, headers);
     final cors = _computeCorsMeta((req?['method'] ?? '').toString(), reqHeaders, headers);
+    final errMessage = widget.httpMeta?['errorMessage']?.toString();
     return ListView(
       children: [
         Text('Status: $status', style: context.appText.subtitle.copyWith(color: color)),
+        if (status == 0 && (errMessage != null && errMessage.isNotEmpty))
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Transport Error: $errMessage', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.error)),
+          ),
         if (durationMs != null || _respTtfbMs != null || _respTotalMs != null) Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 6),
           child: Wrap(spacing: 8, children: [
@@ -247,7 +254,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           'allowedHeaders': (cors['allowedHeaders'] ?? []).toString(),
           'vary': headers['Vary'] ?? headers['vary'] ?? '',
           'preflight': (cors['preflight'] == true).toString(),
-          if ((cors['reason'] ?? '') != '') 'reason': cors['reason'],
         }).map((e)=> Padding(
           padding: const EdgeInsets.only(bottom: 2),
           child: SelectableText('${e.key}: ${e.value}', style: context.appText.monospace),

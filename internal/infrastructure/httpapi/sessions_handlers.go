@@ -168,6 +168,10 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
     for _, s := range items {
         view := sessionV1{Session: s}
         meta, sz := d.computeHTTPMeta(r.Context(), s.ID)
+        if meta == nil && s.Error != nil {
+            code := classifyNetError(*s.Error)
+            meta = &httpMetaV1{Method: "", Status: 0, Mime: "", DurationMs: 0, Streaming: false, Headers: map[string]string{}, ErrorCode: code, ErrorMessage: *s.Error}
+        }
         if meta != nil { view.HttpMeta = meta }
         if sz != nil { view.Sizes = sz }
         views = append(views, view)
@@ -195,6 +199,10 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
         if !ok { writeError(w, http.StatusNotFound, "NOT_FOUND", "session not found", map[string]any{"id": id}); return }
         view := sessionV1{Session: sess}
         meta, sz := d.computeHTTPMeta(r.Context(), id)
+        if meta == nil && sess.Error != nil {
+            code := classifyNetError(*sess.Error)
+            meta = &httpMetaV1{Method: "", Status: 0, Mime: "", DurationMs: 0, Streaming: false, Headers: map[string]string{}, ErrorCode: code, ErrorMessage: *sess.Error}
+        }
         if meta != nil { view.HttpMeta = meta }
         if sz != nil { view.Sizes = sz }
         w.Header().Set("Content-Type", "application/json")
@@ -269,6 +277,8 @@ type httpMetaV1 struct {
     Cache     *cacheMetaV1      `json:"cache,omitempty"`
     CORS      *corsMetaV1       `json:"cors,omitempty"`
     Preflight *preflightLinkV1  `json:"preflight,omitempty"`
+    ErrorCode    string         `json:"errorCode,omitempty"`
+    ErrorMessage string         `json:"errorMessage,omitempty"`
 }
 
 type sizeInfoV1 struct {
@@ -419,6 +429,29 @@ func computeCORSMeta(method string, req, resp map[string]string, isPreflight boo
         if !originOk { reason = "origin" } else if len(allowMethods) > 0 && !methodOk { reason = "method" }
     }
     return &corsMetaV1{Ok: ok, Reason: reason, AllowedOrigin: allowOrigin, AllowedMethods: allowMethods, AllowedHeaders: allowHeaders, Vary: vary}
+}
+
+// Грубая классификация сетевых ошибок для UI
+func classifyNetError(msg string) string {
+    m := strings.ToLower(msg)
+    switch {
+    case strings.Contains(m, "context deadline exceeded") || strings.Contains(m, "timeout"):
+        return "TIMEOUT"
+    case strings.Contains(m, "no such host") || strings.Contains(m, "server misbehaving"):
+        return "DNS"
+    case strings.Contains(m, "x509") || strings.Contains(m, "certificate") || strings.Contains(m, "tls"):
+        return "TLS"
+    case strings.Contains(m, "connection refused") || strings.Contains(m, "cannot assign"):
+        return "CONNECT"
+    case strings.Contains(m, "connection reset") || strings.Contains(m, "reset by peer"):
+        return "RST"
+    case strings.Contains(m, "before full header") || strings.Contains(m, "unexpected eof") || strings.Contains(m, "early eof") || strings.Contains(m, "eof"):
+        return "EOF"
+    case strings.Contains(m, "request canceled") || strings.Contains(m, "client canceled"):
+        return "CANCEL"
+    default:
+        return "ERROR"
+    }
 }
 
 func allAllowedFold(allowed []string, requested []string) bool {

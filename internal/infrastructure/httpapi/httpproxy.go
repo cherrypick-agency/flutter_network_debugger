@@ -88,6 +88,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
     // timings via httptrace
     var tStart = time.Now()
     var tDNS, tConnStart, tTLSStart, tFirstByte time.Time
+    hadError := false
     proxy := &httputil.ReverseProxy{
         Director:  director,
         Transport: transport,
@@ -133,6 +134,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
             return nil
         },
         ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
+            hadError = true
             _ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
             d.Logger.Error().Err(err).Msg("reverse proxy error")
             writeError(rw, http.StatusBadGateway, "UPSTREAM_ERROR", err.Error(), map[string]any{"target": upstream.String()})
@@ -198,7 +200,9 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 
     // Serve
     proxy.ServeHTTP(w, r)
-    _ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+    if !hadError {
+        _ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+    }
     d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
     d.Metrics.ActiveSessions.Dec()
 }

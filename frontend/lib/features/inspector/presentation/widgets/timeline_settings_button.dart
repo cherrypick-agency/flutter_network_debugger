@@ -8,7 +8,10 @@ class TimelineSettingsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: 'Timeline settings',
-      icon: const Icon(Icons.settings),
+      icon: const Icon(Icons.settings, size: 16),
+      iconSize: 16,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       onPressed: () async {
         final fit = await showDialog<bool>(
           context: context,

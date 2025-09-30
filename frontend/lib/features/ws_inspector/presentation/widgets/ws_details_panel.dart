@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../theme/context_ext.dart';
+import 'frames_timeline/frames_timeline.dart';
+import 'frames_timeline/frames_timeline_legend.dart';
 import '../../../../widgets/json_viewer.dart';
+import '../../../../widgets/common_search_bar.dart';
+import 'searchable_text_rich.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 
@@ -44,6 +48,24 @@ class WsDetailsPanel extends StatefulWidget {
 class _WsDetailsPanelState extends State<WsDetailsPanel> {
   bool _pretty = true;
   bool _tree = false;
+  bool _showTimeline = true;
+  final ScrollController _listCtrl = ScrollController();
+  DateTimeRange? _brushRange;
+  String? _expandedId;
+
+  // Глобальный поиск по всем фреймам
+  bool _showGlobalSearch = false;
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  bool _matchCase = false;
+  bool _wholeWord = false;
+  bool _useRegex = false;
+  int _globalFocusedIndex = 0;
+  int _globalTotalMatches = 0;
+  final Map<String, int> _frameMatchCounts = <String, int>{};
+  final Map<String, List<GlobalKey>> _frameMatchKeys = <String, List<GlobalKey>>{};
+  String? _pendingFocusFrameId;
+  int _pendingFocusLocalIndex = 0;
 
   bool _frameMatches(Map<String, dynamic> f) {
     if (widget.opcodeFilter != 'all' && (f['opcode']?.toString() ?? '') != widget.opcodeFilter) return false;
@@ -51,23 +73,278 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     return true;
   }
 
-  bool _eventMatches(Map<String, dynamic> e) {
-    final ns = (e['namespace'] ?? '').toString();
-    final nsFilter = widget.namespaceCtrl.text.trim();
-    if (nsFilter.isNotEmpty && !ns.toLowerCase().contains(nsFilter.toLowerCase())) return false;
-    // optional inline event name filter via simple syntax: "ns: foo" already handled above for ns; add name contains support using same field if prefixed with ev=
-    final name = (e['event'] ?? e['name'] ?? '').toString();
-    if (nsFilter.startsWith('ev=') && nsFilter.length > 3) {
-      final ev = nsFilter.substring(3).trim();
-      if (ev.isNotEmpty && !name.toLowerCase().contains(ev.toLowerCase())) return false;
+  // events sidebar временно отключён
+
+  bool _isHeartbeat(Map<String, dynamic> f) {
+    final opcode = (f['opcode'] ?? '').toString();
+    final preview = (f['preview'] ?? '').toString();
+    final size = (f['size'] ?? 0).toString();
+    final isWsPingPong = opcode == 'ping' || opcode == 'pong';
+    final isEnginePingPong = opcode == 'text' && (preview == '2' || preview == '3') && size == '1';
+    return isWsPingPong || isEnginePingPong;
+  }
+
+  void _scrollToFrame(String frameId) {
+    // Простой вариант: найти индекс и прокрутить к нему
+    final idx = widget.frames.indexWhere((e) => (e as Map)['id']?.toString() == frameId);
+    if (idx < 0) return;
+    // приблизительная высота элемента
+    final estimatedItemExtent = 56.0;
+    final target = (idx * estimatedItemExtent).toDouble();
+    if (!_listCtrl.hasClients) return;
+    _listCtrl.animateTo(
+      target.clamp(0, _listCtrl.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    ).whenComplete((){
+      if (!mounted) return;
+      setState(() { _expandedId = frameId; });
+    });
+  }
+
+  void _reindexGlobalMatches() {
+    final query = _searchCtrl.text.trim();
+    _frameMatchCounts.clear();
+    _globalTotalMatches = 0;
+    if (query.isEmpty) {
+      setState(() { _globalFocusedIndex = 0; });
+      return;
     }
-    return true;
+    for (final f in widget.frames) {
+      final fm = f as Map<String, dynamic>;
+      if (!_frameMatches(fm)) continue;
+      if (widget.hideHeartbeats && _isHeartbeat(fm)) continue;
+      if (_brushRange != null) {
+        try {
+          final ts = DateTime.parse((fm['ts'] ?? '').toString());
+          if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end)) continue;
+        } catch (_) {}
+      }
+      final preview = (fm['preview'] ?? '').toString();
+      final extractedJson = _extractJsonPayload(preview);
+      int cnt = 0;
+      if (extractedJson != null && (_pretty || _tree)) {
+        cnt = _countMatchesIn(extractedJson);
+      } else {
+        cnt = _countMatchesIn(preview);
+      }
+      if (cnt > 0) {
+        final idStr = (fm['id'] ?? '').toString();
+        _frameMatchCounts[idStr] = cnt;
+        _globalTotalMatches += cnt;
+      }
+    }
+    if (_globalTotalMatches == 0) {
+      setState(() { _globalFocusedIndex = 0; });
+    } else if (_globalFocusedIndex >= _globalTotalMatches) {
+      setState(() { _globalFocusedIndex = 0; });
+    } else {
+      setState(() {});
+    }
+  }
+
+  int _countMatchesIn(String text) {
+    final q = _searchCtrl.text.trim();
+    if (q.isEmpty) return 0;
+    if (_useRegex) {
+      RegExp? re;
+      try {
+        re = RegExp(q, caseSensitive: _matchCase);
+      } catch (_) {
+        return 0;
+      }
+      int c = 0;
+      for (final m in re.allMatches(text)) {
+        if (_wholeWord) {
+          bool isWordChar(String ch) {
+            final code = ch.codeUnitAt(0);
+            final isAZ = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+            final is09 = (code >= 48 && code <= 57);
+            return isAZ || is09 || ch == '_';
+          }
+          final s = m.start;
+          final e = m.end;
+          final left = s - 1 >= 0 ? text.substring(s - 1, s) : null;
+          final right = e < text.length ? text.substring(e, e + 1) : null;
+          final leftOk = left == null || !isWordChar(left);
+          final rightOk = right == null || !isWordChar(right);
+          if (!(leftOk && rightOk)) {
+            continue;
+          }
+        }
+        c++;
+      }
+      return c;
+    }
+    final src = _matchCase ? text : text.toLowerCase();
+    final query = _matchCase ? q : q.toLowerCase();
+    int from = 0;
+    int c = 0;
+    bool isWordChar(String ch) {
+      final code = ch.codeUnitAt(0);
+      final isAZ = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+      final is09 = (code >= 48 && code <= 57);
+      return isAZ || is09 || ch == '_';
+    }
+    while (true) {
+      final idx = src.indexOf(query, from);
+      if (idx < 0) break;
+      if (_wholeWord) {
+        final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
+        final right = (idx + query.length) < src.length ? src.substring(idx + query.length, idx + query.length + 1) : null;
+        final leftOk = left == null || !isWordChar(left);
+        final rightOk = right == null || !isWordChar(right);
+        if (!(leftOk && rightOk)) {
+          from = idx + 1;
+          continue;
+        }
+      }
+      c++;
+      from = idx + query.length;
+    }
+    return c;
+  }
+
+  (String?, int) _resolveGlobalIndexToFrame(int gIndex) {
+    int acc = 0;
+    for (final f in widget.frames) {
+      final idStr = ((f as Map)['id'] ?? '').toString();
+      final cnt = _frameMatchCounts[idStr] ?? 0;
+      if (cnt <= 0) continue;
+      final end = acc + cnt - 1;
+      if (gIndex >= acc && gIndex <= end) {
+        final local = gIndex - acc;
+        return (idStr, local);
+      }
+      acc += cnt;
+    }
+    return (null, 0);
+  }
+
+  void _focusGlobal(int gIndex) {
+    if (_globalTotalMatches <= 0) return;
+    final (fid, local) = _resolveGlobalIndexToFrame(gIndex);
+    if (fid == null) return;
+    setState(() { _expandedId = fid; });
+    // Прокрутка к тайлу
+    _scrollToFrame(fid);
+    // Если ключи ещё не готовы — отложим
+    final keys = _frameMatchKeys[fid];
+    if (keys != null && local >= 0 && local < keys.length) {
+      final ctx = keys[local].currentContext;
+      if (ctx != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          try {
+            // проверяем, что у контекста всё ещё есть предок Scrollable
+            final scrollable = Scrollable.maybeOf(ctx);
+            if (scrollable == null) {
+              // попробуем ещё раз на следующий кадр
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                final ctx2 = keys[local].currentContext;
+                if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
+                  Scrollable.ensureVisible(ctx2, duration: const Duration(milliseconds: 200), alignment: 0.1);
+                }
+              });
+            } else {
+              Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), alignment: 0.1);
+            }
+          } catch (_) {}
+        });
+      }
+    } else {
+      _pendingFocusFrameId = fid;
+      _pendingFocusLocalIndex = local;
+    }
+  }
+
+  void _gotoNext() {
+    if (_globalTotalMatches <= 0) return;
+    setState(() { _globalFocusedIndex = (_globalFocusedIndex + 1) % _globalTotalMatches; });
+    _focusGlobal(_globalFocusedIndex);
+  }
+
+  void _gotoPrev() {
+    if (_globalTotalMatches <= 0) return;
+    setState(() { _globalFocusedIndex = (_globalFocusedIndex - 1) < 0 ? _globalTotalMatches - 1 : _globalFocusedIndex - 1; });
+    _focusGlobal(_globalFocusedIndex);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    _listCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onChildMatches(String frameId, int count, List<GlobalKey> keys) {
+    _frameMatchKeys[frameId] = keys;
+    // если ждём фокус именно этого фрейма — попробуем перейти
+    if (_pendingFocusFrameId == frameId) {
+      final local = _pendingFocusLocalIndex;
+      if (local >= 0 && local < keys.length) {
+        final ctx = keys[local].currentContext;
+        if (ctx != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            try {
+              final scrollable = Scrollable.maybeOf(ctx);
+              if (scrollable == null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  final ctx2 = keys[local].currentContext;
+                  if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
+                    Scrollable.ensureVisible(ctx2, duration: const Duration(milliseconds: 200), alignment: 0.1);
+                  }
+                });
+              } else {
+                Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), alignment: 0.1);
+              }
+            } catch (_) {}
+          });
+        }
+      }
+      _pendingFocusFrameId = null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      Expanded(child: _Card(
+    final timelineSection = Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: (_showTimeline) ? Column(children: [
+      Builder(builder: (context){
+        final framesList = widget.frames.cast<Map<String, dynamic>>();
+        final tlFrames = framesList.where((f){
+          if (!_frameMatches(f)) return false;
+          if (widget.hideHeartbeats && _isHeartbeat(f)) return false;
+          return true;
+        }).toList();
+        return FramesTimeline(
+          frames: tlFrames,
+          height: 50,
+          onFrameTap: _scrollToFrame,
+          onBrushChanged: (r){ setState(() { _brushRange = r; }); },
+          onFrameHover: (id){
+            final idx = widget.frames.indexWhere((e) => (e as Map)['id']?.toString() == id);
+            if (idx >= 0 && _listCtrl.hasClients) {
+              final estimatedItemExtent = 56.0;
+              final target = (idx * estimatedItemExtent).toDouble();
+              _listCtrl.jumpTo(target.clamp(0, _listCtrl.position.maxScrollExtent));
+            }
+          },
+        );
+      }),
+      const Align(alignment: Alignment.centerLeft, child: FramesTimelineLegend()),
+      const SizedBox(height: 4),
+      if (_showGlobalSearch) _buildGlobalSearchBar(context),
+    ]) : (_showGlobalSearch ? Column(children: [ _buildGlobalSearchBar(context), const SizedBox(height: 8) ]) : const SizedBox.shrink()));
+
+    return Column(children: [
+      // Диаграмма и поиск над заголовком
+      timelineSection,
+      Expanded(child:
+       _Card(
         title: 'Frames',
         actions: [
           FilterChip(
@@ -82,71 +359,152 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
             onSelected: (v){ setState((){ _tree = v; if (v) _pretty = false; }); },
           ),
           const SizedBox(width: 6),
+          Builder(builder: (context){
+            final c = context.appColors;
+            final cs = Theme.of(context).colorScheme;
+            final sel = _showTimeline;
+            return FilterChip(
+              avatar: Icon(Icons.timeline, size: 14, color: sel ? c.primary : c.textSecondary),
+              label: const Text('Timeline', style: TextStyle(fontSize: 12)),
+              selected: sel,
+              showCheckmark: false,
+              shape: const StadiumBorder(),
+              side: BorderSide(color: sel ? c.primary : c.border, width: sel ? 1.5 : 1),
+              selectedColor: cs.primary.withOpacity(0.18),
+              backgroundColor: cs.surface,
+              onSelected: (v){ setState((){ _showTimeline = v; }); },
+            );
+          }),
+          const SizedBox(width: 6),
+          // Глобальный поиск
+          if (!_showGlobalSearch)
+            IconButton(
+              tooltip: 'Search',
+              icon: const Icon(Icons.search, size: 18),
+              onPressed: () {
+                setState(() { _showGlobalSearch = true; });
+                WidgetsBinding.instance.addPostFrameCallback((_){ _searchFocus.requestFocus(); });
+              },
+            ),
           IconButton(
             tooltip: 'Filters',
             icon: const Icon(Icons.filter_list, size: 18),
             onPressed: () => widget._openFilters(context),
           ),
         ],
-        child: ListView.builder(
-          itemCount: widget.frames.length,
-          itemBuilder: (_, i) {
-            final f = widget.frames[i] as Map<String, dynamic>;
-            if (!_frameMatches(f)) { return const SizedBox.shrink(); }
-            final preview = (f['preview'] ?? '').toString();
-            final extractedJson = _extractJsonPayload(preview);
-            final dir = (f['direction'] ?? '').toString();
-            final isDown = dir == 'upstream->client';
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                controller: _listCtrl,
+                itemCount: widget.frames.length,
+                itemBuilder: (_, i) {
+                  final f = widget.frames[i] as Map<String, dynamic>;
+                  if (!_frameMatches(f)) { return const SizedBox.shrink(); }
+                  if (_brushRange != null) {
+                    try {
+                      final ts = DateTime.parse((f['ts'] ?? '').toString());
+                      if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end)) {
+                        return const SizedBox.shrink();
+                      }
+                    } catch (_) {}
+                  }
+                  final preview = (f['preview'] ?? '').toString();
+                  final extractedJson = _extractJsonPayload(preview);
+                  final dir = (f['direction'] ?? '').toString();
+                  final isDown = dir == 'upstream->client';
 
-            final ts = _fmtTime((f['ts'] ?? '').toString());
-            final opcode = (f['opcode'] ?? '').toString();
-            final size = (f['size'] ?? 0).toString();
-            final isWsPingPong = opcode == 'ping' || opcode == 'pong';
-            final isEnginePingPong = opcode == 'text' && (preview == '2' || preview == '3') && size == '1';
-            final isHeartbeat = isWsPingPong || isEnginePingPong;
-            final icon = Icon(
-              isDown ? Icons.south : Icons.north,
-              size: isHeartbeat ? 10 : 16,
-              color: isDown ? context.appColors.success : context.appColors.primary,
-            );
-            if (widget.hideHeartbeats && isHeartbeat) {
-              return const SizedBox.shrink();
-            }
-            if (isHeartbeat) {
-              final label = isWsPingPong
-                  ? opcode.toUpperCase()
-                  : (preview == '2' ? 'PING' : 'PONG');
-              return ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: Row(mainAxisSize: MainAxisSize.min, children: [icon, const SizedBox(width: 6), Text(label)]),
-                trailing: Text(ts, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary)),
-              );
-            }
-            return ExpansionTile(
-              tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-              dense: true,
-              leading: Row(mainAxisSize: MainAxisSize.min, children: [icon, const SizedBox(width: 6), Text(f['opcode'].toString())]),
-              title: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.appText.body),
-              subtitle: Row(children: [
-                Expanded(child: Text('${f['size']} B', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary))),
-              ]),
-              trailing: Text(ts, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary)),
-              children: [
-                Container(
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.all(8),
-                  child: (extractedJson != null)
-                      ? (_tree
-                          ? JsonViewer(jsonString: extractedJson, forceTree: true)
-                          : (_pretty
-                              ? JsonViewer(jsonString: extractedJson, forceTree: false)
-                              : SelectableText(preview, style: context.appText.monospace)))
-                      : SelectableText(preview, style: context.appText.monospace),
-                ),
-              ],
-            );
-          },
+                  final ts = _fmtTime((f['ts'] ?? '').toString());
+                  final opcode = (f['opcode'] ?? '').toString();
+                  final size = (f['size'] ?? 0).toString();
+                  final isWsPingPong = opcode == 'ping' || opcode == 'pong';
+                  final isEnginePingPong = opcode == 'text' && (preview == '2' || preview == '3') && size == '1';
+                  final isHeartbeat = isWsPingPong || isEnginePingPong;
+                  final icon = Icon(
+                    isDown ? Icons.south : Icons.north,
+                    size: isHeartbeat ? 10 : 16,
+                    color: isDown ? context.appColors.success : context.appColors.primary,
+                  );
+                  if (widget.hideHeartbeats && isHeartbeat) {
+                    return const SizedBox.shrink();
+                  }
+                  if (isHeartbeat) {
+                    final label = isWsPingPong
+                        ? opcode.toUpperCase()
+                        : (preview == '2' ? 'PING' : 'PONG');
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      leading: Row(mainAxisSize: MainAxisSize.min, children: [icon, const SizedBox(width: 6), Text(label)]),
+                      trailing: Text(ts, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary)),
+                    );
+                  }
+                  final idStr = (f['id'] ?? '').toString();
+                  final isExpanded = idStr == _expandedId;
+                  // Локальный focusedIndex для этого фрейма
+                  int localFocusedIndex = -1;
+                  if (_globalTotalMatches > 0 && _frameMatchCounts.isNotEmpty) {
+                    int acc = 0;
+                    for (final ff in widget.frames) {
+                      final fid = ((ff as Map)['id'] ?? '').toString();
+                      final cnt = _frameMatchCounts[fid] ?? 0;
+                      if (cnt <= 0) continue;
+                      final end = acc + cnt - 1;
+                      if (fid == idStr && _globalFocusedIndex >= acc && _globalFocusedIndex <= end) {
+                        localFocusedIndex = _globalFocusedIndex - acc;
+                        break;
+                      }
+                      acc += cnt;
+                    }
+                  }
+                  return ExpansionTile(
+                    key: ValueKey('frame_${idStr}_${isExpanded ? 'open' : 'closed'}'),
+                    initiallyExpanded: isExpanded,
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                    dense: true,
+                    leading: Row(mainAxisSize: MainAxisSize.min, children: [icon, const SizedBox(width: 6), Text(f['opcode'].toString())]),
+                    title: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.appText.body),
+                    subtitle: Row(children: [
+                      Expanded(child: Text('${f['size']} B', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary))),
+                    ]),
+                    trailing: Text(ts, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary)),
+                    onExpansionChanged: (open){ setState((){ _expandedId = open ? idStr : (_expandedId == idStr ? null : _expandedId); }); },
+                    children: [
+                      Container(
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.all(8),
+                        child: Builder(builder: (context) {
+                          final cfg = JsonSearchConfig(
+                            query: _showGlobalSearch ? _searchCtrl.text.trim() : '',
+                            matchCase: _matchCase,
+                            wholeWord: _wholeWord,
+                            focusedIndex: localFocusedIndex < 0 ? 0 : localFocusedIndex,
+                            onRebuilt: (count, keys) {
+                              _onChildMatches(idStr, count, keys);
+                              // Пересчитаем индексацию при первом появлении ключей
+                              if ((_frameMatchCounts[idStr] ?? -1) != count) {
+                                _frameMatchCounts[idStr] = count;
+                                _reindexGlobalMatches();
+                              }
+                            },
+                          );
+                          if (extractedJson != null) {
+                            if (_tree) {
+                              return JsonTreeRich(data: jsonDecode(extractedJson), search: cfg);
+                            }
+                            if (_pretty) {
+                              return JsonPrettyRich(data: jsonDecode(extractedJson), search: cfg);
+                            }
+                          }
+                          return SearchableTextRich(text: preview, search: cfg, style: context.appText.monospace);
+                        }),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ))
       /*
@@ -175,6 +533,35 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       */
     ]);
   }
+
+  Widget _buildGlobalSearchBar(BuildContext context) {
+    final countText = _globalTotalMatches == 0 ? '0/0' : '${(_globalFocusedIndex + 1)}/${_globalTotalMatches}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: CommonSearchBar(
+        controller: _searchCtrl,
+        focusNode: _searchFocus,
+        countText: countText,
+        matchCase: _matchCase,
+        wholeWord: _wholeWord,
+        useRegex: _useRegex,
+        canNavigate: _globalTotalMatches > 0,
+        onChanged: () {
+          _globalFocusedIndex = 0;
+          _reindexGlobalMatches();
+          setState((){});
+        },
+        onNext: _gotoNext,
+        onPrev: _gotoPrev,
+        onClose: () { setState(() { _showGlobalSearch = false; _searchCtrl.clear(); _frameMatchCounts.clear(); _frameMatchKeys.clear(); _globalFocusedIndex = 0; _globalTotalMatches = 0; }); },
+        onToggleMatchCase: () { setState(() { _matchCase = !_matchCase; }); _reindexGlobalMatches(); },
+        onToggleWholeWord: () { setState(() { _wholeWord = !_wholeWord; }); _reindexGlobalMatches(); },
+        onToggleRegex: () { setState(() { _useRegex = !_useRegex; }); _reindexGlobalMatches(); },
+      ),
+    );
+  }
+
+  // второй dispose удаляем (объединён выше)
 }
 
 class _Card extends StatelessWidget {
