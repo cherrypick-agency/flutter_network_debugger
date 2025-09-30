@@ -13,3 +13,4 @@ class ChipStrikePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant ChipStrikePainter oldDelegate) => false;
 }
+

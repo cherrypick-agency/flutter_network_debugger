@@ -19,6 +19,11 @@ abstract class _AggregateStore with Store {
   bool loading = false;
 
   @action
+  void clear() {
+    groups = ObservableList.of([]);
+  }
+
+  @action
   Future<void> load({String groupBy = 'domain'}) async {
     if (loading) return;
     loading = true;

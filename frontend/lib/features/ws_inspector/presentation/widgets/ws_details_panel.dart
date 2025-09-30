@@ -148,7 +148,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
             );
           },
         ),
-      )),
+      ))
+      /*
       const VerticalDivider(width: 1),
       SizedBox(width: 200, child: _Card(
         title: 'Events',
@@ -171,6 +172,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
           },
         ),
       )),
+      */
     ]);
   }
 }

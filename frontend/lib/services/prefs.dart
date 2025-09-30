@@ -17,6 +17,7 @@ class PrefsService {
   static const _keyHeaderVal = 'sessions_header_val';
   static const _keyMonitorLog = 'monitor_log_json';
   static const _keyThemeMode = 'theme_mode';
+  static const _keySinceTs = 'clear_since_ts';
 
   Future<void> save({
     required String baseUrl,
@@ -69,6 +70,18 @@ class PrefsService {
       'headerKey': p.getString(_keyHeaderKey) ?? '',
       'headerVal': p.getString(_keyHeaderVal) ?? '',
     };
+  }
+
+  Future<void> saveSince(DateTime tsUtc) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_keySinceTs, tsUtc.toIso8601String());
+  }
+
+  Future<DateTime?> loadSince() async {
+    final p = await SharedPreferences.getInstance();
+    final s = p.getString(_keySinceTs);
+    if (s == null || s.isEmpty) return null;
+    try { return DateTime.parse(s).toUtc(); } catch (_) { return null; }
   }
 }
 

@@ -137,6 +137,10 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
     d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
     d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
+    // Optional artificial response delay
+    if d.Cfg.ResponseDelayMs > 0 {
+        time.Sleep(time.Duration(d.Cfg.ResponseDelayMs) * time.Millisecond)
+    }
     // Write back to client
     copyHeader(w.Header(), resp.Header)
     w.WriteHeader(resp.StatusCode)

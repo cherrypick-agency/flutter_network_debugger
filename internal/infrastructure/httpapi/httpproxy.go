@@ -92,8 +92,15 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
         Director:  director,
         Transport: transport,
         ModifyResponse: func(resp *http.Response) error {
-            // Log response frame
-            preview := buildHTTPResponsePreview(resp)
+            // Artificial response delay (to visualize timeline)
+            if d.Cfg.ResponseDelayMs > 0 {
+                time.Sleep(time.Duration(d.Cfg.ResponseDelayMs) * time.Millisecond)
+            }
+            // Log response frame with timings embedded
+            basePreview := buildHTTPResponsePreview(resp)
+            ttfb := durationMs(tStart, tFirstByte)
+            total := durationMs(tStart, time.Now())
+            preview := augmentPreviewWithTimings(basePreview, ttfb, total)
             fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
             _ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
             d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
@@ -130,6 +137,15 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
             d.Logger.Error().Err(err).Msg("reverse proxy error")
             writeError(rw, http.StatusBadGateway, "UPSTREAM_ERROR", err.Error(), map[string]any{"target": upstream.String()})
         },
+    }
+
+    // Emit lightweight session-start heartbeat frame so UI can draw in-progress bar immediately.
+    {
+        hb := map[string]any{"type": "http_progress", "phase": "started"}
+        b, _ := json.Marshal(hb)
+        fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: len(b), Preview: string(b)}
+        _ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+        d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
     }
 
     // Safely peek a small portion of request body and keep stream intact for upstream.
@@ -350,6 +366,16 @@ func tryCompactJSON(b []byte) string {
         return string(out)
     }
     return ""
+}
+
+// augmentPreviewWithTimings injects {timings:{ttfbMs,totalMs}} into JSON preview.
+func augmentPreviewWithTimings(preview string, ttfb, total int64) string {
+    var m map[string]any
+    if err := json.Unmarshal([]byte(preview), &m); err != nil { return preview }
+    m["timings"] = map[string]any{"ttfbMs": ttfb, "totalMs": total}
+    b, err := json.Marshal(m)
+    if err != nil { return preview }
+    return string(b)
 }
 
 // tryDecompress performs safe small-buffer decompression for preview

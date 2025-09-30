@@ -21,6 +21,7 @@ class JsonViewer extends StatefulWidget {
 class _JsonViewerState extends State<JsonViewer> {
   bool _showSearch = false;
   final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   bool _matchCase = false;
   bool _wholeWord = false;
   int _focusedIndex = 0;
@@ -29,6 +30,7 @@ class _JsonViewerState extends State<JsonViewer> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -139,7 +141,10 @@ class _JsonViewerState extends State<JsonViewer> {
         padding: const EdgeInsets.all(4),
         constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
         tooltip: 'Search',
-        onPressed: () => setState(() => _showSearch = true),
+        onPressed: () {
+          setState(() => _showSearch = true);
+          WidgetsBinding.instance.addPostFrameCallback((_) { _searchFocusNode.requestFocus(); });
+        },
         icon: const Icon(Icons.search, size: 18),
       ),
     );
@@ -154,6 +159,7 @@ class _JsonViewerState extends State<JsonViewer> {
         _searchCtrl.clear();
         _focusedIndex = 0;
         _matchKeys = const [];
+        _searchFocusNode.unfocus();
       });
     }
     final handlers = hk.buildHandlers({
@@ -165,6 +171,7 @@ class _JsonViewerState extends State<JsonViewer> {
       bindings: handlers,
       child: _JsonSearchBar(
         controller: _searchCtrl,
+        focusNode: _searchFocusNode,
         countText: countText,
         matchCase: _matchCase,
         wholeWord: _wholeWord,
@@ -844,6 +851,7 @@ class _JsonSearchConfig {
 class _JsonSearchBar extends StatelessWidget {
   const _JsonSearchBar({
     required this.controller,
+    this.focusNode,
     required this.countText,
     required this.matchCase,
     required this.wholeWord,
@@ -856,6 +864,7 @@ class _JsonSearchBar extends StatelessWidget {
     required this.onToggleWholeWord,
   });
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String countText;
   final bool matchCase;
   final bool wholeWord;
@@ -904,6 +913,7 @@ class _JsonSearchBar extends StatelessWidget {
                     child: TextField(
                       controller: controller,
                       autofocus: true,
+                      focusNode: focusNode,
                       style: textStyle,
                       decoration: InputDecoration(
                         isDense: true,

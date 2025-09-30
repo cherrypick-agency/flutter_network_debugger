@@ -37,6 +37,10 @@ func (s *SessionService) Delete(ctx context.Context, id string) error {
     return s.sessions.DeleteSession(ctx, id)
 }
 
+func (s *SessionService) ClearAll(ctx context.Context) error {
+    return s.sessions.ClearAllSessions(ctx)
+}
+
 func (s *SessionService) AddFrame(ctx context.Context, sessionID string, frame domain.Frame) error {
     if err := s.frames.AppendFrame(ctx, sessionID, frame); err != nil {
         return err

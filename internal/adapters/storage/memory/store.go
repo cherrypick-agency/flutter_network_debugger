@@ -80,6 +80,16 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
     return nil
 }
 
+// ClearAllSessions removes all sessions and associated data
+func (s *Store) ClearAllSessions(ctx context.Context) error {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    // reinitialize map; maps do not support cap(), so we can optionally hint with current len
+    s.items = make(map[string]*sessionEntry, len(s.items))
+    s.order = s.order[:0]
+    return nil
+}
+
 func (s *Store) ListSessions(ctx context.Context, f usecase.SessionFilter) ([]domain.Session, int, error) {
     s.mu.RLock()
     defer s.mu.RUnlock()

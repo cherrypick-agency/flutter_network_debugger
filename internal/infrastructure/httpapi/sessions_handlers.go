@@ -12,6 +12,18 @@ import (
 )
 
 func (d *Deps) handleListSessions(w http.ResponseWriter, r *http.Request) {
+    if r.Method == http.MethodDelete {
+        if err := d.Svc.ClearAll(r.Context()); err != nil {
+            writeError(w, http.StatusInternalServerError, "SESSIONS_CLEAR_FAILED", err.Error(), nil)
+            return
+        }
+        // also close live WS sessions to prevent further events
+        if d.Live != nil { d.Live.CloseAll() }
+        // and broadcast a synthetic event so frontends can refresh
+        if d.Monitor != nil { d.Monitor.Broadcast(MonitorEvent{Type: "sessions_cleared", ID: "*"}) }
+        w.WriteHeader(http.StatusNoContent)
+        return
+    }
     q := r.URL.Query().Get("q")
     target := r.URL.Query().Get("target")
     limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -133,6 +145,14 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 
 // handleV1ListSessions implements GET /_api/v1/sessions with cursor pagination and sorting.
 func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
+    if r.Method == http.MethodDelete {
+        if err := d.Svc.ClearAll(r.Context()); err != nil {
+            writeError(w, http.StatusInternalServerError, "SESSIONS_CLEAR_FAILED", err.Error(), nil)
+            return
+        }
+        w.WriteHeader(http.StatusNoContent)
+        return
+    }
     q := r.URL.Query().Get("q")
     target := r.URL.Query().Get("target")
     limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))

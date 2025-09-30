@@ -20,6 +20,11 @@ abstract class _SessionsStore with Store {
   bool loading = false;
 
   @action
+  void clear() {
+    items = ObservableList.of([]);
+  }
+
+  @action
   Future<void> load({String? q, String? target}) async {
     if (loading) return;
     loading = true;

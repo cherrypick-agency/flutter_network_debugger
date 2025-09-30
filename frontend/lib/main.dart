@@ -17,6 +17,7 @@ import 'features/inspector/application/stores/session_details_store.dart';
 import 'features/inspector/application/stores/aggregate_store.dart';
 import 'features/inspector/presentation/widgets/waterfall_timeline.dart';
 import 'features/inspector/presentation/widgets/waterfall_timeline_fullscreen.dart';
+import 'features/inspector/presentation/widgets/timeline_settings_button.dart';
 import 'core/di/di.dart';
 import 'core/notifications/notifications_service.dart';
 import 'core/notifications/notification_snackbar.dart';
@@ -135,6 +136,9 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showFilters = false;
   final Set<String> _selectedDomains = <String>{};
   bool _hideHeartbeats = false;
+  bool _wfFitAll = true;
+  // Показывать только сессии, начавшиеся после очистки
+  DateTime? _since;
   
   @override
   void initState() {
@@ -174,7 +178,11 @@ class _MyHomePageState extends State<MyHomePage> {
           try {
             final Map<String, dynamic> ev = jsonDecode(s);
             final t = (ev['type'] ?? '').toString();
-            if (t == 'session_started' || t == 'session_ended') { _scheduleSessionsReload(); }
+            if (t == 'session_started' || t == 'session_ended') {
+              // Если только что чистили — дадим UI стабилизироваться и не дергать загрузку
+              if (_loadingSessions) return;
+              _scheduleSessionsReload();
+            }
             if (t == 'frame_added' || t == 'event_added' || t == 'sio_probe') {
               final sid = (ev['id'] ?? '').toString();
               if (_selectedSessionId != null && sid == _selectedSessionId) { _tickRefresh(); }
@@ -212,6 +220,65 @@ class _MyHomePageState extends State<MyHomePage> {
     _sessionsReloadDebounce = Timer(const Duration(milliseconds: 300), () {
       if (!_loadingSessions) { _loadSessions(); }
     });
+  }
+
+  Future<void> _clearAllSessions() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear all sessions?'),
+        content: const Text('This will remove all sessions from backend and UI.'),
+        actions: [
+          TextButton(onPressed: ()=> Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error), onPressed: ()=> Navigator.of(ctx).pop(true), child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      // ignore: invalid_use_of_protected_member
+      final client = sl.get<Object>();
+      bool cleared = false;
+      try {
+        await (client as dynamic).delete(path: '/_api/v1/sessions');
+        cleared = true;
+      } catch (_) {}
+      if (!cleared) {
+        try {
+          await (client as dynamic).delete(path: '/api/sessions');
+          cleared = true;
+        } catch (_) {}
+      }
+      if (!cleared) {
+        // fallback: iteratively delete known sessions
+        final items = context.read<SessionsStore>().items.toList();
+        for (final s in items) {
+          try { await (client as dynamic).delete(path: '/_api/v1/sessions/${s.id}'); } catch (_) {}
+          try { await (client as dynamic).delete(path: '/api/sessions/${s.id}'); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    // reset local state immediately
+    setState(() {
+      _selectedSessionId = null;
+      _frames.clear();
+      _events.clear();
+      _selectedRange = null;
+      _wfFitAll = true; // let timeline start from now and fit all
+      _since = DateTime.now().toUtc(); // водораздел для UI
+    });
+    try { await PrefsService().saveSince(_since!); } catch (_) {}
+    // clear stores immediately for instant UI reset
+    try { context.read<SessionsStore>().clear(); } catch (_) {}
+    try { context.read<AggregateStore>().clear(); } catch (_) {}
+    // temporarily suppress auto-reload caused by monitor events
+    _sessionsReloadDebounce?.cancel();
+    _loadingSessions = true;
+    await Future.delayed(const Duration(milliseconds: 300));
+    _loadingSessions = false;
+    // final reload to confirm empty state
+    await _loadSessions();
   }
 
   String _wsURL(String base, String path) {
@@ -297,6 +364,8 @@ class _MyHomePageState extends State<MyHomePage> {
       _headerKeyCtrl.text = data['headerKey'] ?? '';
       _headerValCtrl.text = data['headerVal'] ?? '';
     });
+    // restore since-ts if any
+    try { _since = await PrefsService().loadSince(); } catch (_) {}
   }
 
   Future<void> _savePrefs() async {
@@ -415,7 +484,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-              ElevatedButton(onPressed: _loadSessions, child: const Text('Refresh')),
+              // ElevatedButton(onPressed: _loadSessions, child: const Text('Refresh')),
               IconButton(onPressed: (){ setState(() { _showFilters = !_showFilters; }); }, tooltip: 'Filters', icon: const Icon(Icons.filter_list)),
               IconButton(onPressed: widget.onToggleTheme, tooltip: 'Theme', icon: const Icon(Icons.brightness_6)),
               TextButton.icon(
@@ -430,29 +499,49 @@ class _MyHomePageState extends State<MyHomePage> {
               padding: const EdgeInsets.only(top: 8),
               child: Stack(children: [
                 Observer(builder: (_) {
-                  final sessions = context.watch<SessionsStore>().items.toList();
+                  final raw = context.watch<SessionsStore>().items.toList();
+                  final sessions = _since == null
+                      ? raw
+                      : raw.where((s) {
+                          final st = s.startedAt;
+                          return st == null || !st.isBefore(_since!);
+                        }).toList(growable: false);
                   return WaterfallTimeline(
                     sessions: sessions,
+                    fitAll: _wfFitAll,
+                    onFitAllChanged: (v){ setState(() { _wfFitAll = v; }); },
                     onIntervalSelected: (range){ setState(() { _selectedRange = range; }); },
                     onSessionSelected: (s){ setState(() { _selectedSessionId = s.id; }); _loadDetails(s.id); },
+                    initialRange: _since == null ? null : DateTimeRange(start: _since!, end: DateTime.now()),
                   );
                 }),
                 Positioned(
                   right: 0,
                   top: 0,
-                  child: IconButton(
-                    tooltip: 'Open fullscreen',
-                    icon: const Icon(Icons.fullscreen),
-                    onPressed: () async {
-                      final res = await Navigator.of(context).push< dynamic>(
-                        MaterialPageRoute(builder: (_) => WaterfallTimelineFullscreenPage(initialRange: _selectedRange)),
-                      );
-                      if (res is String) {
-                        setState(() { _selectedSessionId = res; });
-                        _loadDetails(res);
-                      }
-                    },
-                  ),
+                  child: Row(children: [
+                    IconButton(
+                      tooltip: 'Clear all sessions',
+                      icon: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error),
+                      onPressed: () async { await _clearAllSessions(); },
+                    ),
+                    TimelineSettingsButton(
+                      getFit: () => _wfFitAll,
+                      setFit: (v){ setState(() { _wfFitAll = v; }); },
+                    ),
+                    IconButton(
+                      tooltip: 'Open fullscreen',
+                      icon: const Icon(Icons.fullscreen),
+                      onPressed: () async {
+                        final res = await Navigator.of(context).push< dynamic>(
+                          MaterialPageRoute(builder: (_) => WaterfallTimelineFullscreenPage(initialRange: _selectedRange)),
+                        );
+                        if (res is String) {
+                          setState(() { _selectedSessionId = res; });
+                          _loadDetails(res);
+                        }
+                      },
+                    ),
+                  ]),
                 ),
               ]),
             ),
@@ -585,7 +674,9 @@ class _MyHomePageState extends State<MyHomePage> {
                             final status = int.tryParse((meta['status'] ?? '').toString()) ?? 0;
                             final durationMs = int.tryParse((meta['durationMs'] ?? '').toString()) ?? -1;
                             final cacheStatus = (meta['cache']?['status'] ?? '').toString();
-                            final corsOk = (meta['cors']?['ok'] ?? false) == true;
+                            // Пока нет ответа (status==0) не показываем CORS, рисуем loader
+                            final hasResponse = status > 0;
+                            final corsOk = hasResponse ? ((meta['cors']?['ok'] ?? false) == true) : true;
                             final isWs = (s.kind == 'ws') || (method.isEmpty && (s.kind == null));
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -614,6 +705,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                             if (isWs) _chip('WS', backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1), foregroundColor: Theme.of(context).colorScheme.primary),
                                             if (!isWs && method.isNotEmpty) _chip(method.toUpperCase(), backgroundColor: Theme.of(context).colorScheme.surfaceVariant, foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant),
                                             if (!isWs && status > 0) _chip('HTTP $status', backgroundColor: _statusBg(status), foregroundColor: _statusFg(status)),
+                                            if (!isWs && !hasResponse) const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                                             if (!isWs && durationMs >= 0) _chip('${durationMs} ms', backgroundColor: _durationBg(durationMs), foregroundColor: _durationFg(durationMs)),
                                             if (!isWs && cacheStatus.isNotEmpty)
                                               (cacheStatus.toUpperCase() == 'MISS')
@@ -782,6 +874,11 @@ class _MyHomePageState extends State<MyHomePage> {
   List<dynamic> _visibleSessions() {
     final src = context.read<SessionsStore>().items.toList();
     final filtered = src.where((s) {
+      // hide sessions started before last clear
+      if (_since != null) {
+        final st = s.startedAt;
+        if (st != null && st.isBefore(_since!)) return false;
+      }
       // time range filter (if selected)
       if (_selectedRange != null) {
         final start = s.startedAt;
@@ -963,3 +1060,5 @@ class _Card extends StatelessWidget {
     );
   }
 }
+
+// moved TimelineSettingsButton to features/inspector/presentation/widgets/timeline_settings_button.dart

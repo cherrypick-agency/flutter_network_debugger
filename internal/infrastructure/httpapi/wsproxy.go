@@ -113,6 +113,7 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
         _ = src.Close()
         _ = dst.Close()
         // close session if both sides closed (best-effort)
+        _ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
         d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
         d.Metrics.ActiveSessions.Dec()
         d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Msg("wsproxy: stream closed")

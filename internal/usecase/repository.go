@@ -13,6 +13,7 @@ type SessionRepository interface {
     ListSessions(ctx context.Context, f SessionFilter) ([]domain.Session, int, error)
     IncrementCounters(ctx context.Context, id string, frame domain.Frame) error
     SetClosed(ctx context.Context, id string, closedAt time.Time, errMsg *string) error
+    ClearAllSessions(ctx context.Context) error
 }
 
 type FrameRepository interface {

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../theme/context_ext.dart';
 import '../../application/stores/sessions_store.dart';
-import '../../domain/entities/session.dart';
 import 'waterfall_timeline.dart';
 
 class WaterfallTimelineFullscreenPage extends StatelessWidget {
@@ -30,9 +29,16 @@ class WaterfallTimelineFullscreenPage extends StatelessWidget {
             const SizedBox(height: 8),
             Expanded(
               child: Consumer<SessionsStore>(builder: (context, store, _) {
-                final sessions = store.items.toList();
+                final raw = store.items.toList();
+                final sessions = initialRange == null
+                    ? raw
+                    : raw.where((s) {
+                        final st = s.startedAt;
+                        return st == null || !st.isBefore(initialRange!.start);
+                      }).toList(growable: false);
                 return WaterfallTimeline(
                   sessions: sessions,
+                  expandToParent: true,
                   initialRange: initialRange,
                   onIntervalSelected: (range) {
                     // optionally communicate back via Navigator.pop or state mgmt

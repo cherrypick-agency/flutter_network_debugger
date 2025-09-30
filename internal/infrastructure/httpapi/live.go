@@ -37,6 +37,17 @@ func (ls *LiveSessions) Unregister(sessionID string) {
     ls.mu.Unlock()
 }
 
+// CloseAll закрывает все активные WS-сессии (клиент и апстрим), очищая карту.
+func (ls *LiveSessions) CloseAll() {
+    ls.mu.Lock()
+    for id, w := range ls.m {
+        if w.client != nil { _ = w.client.Close() }
+        if w.upstream != nil { _ = w.upstream.Close() }
+        delete(ls.m, id)
+    }
+    ls.mu.Unlock()
+}
+
 // SendText отправляет текстовый фрейм в заданном направлении.
 // direction: "client->upstream" или "upstream->client".
 func (ls *LiveSessions) SendText(sessionID string, direction string, payload string) error {
@@ -59,5 +70,6 @@ func (ls *LiveSessions) SendText(sessionID string, direction string, payload str
         return errors.New("invalid direction")
     }
 }
+
 
 

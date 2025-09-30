@@ -1,3 +1,69 @@
+# ===============
+# Flutter / Dart
+# ===============
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+build/
+test_cache/
+coverage/
+
+# ===============
+# iOS
+# ===============
+ios/Flutter/.last_build_id
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/.symlinks/
+ios/Pods/
+ios/DerivedData/
+ios/**/xcuserdata/
+
+# ===============
+# macOS
+# ===============
+macos/Flutter/ephemeral/
+macos/Flutter/Flutter-Debug.xcconfig
+macos/Flutter/Flutter-Release.xcconfig
+macos/Flutter/Flutter-Profile.xcconfig
+macos/Flutter/flutter_export_environment.sh
+macos/**/xcuserdata/
+macos/Pods/
+
+# ===============
+# Android (if present later)
+# ===============
+android/.gradle/
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+android/**/build/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/.cxx/
+
+# ===============
+# Windows
+# ===============
+windows/flutter/ephemeral/
+
+# ===============
+# IDE / Editors
+# ===============
+.idea/
+.vscode/
+*.iml
+
+# ===============
+# Logs / Temp
+# ===============
+*.log
+*.tmp
 # Miscellaneous
 *.class
 *.log

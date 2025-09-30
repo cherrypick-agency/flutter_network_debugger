@@ -23,6 +23,8 @@ type Config struct {
     BodyMaxBytes  int
     BodySpoolDir  string
     PreviewDecompress bool
+    // Artificial response delay for proxy responses (ms)
+    ResponseDelayMs int
 }
 
 func FromEnv() Config {
@@ -48,6 +50,7 @@ func FromEnv() Config {
     } else {
         cfg.PreviewDecompress = true
     }
+    cfg.ResponseDelayMs = getEnvInt("RESPONSE_DELAY_MS", 0)
     if os.Getenv("INSECURE_TLS") == "1" || os.Getenv("INSECURE_TLS") == "true" {
         cfg.InsecureTLS = true
     }
