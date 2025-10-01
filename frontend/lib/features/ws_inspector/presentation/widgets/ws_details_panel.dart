@@ -18,6 +18,25 @@ String _fmtTime(String ts) {
   }
 }
 
+// Локальное состояние поиска для одного фрейма
+class _LocalSearchState {
+  _LocalSearchState()
+    : controller = TextEditingController(),
+      focus = FocusNode();
+  bool show = false;
+  final TextEditingController controller;
+  final FocusNode focus;
+  bool matchCase = false;
+  bool wholeWord = false;
+  bool useRegex = false;
+  int focusedIndex = 0;
+  List<GlobalKey> keys = const [];
+  void dispose() {
+    controller.dispose();
+    focus.dispose();
+  }
+}
+
 class WsDetailsPanel extends StatefulWidget {
   const WsDetailsPanel({
     super.key,
@@ -63,13 +82,56 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   int _globalFocusedIndex = 0;
   int _globalTotalMatches = 0;
   final Map<String, int> _frameMatchCounts = <String, int>{};
-  final Map<String, List<GlobalKey>> _frameMatchKeys = <String, List<GlobalKey>>{};
+  final Map<String, List<GlobalKey>> _frameMatchKeys =
+      <String, List<GlobalKey>>{};
   String? _pendingFocusFrameId;
   int _pendingFocusLocalIndex = 0;
 
+  // Локальный поиск на уровне фреймов
+  final Map<String, _LocalSearchState> _localSearch =
+      <String, _LocalSearchState>{};
+  _LocalSearchState _localFor(String id) =>
+      _localSearch.putIfAbsent(id, () => _LocalSearchState());
+  void _localGotoNext(String id) {
+    final s = _localSearch[id];
+    if (s == null || s.keys.isEmpty) return;
+    setState(() {
+      s.focusedIndex = (s.focusedIndex + 1) % s.keys.length;
+    });
+    final ctx = s.keys[s.focusedIndex].currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 200),
+        alignment: 0.1,
+      );
+    }
+  }
+
+  void _localGotoPrev(String id) {
+    final s = _localSearch[id];
+    if (s == null || s.keys.isEmpty) return;
+    setState(() {
+      s.focusedIndex =
+          (s.focusedIndex - 1) < 0 ? s.keys.length - 1 : s.focusedIndex - 1;
+    });
+    final ctx = s.keys[s.focusedIndex].currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 200),
+        alignment: 0.1,
+      );
+    }
+  }
+
   bool _frameMatches(Map<String, dynamic> f) {
-    if (widget.opcodeFilter != 'all' && (f['opcode']?.toString() ?? '') != widget.opcodeFilter) return false;
-    if (widget.directionFilter != 'all' && (f['direction']?.toString() ?? '') != widget.directionFilter) return false;
+    if (widget.opcodeFilter != 'all' &&
+        (f['opcode']?.toString() ?? '') != widget.opcodeFilter)
+      return false;
+    if (widget.directionFilter != 'all' &&
+        (f['direction']?.toString() ?? '') != widget.directionFilter)
+      return false;
     return true;
   }
 
@@ -80,26 +142,33 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     final preview = (f['preview'] ?? '').toString();
     final size = (f['size'] ?? 0).toString();
     final isWsPingPong = opcode == 'ping' || opcode == 'pong';
-    final isEnginePingPong = opcode == 'text' && (preview == '2' || preview == '3') && size == '1';
+    final isEnginePingPong =
+        opcode == 'text' && (preview == '2' || preview == '3') && size == '1';
     return isWsPingPong || isEnginePingPong;
   }
 
   void _scrollToFrame(String frameId) {
     // Простой вариант: найти индекс и прокрутить к нему
-    final idx = widget.frames.indexWhere((e) => (e as Map)['id']?.toString() == frameId);
+    final idx = widget.frames.indexWhere(
+      (e) => (e as Map)['id']?.toString() == frameId,
+    );
     if (idx < 0) return;
     // приблизительная высота элемента
     final estimatedItemExtent = 56.0;
     final target = (idx * estimatedItemExtent).toDouble();
     if (!_listCtrl.hasClients) return;
-    _listCtrl.animateTo(
-      target.clamp(0, _listCtrl.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-    ).whenComplete((){
-      if (!mounted) return;
-      setState(() { _expandedId = frameId; });
-    });
+    _listCtrl
+        .animateTo(
+          target.clamp(0, _listCtrl.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        )
+        .whenComplete(() {
+          if (!mounted) return;
+          setState(() {
+            _expandedId = frameId;
+          });
+        });
   }
 
   void _reindexGlobalMatches() {
@@ -107,7 +176,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     _frameMatchCounts.clear();
     _globalTotalMatches = 0;
     if (query.isEmpty) {
-      setState(() { _globalFocusedIndex = 0; });
+      setState(() {
+        _globalFocusedIndex = 0;
+      });
       return;
     }
     for (final f in widget.frames) {
@@ -117,7 +188,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       if (_brushRange != null) {
         try {
           final ts = DateTime.parse((fm['ts'] ?? '').toString());
-          if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end)) continue;
+          if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end))
+            continue;
         } catch (_) {}
       }
       final preview = (fm['preview'] ?? '').toString();
@@ -135,9 +207,13 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       }
     }
     if (_globalTotalMatches == 0) {
-      setState(() { _globalFocusedIndex = 0; });
+      setState(() {
+        _globalFocusedIndex = 0;
+      });
     } else if (_globalFocusedIndex >= _globalTotalMatches) {
-      setState(() { _globalFocusedIndex = 0; });
+      setState(() {
+        _globalFocusedIndex = 0;
+      });
     } else {
       setState(() {});
     }
@@ -158,10 +234,12 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         if (_wholeWord) {
           bool isWordChar(String ch) {
             final code = ch.codeUnitAt(0);
-            final isAZ = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+            final isAZ =
+                (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
             final is09 = (code >= 48 && code <= 57);
             return isAZ || is09 || ch == '_';
           }
+
           final s = m.start;
           final e = m.end;
           final left = s - 1 >= 0 ? text.substring(s - 1, s) : null;
@@ -186,12 +264,16 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       final is09 = (code >= 48 && code <= 57);
       return isAZ || is09 || ch == '_';
     }
+
     while (true) {
       final idx = src.indexOf(query, from);
       if (idx < 0) break;
       if (_wholeWord) {
         final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final right = (idx + query.length) < src.length ? src.substring(idx + query.length, idx + query.length + 1) : null;
+        final right =
+            (idx + query.length) < src.length
+                ? src.substring(idx + query.length, idx + query.length + 1)
+                : null;
         final leftOk = left == null || !isWordChar(left);
         final rightOk = right == null || !isWordChar(right);
         if (!(leftOk && rightOk)) {
@@ -225,7 +307,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     if (_globalTotalMatches <= 0) return;
     final (fid, local) = _resolveGlobalIndexToFrame(gIndex);
     if (fid == null) return;
-    setState(() { _expandedId = fid; });
+    setState(() {
+      _expandedId = fid;
+    });
     // Прокрутка к тайлу
     _scrollToFrame(fid);
     // Если ключи ещё не готовы — отложим
@@ -244,11 +328,19 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                 if (!mounted) return;
                 final ctx2 = keys[local].currentContext;
                 if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
-                  Scrollable.ensureVisible(ctx2, duration: const Duration(milliseconds: 200), alignment: 0.1);
+                  Scrollable.ensureVisible(
+                    ctx2,
+                    duration: const Duration(milliseconds: 200),
+                    alignment: 0.1,
+                  );
                 }
               });
             } else {
-              Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), alignment: 0.1);
+              Scrollable.ensureVisible(
+                ctx,
+                duration: const Duration(milliseconds: 200),
+                alignment: 0.1,
+              );
             }
           } catch (_) {}
         });
@@ -261,13 +353,20 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   void _gotoNext() {
     if (_globalTotalMatches <= 0) return;
-    setState(() { _globalFocusedIndex = (_globalFocusedIndex + 1) % _globalTotalMatches; });
+    setState(() {
+      _globalFocusedIndex = (_globalFocusedIndex + 1) % _globalTotalMatches;
+    });
     _focusGlobal(_globalFocusedIndex);
   }
 
   void _gotoPrev() {
     if (_globalTotalMatches <= 0) return;
-    setState(() { _globalFocusedIndex = (_globalFocusedIndex - 1) < 0 ? _globalTotalMatches - 1 : _globalFocusedIndex - 1; });
+    setState(() {
+      _globalFocusedIndex =
+          (_globalFocusedIndex - 1) < 0
+              ? _globalTotalMatches - 1
+              : _globalFocusedIndex - 1;
+    });
     _focusGlobal(_globalFocusedIndex);
   }
 
@@ -276,10 +375,15 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _listCtrl.dispose();
+    for (final s in _localSearch.values) {
+      s.dispose();
+    }
     super.dispose();
   }
 
   void _onChildMatches(String frameId, int count, List<GlobalKey> keys) {
+    if (!_showGlobalSearch)
+      return; // локальный поиск не должен перетирать глобальные ключи
     _frameMatchKeys[frameId] = keys;
     // если ждём фокус именно этого фрейма — попробуем перейти
     if (_pendingFocusFrameId == frameId) {
@@ -296,11 +400,19 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                   if (!mounted) return;
                   final ctx2 = keys[local].currentContext;
                   if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
-                    Scrollable.ensureVisible(ctx2, duration: const Duration(milliseconds: 200), alignment: 0.1);
+                    Scrollable.ensureVisible(
+                      ctx2,
+                      duration: const Duration(milliseconds: 200),
+                      alignment: 0.1,
+                    );
                   }
                 });
               } else {
-                Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), alignment: 0.1);
+                Scrollable.ensureVisible(
+                  ctx,
+                  duration: const Duration(milliseconds: 200),
+                  alignment: 0.1,
+                );
               }
             } catch (_) {}
           });
@@ -312,202 +424,471 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final timelineSection = Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: (_showTimeline) ? Column(children: [
-      Builder(builder: (context){
-        final framesList = widget.frames.cast<Map<String, dynamic>>();
-        final tlFrames = framesList.where((f){
-          if (!_frameMatches(f)) return false;
-          if (widget.hideHeartbeats && _isHeartbeat(f)) return false;
-          return true;
-        }).toList();
-        return FramesTimeline(
-          frames: tlFrames,
-          height: 50,
-          onFrameTap: _scrollToFrame,
-          onBrushChanged: (r){ setState(() { _brushRange = r; }); },
-          onFrameHover: (id){
-            final idx = widget.frames.indexWhere((e) => (e as Map)['id']?.toString() == id);
-            if (idx >= 0 && _listCtrl.hasClients) {
-              final estimatedItemExtent = 56.0;
-              final target = (idx * estimatedItemExtent).toDouble();
-              _listCtrl.jumpTo(target.clamp(0, _listCtrl.position.maxScrollExtent));
-            }
-          },
-        );
-      }),
-      const Align(alignment: Alignment.centerLeft, child: FramesTimelineLegend()),
-      const SizedBox(height: 4),
-      if (_showGlobalSearch) _buildGlobalSearchBar(context),
-    ]) : (_showGlobalSearch ? Column(children: [ _buildGlobalSearchBar(context), const SizedBox(height: 8) ]) : const SizedBox.shrink()));
-
-    return Column(children: [
-      // Диаграмма и поиск над заголовком
-      timelineSection,
-      Expanded(child:
-       _Card(
-        title: 'Frames',
-        actions: [
-          FilterChip(
-            label: const Text('Pretty', style: TextStyle(fontSize: 12)),
-            selected: _pretty && !_tree,
-            onSelected: (v){ setState((){ _pretty = v; if (v) _tree = false; }); },
-          ),
-          const SizedBox(width: 6),
-          FilterChip(
-            label: const Text('Tree', style: TextStyle(fontSize: 12)),
-            selected: _tree,
-            onSelected: (v){ setState((){ _tree = v; if (v) _pretty = false; }); },
-          ),
-          const SizedBox(width: 6),
-          Builder(builder: (context){
-            final c = context.appColors;
-            final cs = Theme.of(context).colorScheme;
-            final sel = _showTimeline;
-            return FilterChip(
-              avatar: Icon(Icons.timeline, size: 14, color: sel ? c.primary : c.textSecondary),
-              label: const Text('Timeline', style: TextStyle(fontSize: 12)),
-              selected: sel,
-              showCheckmark: false,
-              shape: const StadiumBorder(),
-              side: BorderSide(color: sel ? c.primary : c.border, width: sel ? 1.5 : 1),
-              selectedColor: cs.primary.withOpacity(0.18),
-              backgroundColor: cs.surface,
-              onSelected: (v){ setState((){ _showTimeline = v; }); },
-            );
-          }),
-          const SizedBox(width: 6),
-          // Глобальный поиск
-          if (!_showGlobalSearch)
-            IconButton(
-              tooltip: 'Search',
-              icon: const Icon(Icons.search, size: 18),
-              onPressed: () {
-                setState(() { _showGlobalSearch = true; });
-                WidgetsBinding.instance.addPostFrameCallback((_){ _searchFocus.requestFocus(); });
-              },
-            ),
-          IconButton(
-            tooltip: 'Filters',
-            icon: const Icon(Icons.filter_list, size: 18),
-            onPressed: () => widget._openFilters(context),
-          ),
-        ],
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                controller: _listCtrl,
-                itemCount: widget.frames.length,
-                itemBuilder: (_, i) {
-                  final f = widget.frames[i] as Map<String, dynamic>;
-                  if (!_frameMatches(f)) { return const SizedBox.shrink(); }
-                  if (_brushRange != null) {
-                    try {
-                      final ts = DateTime.parse((f['ts'] ?? '').toString());
-                      if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end)) {
-                        return const SizedBox.shrink();
-                      }
-                    } catch (_) {}
-                  }
-                  final preview = (f['preview'] ?? '').toString();
-                  final extractedJson = _extractJsonPayload(preview);
-                  final dir = (f['direction'] ?? '').toString();
-                  final isDown = dir == 'upstream->client';
-
-                  final ts = _fmtTime((f['ts'] ?? '').toString());
-                  final opcode = (f['opcode'] ?? '').toString();
-                  final size = (f['size'] ?? 0).toString();
-                  final isWsPingPong = opcode == 'ping' || opcode == 'pong';
-                  final isEnginePingPong = opcode == 'text' && (preview == '2' || preview == '3') && size == '1';
-                  final isHeartbeat = isWsPingPong || isEnginePingPong;
-                  final icon = Icon(
-                    isDown ? Icons.south : Icons.north,
-                    size: isHeartbeat ? 10 : 16,
-                    color: isDown ? context.appColors.success : context.appColors.primary,
-                  );
-                  if (widget.hideHeartbeats && isHeartbeat) {
-                    return const SizedBox.shrink();
-                  }
-                  if (isHeartbeat) {
-                    final label = isWsPingPong
-                        ? opcode.toUpperCase()
-                        : (preview == '2' ? 'PING' : 'PONG');
-                    return ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                      leading: Row(mainAxisSize: MainAxisSize.min, children: [icon, const SizedBox(width: 6), Text(label)]),
-                      trailing: Text(ts, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary)),
-                    );
-                  }
-                  final idStr = (f['id'] ?? '').toString();
-                  final isExpanded = idStr == _expandedId;
-                  // Локальный focusedIndex для этого фрейма
-                  int localFocusedIndex = -1;
-                  if (_globalTotalMatches > 0 && _frameMatchCounts.isNotEmpty) {
-                    int acc = 0;
-                    for (final ff in widget.frames) {
-                      final fid = ((ff as Map)['id'] ?? '').toString();
-                      final cnt = _frameMatchCounts[fid] ?? 0;
-                      if (cnt <= 0) continue;
-                      final end = acc + cnt - 1;
-                      if (fid == idStr && _globalFocusedIndex >= acc && _globalFocusedIndex <= end) {
-                        localFocusedIndex = _globalFocusedIndex - acc;
-                        break;
-                      }
-                      acc += cnt;
-                    }
-                  }
-                  return ExpansionTile(
-                    key: ValueKey('frame_${idStr}_${isExpanded ? 'open' : 'closed'}'),
-                    initiallyExpanded: isExpanded,
-                    tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-                    dense: true,
-                    leading: Row(mainAxisSize: MainAxisSize.min, children: [icon, const SizedBox(width: 6), Text(f['opcode'].toString())]),
-                    title: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.appText.body),
-                    subtitle: Row(children: [
-                      Expanded(child: Text('${f['size']} B', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary))),
-                    ]),
-                    trailing: Text(ts, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.appColors.textSecondary)),
-                    onExpansionChanged: (open){ setState((){ _expandedId = open ? idStr : (_expandedId == idStr ? null : _expandedId); }); },
-                    children: [
-                      Container(
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.all(8),
-                        child: Builder(builder: (context) {
-                          final cfg = JsonSearchConfig(
-                            query: _showGlobalSearch ? _searchCtrl.text.trim() : '',
-                            matchCase: _matchCase,
-                            wholeWord: _wholeWord,
-                            focusedIndex: localFocusedIndex < 0 ? 0 : localFocusedIndex,
-                            onRebuilt: (count, keys) {
-                              _onChildMatches(idStr, count, keys);
-                              // Пересчитаем индексацию при первом появлении ключей
-                              if ((_frameMatchCounts[idStr] ?? -1) != count) {
-                                _frameMatchCounts[idStr] = count;
-                                _reindexGlobalMatches();
-                              }
-                            },
+    final timelineSection = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child:
+          (_showTimeline)
+              ? Column(
+                children: [
+                  Builder(
+                    builder: (context) {
+                      final framesList =
+                          widget.frames.cast<Map<String, dynamic>>();
+                      final tlFrames =
+                          framesList.where((f) {
+                            if (!_frameMatches(f)) return false;
+                            if (widget.hideHeartbeats && _isHeartbeat(f))
+                              return false;
+                            return true;
+                          }).toList();
+                      return FramesTimeline(
+                        frames: tlFrames,
+                        height: 50,
+                        onFrameTap: _scrollToFrame,
+                        onBrushChanged: (r) {
+                          setState(() {
+                            _brushRange = r;
+                          });
+                        },
+                        onFrameHover: (id) {
+                          final idx = widget.frames.indexWhere(
+                            (e) => (e as Map)['id']?.toString() == id,
                           );
-                          if (extractedJson != null) {
-                            if (_tree) {
-                              return JsonTreeRich(data: jsonDecode(extractedJson), search: cfg);
-                            }
-                            if (_pretty) {
-                              return JsonPrettyRich(data: jsonDecode(extractedJson), search: cfg);
-                            }
+                          if (idx >= 0 && _listCtrl.hasClients) {
+                            final estimatedItemExtent = 56.0;
+                            final target =
+                                (idx * estimatedItemExtent).toDouble();
+                            _listCtrl.jumpTo(
+                              target.clamp(
+                                0,
+                                _listCtrl.position.maxScrollExtent,
+                              ),
+                            );
                           }
-                          return SearchableTextRich(text: preview, search: cfg, style: context.appText.monospace);
-                        }),
-                      ),
+                        },
+                      );
+                    },
+                  ),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: FramesTimelineLegend(),
+                  ),
+                  const SizedBox(height: 4),
+                  if (_showGlobalSearch) _buildGlobalSearchBar(context),
+                ],
+              )
+              : (_showGlobalSearch
+                  ? Column(
+                    children: [
+                      _buildGlobalSearchBar(context),
+                      const SizedBox(height: 8),
                     ],
+                  )
+                  : const SizedBox.shrink()),
+    );
+
+    return Column(
+      children: [
+        // Диаграмма и поиск над заголовком
+        timelineSection,
+        Expanded(
+          child: _Card(
+            title: 'Frames',
+            actions: [
+              FilterChip(
+                label: const Text('Pretty', style: TextStyle(fontSize: 12)),
+                selected: _pretty && !_tree,
+                onSelected: (v) {
+                  setState(() {
+                    _pretty = v;
+                    if (v) _tree = false;
+                  });
+                },
+              ),
+              const SizedBox(width: 6),
+              FilterChip(
+                label: const Text('Tree', style: TextStyle(fontSize: 12)),
+                selected: _tree,
+                onSelected: (v) {
+                  setState(() {
+                    _tree = v;
+                    if (v) _pretty = false;
+                  });
+                },
+              ),
+              const SizedBox(width: 6),
+              Builder(
+                builder: (context) {
+                  final c = context.appColors;
+                  final cs = Theme.of(context).colorScheme;
+                  final sel = _showTimeline;
+                  return FilterChip(
+                    avatar: Icon(
+                      Icons.timeline,
+                      size: 14,
+                      color: sel ? c.primary : c.textSecondary,
+                    ),
+                    label: const Text(
+                      'Timeline',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    selected: sel,
+                    showCheckmark: false,
+                    shape: const StadiumBorder(),
+                    side: BorderSide(
+                      color: sel ? c.primary : c.border,
+                      width: sel ? 1.5 : 1,
+                    ),
+                    selectedColor: cs.primary.withOpacity(0.18),
+                    backgroundColor: cs.surface,
+                    onSelected: (v) {
+                      setState(() {
+                        _showTimeline = v;
+                      });
+                    },
                   );
                 },
               ),
+              const SizedBox(width: 6),
+              // Глобальный поиск
+              if (!_showGlobalSearch)
+                IconButton(
+                  tooltip: 'Search',
+                  icon: const Icon(Icons.search, size: 18),
+                  onPressed: () {
+                    setState(() {
+                      _showGlobalSearch = true;
+                    });
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _searchFocus.requestFocus();
+                    });
+                  },
+                ),
+              IconButton(
+                tooltip: 'Filters',
+                icon: const Icon(Icons.filter_list, size: 18),
+                onPressed: () => widget._openFilters(context),
+              ),
+            ],
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _listCtrl,
+                    itemCount: widget.frames.length,
+                    itemBuilder: (_, i) {
+                      final f = widget.frames[i] as Map<String, dynamic>;
+                      if (!_frameMatches(f)) {
+                        return const SizedBox.shrink();
+                      }
+                      if (_brushRange != null) {
+                        try {
+                          final ts = DateTime.parse((f['ts'] ?? '').toString());
+                          if (ts.isBefore(_brushRange!.start) ||
+                              ts.isAfter(_brushRange!.end)) {
+                            return const SizedBox.shrink();
+                          }
+                        } catch (_) {}
+                      }
+                      final preview = (f['preview'] ?? '').toString();
+                      final extractedJson = _extractJsonPayload(preview);
+                      final dir = (f['direction'] ?? '').toString();
+                      final isDown = dir == 'upstream->client';
+
+                      final ts = _fmtTime((f['ts'] ?? '').toString());
+                      final opcode = (f['opcode'] ?? '').toString();
+                      final size = (f['size'] ?? 0).toString();
+                      final isWsPingPong = opcode == 'ping' || opcode == 'pong';
+                      final isEnginePingPong =
+                          opcode == 'text' &&
+                          (preview == '2' || preview == '3') &&
+                          size == '1';
+                      final isHeartbeat = isWsPingPong || isEnginePingPong;
+                      final icon = Icon(
+                        isDown ? Icons.south : Icons.north,
+                        size: isHeartbeat ? 10 : 16,
+                        color:
+                            isDown
+                                ? context.appColors.success
+                                : context.appColors.primary,
+                      );
+                      if (widget.hideHeartbeats && isHeartbeat) {
+                        return const SizedBox.shrink();
+                      }
+                      if (isHeartbeat) {
+                        final label =
+                            isWsPingPong
+                                ? opcode.toUpperCase()
+                                : (preview == '2' ? 'PING' : 'PONG');
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                          ),
+                          leading: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              icon,
+                              const SizedBox(width: 6),
+                              Text(label),
+                            ],
+                          ),
+                          trailing: Text(
+                            ts,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelSmall?.copyWith(
+                              color: context.appColors.textSecondary,
+                            ),
+                          ),
+                        );
+                      }
+                      final idStr = (f['id'] ?? '').toString();
+                      final isExpanded = idStr == _expandedId;
+                      // Локальный focusedIndex для этого фрейма
+                      int localFocusedIndex = -1;
+                      if (_globalTotalMatches > 0 &&
+                          _frameMatchCounts.isNotEmpty) {
+                        int acc = 0;
+                        for (final ff in widget.frames) {
+                          final fid = ((ff as Map)['id'] ?? '').toString();
+                          final cnt = _frameMatchCounts[fid] ?? 0;
+                          if (cnt <= 0) continue;
+                          final end = acc + cnt - 1;
+                          if (fid == idStr &&
+                              _globalFocusedIndex >= acc &&
+                              _globalFocusedIndex <= end) {
+                            localFocusedIndex = _globalFocusedIndex - acc;
+                            break;
+                          }
+                          acc += cnt;
+                        }
+                      }
+                      return ExpansionTile(
+                        key: ValueKey(
+                          'frame_${idStr}_${isExpanded ? 'open' : 'closed'}',
+                        ),
+                        initiallyExpanded: isExpanded,
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                        dense: true,
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            icon,
+                            const SizedBox(width: 6),
+                            Text(f['opcode'].toString()),
+                          ],
+                        ),
+                        title: Text(
+                          preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.appText.body,
+                        ),
+                        subtitle: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${f['size']} B',
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.labelSmall?.copyWith(
+                                  color: context.appColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: Text(
+                          ts,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.labelSmall?.copyWith(
+                            color: context.appColors.textSecondary,
+                          ),
+                        ),
+                        onExpansionChanged: (open) {
+                          setState(() {
+                            _expandedId =
+                                open
+                                    ? idStr
+                                    : (_expandedId == idStr
+                                        ? null
+                                        : _expandedId);
+                          });
+                        },
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final local = _localFor(idStr);
+                              final String activeQuery =
+                                  local.show
+                                      ? local.controller.text.trim()
+                                      : (_showGlobalSearch
+                                          ? _searchCtrl.text.trim()
+                                          : '');
+                              final bool activeMatchCase =
+                                  local.show ? local.matchCase : _matchCase;
+                              final bool activeWholeWord =
+                                  local.show ? local.wholeWord : _wholeWord;
+                              final bool activeUseRegex =
+                                  local.show ? local.useRegex : _useRegex;
+                              final int activeFocusedIndex =
+                                  local.show
+                                      ? local.focusedIndex
+                                      : (localFocusedIndex < 0
+                                          ? 0
+                                          : localFocusedIndex);
+
+                              final content = Container(
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.all(8),
+                                child: Builder(
+                                  builder: (context) {
+                                    final cfg = JsonSearchConfig(
+                                      query: activeQuery,
+                                      matchCase: activeMatchCase,
+                                      wholeWord: activeWholeWord,
+                                      useRegex: activeUseRegex,
+                                      focusedIndex: activeFocusedIndex,
+                                      onRebuilt: (count, keys) {
+                                        if (local.show) {
+                                          setState(() {
+                                            local.keys = keys;
+                                            if (local.focusedIndex >=
+                                                keys.length) {
+                                              local.focusedIndex = 0;
+                                            }
+                                          });
+                                        } else if (_showGlobalSearch) {
+                                          _onChildMatches(idStr, count, keys);
+                                          if ((_frameMatchCounts[idStr] ??
+                                                  -1) !=
+                                              count) {
+                                            _frameMatchCounts[idStr] = count;
+                                            _reindexGlobalMatches();
+                                          }
+                                        }
+                                      },
+                                    );
+                                    if (extractedJson != null) {
+                                      if (_tree) {
+                                        return JsonTreeRich(
+                                          data: jsonDecode(extractedJson),
+                                          search: cfg,
+                                        );
+                                      }
+                                      if (_pretty) {
+                                        return JsonPrettyRich(
+                                          data: jsonDecode(extractedJson),
+                                          search: cfg,
+                                        );
+                                      }
+                                    }
+                                    return SearchableTextRich(
+                                      text: preview,
+                                      search: cfg,
+                                      style: context.appText.monospace,
+                                    );
+                                  },
+                                ),
+                              );
+
+                              return Stack(
+                                children: [
+                                  content,
+                                  Positioned(
+                                    top: 6,
+                                    left: 6,
+                                    right: 6,
+                                    child: Align(
+                                      alignment: Alignment.topRight,
+                                      child:
+                                          local.show
+                                              ? CommonSearchBar(
+                                                controller: local.controller,
+                                                focusNode: local.focus,
+                                                countText:
+                                                    local.keys.isEmpty
+                                                        ? '0/0'
+                                                        : '${local.focusedIndex + 1}/${local.keys.length}',
+                                                matchCase: local.matchCase,
+                                                wholeWord: local.wholeWord,
+                                                useRegex: local.useRegex,
+                                                canNavigate:
+                                                    local.keys.isNotEmpty,
+                                                onChanged: () {
+                                                  setState(() {
+                                                    local.focusedIndex = 0;
+                                                  });
+                                                },
+                                                onNext:
+                                                    () => _localGotoNext(idStr),
+                                                onPrev:
+                                                    () => _localGotoPrev(idStr),
+                                                onClose: () {
+                                                  setState(() {
+                                                    local.show = false;
+                                                    local.controller.clear();
+                                                    local.focusedIndex = 0;
+                                                    local.keys = const [];
+                                                    local.focus.unfocus();
+                                                  });
+                                                },
+                                                onToggleMatchCase: () {
+                                                  setState(() {
+                                                    local.matchCase =
+                                                        !local.matchCase;
+                                                  });
+                                                },
+                                                onToggleWholeWord: () {
+                                                  setState(() {
+                                                    local.wholeWord =
+                                                        !local.wholeWord;
+                                                  });
+                                                },
+                                                onToggleRegex: () {
+                                                  setState(() {
+                                                    local.useRegex =
+                                                        !local.useRegex;
+                                                  });
+                                                },
+                                              )
+                                              : IconButton(
+                                                tooltip: 'Search in frame',
+                                                icon: const Icon(
+                                                  Icons.search,
+                                                  size: 18,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    local.show = true;
+                                                  });
+                                                  WidgetsBinding.instance
+                                                      .addPostFrameCallback((
+                                                        _,
+                                                      ) {
+                                                        local.focus
+                                                            .requestFocus();
+                                                      });
+                                                },
+                                              ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ))
-      /*
+        /*
       const VerticalDivider(width: 1),
       SizedBox(width: 200, child: _Card(
         title: 'Events',
@@ -531,11 +912,15 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         ),
       )),
       */
-    ]);
+      ],
+    );
   }
 
   Widget _buildGlobalSearchBar(BuildContext context) {
-    final countText = _globalTotalMatches == 0 ? '0/0' : '${(_globalFocusedIndex + 1)}/${_globalTotalMatches}';
+    final countText =
+        _globalTotalMatches == 0
+            ? '0/0'
+            : '${(_globalFocusedIndex + 1)}/${_globalTotalMatches}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: CommonSearchBar(
@@ -549,14 +934,38 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         onChanged: () {
           _globalFocusedIndex = 0;
           _reindexGlobalMatches();
-          setState((){});
+          setState(() {});
         },
         onNext: _gotoNext,
         onPrev: _gotoPrev,
-        onClose: () { setState(() { _showGlobalSearch = false; _searchCtrl.clear(); _frameMatchCounts.clear(); _frameMatchKeys.clear(); _globalFocusedIndex = 0; _globalTotalMatches = 0; }); },
-        onToggleMatchCase: () { setState(() { _matchCase = !_matchCase; }); _reindexGlobalMatches(); },
-        onToggleWholeWord: () { setState(() { _wholeWord = !_wholeWord; }); _reindexGlobalMatches(); },
-        onToggleRegex: () { setState(() { _useRegex = !_useRegex; }); _reindexGlobalMatches(); },
+        onClose: () {
+          setState(() {
+            _showGlobalSearch = false;
+            _searchCtrl.clear();
+            _frameMatchCounts.clear();
+            _frameMatchKeys.clear();
+            _globalFocusedIndex = 0;
+            _globalTotalMatches = 0;
+          });
+        },
+        onToggleMatchCase: () {
+          setState(() {
+            _matchCase = !_matchCase;
+          });
+          _reindexGlobalMatches();
+        },
+        onToggleWholeWord: () {
+          setState(() {
+            _wholeWord = !_wholeWord;
+          });
+          _reindexGlobalMatches();
+        },
+        onToggleRegex: () {
+          setState(() {
+            _useRegex = !_useRegex;
+          });
+          _reindexGlobalMatches();
+        },
       ),
     );
   }
@@ -579,10 +988,19 @@ class _Card extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))),
-              if (actions != null) ...actions!,
-            ]),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (actions != null) ...actions!,
+              ],
+            ),
             const SizedBox(height: 8),
             Expanded(child: child),
           ],
@@ -594,78 +1012,131 @@ class _Card extends StatelessWidget {
 
 extension on WsDetailsPanel {
   void _openFilters(BuildContext context) {
-    showModalBottomSheet(context: context, builder: (_) {
-      String localOpcode = opcodeFilter;
-      String localDirection = directionFilter;
-      bool localHideHeartbeats = hideHeartbeats;
-      return StatefulBuilder(builder: (context, setState) {
-        return Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('WebSocket filters', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Row(children: [
-                const Text('Opcode:'),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: localOpcode,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('Any')),
-                    DropdownMenuItem(value: 'text', child: Text('Text')),
-                    DropdownMenuItem(value: 'binary', child: Text('Binary')),
-                    DropdownMenuItem(value: 'ping', child: Text('Ping')),
-                    DropdownMenuItem(value: 'pong', child: Text('Pong')),
-                    DropdownMenuItem(value: 'close', child: Text('Close')),
-                  ],
-                  onChanged: (v){ setState((){ localOpcode = v ?? 'all'; }); },
-                ),
-                const SizedBox(width: 16),
-                const Text('Direction:'),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: localDirection,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('Any')),
-                    DropdownMenuItem(value: 'client->upstream', child: Text('client->upstream')),
-                    DropdownMenuItem(value: 'upstream->client', child: Text('upstream->client')),
-                  ],
-                  onChanged: (v){ setState((){ localDirection = v ?? 'all'; }); },
-                ),
-              ]),
-              const SizedBox(height: 8),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: const Text('Hide heartbeats (ping/pong)'),
-                value: localHideHeartbeats,
-                onChanged: (v){ setState((){ localHideHeartbeats = v ?? false; }); },
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        String localOpcode = opcodeFilter;
+        String localDirection = directionFilter;
+        bool localHideHeartbeats = hideHeartbeats;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'WebSocket filters',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('Opcode:'),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: localOpcode,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('Any')),
+                          DropdownMenuItem(value: 'text', child: Text('Text')),
+                          DropdownMenuItem(
+                            value: 'binary',
+                            child: Text('Binary'),
+                          ),
+                          DropdownMenuItem(value: 'ping', child: Text('Ping')),
+                          DropdownMenuItem(value: 'pong', child: Text('Pong')),
+                          DropdownMenuItem(
+                            value: 'close',
+                            child: Text('Close'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            localOpcode = v ?? 'all';
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 16),
+                      const Text('Direction:'),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: localDirection,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('Any')),
+                          DropdownMenuItem(
+                            value: 'client->upstream',
+                            child: Text('client->upstream'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'upstream->client',
+                            child: Text('upstream->client'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            localDirection = v ?? 'all';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Hide heartbeats (ping/pong)'),
+                    value: localHideHeartbeats,
+                    onChanged: (v) {
+                      setState(() {
+                        localHideHeartbeats = v ?? false;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: namespaceCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Namespace contains (or ev=eventName)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        onChangeOpcode(localOpcode);
+                        onChangeDirection(localDirection);
+                        onToggleHeartbeats(localHideHeartbeats);
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Apply'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              TextField(controller: namespaceCtrl, decoration: const InputDecoration(labelText: 'Namespace contains (or ev=eventName)'),),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton(onPressed: (){
-                  onChangeOpcode(localOpcode);
-                  onChangeDirection(localDirection);
-                  onToggleHeartbeats(localHideHeartbeats);
-                  Navigator.of(context).pop();
-                }, child: const Text('Apply')),
-              )
-            ],
-          ),
+            );
+          },
         );
-      });
-    });
+      },
+    );
   }
 }
 
-bool _isJsonLocal(String s) { try { jsonDecode(s); return true; } catch (_) { return false; } }
+bool _isJsonLocal(String s) {
+  try {
+    jsonDecode(s);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 // Некоторые фреймы содержат обёртку протокола (socket.io) вида '42/namespace,[...]' или '2'/'3'
 // Попробуем безопасно извлечь JSON часть, если она есть
@@ -707,16 +1178,42 @@ class _JsonToggleRowState extends State<_JsonToggleRow> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(spacing: 8, children: [
-          FilterChip(label: const Text('Pretty', style: TextStyle(fontSize: 12)), selected: pretty && !tree, onSelected: (v){ setState(() { tree = false; pretty = true; }); }),
-          FilterChip(label: const Text('Tree', style: TextStyle(fontSize: 12)), selected: tree, onSelected: (v){ setState(() { tree = v; pretty = !v; }); }),
-          TextButton.icon(
-            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), textStyle: const TextStyle(fontSize: 12)),
-            onPressed: (){ Clipboard.setData(ClipboardData(text: widget.json)); },
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Copy'),
-          ),
-        ]),
+        Wrap(
+          spacing: 8,
+          children: [
+            FilterChip(
+              label: const Text('Pretty', style: TextStyle(fontSize: 12)),
+              selected: pretty && !tree,
+              onSelected: (v) {
+                setState(() {
+                  tree = false;
+                  pretty = true;
+                });
+              },
+            ),
+            FilterChip(
+              label: const Text('Tree', style: TextStyle(fontSize: 12)),
+              selected: tree,
+              onSelected: (v) {
+                setState(() {
+                  tree = v;
+                  pretty = !v;
+                });
+              },
+            ),
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: widget.json));
+              },
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copy'),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         // Контент
         if (tree)
@@ -727,5 +1224,3 @@ class _JsonToggleRowState extends State<_JsonToggleRow> {
     );
   }
 }
-
-

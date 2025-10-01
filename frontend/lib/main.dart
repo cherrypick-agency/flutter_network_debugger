@@ -27,6 +27,7 @@ import 'package:app_http_client/application/app_http_client.dart'
     as http_client;
 import 'widgets/strike_painter.dart';
 import 'features/hotkeys/presentation/hotkeys_settings_page.dart';
+import 'features/settings/presentation/settings_page.dart';
 import 'core/hotkeys/hotkeys_service.dart';
 
 void main() async {
@@ -100,7 +101,10 @@ class _MyAppState extends State<MyApp> {
             theme: buildLightTheme(),
             darkTheme: buildDarkTheme(),
             themeMode: _mode,
-            routes: {'/hotkeys': (_) => const HotkeysSettingsPage()},
+            routes: {
+              '/hotkeys': (_) => const HotkeysSettingsPage(),
+              '/settings': (_) => const SettingsPage(),
+            },
             home: MyHomePage(onToggleTheme: _toggleTheme),
           );
         },
@@ -132,6 +136,10 @@ class _MyHomePageState extends State<MyHomePage> {
   // legacy loaders removed
   final ScrollController _framesCtrl = ScrollController();
   final ScrollController _eventsCtrl = ScrollController();
+  // Скролл сессий: если пользователь на самом дне — липнем к низу при новых элементах
+  final ScrollController _sessionsCtrl = ScrollController();
+  bool _sessionsStickToBottom = true;
+  int _lastSessionsLen = 0;
   String _opcodeFilter = 'all';
   String _directionFilter = 'all';
   Timer? _pollTimer;
@@ -164,6 +172,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _loadSessions();
     _framesCtrl.addListener(_onFramesScroll);
     _eventsCtrl.addListener(_onEventsScroll);
+    _sessionsCtrl.addListener(_onSessionsScroll);
   }
 
   @override
@@ -173,6 +182,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _sessionsReloadDebounce?.cancel();
     _framesCtrl.dispose();
     _eventsCtrl.dispose();
+    _sessionsCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
   }
@@ -522,6 +532,14 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (_) {}
   }
 
+  void _onSessionsScroll() {
+    if (!_sessionsCtrl.hasClients) return;
+    final pos = _sessionsCtrl.position;
+    // Считаем "внизу", если остался небольшой хвост (для стабилизации на резайзах)
+    final nearBottom = (pos.maxScrollExtent - pos.pixels) < 48;
+    _sessionsStickToBottom = nearBottom;
+  }
+
   // фильтры перенесены в WsDetailsPanel
 
   Future<void> _deleteSelected() async {
@@ -634,6 +652,15 @@ class _MyHomePageState extends State<MyHomePage> {
                                   tooltip: 'Hotkeys',
                                   icon: const Icon(Icons.keyboard),
                                 ),
+                                IconButton(
+                                  onPressed: () {
+                                    Navigator.of(
+                                      context,
+                                    ).pushNamed('/settings');
+                                  },
+                                  tooltip: 'Settings',
+                                  icon: const Icon(Icons.settings),
+                                ),
                               ],
                             ),
                           ),
@@ -661,6 +688,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                 .toList(growable: false);
                                     return WaterfallTimeline(
                                       sessions: sessions,
+                                      autoCompressLanes: true,
                                       fitAll: _wfFitAll,
                                       onFitAllChanged: (v) {
                                         setState(() {
@@ -1095,7 +1123,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                         style: context.appText.title,
                                       ),
                                       const SizedBox(height: 6),
-                                      // Domain chips under Sessions header as Wrap (max 3 rows, then scroll)
+                                      // Домены инлайн: до 3 рядов без пустых мест, далее скролл
                                       Observer(
                                         builder: (_) {
                                           final agg =
@@ -1106,68 +1134,152 @@ class _MyHomePageState extends State<MyHomePage> {
                                               () => agg.load(groupBy: 'domain'),
                                             );
                                           }
-                                          return ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              maxHeight: 48.0,
-                                            ),
-                                            child: SingleChildScrollView(
-                                              child: Wrap(
-                                                spacing: 6,
-                                                runSpacing: 4,
+                                          final labels = [
+                                            for (final g in agg.groups)
+                                              '${(g['key'] ?? '').toString()} (${g['count']})',
+                                          ];
+                                          const double spacing = 6.0;
+                                          const double runSpacing = 4.0;
+                                          const double horizPad =
+                                              6.0; // labelPadding по горизонтали
+                                          const double fontSize =
+                                              10.0; // уменьшено ~в 1.5 раза
+                                          const double chipHPaddingTotal =
+                                              horizPad * 2;
+                                          const double rowHeight =
+                                              24.0; // компактная высота строки
+                                          return LayoutBuilder(
+                                            builder: (context, c) {
+                                              double maxW =
+                                                  c.maxWidth.isFinite
+                                                      ? c.maxWidth
+                                                      : 320.0;
+                                              // Оценим ширины чипов с учётом текста и паддингов
+                                              final textStyle =
+                                                  Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        fontSize: fontSize,
+                                                      ) ??
+                                                  const TextStyle(
+                                                    fontSize: fontSize,
+                                                  );
+                                              List<double> chipWidths = [];
+                                              for (final label in labels) {
+                                                final tp = TextPainter(
+                                                  text: TextSpan(
+                                                    text: label,
+                                                    style: textStyle,
+                                                  ),
+                                                  textDirection:
+                                                      TextDirection.ltr,
+                                                )..layout();
+                                                double w =
+                                                    tp.size.width +
+                                                    chipHPaddingTotal;
+                                                chipWidths.add(w);
+                                              }
+                                              // Подсчёт строк wrap-алгоритмом
+                                              int rows = 1;
+                                              double lineW = 0;
+                                              for (
+                                                int i = 0;
+                                                i < chipWidths.length;
+                                                i++
+                                              ) {
+                                                final cw = chipWidths[i];
+                                                final add =
+                                                    lineW == 0
+                                                        ? cw
+                                                        : cw + spacing;
+                                                if (lineW + add <= maxW) {
+                                                  lineW += add;
+                                                } else {
+                                                  rows++;
+                                                  lineW = cw;
+                                                }
+                                              }
+                                              final int visibleRows = rows
+                                                  .clamp(0, 3);
+                                              final double maxHeight =
+                                                  visibleRows > 0
+                                                      ? (rowHeight *
+                                                              visibleRows +
+                                                          runSpacing *
+                                                              (visibleRows - 1))
+                                                      : 0;
+
+                                              Widget wrap = Wrap(
+                                                spacing: spacing,
+                                                runSpacing: runSpacing,
                                                 children: [
-                                                  for (final g in agg.groups)
+                                                  for (
+                                                    int i = 0;
+                                                    i < labels.length;
+                                                    i++
+                                                  )
                                                     Builder(
                                                       builder: (context) {
+                                                        final g = agg.groups[i];
                                                         final key =
                                                             (g['key'] ?? '')
                                                                 .toString();
                                                         final selected =
                                                             _selectedDomains
                                                                 .contains(key);
-                                                        return Transform.scale(
-                                                          scale: 0.69,
-                                                          alignment:
-                                                              Alignment
-                                                                  .centerLeft,
-                                                          child: ChoiceChip(
-                                                            label: Text(
-                                                              '$key (${g['count']})',
-                                                              style:
-                                                                  const TextStyle(
-                                                                    fontSize:
-                                                                        12,
-                                                                  ),
-                                                            ),
-                                                            selected: selected,
-                                                            visualDensity:
-                                                                const VisualDensity(
-                                                                  horizontal:
-                                                                      -3,
-                                                                  vertical: -3,
-                                                                ),
-                                                            materialTapTargetSize:
-                                                                MaterialTapTargetSize
-                                                                    .shrinkWrap,
-                                                            onSelected: (_) {
-                                                              setState(() {
-                                                                if (selected) {
-                                                                  _selectedDomains
-                                                                      .remove(
-                                                                        key,
-                                                                      );
-                                                                } else {
-                                                                  _selectedDomains
-                                                                      .add(key);
-                                                                }
-                                                              });
-                                                            },
+                                                        return ChoiceChip(
+                                                          label: Text(
+                                                            labels[i],
+                                                            style: textStyle,
                                                           ),
+                                                          labelPadding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal:
+                                                                    horizPad,
+                                                              ),
+                                                          selected: selected,
+                                                          visualDensity:
+                                                              const VisualDensity(
+                                                                horizontal: -4,
+                                                                vertical: -4,
+                                                              ),
+                                                          materialTapTargetSize:
+                                                              MaterialTapTargetSize
+                                                                  .shrinkWrap,
+                                                          onSelected: (_) {
+                                                            setState(() {
+                                                              if (selected) {
+                                                                _selectedDomains
+                                                                    .remove(
+                                                                      key,
+                                                                    );
+                                                              } else {
+                                                                _selectedDomains
+                                                                    .add(key);
+                                                              }
+                                                            });
+                                                          },
                                                         );
                                                       },
                                                     ),
                                                 ],
-                                              ),
-                                            ),
+                                              );
+
+                                              if (rows <= 3) {
+                                                return wrap; // без лишнего места
+                                              }
+                                              return SizedBox(
+                                                width: double.infinity,
+                                                height: maxHeight,
+                                                child: Scrollbar(
+                                                  thumbVisibility: false,
+                                                  child: SingleChildScrollView(
+                                                    child: wrap,
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           );
                                         },
                                       ),
@@ -1176,7 +1288,34 @@ class _MyHomePageState extends State<MyHomePage> {
                                         child: Observer(
                                           builder: (_) {
                                             final sessions = _visibleSessions();
+                                            // Если были внизу и список вырос — проскроллим к концу после билда
+                                            if (_sessionsStickToBottom &&
+                                                sessions.length >=
+                                                    _lastSessionsLen) {
+                                              WidgetsBinding.instance
+                                                  .addPostFrameCallback((_) {
+                                                    if (!_sessionsCtrl
+                                                        .hasClients)
+                                                      return;
+                                                    final max =
+                                                        _sessionsCtrl
+                                                            .position
+                                                            .maxScrollExtent;
+                                                    if (max > 0) {
+                                                      _sessionsCtrl.animateTo(
+                                                        max,
+                                                        duration:
+                                                            const Duration(
+                                                              milliseconds: 120,
+                                                            ),
+                                                        curve: Curves.easeOut,
+                                                      );
+                                                    }
+                                                  });
+                                            }
+                                            _lastSessionsLen = sessions.length;
                                             return ListView.builder(
+                                              controller: _sessionsCtrl,
                                               itemCount: sessions.length,
                                               itemBuilder: (ctx, i) {
                                                 final s = sessions[i];

@@ -3,6 +3,7 @@ package config
 import (
     "os"
     "strconv"
+    "strings"
 )
 
 type Config struct {
@@ -25,6 +26,9 @@ type Config struct {
     PreviewDecompress bool
     // Artificial response delay for proxy responses (ms)
     ResponseDelayMs int
+    // Optional range support: if set, each response delay will be random in [min,max]
+    ResponseDelayMinMs int
+    ResponseDelayMaxMs int
 }
 
 func FromEnv() Config {
@@ -51,6 +55,20 @@ func FromEnv() Config {
         cfg.PreviewDecompress = true
     }
     cfg.ResponseDelayMs = getEnvInt("RESPONSE_DELAY_MS", 0)
+    if raw := os.Getenv("RESPONSE_DELAY_MS"); raw != "" && strings.Contains(raw, "-") {
+        parts := strings.SplitN(raw, "-", 2)
+        if len(parts) == 2 {
+            minStr := strings.TrimSpace(parts[0])
+            maxStr := strings.TrimSpace(parts[1])
+            if min, err1 := strconv.Atoi(minStr); err1 == nil {
+                if max, err2 := strconv.Atoi(maxStr); err2 == nil {
+                    if max < min { min, max = max, min }
+                    cfg.ResponseDelayMinMs = min
+                    cfg.ResponseDelayMaxMs = max
+                }
+            }
+        }
+    }
     if os.Getenv("INSECURE_TLS") == "1" || os.Getenv("INSECURE_TLS") == "true" {
         cfg.InsecureTLS = true
     }

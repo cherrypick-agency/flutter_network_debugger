@@ -18,6 +18,8 @@ class PrefsService {
   static const _keyMonitorLog = 'monitor_log_json';
   static const _keyThemeMode = 'theme_mode';
   static const _keySinceTs = 'clear_since_ts';
+  static const _keyRespDelayEnabled = 'resp_delay_enabled';
+  static const _keyRespDelayValue = 'resp_delay_value'; // "1500" или "1000-3000"
 
   Future<void> save({
     required String baseUrl,
@@ -34,6 +36,8 @@ class PrefsService {
     String? groupBy,
     String? headerKey,
     String? headerVal,
+    bool? respDelayEnabled,
+    String? respDelayValue,
   }) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyBaseUrl, baseUrl);
@@ -50,6 +54,8 @@ class PrefsService {
     if (groupBy != null) await p.setString(_keyGroupBy, groupBy);
     if (headerKey != null) await p.setString(_keyHeaderKey, headerKey);
     if (headerVal != null) await p.setString(_keyHeaderVal, headerVal);
+    if (respDelayEnabled != null) await p.setBool(_keyRespDelayEnabled, respDelayEnabled);
+    if (respDelayValue != null) await p.setString(_keyRespDelayValue, respDelayValue);
   }
 
   Future<Map<String, String>> load() async {
@@ -69,6 +75,8 @@ class PrefsService {
       'groupBy': p.getString(_keyGroupBy) ?? 'none',
       'headerKey': p.getString(_keyHeaderKey) ?? '',
       'headerVal': p.getString(_keyHeaderVal) ?? '',
+      'respDelayEnabled': (p.getBool(_keyRespDelayEnabled) ?? false).toString(),
+      'respDelayValue': p.getString(_keyRespDelayValue) ?? '',
     };
   }
 

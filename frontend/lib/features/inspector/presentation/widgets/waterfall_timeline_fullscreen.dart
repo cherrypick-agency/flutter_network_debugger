@@ -11,10 +11,12 @@ class WaterfallTimelineFullscreenPage extends StatefulWidget {
   const WaterfallTimelineFullscreenPage({super.key, this.initialRange});
   final DateTimeRange? initialRange;
   @override
-  State<WaterfallTimelineFullscreenPage> createState() => _WaterfallTimelineFullscreenPageState();
+  State<WaterfallTimelineFullscreenPage> createState() =>
+      _WaterfallTimelineFullscreenPageState();
 }
 
-class _WaterfallTimelineFullscreenPageState extends State<WaterfallTimelineFullscreenPage> {
+class _WaterfallTimelineFullscreenPageState
+    extends State<WaterfallTimelineFullscreenPage> {
   Timer? _poll;
 
   @override
@@ -25,7 +27,9 @@ class _WaterfallTimelineFullscreenPageState extends State<WaterfallTimelineFulls
       final store = context.read<SessionsStore>();
       store.load();
       _poll = Timer.periodic(const Duration(seconds: 2), (_) {
-        if (!store.loading) { store.load(); }
+        if (!store.loading) {
+          store.load();
+        }
       });
     });
   }
@@ -61,34 +65,48 @@ class _WaterfallTimelineFullscreenPageState extends State<WaterfallTimelineFulls
                 future: PrefsService().loadSince(),
                 builder: (context, snap) {
                   final since = snap.data;
-                  return Observer(builder: (_) {
-                    final store = context.read<SessionsStore>();
-                    final raw = store.items.toList();
-                    var list = raw;
-                    if (since != null) {
-                      list = list.where((s) {
-                        final st = s.startedAt;
-                        return st == null || !st.isBefore(since);
-                      }).toList(growable: false);
-                    }
-                    if (widget.initialRange != null) {
-                      list = list.where((s) {
-                        final st = s.startedAt;
-                        return st == null || !st.isBefore(widget.initialRange!.start);
-                      }).toList(growable: false);
-                    }
-                    return WaterfallTimeline(
-                      sessions: list,
-                      expandToParent: true,
-                      initialRange: widget.initialRange,
-                      onIntervalSelected: (range) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Selected: ${range.start} — ${range.end}')),
-                        );
-                      },
-                      onSessionSelected: (s) { Navigator.of(context).maybePop(s); },
-                    );
-                  });
+                  return Observer(
+                    builder: (_) {
+                      final store = context.read<SessionsStore>();
+                      final raw = store.items.toList();
+                      var list = raw;
+                      if (since != null) {
+                        list = list
+                            .where((s) {
+                              final st = s.startedAt;
+                              return st == null || !st.isBefore(since);
+                            })
+                            .toList(growable: false);
+                      }
+                      if (widget.initialRange != null) {
+                        list = list
+                            .where((s) {
+                              final st = s.startedAt;
+                              return st == null ||
+                                  !st.isBefore(widget.initialRange!.start);
+                            })
+                            .toList(growable: false);
+                      }
+                      return WaterfallTimeline(
+                        sessions: list,
+                        autoCompressLanes: true,
+                        expandToParent: true,
+                        initialRange: widget.initialRange,
+                        onIntervalSelected: (range) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Selected: ${range.start} — ${range.end}',
+                              ),
+                            ),
+                          );
+                        },
+                        onSessionSelected: (s) {
+                          Navigator.of(context).maybePop(s);
+                        },
+                      );
+                    },
+                  );
                 },
               ),
             ),

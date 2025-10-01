@@ -115,6 +115,8 @@ func buildBaseMux(d *Deps) *http.ServeMux {
     mux.HandleFunc("/_api/v1/sessions", d.handleV1ListSessions)
     mux.HandleFunc("/_api/v1/sessions/", d.handleV1SessionByID)
     mux.HandleFunc("/_api/v1/sessions/aggregate", d.handleV1SessionsAggregate)
+    // Runtime settings (response delay, etc.)
+    mux.HandleFunc("/_api/v1/settings", d.handleV1Settings)
     mux.HandleFunc("/_api/v1/monitor/ws", d.Monitor.HandleWS)
     mux.HandleFunc("/_api/v1/httpproxy", d.handleHTTPProxy)
     mux.HandleFunc("/_api/v1/httpproxy/", d.handleHTTPProxy)

@@ -94,9 +94,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
         Transport: transport,
         ModifyResponse: func(resp *http.Response) error {
             // Artificial response delay (to visualize timeline)
-            if d.Cfg.ResponseDelayMs > 0 {
-                time.Sleep(time.Duration(d.Cfg.ResponseDelayMs) * time.Millisecond)
-            }
+            sleepResponseDelay(d.Cfg)
             // Log response frame with timings embedded
             basePreview := buildHTTPResponsePreview(resp)
             ttfb := durationMs(tStart, tFirstByte)

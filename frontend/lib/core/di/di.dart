@@ -13,6 +13,7 @@ import '../../features/inspector/application/usecases/list_aggregate.dart';
 import '../../features/inspector/application/stores/aggregate_store.dart';
 import '../notifications/notifications_service.dart';
 import '../hotkeys/hotkeys_service.dart';
+import '../../features/settings/application/settings_service.dart';
 
 final sl = GetIt.instance;
 
@@ -20,25 +21,48 @@ Future<void> setupDI({required String baseUrl}) async {
   // init http module (как в qovo_flutter)
   final container = ContainerDI(sl);
   // tokens storage внутри модуля; baseURL как лямбда
-  final module = module_entry.AppHttpClientModule(() => baseUrl, (_) {}, container);
+  final module = module_entry.AppHttpClientModule(
+    () => baseUrl,
+    (_) {},
+    container,
+  );
   await module.execute();
   // Repository
-  sl.registerLazySingleton<InspectorRepository>(() => InspectorRepositoryImpl(sl<AppHttpClient>()));
+  sl.registerLazySingleton<InspectorRepository>(
+    () => InspectorRepositoryImpl(sl<AppHttpClient>()),
+  );
   // Use cases
-  sl.registerLazySingleton<ListSessionsUseCase>(() => ListSessionsUseCase(sl<InspectorRepository>()));
-  sl.registerLazySingleton<ListFramesUseCase>(() => ListFramesUseCase(sl<InspectorRepository>()));
-  sl.registerLazySingleton<ListEventsUseCase>(() => ListEventsUseCase(sl<InspectorRepository>()));
-  sl.registerLazySingleton<ListAggregateUseCase>(() => ListAggregateUseCase(sl<InspectorRepository>()));
+  sl.registerLazySingleton<ListSessionsUseCase>(
+    () => ListSessionsUseCase(sl<InspectorRepository>()),
+  );
+  sl.registerLazySingleton<ListFramesUseCase>(
+    () => ListFramesUseCase(sl<InspectorRepository>()),
+  );
+  sl.registerLazySingleton<ListEventsUseCase>(
+    () => ListEventsUseCase(sl<InspectorRepository>()),
+  );
+  sl.registerLazySingleton<ListAggregateUseCase>(
+    () => ListAggregateUseCase(sl<InspectorRepository>()),
+  );
   // Stores
-  sl.registerLazySingleton<SessionsStore>(() => SessionsStore(sl<ListSessionsUseCase>()));
-  sl.registerLazySingleton<SessionDetailsStore>(() => SessionDetailsStore(sl<ListFramesUseCase>(), sl<ListEventsUseCase>()));
-  sl.registerLazySingleton<AggregateStore>(() => AggregateStore(sl<ListAggregateUseCase>()));
+  sl.registerLazySingleton<SessionsStore>(
+    () => SessionsStore(sl<ListSessionsUseCase>()),
+  );
+  sl.registerLazySingleton<SessionDetailsStore>(
+    () => SessionDetailsStore(sl<ListFramesUseCase>(), sl<ListEventsUseCase>()),
+  );
+  sl.registerLazySingleton<AggregateStore>(
+    () => AggregateStore(sl<ListAggregateUseCase>()),
+  );
   // Notifications
   sl.registerLazySingleton<NotificationsService>(() => NotificationsService());
   // Hotkeys
   final hk = HotkeysService();
   await hk.init();
   sl.registerSingleton<HotkeysService>(hk);
+  // Settings service
+  sl.registerLazySingleton<SettingsService>(() => SettingsService());
+  // Первичная синхронизация настроек (задержка ответа)
+  // ignore: unawaited_futures
+  sl<SettingsService>().syncPrefsToBackend();
 }
-
-

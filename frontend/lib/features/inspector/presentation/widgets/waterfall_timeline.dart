@@ -14,6 +14,7 @@ class WaterfallTimeline extends StatefulWidget {
     this.autoExtendViewport = true,
     this.height = 140,
     this.expandToParent = false,
+    this.autoCompressLanes,
     this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     this.initialViewportPadding = const Duration(seconds: 2),
     this.initialRange,
@@ -27,6 +28,11 @@ class WaterfallTimeline extends StatefulWidget {
   final bool autoExtendViewport;
   final double height;
   final bool expandToParent;
+
+  /// Если true — дорожки будут автоматически ужиматься по высоте,
+  /// чтобы все сессии помещались в доступную высоту контейнера.
+  /// По умолчанию поведение наследуется от `expandToParent` для обратной совместимости.
+  final bool? autoCompressLanes;
   final EdgeInsets padding;
   final Duration initialViewportPadding;
   final DateTimeRange? initialRange;
@@ -298,10 +304,11 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                       ? 1
                       : (items.map((e) => e.lane).reduce(math.max) + 1);
               // динамическая высота дорожек: чем выше сам таймлайн, тем выше полосы
+              // если включено авто-сжатие (autoCompressLanes == true) — подгоняем под доступную высоту
               double laneHeight = _laneHeight;
-              if (widget.expandToParent &&
-                  constraints.hasBoundedHeight &&
-                  lanes > 0) {
+              final bool compressLanes =
+                  (widget.autoCompressLanes ?? widget.expandToParent);
+              if (compressLanes && constraints.hasBoundedHeight && lanes > 0) {
                 final available = (constraints.maxHeight -
                         widget.padding.vertical -
                         _axisHeight)

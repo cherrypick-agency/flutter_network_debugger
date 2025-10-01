@@ -30,7 +30,9 @@ class SearchableTextRich extends StatelessWidget {
       highlight: hl,
       highlightFocused: hlFocus,
       matchCounter: () => matchCounter,
-      incMatchCounter: () { matchCounter++; },
+      incMatchCounter: () {
+        matchCounter++;
+      },
       keys: keys,
     );
 
@@ -73,6 +75,7 @@ class SearchableTextRich extends StatelessWidget {
         final is09 = (code >= 48 && code <= 57);
         return isAZ || is09 || ch == '_';
       }
+
       for (final m in matches) {
         final s = m.start;
         final e = m.end;
@@ -90,12 +93,23 @@ class SearchableTextRich extends StatelessWidget {
         }
         final key = GlobalKey();
         keys.add(key);
-        out.add(WidgetSpan(child: SizedBox(key: key, width: 0, height: 0)));
+        // Якорь должен иметь ненулевую высоту и базовую линию, чтобы ensureVisible корректно работал
+        out.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: SizedBox(key: key, width: 0, height: 1),
+          ),
+        );
         final isFocused = matchCounter() == cfg.focusedIndex;
-        out.add(TextSpan(
-          text: srcText.substring(s, e),
-          style: baseStyle.copyWith(backgroundColor: isFocused ? highlightFocused : highlight),
-        ));
+        out.add(
+          TextSpan(
+            text: srcText.substring(s, e),
+            style: baseStyle.copyWith(
+              backgroundColor: isFocused ? highlightFocused : highlight,
+            ),
+          ),
+        );
         incMatchCounter();
         last = e;
       }
@@ -119,7 +133,10 @@ class SearchableTextRich extends StatelessWidget {
       if (idx < 0) return -1;
       if (!cfg.wholeWord) return idx;
       final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+      final right =
+          (idx + q.length) < src.length
+              ? src.substring(idx + q.length, idx + q.length + 1)
+              : null;
       final leftOk = left == null || !isWordChar(left);
       final rightOk = right == null || !isWordChar(right);
       if (leftOk && rightOk) return idx;
@@ -128,7 +145,10 @@ class SearchableTextRich extends StatelessWidget {
         idx = src.indexOf(q, nextStart);
         if (idx < 0) return -1;
         final l = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final r = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+        final r =
+            (idx + q.length) < src.length
+                ? src.substring(idx + q.length, idx + q.length + 1)
+                : null;
         final lo = l == null || !isWordChar(l);
         final ro = r == null || !isWordChar(r);
         if (lo && ro) return idx;
@@ -145,16 +165,29 @@ class SearchableTextRich extends StatelessWidget {
         break;
       }
       if (idx > start) {
-        out.add(TextSpan(text: srcText.substring(start, idx), style: baseStyle));
+        out.add(
+          TextSpan(text: srcText.substring(start, idx), style: baseStyle),
+        );
       }
       final key = GlobalKey();
       keys.add(key);
-      out.add(WidgetSpan(child: SizedBox(key: key, width: 0, height: 0)));
+      // Якорь должен иметь ненулевую высоту и базовую линию, чтобы ensureVisible корректно работал
+      out.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: SizedBox(key: key, width: 0, height: 1),
+        ),
+      );
       final isFocused = matchCounter() == cfg.focusedIndex;
-      out.add(TextSpan(
-        text: srcText.substring(idx, idx + q.length),
-        style: baseStyle.copyWith(backgroundColor: isFocused ? highlightFocused : highlight),
-      ));
+      out.add(
+        TextSpan(
+          text: srcText.substring(idx, idx + q.length),
+          style: baseStyle.copyWith(
+            backgroundColor: isFocused ? highlightFocused : highlight,
+          ),
+        ),
+      );
       incMatchCounter();
       start = idx + q.length;
     }
@@ -162,5 +195,3 @@ class SearchableTextRich extends StatelessWidget {
     return out;
   }
 }
-
-

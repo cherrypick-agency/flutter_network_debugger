@@ -138,9 +138,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
     d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
     // Optional artificial response delay
-    if d.Cfg.ResponseDelayMs > 0 {
-        time.Sleep(time.Duration(d.Cfg.ResponseDelayMs) * time.Millisecond)
-    }
+    sleepResponseDelay(d.Cfg)
     // Write back to client
     copyHeader(w.Header(), resp.Header)
     w.WriteHeader(resp.StatusCode)

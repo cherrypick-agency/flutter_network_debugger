@@ -10,7 +10,12 @@ import '../theme/context_ext.dart';
 
 /// Универсальный JSON-виджет поверх json_tree_viewer
 class JsonViewer extends StatefulWidget {
-  const JsonViewer({super.key, required this.jsonString, this.forceTree = false, this.treeHeight = 280});
+  const JsonViewer({
+    super.key,
+    required this.jsonString,
+    this.forceTree = false,
+    this.treeHeight = 280,
+  });
   final String jsonString;
   final bool forceTree;
   final double treeHeight;
@@ -58,7 +63,8 @@ class _JsonViewerState extends State<JsonViewer> {
   void _gotoPrev() {
     if (_matchKeys.isEmpty) return;
     setState(() {
-      _focusedIndex = (_focusedIndex - 1) < 0 ? _matchKeys.length - 1 : _focusedIndex - 1;
+      _focusedIndex =
+          (_focusedIndex - 1) < 0 ? _matchKeys.length - 1 : _focusedIndex - 1;
     });
     _scrollToFocused();
   }
@@ -68,7 +74,11 @@ class _JsonViewerState extends State<JsonViewer> {
     final key = _matchKeys[_focusedIndex];
     final ctx = key.currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), alignment: 0.1);
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 200),
+        alignment: 0.1,
+      );
     }
   }
 
@@ -78,63 +88,119 @@ class _JsonViewerState extends State<JsonViewer> {
     try {
       data = jsonDecode(widget.jsonString);
     } catch (_) {
-      return SelectableText(widget.jsonString, style: context.appText.monospace);
+      return SelectableText(
+        widget.jsonString,
+        style: context.appText.monospace,
+      );
     }
-    return LayoutBuilder(builder: (context, constraints) {
-      if (widget.forceTree) {
-        final searchCfgTree = JsonSearchConfig(
-          query: _searchCtrl.text.trim(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (widget.forceTree) {
+          final searchCfgTree = JsonSearchConfig(
+            query: _searchCtrl.text.trim(),
+            matchCase: _matchCase,
+            wholeWord: _wholeWord,
+            useRegex: _useRegex,
+            focusedIndex: _focusedIndex,
+            onRebuilt: _handleMatchesRebuilt,
+          );
+          final content = JsonTreeRich(data: data, search: searchCfgTree);
+          if (!constraints.hasBoundedHeight) {
+            return SizedBox(
+              height: widget.treeHeight,
+              child: Stack(
+                children: [
+                  Positioned.fill(child: SingleChildScrollView(child: content)),
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    right: 6,
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child:
+                          _showSearch
+                              ? _buildSearchBar(context)
+                              : _buildSearchButton(context),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          return Stack(
+            children: [
+              content,
+              Positioned(
+                top: 6,
+                left: 6,
+                right: 6,
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child:
+                      _showSearch
+                          ? _buildSearchBar(context)
+                          : _buildSearchButton(context),
+                ),
+              ),
+            ],
+          );
+        }
+
+        final searchCfg = JsonSearchConfig(
+          query: _showSearch ? _searchCtrl.text.trim() : '',
           matchCase: _matchCase,
           wholeWord: _wholeWord,
           useRegex: _useRegex,
           focusedIndex: _focusedIndex,
           onRebuilt: _handleMatchesRebuilt,
         );
-        final content = JsonTreeRich(data: data, search: searchCfgTree);
+
         if (!constraints.hasBoundedHeight) {
+          // Внутренний скролл и закрепленная сверху панель поиска
           return SizedBox(
             height: widget.treeHeight,
-            child: Stack(children: [
-              Positioned.fill(child: SingleChildScrollView(child: content)),
-              Positioned(top: 6, right: 0, child: Center(child: _showSearch ? _buildSearchBar(context) : _buildSearchButton(context))),
-            ]),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: SingleChildScrollView(
+                    child: JsonPrettyRich(data: data, search: searchCfg),
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  right: 6,
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child:
+                        _showSearch
+                            ? _buildSearchBar(context)
+                            : _buildSearchButton(context),
+                  ),
+                ),
+              ],
+            ),
           );
         }
-        return Stack(children: [
-          content,
-          Positioned(top: 6, right: 0, child: Center(child: _showSearch ? _buildSearchBar(context) : _buildSearchButton(context))),
-        ]);
-      }
-
-      final searchCfg = JsonSearchConfig(
-        query: _showSearch ? _searchCtrl.text.trim() : '',
-        matchCase: _matchCase,
-        wholeWord: _wholeWord,
-        useRegex: _useRegex,
-        focusedIndex: _focusedIndex,
-        onRebuilt: _handleMatchesRebuilt,
-      );
-
-      if (!constraints.hasBoundedHeight) {
-        // Внутренний скролл и закрепленная сверху панель поиска
-        return SizedBox(
-          height: widget.treeHeight,
-          child: Stack(children: [
-            Positioned.fill(
-              child: SingleChildScrollView(
-                child: JsonPrettyRich(data: data, search: searchCfg),
+        // Обычный режим с закрепленной панелью по центру сверху
+        return Stack(
+          children: [
+            JsonPrettyRich(data: data, search: searchCfg),
+            Positioned(
+              top: 6,
+              left: 0,
+              right: 0,
+              child: Center(
+                child:
+                    _showSearch
+                        ? _buildSearchBar(context)
+                        : _buildSearchButton(context),
               ),
             ),
-            Positioned(top: 6, right: 0, child: Center(child: _showSearch ? _buildSearchBar(context) : _buildSearchButton(context))),
-          ]),
+          ],
         );
-      }
-      // Обычный режим с закрепленной панелью по центру сверху
-      return Stack(children: [
-        JsonPrettyRich(data: data, search: searchCfg),
-        Positioned(top: 6, left: 0, right: 0, child: Center(child: _showSearch ? _buildSearchBar(context) : _buildSearchButton(context))),
-      ]);
-    });
+      },
+    );
   }
 
   Widget _buildSearchButton(BuildContext context) {
@@ -147,7 +213,9 @@ class _JsonViewerState extends State<JsonViewer> {
         tooltip: 'Search',
         onPressed: () {
           setState(() => _showSearch = true);
-          WidgetsBinding.instance.addPostFrameCallback((_) { _searchFocusNode.requestFocus(); });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _searchFocusNode.requestFocus();
+          });
         },
         icon: const Icon(Icons.search, size: 18),
       ),
@@ -155,7 +223,10 @@ class _JsonViewerState extends State<JsonViewer> {
   }
 
   Widget _buildSearchBar(BuildContext context) {
-    final countText = _matchKeys.isEmpty ? '0/0' : '${_focusedIndex + 1}/${_matchKeys.length}';
+    final countText =
+        _matchKeys.isEmpty
+            ? '0/0'
+            : '${_focusedIndex + 1}/${_matchKeys.length}';
     final hk = sl<HotkeysService>();
     void _closeSearch() {
       setState(() {
@@ -166,6 +237,7 @@ class _JsonViewerState extends State<JsonViewer> {
         _searchFocusNode.unfocus();
       });
     }
+
     final handlers = hk.buildHandlers({
       'jsonSearch.next': _gotoNext,
       'jsonSearch.prev': _gotoPrev,
@@ -181,7 +253,10 @@ class _JsonViewerState extends State<JsonViewer> {
         wholeWord: _wholeWord,
         useRegex: _useRegex,
         canNavigate: _matchKeys.isNotEmpty,
-        onChanged: () => setState(() { _focusedIndex = 0; }),
+        onChanged:
+            () => setState(() {
+              _focusedIndex = 0;
+            }),
         onNext: _gotoNext,
         onPrev: _gotoPrev,
         onClose: _closeSearch,
@@ -222,9 +297,13 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       final is09 = (c >= 48 && c <= 57);
       return isAZ || is09 || ch == '_';
     }
+
     while (idx >= 0) {
       final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+      final right =
+          (idx + q.length) < src.length
+              ? src.substring(idx + q.length, idx + q.length + 1)
+              : null;
       final leftOk = left == null || !isWordChar(left);
       final rightOk = right == null || !isWordChar(right);
       if (leftOk && rightOk) return true;
@@ -263,7 +342,11 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         final idxDot = p.lastIndexOf('.');
         final idxBr = p.lastIndexOf('[');
         final cut = idxDot > idxBr ? idxDot : idxBr;
-        if (cut <= 0) { p = ''; } else { p = p.substring(0, cut); }
+        if (cut <= 0) {
+          p = '';
+        } else {
+          p = p.substring(0, cut);
+        }
       }
     }
   }
@@ -284,9 +367,16 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
     final List<GlobalKey> keys = [];
 
     final Set<String> autoExpand = <String>{};
-    _collectAutoExpandPaths((widget.data is Map || widget.data is Iterable) ? widget.data : {'value': widget.data}, '', autoExpand);
+    _collectAutoExpandPaths(
+      (widget.data is Map || widget.data is Iterable)
+          ? widget.data
+          : {'value': widget.data},
+      '',
+      autoExpand,
+    );
 
-    bool isExpanded(String path) => _userExpanded.contains(path) || autoExpand.contains(path);
+    bool isExpanded(String path) =>
+        _userExpanded.contains(path) || autoExpand.contains(path);
 
     const double indentPx = 14;
     const double iconSize = 14;
@@ -305,102 +395,196 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       List<GlobalKey> keys,
     ) {
       if (node is String) {
-        return _splitWithHighlights('"$node"', baseStyle: stringStyle, highlight: highlight, highlightFocused: highlightFocused, matchCounter: matchCounter, incMatchCounter: incMatchCounter, keys: keys);
+        return _splitWithHighlights(
+          '"$node"',
+          baseStyle: stringStyle,
+          highlight: highlight,
+          highlightFocused: highlightFocused,
+          matchCounter: matchCounter,
+          incMatchCounter: incMatchCounter,
+          keys: keys,
+        );
       }
       if (node is num) {
-        return _splitWithHighlights(node.toString(), baseStyle: numberStyle, highlight: highlight, highlightFocused: highlightFocused, matchCounter: matchCounter, incMatchCounter: incMatchCounter, keys: keys);
+        return _splitWithHighlights(
+          node.toString(),
+          baseStyle: numberStyle,
+          highlight: highlight,
+          highlightFocused: highlightFocused,
+          matchCounter: matchCounter,
+          incMatchCounter: incMatchCounter,
+          keys: keys,
+        );
       }
       if (node is bool) {
-        return _splitWithHighlights(node ? 'true' : 'false', baseStyle: boolStyle, highlight: highlight, highlightFocused: highlightFocused, matchCounter: matchCounter, incMatchCounter: incMatchCounter, keys: keys);
+        return _splitWithHighlights(
+          node ? 'true' : 'false',
+          baseStyle: boolStyle,
+          highlight: highlight,
+          highlightFocused: highlightFocused,
+          matchCounter: matchCounter,
+          incMatchCounter: incMatchCounter,
+          keys: keys,
+        );
       }
       if (node == null) {
-        return _splitWithHighlights('null', baseStyle: nullStyle, highlight: highlight, highlightFocused: highlightFocused, matchCounter: matchCounter, incMatchCounter: incMatchCounter, keys: keys);
+        return _splitWithHighlights(
+          'null',
+          baseStyle: nullStyle,
+          highlight: highlight,
+          highlightFocused: highlightFocused,
+          matchCounter: matchCounter,
+          incMatchCounter: incMatchCounter,
+          keys: keys,
+        );
       }
-      return _splitWithHighlights(node.toString(), baseStyle: punct, highlight: highlight, highlightFocused: highlightFocused, matchCounter: matchCounter, incMatchCounter: incMatchCounter, keys: keys);
+      return _splitWithHighlights(
+        node.toString(),
+        baseStyle: punct,
+        highlight: highlight,
+        highlightFocused: highlightFocused,
+        matchCounter: matchCounter,
+        incMatchCounter: incMatchCounter,
+        keys: keys,
+      );
     }
 
     List<Widget> buildNode(dynamic node, String path, int indent) {
       final List<Widget> out = [];
       if (node is Map) {
-        int idx = 0; final last = node.length - 1;
+        int idx = 0;
+        final last = node.length - 1;
         for (final entry in node.entries) {
           final childPath = '$path.${entry.key}';
           final value = entry.value;
           final container = value is Map || value is List;
           final expanded = container && isExpanded(childPath);
-          out.add(Padding(
-            padding: EdgeInsets.only(left: indent * indentPx),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (!container) return;
-                setState((){
-                  if (expanded) {
-                    _userExpanded.remove(childPath);
-                  } else {
-                    _userExpanded.add(childPath);
-                  }
-                });
-              },
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (container) SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: IconButton(
-                    padding: const EdgeInsets.all(iconPad),
-                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                    iconSize: iconSize,
-                    onPressed: (){
-                      setState((){
-                        if (expanded) {
-                          _userExpanded.remove(childPath);
-                        } else {
-                          _userExpanded.add(childPath);
-                        }
-                      });
-                    },
-                    icon: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: iconSize),
-                  ),
-                ) else const SizedBox(width: 18, height: 18),
-                Expanded(child: RichText(text: TextSpan(children: [
-                  TextSpan(
-                    children: _splitWithHighlights('"${entry.key}": ',
-                    baseStyle: keyStyle,
-                    highlight: hl,
-                    highlightFocused: hlFocus,
-                    matchCounter: () => matchCounter,
-                    incMatchCounter: () { matchCounter++; },
-                    keys: keys,
-                  ),
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = () {
-                        if (!container) return;
-                        setState(() {
-                          if (expanded) {
-                            _userExpanded.remove(childPath);
-                          } else {
-                            _userExpanded.add(childPath);
-                          }
-                        });
-                      },
-                  ),
-                  if (!container)
-                    ..._valueToSpans(value, stringStyle, numberStyle, boolStyle, nullStyle, hl, hlFocus, () => matchCounter, () { matchCounter++; }, keys)
-                  else
-                    TextSpan(text: expanded ? (value is Map ? '{' : '[') : (value is Map ? '{… ${value.length}}' : '[… ${value.length}]'), style: punct),
-                  TextSpan(text: (expanded ? '' : (idx != last ? ',' : ''))),
-                ]))),
-              ]),
+          out.add(
+            Padding(
+              padding: EdgeInsets.only(left: indent * indentPx),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (!container) return;
+                  setState(() {
+                    if (expanded) {
+                      _userExpanded.remove(childPath);
+                    } else {
+                      _userExpanded.add(childPath);
+                    }
+                  });
+                },
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (container)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: IconButton(
+                          padding: const EdgeInsets.all(iconPad),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          iconSize: iconSize,
+                          onPressed: () {
+                            setState(() {
+                              if (expanded) {
+                                _userExpanded.remove(childPath);
+                              } else {
+                                _userExpanded.add(childPath);
+                              }
+                            });
+                          },
+                          icon: Icon(
+                            expanded ? Icons.expand_more : Icons.chevron_right,
+                            size: iconSize,
+                          ),
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 18, height: 18),
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              children: _splitWithHighlights(
+                                '"${entry.key}": ',
+                                baseStyle: keyStyle,
+                                highlight: hl,
+                                highlightFocused: hlFocus,
+                                matchCounter: () => matchCounter,
+                                incMatchCounter: () {
+                                  matchCounter++;
+                                },
+                                keys: keys,
+                              ),
+                              recognizer:
+                                  TapGestureRecognizer()
+                                    ..onTap = () {
+                                      if (!container) return;
+                                      setState(() {
+                                        if (expanded) {
+                                          _userExpanded.remove(childPath);
+                                        } else {
+                                          _userExpanded.add(childPath);
+                                        }
+                                      });
+                                    },
+                            ),
+                            if (!container)
+                              ..._valueToSpans(
+                                value,
+                                stringStyle,
+                                numberStyle,
+                                boolStyle,
+                                nullStyle,
+                                hl,
+                                hlFocus,
+                                () => matchCounter,
+                                () {
+                                  matchCounter++;
+                                },
+                                keys,
+                              )
+                            else
+                              TextSpan(
+                                text:
+                                    expanded
+                                        ? (value is Map ? '{' : '[')
+                                        : (value is Map
+                                            ? '{… ${value.length}}'
+                                            : '[… ${value.length}]'),
+                                style: punct,
+                              ),
+                            TextSpan(
+                              text: (expanded ? '' : (idx != last ? ',' : '')),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ));
+          );
           if (container && expanded) {
             out.addAll(buildNode(value, childPath, indent + 1));
-            out.add(Padding(
-              padding: EdgeInsets.only(left: indent * indentPx + 18),
-              child: SelectableText.rich(TextSpan(text: value is Map ? '}' : ']', style: punct, children: [
-                TextSpan(text: idx != last ? ',' : ''),
-              ])),
-            ));
+            out.add(
+              Padding(
+                padding: EdgeInsets.only(left: indent * indentPx + 18),
+                child: SelectableText.rich(
+                  TextSpan(
+                    text: value is Map ? '}' : ']',
+                    style: punct,
+                    children: [TextSpan(text: idx != last ? ',' : '')],
+                  ),
+                ),
+              ),
+            );
           }
           idx++;
         }
@@ -412,70 +596,116 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           final value = node[i];
           final container = value is Map || value is List;
           final expanded = container && isExpanded(childPath);
-          out.add(Padding(
-            padding: EdgeInsets.only(left: indent * indentPx),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (!container) return;
-                setState((){
-                  if (expanded) {
-                    _userExpanded.remove(childPath);
-                  } else {
-                    _userExpanded.add(childPath);
-                  }
-                });
-              },
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (container) SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: IconButton(
-                    padding: const EdgeInsets.all(iconPad),
-                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                    iconSize: iconSize,
-                    onPressed: (){
-                      setState((){
-                        if (expanded) {
-                          _userExpanded.remove(childPath);
-                        } else {
-                          _userExpanded.add(childPath);
-                        }
-                      });
-                    },
-                    icon: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: iconSize),
-                  ),
-                ) else const SizedBox(width: 18, height: 18),
-                Expanded(child: RichText(text: TextSpan(children: [
-                  TextSpan(
-                    text: '$i: ',
-                    style: punct,
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = () {
-                        if (!container) return;
-                        setState((){
-                          if (expanded) {
-                            _userExpanded.remove(childPath);
-                          } else {
-                            _userExpanded.add(childPath);
-                          }
-                        });
-                      },
-                  ),
-                  if (!container)
-                    ..._valueToSpans(value, stringStyle, numberStyle, boolStyle, nullStyle, hl, hlFocus, () => matchCounter, () { matchCounter++; }, keys)
-                  else
-                    TextSpan(text: expanded ? (value is Map ? '{' : '[') : (value is Map ? '{… ${value.length}}' : '[… ${value.length}]'), style: punct),
-                ]))),
-              ]),
+          out.add(
+            Padding(
+              padding: EdgeInsets.only(left: indent * indentPx),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (!container) return;
+                  setState(() {
+                    if (expanded) {
+                      _userExpanded.remove(childPath);
+                    } else {
+                      _userExpanded.add(childPath);
+                    }
+                  });
+                },
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (container)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: IconButton(
+                          padding: const EdgeInsets.all(iconPad),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          iconSize: iconSize,
+                          onPressed: () {
+                            setState(() {
+                              if (expanded) {
+                                _userExpanded.remove(childPath);
+                              } else {
+                                _userExpanded.add(childPath);
+                              }
+                            });
+                          },
+                          icon: Icon(
+                            expanded ? Icons.expand_more : Icons.chevron_right,
+                            size: iconSize,
+                          ),
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 18, height: 18),
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '$i: ',
+                              style: punct,
+                              recognizer:
+                                  TapGestureRecognizer()
+                                    ..onTap = () {
+                                      if (!container) return;
+                                      setState(() {
+                                        if (expanded) {
+                                          _userExpanded.remove(childPath);
+                                        } else {
+                                          _userExpanded.add(childPath);
+                                        }
+                                      });
+                                    },
+                            ),
+                            if (!container)
+                              ..._valueToSpans(
+                                value,
+                                stringStyle,
+                                numberStyle,
+                                boolStyle,
+                                nullStyle,
+                                hl,
+                                hlFocus,
+                                () => matchCounter,
+                                () {
+                                  matchCounter++;
+                                },
+                                keys,
+                              )
+                            else
+                              TextSpan(
+                                text:
+                                    expanded
+                                        ? (value is Map ? '{' : '[')
+                                        : (value is Map
+                                            ? '{… ${value.length}}'
+                                            : '[… ${value.length}]'),
+                                style: punct,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ));
+          );
           if (container && expanded) {
             out.addAll(buildNode(value, childPath, indent + 1));
-            out.add(Padding(
-              padding: EdgeInsets.only(left: indent * indentPx + 18),
-              child: SelectableText.rich(TextSpan(text: value is Map ? '}' : ']', style: punct)),
-            ));
+            out.add(
+              Padding(
+                padding: EdgeInsets.only(left: indent * indentPx + 18),
+                child: SelectableText.rich(
+                  TextSpan(text: value is Map ? '}' : ']', style: punct),
+                ),
+              ),
+            );
           }
         }
         return out;
@@ -484,10 +714,16 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
     }
 
     // Build tree using a single recursive dispatcher
-    final dynamic root = (widget.data is Map || widget.data is Iterable) ? widget.data : {'value': widget.data};
+    final dynamic root =
+        (widget.data is Map || widget.data is Iterable)
+            ? widget.data
+            : {'value': widget.data};
     final List<Widget> children = buildNode(root, '', 0);
 
-    final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
 
     if (widget.search.onRebuilt != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -527,6 +763,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         final is09 = (code >= 48 && code <= 57);
         return isAZ || is09 || ch == '_';
       }
+
       for (final m in matches) {
         final s = m.start;
         final e = m.end;
@@ -544,12 +781,23 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         }
         final key = GlobalKey();
         keys.add(key);
-        out.add(WidgetSpan(child: SizedBox(key: key, width: 0, height: 0)));
+        // Небольшой якорь по базовой линии — помогает ensureVisible прокрутить точно к совпадению
+        out.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: SizedBox(key: key, width: 0, height: 1),
+          ),
+        );
         final isFocused = matchCounter() == widget.search.focusedIndex;
-        out.add(TextSpan(
-          text: text.substring(s, e),
-          style: baseStyle.copyWith(backgroundColor: isFocused ? highlightFocused : highlight),
-        ));
+        out.add(
+          TextSpan(
+            text: text.substring(s, e),
+            style: baseStyle.copyWith(
+              backgroundColor: isFocused ? highlightFocused : highlight,
+            ),
+          ),
+        );
         incMatchCounter();
         last = e;
       }
@@ -567,6 +815,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       final is09 = (code >= 48 && code <= 57);
       return isAZ || is09 || ch == '_';
     }
+
     while (true) {
       final idx = src.indexOf(q, start);
       if (idx < 0) {
@@ -577,7 +826,10 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       }
       if (widget.search.wholeWord) {
         final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final right = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+        final right =
+            (idx + q.length) < src.length
+                ? src.substring(idx + q.length, idx + q.length + 1)
+                : null;
         final leftOk = left == null || !isWordChar(left);
         final rightOk = right == null || !isWordChar(right);
         if (!(leftOk && rightOk)) {
@@ -590,12 +842,22 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       }
       final key = GlobalKey();
       keys.add(key);
-      out.add(WidgetSpan(child: SizedBox(key: key, width: 0, height: 0)));
+      out.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: SizedBox(key: key, width: 0, height: 1),
+        ),
+      );
       final isFocused = matchCounter() == widget.search.focusedIndex;
-      out.add(TextSpan(
-        text: text.substring(idx, idx + q.length),
-        style: baseStyle.copyWith(backgroundColor: isFocused ? highlightFocused : highlight),
-      ));
+      out.add(
+        TextSpan(
+          text: text.substring(idx, idx + q.length),
+          style: baseStyle.copyWith(
+            backgroundColor: isFocused ? highlightFocused : highlight,
+          ),
+        ),
+      );
       incMatchCounter();
       start = idx + q.length;
     }
@@ -637,7 +899,9 @@ class JsonPrettyRich extends StatelessWidget {
       highlight: hl,
       highlightFocused: hlFocus,
       matchCounter: () => matchCounter,
-      incMatchCounter: () { matchCounter++; },
+      incMatchCounter: () {
+        matchCounter++;
+      },
       keys: keys,
     );
 
@@ -670,15 +934,17 @@ class JsonPrettyRich extends StatelessWidget {
     final List<InlineSpan> out = [];
     final String ind = '  ' * indent;
 
-    void addP(String s) => out.addAll(_splitWithHighlights(
-          s,
-          baseStyle: punct,
-          highlight: highlight,
-          highlightFocused: highlightFocused,
-          matchCounter: matchCounter,
-          incMatchCounter: incMatchCounter,
-          keys: keys,
-        ));
+    void addP(String s) => out.addAll(
+      _splitWithHighlights(
+        s,
+        baseStyle: punct,
+        highlight: highlight,
+        highlightFocused: highlightFocused,
+        matchCounter: matchCounter,
+        incMatchCounter: incMatchCounter,
+        keys: keys,
+      ),
+    );
 
     if (node is Map) {
       addP('{\n');
@@ -686,30 +952,36 @@ class JsonPrettyRich extends StatelessWidget {
       final last = node.length - 1;
       for (final entry in node.entries) {
         addP('$ind  ');
-        out.addAll(_splitWithHighlights('"${entry.key}"',
+        out.addAll(
+          _splitWithHighlights(
+            '"${entry.key}"',
             baseStyle: keyStyle,
             highlight: highlight,
             highlightFocused: highlightFocused,
             matchCounter: matchCounter,
             incMatchCounter: incMatchCounter,
-            keys: keys));
+            keys: keys,
+          ),
+        );
         addP(': ');
-        out.addAll(_buildSpans(
-          context,
-          entry.value,
-          indent + 1,
+        out.addAll(
+          _buildSpans(
+            context,
+            entry.value,
+            indent + 1,
             punct: punct,
             keyStyle: keyStyle,
             stringStyle: stringStyle,
             numberStyle: numberStyle,
             boolStyle: boolStyle,
-          nullStyle: nullStyle,
-          highlight: highlight,
-          highlightFocused: highlightFocused,
-          matchCounter: matchCounter,
-          incMatchCounter: incMatchCounter,
-          keys: keys,
-        ));
+            nullStyle: nullStyle,
+            highlight: highlight,
+            highlightFocused: highlightFocused,
+            matchCounter: matchCounter,
+            incMatchCounter: incMatchCounter,
+            keys: keys,
+          ),
+        );
         if (i != last) addP(',');
         addP('\n');
         i++;
@@ -721,22 +993,24 @@ class JsonPrettyRich extends StatelessWidget {
       addP('[\n');
       for (int i = 0; i < node.length; i++) {
         addP('$ind  ');
-        out.addAll(_buildSpans(
-          context,
-          node[i],
-          indent + 1,
+        out.addAll(
+          _buildSpans(
+            context,
+            node[i],
+            indent + 1,
             punct: punct,
             keyStyle: keyStyle,
             stringStyle: stringStyle,
             numberStyle: numberStyle,
             boolStyle: boolStyle,
-          nullStyle: nullStyle,
-          highlight: highlight,
-          highlightFocused: highlightFocused,
-          matchCounter: matchCounter,
-          incMatchCounter: incMatchCounter,
-          keys: keys,
-        ));
+            nullStyle: nullStyle,
+            highlight: highlight,
+            highlightFocused: highlightFocused,
+            matchCounter: matchCounter,
+            incMatchCounter: incMatchCounter,
+            keys: keys,
+          ),
+        );
         if (i != node.length - 1) addP(',');
         addP('\n');
       }
@@ -744,52 +1018,72 @@ class JsonPrettyRich extends StatelessWidget {
       return out;
     }
     if (node is String) {
-      out.addAll(_splitWithHighlights('"$node"',
+      out.addAll(
+        _splitWithHighlights(
+          '"$node"',
           baseStyle: stringStyle,
           highlight: highlight,
           highlightFocused: highlightFocused,
           matchCounter: matchCounter,
           incMatchCounter: incMatchCounter,
-          keys: keys));
+          keys: keys,
+        ),
+      );
       return out;
     }
     if (node is num) {
-      out.addAll(_splitWithHighlights(node.toString(),
+      out.addAll(
+        _splitWithHighlights(
+          node.toString(),
           baseStyle: numberStyle,
           highlight: highlight,
           highlightFocused: highlightFocused,
           matchCounter: matchCounter,
           incMatchCounter: incMatchCounter,
-          keys: keys));
+          keys: keys,
+        ),
+      );
       return out;
     }
     if (node is bool) {
-      out.addAll(_splitWithHighlights(node ? 'true' : 'false',
+      out.addAll(
+        _splitWithHighlights(
+          node ? 'true' : 'false',
           baseStyle: boolStyle,
           highlight: highlight,
           highlightFocused: highlightFocused,
           matchCounter: matchCounter,
           incMatchCounter: incMatchCounter,
-          keys: keys));
+          keys: keys,
+        ),
+      );
       return out;
     }
     if (node == null) {
-      out.addAll(_splitWithHighlights('null',
+      out.addAll(
+        _splitWithHighlights(
+          'null',
           baseStyle: nullStyle,
           highlight: highlight,
           highlightFocused: highlightFocused,
           matchCounter: matchCounter,
           incMatchCounter: incMatchCounter,
-          keys: keys));
+          keys: keys,
+        ),
+      );
       return out;
     }
-    out.addAll(_splitWithHighlights(node.toString(),
+    out.addAll(
+      _splitWithHighlights(
+        node.toString(),
         baseStyle: punct,
         highlight: highlight,
         highlightFocused: highlightFocused,
         matchCounter: matchCounter,
         incMatchCounter: incMatchCounter,
-        keys: keys));
+        keys: keys,
+      ),
+    );
     return out;
   }
 
@@ -825,7 +1119,10 @@ class JsonPrettyRich extends StatelessWidget {
       if (idx < 0) return -1;
       if (!cfg.wholeWord) return idx;
       final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+      final right =
+          (idx + q.length) < src.length
+              ? src.substring(idx + q.length, idx + q.length + 1)
+              : null;
       final leftOk = left == null || !isWordChar(left);
       final rightOk = right == null || !isWordChar(right);
       if (leftOk && rightOk) return idx;
@@ -834,7 +1131,10 @@ class JsonPrettyRich extends StatelessWidget {
         idx = src.indexOf(q, nextStart);
         if (idx < 0) return -1;
         final l = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final r = (idx + q.length) < src.length ? src.substring(idx + q.length, idx + q.length + 1) : null;
+        final r =
+            (idx + q.length) < src.length
+                ? src.substring(idx + q.length, idx + q.length + 1)
+                : null;
         final lo = l == null || !isWordChar(l);
         final ro = r == null || !isWordChar(r);
         if (lo && ro) return idx;
@@ -855,12 +1155,22 @@ class JsonPrettyRich extends StatelessWidget {
       }
       final key = GlobalKey();
       keys.add(key);
-      out.add(WidgetSpan(child: SizedBox(key: key, width: 0, height: 0)));
+      out.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: SizedBox(key: key, width: 0, height: 1),
+        ),
+      );
       final isFocused = matchCounter() == cfg.focusedIndex;
-      out.add(TextSpan(
-        text: text.substring(idx, idx + q.length),
-        style: baseStyle.copyWith(backgroundColor: isFocused ? highlightFocused : highlight),
-      ));
+      out.add(
+        TextSpan(
+          text: text.substring(idx, idx + q.length),
+          style: baseStyle.copyWith(
+            backgroundColor: isFocused ? highlightFocused : highlight,
+          ),
+        ),
+      );
       incMatchCounter();
       start = idx + q.length;
     }
@@ -887,5 +1197,3 @@ class JsonSearchConfig {
 }
 
 // Интенты удалены — используются в CommonSearchBar
-
-
