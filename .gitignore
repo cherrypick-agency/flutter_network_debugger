@@ -1,6 +1,7 @@
 /tmp/
 /build/
 /web/downloads/
+/dist/
 
 .clinerules/byterover-rules.md
 .kilocode/rules/byterover-rules.md
