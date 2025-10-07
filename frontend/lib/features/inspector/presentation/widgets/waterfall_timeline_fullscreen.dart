@@ -82,8 +82,12 @@ class _WaterfallTimelineFullscreenPageState
                         list = list
                             .where((s) {
                               final st = s.startedAt;
-                              return st == null ||
-                                  !st.isBefore(widget.initialRange!.start);
+                              if (st == null) return false;
+                              final en = s.closedAt ?? DateTime.now();
+                              final sel = widget.initialRange!;
+                              // Пересечение интервалов: [st, en] x [sel.start, sel.end]
+                              return en.isAfter(sel.start) &&
+                                  st.isBefore(sel.end);
                             })
                             .toList(growable: false);
                       }

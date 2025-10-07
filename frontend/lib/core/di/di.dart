@@ -14,6 +14,11 @@ import '../../features/inspector/application/stores/aggregate_store.dart';
 import '../notifications/notifications_service.dart';
 import '../hotkeys/hotkeys_service.dart';
 import '../../features/settings/application/settings_service.dart';
+import '../../features/filters/application/stores/sessions_filters_store.dart';
+import '../../features/inspector/application/stores/home_ui_store.dart';
+import '../../features/inspector/application/services/monitor_service.dart';
+import '../../features/inspector/application/services/http_meta_service.dart';
+import '../../features/inspector/application/services/sessions_polling_service.dart';
 
 final sl = GetIt.instance;
 
@@ -27,6 +32,7 @@ Future<void> setupDI({required String baseUrl}) async {
     container,
   );
   await module.execute();
+  // TODO Injectable
   // Repository
   sl.registerLazySingleton<InspectorRepository>(
     () => InspectorRepositoryImpl(sl<AppHttpClient>()),
@@ -54,6 +60,16 @@ Future<void> setupDI({required String baseUrl}) async {
   sl.registerLazySingleton<AggregateStore>(
     () => AggregateStore(sl<ListAggregateUseCase>()),
   );
+  // UI store
+  sl.registerLazySingleton<HomeUiStore>(() => HomeUiStore());
+  // Services
+  sl.registerLazySingleton<MonitorService>(() => MonitorService());
+  sl.registerLazySingleton<HttpMetaService>(() => HttpMetaService());
+  sl.registerLazySingleton<SessionsPollingService>(
+    () => SessionsPollingService(),
+  );
+  // Filters store
+  sl.registerLazySingleton<SessionsFiltersStore>(() => SessionsFiltersStore());
   // Notifications
   sl.registerLazySingleton<NotificationsService>(() => NotificationsService());
   // Hotkeys

@@ -1,5 +1,6 @@
 /tmp/
 /build/
+/web/downloads/
 
 .clinerules/byterover-rules.md
 .kilocode/rules/byterover-rules.md
@@ -81,3 +82,6 @@ frontend/windows/flutter/ephemeral/
 .idea/
 .vscode/
 *.iml
+
+# Embedded web build for desktop wrapper
+cmd/network-debugger-web/_web/

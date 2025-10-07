@@ -20,6 +20,9 @@ class WaterfallTimeline extends StatefulWidget {
     this.initialRange,
     this.fitAll,
     this.onFitAllChanged,
+    this.onIntervalCleared,
+    this.hoveredSessionIdExt,
+    this.selectedSessionIdExt,
   });
 
   final List<Session> sessions;
@@ -38,6 +41,11 @@ class WaterfallTimeline extends StatefulWidget {
   final DateTimeRange? initialRange;
   final bool? fitAll;
   final ValueChanged<bool>? onFitAllChanged;
+  // Колбэк, который дёргаем при сбросе выделения (двойной клик по таймлайну)
+  final VoidCallback? onIntervalCleared;
+  // Внешняя подсветка по наведению/выбору элемента в списке сессий
+  final String? hoveredSessionIdExt;
+  final String? selectedSessionIdExt;
 
   @override
   State<WaterfallTimeline> createState() => _WaterfallTimelineState();
@@ -88,9 +96,6 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
     super.initState();
     _vCtrl.addListener(() {
       if (mounted) setState(() {});
-    });
-    _hCtrl.addListener(() {
-      /* could track user scroll if needed */
     });
     _pulse =
         AnimationController(
@@ -498,6 +503,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                 setState(() {
                                   _selectedRange = null;
                                 });
+                                // Сообщаем наверх, что выделение сброшено,
+                                // чтобы внешний фильтр по интервалу тоже очистился
+                                widget.onIntervalCleared?.call();
                               },
                               child: Stack(
                                 clipBehavior: Clip.hardEdge,
@@ -600,8 +608,18 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                         widget.padding.top +
                                         _axisHeight +
                                         it.lane * (laneHeight + _laneGap);
+                                    final isSelectedExt =
+                                        (widget.selectedSessionIdExt != null &&
+                                            widget.selectedSessionIdExt ==
+                                                it.session.id);
+                                    final isHoverExt =
+                                        (widget.hoveredSessionIdExt != null &&
+                                            widget.hoveredSessionIdExt ==
+                                                it.session.id);
                                     final isHover =
-                                        _hoverSessionId == it.session.id;
+                                        _hoverSessionId == it.session.id ||
+                                        isHoverExt ||
+                                        isSelectedExt;
                                     final baseColor = _barColor(
                                       context,
                                       it.session,
@@ -619,7 +637,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                         isActive
                                             ? (0.6 + 0.4 * _pulse.value)
                                             : 1.0;
-                                    final baseAlpha = isHover ? 0.95 : 0.75;
+                                    final baseAlpha =
+                                        isHover
+                                            ? (isSelectedExt ? 1.0 : 0.95)
+                                            : 0.75;
                                     final color = tuned.withOpacity(
                                       (baseAlpha * pulse).clamp(0.0, 1.0),
                                     );
@@ -669,7 +690,12 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                                           ),
                                                       border: Border.all(
                                                         color: borderColor,
-                                                        width: 1,
+                                                        width:
+                                                            isSelectedExt
+                                                                ? 2
+                                                                : (isHover
+                                                                    ? 1.3
+                                                                    : 1),
                                                       ),
                                                     ),
                                                   ),

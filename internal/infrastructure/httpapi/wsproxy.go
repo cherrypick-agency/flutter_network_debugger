@@ -13,14 +13,14 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	sio "go-proxy/internal/adapters/decoders/socketio"
-	"go-proxy/internal/domain"
-	"go-proxy/pkg/shared/id"
-	"go-proxy/pkg/shared/redact"
+	sio "network-debugger/internal/adapters/decoders/socketio"
+	"network-debugger/internal/domain"
+	"network-debugger/pkg/shared/id"
+	"network-debugger/pkg/shared/redact"
 )
 
 func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
-	tgt := r.URL.Query().Get("target")
+	tgt := r.URL.Query().Get("_target")
 	if tgt == "" {
 		if d.Cfg.DefaultTarget != "" {
 			tgt = d.Cfg.DefaultTarget
@@ -62,7 +62,7 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
-	d.Logger.Info().Str("session", sessionID).Str("target", u.String()).Str("client", sess.ClientAddr).Msg("wsproxy: incoming WS session")
+	d.Logger.Info().Str("session", sessionID).Str("target", u.String()).Str("client", sess.ClientAddr).Msg("network-debugger: incoming WS session")
 
 	upgrader := websocket.Upgrader{
 		CheckOrigin:  func(r *http.Request) bool { return true },
@@ -74,7 +74,7 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 		return
 	}
-	d.Logger.Info().Str("session", sessionID).Msg("wsproxy: client upgraded to WebSocket")
+	d.Logger.Info().Str("session", sessionID).Msg("network-debugger: client upgraded to WebSocket")
 
 	// Ограничиваем время рукопожатия/диала к апстриму, чтобы не вешать клиента при недоступном апстриме
 	dialer := websocket.Dialer{
@@ -120,7 +120,7 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 		return
 	}
-	d.Logger.Info().Str("session", sessionID).Str("upstream", u.String()).Msg("wsproxy: connected to upstream")
+	d.Logger.Info().Str("session", sessionID).Str("upstream", u.String()).Msg("network-debugger: connected to upstream")
 	// Register live session for API injection
 	if d.Live != nil {
 		d.Live.Register(sessionID, clientConn, upstreamConn)
@@ -151,7 +151,7 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 			d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
 			d.Metrics.ActiveSessions.Dec()
 		}
-		d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Msg("wsproxy: stream closed")
+		d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Msg("network-debugger: stream closed")
 		if d.Live != nil {
 			d.Live.Unregister(sessionID)
 		}
@@ -178,7 +178,7 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 
 		// best-effort Socket.IO event decoding for text frames
 		if !loggedFirst {
-			d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Str("opcode", string(opcode)).Int("size", len(data)).Msg("wsproxy: first frame proxied")
+			d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Str("opcode", string(opcode)).Int("size", len(data)).Msg("network-debugger: first frame proxied")
 			loggedFirst = true
 		}
 		if opcode == domain.OpcodeText {

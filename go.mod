@@ -1,4 +1,4 @@
-module go-proxy
+module network-debugger
 
 go 1.19
 

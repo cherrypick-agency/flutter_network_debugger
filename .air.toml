@@ -2,8 +2,8 @@ root = "."
 tmp_dir = "./tmp"
 
 [build]
-  cmd = "cd cmd/wsproxy && go build -race -o ../../bin/wsproxy"
-  bin = "./bin/wsproxy"
+  cmd = "cd cmd/network-debugger && go build -race -o ../../bin/network-debugger"
+  bin = "./bin/network-debugger"
   include_ext = ["go"]
   exclude_dir = ["frontend", "bin", "deploy", "docs", "build", "tmp"]
   delay = 150

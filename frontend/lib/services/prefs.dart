@@ -19,7 +19,9 @@ class PrefsService {
   static const _keyThemeMode = 'theme_mode';
   static const _keySinceTs = 'clear_since_ts';
   static const _keyRespDelayEnabled = 'resp_delay_enabled';
-  static const _keyRespDelayValue = 'resp_delay_value'; // "1500" или "1000-3000"
+  static const _keyRespDelayValue =
+      'resp_delay_value'; // "1500" или "1000-3000"
+  static const _keyIsRecording = 'is_recording';
 
   Future<void> save({
     required String baseUrl,
@@ -50,12 +52,15 @@ class PrefsService {
     if (httpMethod != null) await p.setString(_keyHttpMethod, httpMethod);
     if (httpStatus != null) await p.setString(_keyHttpStatus, httpStatus);
     if (httpMime != null) await p.setString(_keyHttpMime, httpMime);
-    if (httpMinDurationMs != null) await p.setInt(_keyHttpMinDur, httpMinDurationMs);
+    if (httpMinDurationMs != null)
+      await p.setInt(_keyHttpMinDur, httpMinDurationMs);
     if (groupBy != null) await p.setString(_keyGroupBy, groupBy);
     if (headerKey != null) await p.setString(_keyHeaderKey, headerKey);
     if (headerVal != null) await p.setString(_keyHeaderVal, headerVal);
-    if (respDelayEnabled != null) await p.setBool(_keyRespDelayEnabled, respDelayEnabled);
-    if (respDelayValue != null) await p.setString(_keyRespDelayValue, respDelayValue);
+    if (respDelayEnabled != null)
+      await p.setBool(_keyRespDelayEnabled, respDelayEnabled);
+    if (respDelayValue != null)
+      await p.setString(_keyRespDelayValue, respDelayValue);
   }
 
   Future<Map<String, String>> load() async {
@@ -89,7 +94,11 @@ class PrefsService {
     final p = await SharedPreferences.getInstance();
     final s = p.getString(_keySinceTs);
     if (s == null || s.isEmpty) return null;
-    try { return DateTime.parse(s).toUtc(); } catch (_) { return null; }
+    try {
+      return DateTime.parse(s).toUtc();
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -97,7 +106,10 @@ extension PrefsServiceMonitor on PrefsService {
   Future<void> saveMonitorLog(List<String> items) async {
     final p = await SharedPreferences.getInstance();
     final trimmed = items.length > 500 ? items.sublist(0, 500) : items;
-    await p.setString(PrefsService._keyMonitorLog, trimmed.join('\n')); // компактно
+    await p.setString(
+      PrefsService._keyMonitorLog,
+      trimmed.join('\n'),
+    ); // компактно
   }
 
   Future<List<String>> loadMonitorLog() async {
@@ -117,5 +129,17 @@ extension PrefsServiceTheme on PrefsService {
   Future<String> loadThemeModeString() async {
     final p = await SharedPreferences.getInstance();
     return p.getString(PrefsService._keyThemeMode) ?? 'system';
+  }
+}
+
+extension PrefsServiceRecording on PrefsService {
+  Future<void> saveIsRecording(bool isRecording) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(PrefsService._keyIsRecording, isRecording);
+  }
+
+  Future<bool> loadIsRecording() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(PrefsService._keyIsRecording) ?? true;
   }
 }

@@ -69,6 +69,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   bool _tree = false;
   bool _showTimeline = true;
   final ScrollController _listCtrl = ScrollController();
+  // Последняя известная длина списка фреймов (для автопрокрутки)
+  int _lastFramesLen = 0;
+  // Флаг, что после следующего кадра стоит прокрутить вниз
+  bool _autoScrollPending = false;
   DateTimeRange? _brushRange;
   String? _expandedId;
 
@@ -86,6 +90,11 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       <String, List<GlobalKey>>{};
   String? _pendingFocusFrameId;
   int _pendingFocusLocalIndex = 0;
+
+  // Ключи контейнеров тайлов для точного ensureVisible по внешнему списку
+  final Map<String, GlobalKey> _frameTileKeys = <String, GlobalKey>{};
+  GlobalKey _tileKeyFor(String id) =>
+      _frameTileKeys.putIfAbsent(id, () => GlobalKey());
 
   // Локальный поиск на уровне фреймов
   final Map<String, _LocalSearchState> _localSearch =
@@ -147,16 +156,56 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     return isWsPingPong || isEnginePingPong;
   }
 
+  // Если появились новые фреймы — при необходимости прокручиваем вниз,
+  // но только если пользователь уже был у конца списка
+  void _maybeAutoScrollToBottomOnNewFrames() {
+    if (widget.frames.length > _lastFramesLen) {
+      bool atBottom = false;
+      if (_listCtrl.hasClients) {
+        try {
+          final pos = _listCtrl.position;
+          // небольшой допуск, чтобы не дёргать, если почти внизу
+          atBottom = pos.pixels >= (pos.maxScrollExtent - 16);
+        } catch (_) {}
+      } else {
+        // если скролл ещё не прикреплён — считаем, что можно прилипать к низу
+        atBottom = true;
+      }
+      _autoScrollPending = atBottom;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_autoScrollPending && _listCtrl.hasClients) {
+          final max = _listCtrl.position.maxScrollExtent;
+          if (max > 0) {
+            _listCtrl.animateTo(
+              max,
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+            );
+          }
+        }
+        _lastFramesLen = widget.frames.length;
+        _autoScrollPending = false;
+      });
+    } else {
+      _lastFramesLen = widget.frames.length;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant WsDetailsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _maybeAutoScrollToBottomOnNewFrames();
+  }
+
   void _scrollToFrame(String frameId) {
-    // Простой вариант: найти индекс и прокрутить к нему
+    // 1) Грубая прокрутка по индексу, чтобы построился виджет в зоне экрана
     final idx = widget.frames.indexWhere(
       (e) => (e as Map)['id']?.toString() == frameId,
     );
-    if (idx < 0) return;
-    // приблизительная высота элемента
+    if (idx < 0 || !_listCtrl.hasClients) return;
     final estimatedItemExtent = 56.0;
     final target = (idx * estimatedItemExtent).toDouble();
-    if (!_listCtrl.hasClients) return;
     _listCtrl
         .animateTo(
           target.clamp(0, _listCtrl.position.maxScrollExtent),
@@ -165,8 +214,19 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         )
         .whenComplete(() {
           if (!mounted) return;
-          setState(() {
-            _expandedId = frameId;
+          // 2) Точная доводка: ensureVisible по ключу контейнера тайла
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final key = _tileKeyFor(frameId);
+            final ctx = key.currentContext;
+            if (ctx != null) {
+              try {
+                Scrollable.ensureVisible(
+                  ctx,
+                  duration: const Duration(milliseconds: 180),
+                  alignment: 0.1,
+                );
+              } catch (_) {}
+            }
           });
         });
   }
@@ -310,45 +370,11 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     setState(() {
       _expandedId = fid;
     });
-    // Прокрутка к тайлу
+    // Прокрутка к тайлу (грубо + точная доводка)
     _scrollToFrame(fid);
-    // Если ключи ещё не готовы — отложим
-    final keys = _frameMatchKeys[fid];
-    if (keys != null && local >= 0 && local < keys.length) {
-      final ctx = keys[local].currentContext;
-      if (ctx != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          try {
-            // проверяем, что у контекста всё ещё есть предок Scrollable
-            final scrollable = Scrollable.maybeOf(ctx);
-            if (scrollable == null) {
-              // попробуем ещё раз на следующий кадр
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                final ctx2 = keys[local].currentContext;
-                if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
-                  Scrollable.ensureVisible(
-                    ctx2,
-                    duration: const Duration(milliseconds: 200),
-                    alignment: 0.1,
-                  );
-                }
-              });
-            } else {
-              Scrollable.ensureVisible(
-                ctx,
-                duration: const Duration(milliseconds: 200),
-                alignment: 0.1,
-              );
-            }
-          } catch (_) {}
-        });
-      }
-    } else {
-      _pendingFocusFrameId = fid;
-      _pendingFocusLocalIndex = local;
-    }
+    // Всегда откладываем фокус на внутренний матч до готовности ключей
+    _pendingFocusFrameId = fid;
+    _pendingFocusLocalIndex = local;
   }
 
   void _gotoNext() {
@@ -969,8 +995,6 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       ),
     );
   }
-
-  // второй dispose удаляем (объединён выше)
 }
 
 class _Card extends StatelessWidget {

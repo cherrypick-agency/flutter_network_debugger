@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: go-proxy API
+  title: network-debugger API
   version: 0.1.0-mvp
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:9091
 paths:
   /api/sessions:
     get:
@@ -19,7 +19,7 @@ paths:
           name: q
           schema: { type: string }
         - in: query
-          name: target
+          name: _target
           schema: { type: string }
       responses:
         '200':

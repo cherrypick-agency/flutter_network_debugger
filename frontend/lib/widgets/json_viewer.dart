@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import '../core/hotkeys/hotkeys_service.dart';
 import 'common_search_bar.dart';
 import '../core/di/di.dart';
-// import 'package:json_tree_viewer/json_tree_viewer.dart' as jtv; // no longer used directly
 import '../theme/context_ext.dart';
 
 /// Универсальный JSON-виджет поверх json_tree_viewer
@@ -28,6 +27,7 @@ class _JsonViewerState extends State<JsonViewer> {
   bool _showSearch = false;
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final ScrollController _innerScrollCtrl = ScrollController();
   bool _matchCase = false;
   bool _wholeWord = false;
   bool _useRegex = false;
@@ -38,6 +38,7 @@ class _JsonViewerState extends State<JsonViewer> {
   void dispose() {
     _searchCtrl.dispose();
     _searchFocusNode.dispose();
+    _innerScrollCtrl.dispose();
     super.dispose();
   }
 
@@ -74,11 +75,19 @@ class _JsonViewerState extends State<JsonViewer> {
     final key = _matchKeys[_focusedIndex];
     final ctx = key.currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 200),
-        alignment: 0.1,
-      );
+      try {
+        final renderObject = ctx.findRenderObject();
+        if (renderObject != null && _innerScrollCtrl.hasClients) {
+          // Скроллим ТОЛЬКО внутренний скролл JSON
+          _innerScrollCtrl.position.ensureVisible(
+            renderObject,
+            duration: const Duration(milliseconds: 200),
+            alignment: 0.1,
+          );
+        }
+      } catch (_) {
+        // игнорируем — лучше не трогать родителя
+      }
     }
   }
 
@@ -110,7 +119,12 @@ class _JsonViewerState extends State<JsonViewer> {
               height: widget.treeHeight,
               child: Stack(
                 children: [
-                  Positioned.fill(child: SingleChildScrollView(child: content)),
+                  Positioned.fill(
+                    child: SingleChildScrollView(
+                      controller: _innerScrollCtrl,
+                      child: content,
+                    ),
+                  ),
                   Positioned(
                     top: 6,
                     left: 6,
@@ -129,7 +143,12 @@ class _JsonViewerState extends State<JsonViewer> {
           }
           return Stack(
             children: [
-              content,
+              Positioned.fill(
+                child: SingleChildScrollView(
+                  controller: _innerScrollCtrl,
+                  child: content,
+                ),
+              ),
               Positioned(
                 top: 6,
                 left: 6,
@@ -163,6 +182,7 @@ class _JsonViewerState extends State<JsonViewer> {
               children: [
                 Positioned.fill(
                   child: SingleChildScrollView(
+                    controller: _innerScrollCtrl,
                     child: JsonPrettyRich(data: data, search: searchCfg),
                   ),
                 ),
@@ -185,7 +205,12 @@ class _JsonViewerState extends State<JsonViewer> {
         // Обычный режим с закрепленной панелью по центру сверху
         return Stack(
           children: [
-            JsonPrettyRich(data: data, search: searchCfg),
+            Positioned.fill(
+              child: SingleChildScrollView(
+                controller: _innerScrollCtrl,
+                child: JsonPrettyRich(data: data, search: searchCfg),
+              ),
+            ),
             Positioned(
               top: 6,
               left: 0,
@@ -267,8 +292,6 @@ class _JsonViewerState extends State<JsonViewer> {
     );
   }
 }
-
-// Kept for reference; pretty/tree rich modes cover tree rendering now
 
 /// Расширенный tree-view с подсветкой и автоматическим раскрытием совпадений
 class JsonTreeRich extends StatefulWidget {
@@ -1195,5 +1218,3 @@ class JsonSearchConfig {
   final int focusedIndex;
   final void Function(int count, List<GlobalKey> keys)? onRebuilt;
 }
-
-// Интенты удалены — используются в CommonSearchBar

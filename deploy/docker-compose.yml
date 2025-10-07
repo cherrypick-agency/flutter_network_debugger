@@ -1,6 +1,6 @@
 version: "3.9"
 services:
-  wsproxy:
+  network-debugger:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -10,5 +10,3 @@ services:
       - ADDR=:8080
       - LOG_LEVEL=info
       - INSECURE_TLS=1
-
-
