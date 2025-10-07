@@ -174,7 +174,7 @@ func TestWSProxy_EndToEnd_SessionFramesEventsAndAPI(t *testing.T) {
 	var framesCount, eventsCount int
 
 	// Proxy WS
-	proxyURL := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?target=" + url.QueryEscape(echoWS)
+	proxyURL := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?_target=" + url.QueryEscape(echoWS)
 	clientConn, _, err := websocket.DefaultDialer.Dial(proxyURL, nil)
 	if err != nil {
 		t.Fatalf("proxy dial failed: %v", err)
@@ -389,7 +389,7 @@ func TestHeadersAndSubprotocolForwarding(t *testing.T) {
 	appSrv, _ := startAppServer(t)
 	defer appSrv.Close()
 
-	u := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?target=" + url.QueryEscape(echoWS+"?dump=1")
+	u := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?_target=" + url.QueryEscape(echoWS+"?dump=1")
 	hdr := http.Header{}
 	hdr.Set("Authorization", "Bearer abc")
 	hdr.Set("Cookie", "sid=xyz")
@@ -422,7 +422,7 @@ func TestBinaryCounters(t *testing.T) {
 	appSrv, _ := startAppServer(t)
 	defer appSrv.Close()
 
-	u := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?target=" + url.QueryEscape(echoWS)
+	u := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?_target=" + url.QueryEscape(echoWS)
 	c, _, err := websocket.DefaultDialer.Dial(u, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -466,7 +466,7 @@ func TestPaginationFramesAndEvents(t *testing.T) {
 	defer appSrv.Close()
 
 	// create session with many frames/events
-	u := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?target=" + url.QueryEscape(echoWS)
+	u := wsURLFromHTTP(appSrv.URL, "/wsproxy") + "?_target=" + url.QueryEscape(echoWS)
 	c, _, err := websocket.DefaultDialer.Dial(u, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -605,7 +605,7 @@ func TestMonitor_MultipleClients(t *testing.T) {
 	defer mon2.Close()
 
 	// create session
-	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
 	}
@@ -638,7 +638,7 @@ func TestSocketIO_AckWithoutNamespace(t *testing.T) {
 	appSrv, _ := startAppServer(t)
 	defer appSrv.Close()
 
-	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -688,7 +688,7 @@ func TestSessionsFilterByQuery(t *testing.T) {
 	defer appSrv.Close()
 
 	// create a session
-	c, _, _ := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+	c, _, _ := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 	_ = c.WriteMessage(websocket.TextMessage, []byte("ok"))
 	_ = c.Close()
 	time.Sleep(100 * time.Millisecond)
@@ -751,7 +751,7 @@ func TestSustainedRealtimeSession(t *testing.T) {
 	defer mon.Close()
 
 	// start proxy session
-	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 	if err != nil {
 		t.Fatalf("proxy dial: %v", err)
 	}
@@ -878,7 +878,7 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 	for s := 0; s < sessions; s++ {
 		go func(idx int) {
 			defer wg.Done()
-			c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+			c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 			if err != nil {
 				t.Errorf("dial: %v", err)
 				return
@@ -899,7 +899,7 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 	cancel()
 
 	// list sessions filtered by target
-	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&target=" + url.QueryEscape(echoWS))
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -989,7 +989,7 @@ func TestRichServerManyEvents(t *testing.T) {
 
 	// connect to rich server (server-initiated events/ping/binary)
 	richTarget := echoWS + "?server=rich"
-	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(richTarget), nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(richTarget), nil)
 	if err != nil {
 		t.Fatalf("proxy dial: %v", err)
 	}
@@ -1079,7 +1079,7 @@ func TestDeleteSessionAnd404(t *testing.T) {
 	defer appSrv.Close()
 
 	// create session
-	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -1125,7 +1125,7 @@ func TestUpstreamDialFailureSetsClosedError(t *testing.T) {
 
 	badTarget := "ws://127.0.0.1:9/ws" // порт discard, не слушает
 	// create session attempt
-	_, _, _ = websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(badTarget), nil)
+	_, _, _ = websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(badTarget), nil)
 	// подождём обработку
 	time.Sleep(200 * time.Millisecond)
 
@@ -1163,7 +1163,7 @@ func TestListFiltersAndRedaction(t *testing.T) {
 
 	// create a few sessions with different targets and payload containing token
 	for i := 0; i < 2; i++ {
-		c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?target="+url.QueryEscape(echoWS), nil)
+		c, _, err := websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(echoWS), nil)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -1175,7 +1175,7 @@ func TestListFiltersAndRedaction(t *testing.T) {
 	}
 
 	// list with target filter
-	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&target=" + url.QueryEscape(echoWS))
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ Target string } `json:"items"`

@@ -33,7 +33,7 @@ itest:
 
 e2e-echo:
 	# Requires wscat: npm i -g wscat
-	wscat -c "ws://localhost:8080/network-debugger?target=wss://echo.websocket.events"
+	wscat -c "ws://localhost:8080/network-debugger?_target=wss://echo.websocket.events"
 
 docker-build:
 	docker build -t network-debugger -f deploy/Dockerfile .

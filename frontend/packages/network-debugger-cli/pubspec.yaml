@@ -1,0 +1,22 @@
+name: network_debugger_cli
+description: CLI launcher for network-debugger (web). Downloads, caches and runs the correct binary.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+executables:
+  network-debugger: network_debugger_cli
+
+dependencies:
+  args: ^2.6.0
+  http: ^1.2.2
+  archive: ^3.6.1
+  path: ^1.9.0
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0
+
+

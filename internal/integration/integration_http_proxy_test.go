@@ -75,7 +75,7 @@ func TestHTTPReverseProxy_BasicGetAndPost(t *testing.T) {
 	client := app.Client()
 
 	// GET via /httpproxy with path join and query pass-through
-	u, _ := url.Parse(app.URL + "/httpproxy/get?target=" + url.QueryEscape(upstreamURL) + "&q=42")
+	u, _ := url.Parse(app.URL + "/httpproxy/get?_target=" + url.QueryEscape(upstreamURL) + "&q=42")
 	resp, err := client.Get(u.String())
 	if err != nil {
 		t.Fatalf("get via reverse: %v", err)
@@ -91,7 +91,7 @@ func TestHTTPReverseProxy_BasicGetAndPost(t *testing.T) {
 	}
 
 	// POST body
-	resp2, err := client.Post(app.URL+"/httpproxy/post?target="+url.QueryEscape(upstreamURL), "application/json", io.NopCloser(io.LimitReader(io.MultiReader(), 0)))
+	resp2, err := client.Post(app.URL+"/httpproxy/post?_target="+url.QueryEscape(upstreamURL), "application/json", io.NopCloser(io.LimitReader(io.MultiReader(), 0)))
 	if err != nil {
 		t.Fatalf("post via reverse: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestHTTPReverseProxy_BasicGetAndPost(t *testing.T) {
 	}
 
 	// hop-by-hop headers should be stripped; upstream /hop will echo empties
-	u2 := app.URL + "/httpproxy/hop?target=" + url.QueryEscape(upstreamURL)
+	u2 := app.URL + "/httpproxy/hop?_target=" + url.QueryEscape(upstreamURL)
 	req2, _ := http.NewRequest(http.MethodGet, u2, nil)
 	req2.Header.Set("Connection", "keep-alive")
 	req2.Header.Set("Proxy-Connection", "keep-alive")
@@ -223,7 +223,7 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 	defer app.Close()
 
 	// perform request with sensitive headers and ensure redaction in frames
-	req, _ := http.NewRequest(http.MethodGet, app.URL+"/httpproxy/get?target="+url.QueryEscape(upstreamURL)+"&q=ok", nil)
+	req, _ := http.NewRequest(http.MethodGet, app.URL+"/httpproxy/get?_target="+url.QueryEscape(upstreamURL)+"&q=ok", nil)
 	req.Header.Set("Authorization", "Bearer topsecret")
 	req.Header.Set("Cookie", "sid=clientsecret")
 	resp, err := app.Client().Do(req)
@@ -233,7 +233,7 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 	resp.Body.Close()
 
 	// large body path to exercise preview truncation path
-	_, _ = app.Client().Get(app.URL + "/httpproxy/gzip?target=" + url.QueryEscape(upstreamURL))
+	_, _ = app.Client().Get(app.URL + "/httpproxy/gzip?_target=" + url.QueryEscape(upstreamURL))
 
 	// list sessions filtered by upstream URL substring (q filter is contains)
 	r, _ := app.Client().Get(app.URL + "/api/sessions?limit=1000&q=" + url.QueryEscape(upstreamURL))

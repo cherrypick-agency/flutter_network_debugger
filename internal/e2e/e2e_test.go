@@ -320,7 +320,7 @@ func TestE2E_BinaryProcess_RealTCP(t *testing.T) {
 	waitReady(t, baseURL, 3*time.Second)
 
 	// 3) Open real WS client to network-debugger and exchange a variety of frames/events over time
-	proxyWS := "ws://" + addr + "/wsproxy?target=" + urlQueryEscape(echoURL)
+	proxyWS := "ws://" + addr + "/wsproxy?_target=" + urlQueryEscape(echoURL)
 	c, _, err := websocket.DefaultDialer.Dial(proxyWS, nil)
 	if err != nil {
 		t.Fatalf("dial proxy ws: %v\nlogs:\n%s", err, out.String())
@@ -467,7 +467,7 @@ func TestE2E_WSUnified_WithTarget(t *testing.T) {
 	u.Scheme = "ws"
 	u.Path = "/proxy"
 	q := u.Query()
-	q.Set("target", echoURL)
+	q.Set("_target", echoURL)
 	u.RawQuery = q.Encode()
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -537,7 +537,7 @@ func TestE2E_TLS_WSS_Subprotocols(t *testing.T) {
 	target := tlsURL + "?hdr=1&subp=1"
 	hdr := http.Header{}
 	hdr.Set("Sec-WebSocket-Protocol", "proto1")
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c, _, err := websocket.DefaultDialer.Dial(ws, hdr)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -573,7 +573,7 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 
 	// Connect raw WS to network-debugger targeting socket.io EIO=3 websocket transport
 	target := sioURL // already EIO=3 transport=websocket
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -704,7 +704,7 @@ func TestE2E_HeadersForwardingAndNegative(t *testing.T) {
 	hdr.Set("Authorization", "Bearer abc")
 	hdr.Set("Cookie", "sid=xyz")
 	hdr.Set("X-Test", "one")
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c, _, err := websocket.DefaultDialer.Dial(ws, hdr)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -724,7 +724,7 @@ func TestE2E_HeadersForwardingAndNegative(t *testing.T) {
 	_ = c.Close()
 
 	// negative: no Authorization
-	ws2 := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws2 := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c2, _, err := websocket.DefaultDialer.Dial(ws2, nil)
 	if err != nil {
 		t.Fatalf("dial2: %v", err)
@@ -756,7 +756,7 @@ func TestE2E_LargeFramesAndPreview(t *testing.T) {
 	baseURL := "http://" + addr
 	waitReady(t, baseURL, 4*time.Second)
 
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(echoURL)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(echoURL)
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -828,7 +828,7 @@ func TestE2E_ServerClientCloses(t *testing.T) {
 
 	// server-initiated close after 3 frames
 	target := echoURL + "?closeAt=3"
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -857,7 +857,7 @@ func TestE2E_ServerClientCloses(t *testing.T) {
 	}
 
 	// client-initiated close
-	ws2 := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(echoURL)
+	ws2 := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(echoURL)
 	c2, _, err := websocket.DefaultDialer.Dial(ws2, nil)
 	if err != nil {
 		t.Fatalf("dial2: %v", err)
@@ -883,7 +883,7 @@ func TestE2E_BackpressureSlowEcho(t *testing.T) {
 
 	// slow echo 50ms per frame
 	target := echoURL + "?slowMs=50"
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -927,7 +927,7 @@ func TestE2E_SocketIOAdvanced(t *testing.T) {
 	bu, _ := url.Parse(baseURL)
 	bu.Scheme = "ws"
 	bu.Path = "/wsproxy"
-	bu.RawQuery = "target=" + url.QueryEscape(sioURL)
+	bu.RawQuery = "_target=" + url.QueryEscape(sioURL)
 	ws := bu.String()
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
 	if err != nil {
@@ -943,7 +943,7 @@ func TestE2E_SocketIOAdvanced(t *testing.T) {
 	_ = c.Close()
 
 	// poll REST for events
-	resp2, _ := http.Get(baseURL + "/api/sessions?limit=100&target=" + url.QueryEscape(sioURL))
+	resp2, _ := http.Get(baseURL + "/api/sessions?limit=100&_target=" + url.QueryEscape(sioURL))
 	defer resp2.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -1008,7 +1008,7 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 
 	// 1st session will be dropped by server closeAt
 	target := echoURL + "?closeAt=1"
-	ws := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(target)
+	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(target)
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -1018,7 +1018,7 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	_ = c.Close()
 
 	// new session reconnect
-	ws2 := "ws://" + addr + "/wsproxy?target=" + url.QueryEscape(echoURL)
+	ws2 := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(echoURL)
 	c2, _, err := websocket.DefaultDialer.Dial(ws2, nil)
 	if err != nil {
 		t.Fatalf("dial2: %v", err)
