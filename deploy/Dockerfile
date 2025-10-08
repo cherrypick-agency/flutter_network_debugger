@@ -8,8 +8,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
 COPY --from=build /out/network-debugger /app/network-debugger
-EXPOSE 8080
-ENV ADDR=:8080
+EXPOSE 9091
+ENV ADDR=:9091
 USER 65532:65532
 ENTRYPOINT ["/app/network-debugger"]
 
