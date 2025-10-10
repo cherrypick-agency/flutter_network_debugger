@@ -4,8 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import '../../../../theme/context_ext.dart';
 import '../../application/stores/sessions_store.dart';
-import 'waterfall_timeline.dart';
-import '../../../../services/prefs.dart';
+import 'waterfall_timeline.dart' show WaterfallTimeline;
+import '../../application/stores/home_ui_store.dart';
+import '../../../../core/di/di.dart';
 
 class WaterfallTimelineFullscreenPage extends StatefulWidget {
   const WaterfallTimelineFullscreenPage({super.key, this.initialRange});
@@ -61,54 +62,53 @@ class _WaterfallTimelineFullscreenPageState
             Text('All sessions', style: context.appText.title),
             const SizedBox(height: 8),
             Expanded(
-              child: FutureBuilder<DateTime?>(
-                future: PrefsService().loadSince(),
-                builder: (context, snap) {
-                  final since = snap.data;
-                  return Observer(
-                    builder: (_) {
-                      final store = context.read<SessionsStore>();
-                      final raw = store.items.toList();
-                      var list = raw;
-                      if (since != null) {
-                        list = list
-                            .where((s) {
-                              final st = s.startedAt;
-                              return st == null || !st.isBefore(since);
-                            })
-                            .toList(growable: false);
-                      }
-                      if (widget.initialRange != null) {
-                        list = list
-                            .where((s) {
-                              final st = s.startedAt;
-                              if (st == null) return false;
-                              final en = s.closedAt ?? DateTime.now();
-                              final sel = widget.initialRange!;
-                              // Пересечение интервалов: [st, en] x [sel.start, sel.end]
-                              return en.isAfter(sel.start) &&
-                                  st.isBefore(sel.end);
-                            })
-                            .toList(growable: false);
-                      }
-                      return WaterfallTimeline(
-                        sessions: list,
-                        autoCompressLanes: true,
-                        expandToParent: true,
-                        initialRange: widget.initialRange,
-                        onIntervalSelected: (range) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Selected: ${range.start} — ${range.end}',
-                              ),
-                            ),
-                          );
-                        },
-                        onSessionSelected: (s) {
-                          Navigator.of(context).maybePop(s);
-                        },
+              child: Observer(
+                builder: (_) {
+                  final ui = sl<HomeUiStore>();
+                  final since = ui.since.value;
+                  final store = context.read<SessionsStore>();
+                  final raw = store.items.toList();
+                  var list = raw;
+                  if (since != null) {
+                    list = list
+                        .where((s) {
+                          final end = s.closedAt ?? DateTime.now();
+                          return !end.isBefore(since);
+                        })
+                        .toList(growable: false);
+                  }
+                  if (widget.initialRange != null) {
+                    list = list
+                        .where((s) {
+                          final st = s.startedAt;
+                          if (st == null) return false;
+                          final en = s.closedAt ?? DateTime.now();
+                          final sel = widget.initialRange!;
+                          return en.isAfter(sel.start) && st.isBefore(sel.end);
+                        })
+                        .toList(growable: false);
+                  }
+                  final fixedWindow =
+                      ui.recentWindowEnabled.value
+                          ? Duration(minutes: ui.recentWindowMinutes.value)
+                          : null;
+                  return WaterfallTimeline(
+                    sessions: list,
+                    autoCompressLanes: true,
+                    expandToParent: true,
+                    fixedWindow: fixedWindow,
+                    initialRange: widget.initialRange,
+                    onIntervalSelected: (range) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Selected: ${range.start} — ${range.end}',
+                          ),
+                        ),
                       );
+                    },
+                    onSessionSelected: (s) {
+                      Navigator.of(context).maybePop(s);
                     },
                   );
                 },

@@ -23,6 +23,7 @@ class WaterfallTimeline extends StatefulWidget {
     this.onIntervalCleared,
     this.hoveredSessionIdExt,
     this.selectedSessionIdExt,
+    this.fixedWindow,
   });
 
   final List<Session> sessions;
@@ -46,6 +47,8 @@ class WaterfallTimeline extends StatefulWidget {
   // Внешняя подсветка по наведению/выбору элемента в списке сессий
   final String? hoveredSessionIdExt;
   final String? selectedSessionIdExt;
+  // Если задано — таймлайн фиксируется в окне [now - fixedWindow .. now]
+  final Duration? fixedWindow;
 
   @override
   State<WaterfallTimeline> createState() => _WaterfallTimelineState();
@@ -256,12 +259,17 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
 
   @override
   Widget build(BuildContext context) {
+    final useFixed = widget.fixedWindow != null;
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
-        SingleActivator(LogicalKeyboardKey.equal): () => _zoom(0.8),
-        SingleActivator(LogicalKeyboardKey.minus): () => _zoom(1.25),
-        SingleActivator(LogicalKeyboardKey.arrowLeft): () => _pan(-0.2),
-        SingleActivator(LogicalKeyboardKey.arrowRight): () => _pan(0.2),
+        if (!useFixed)
+          SingleActivator(LogicalKeyboardKey.equal): () => _zoom(0.8),
+        if (!useFixed)
+          SingleActivator(LogicalKeyboardKey.minus): () => _zoom(1.25),
+        if (!useFixed)
+          SingleActivator(LogicalKeyboardKey.arrowLeft): () => _pan(-0.2),
+        if (!useFixed)
+          SingleActivator(LogicalKeyboardKey.arrowRight): () => _pan(0.2),
         SingleActivator(LogicalKeyboardKey.escape):
             () => setState(() {
               _dragStart = null;
@@ -274,9 +282,17 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
           height: widget.expandToParent ? null : widget.height,
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final now = DateTime.now();
+              final windowStart =
+                  useFixed ? now.subtract(widget.fixedWindow!) : null;
+              final windowEnd = useFixed ? now : null;
+
               final dataBounds = _timesOf(widget.sessions);
-              final dataStart = dataBounds.start ?? _viewStart;
-              final dataEnd = dataBounds.end ?? _viewEnd;
+              final rawStart = dataBounds.start ?? _viewStart;
+              final rawEnd = dataBounds.end ?? _viewEnd;
+              final dataStart = useFixed ? (windowStart!) : rawStart;
+              final dataEnd = useFixed ? (windowEnd!) : rawEnd;
+
               final fullMs = (dataEnd
                       .difference(dataStart)
                       .inMilliseconds
@@ -291,10 +307,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                 1.0,
                 minContent,
               );
-              // fitAll всегда уважаем, даже при активном прогрессе
-              final bool useFitAll = _isFitAll;
+              // При фиксированном окне всегда используем fit по окну
+              final bool useFitAllNow = useFixed ? true : _isFitAll;
               final double pxPerMs =
-                  useFitAll
+                  useFitAllNow
                       ? (fullMs > 0 ? (fitWidthPx / fullMs) : 1.0)
                       : _pxPerMs(
                         _viewEnd
@@ -327,12 +343,13 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                   _axisHeight + lanesHeight + widget.padding.vertical;
               final vOff = _vCtrl.hasClients ? _vCtrl.offset : 0.0;
               final contentWidth =
-                  useFitAll
+                  useFitAllNow
                       ? minContent
                       : (fullMs * pxPerMs).clamp(minContent, 2000000.0);
               // Keep mapping origin consistent with painting
               _axisStart = dataStart;
 
+              final bool showMs = dataEnd.difference(dataStart).inSeconds < 30;
               return Scrollbar(
                 controller: _hCtrl,
                 thumbVisibility: true,
@@ -357,6 +374,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                         ),
                         child: GestureDetector(
                           onScaleStart: (d) {
+                            if (useFixed) return;
                             // Не отключаем Fit All на старте жеста; только когда реально меняется scale
                             final dx = d.localFocalPoint.dx;
                             final pxPer =
@@ -364,6 +382,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                             _scaleAnchor = _xToTime(dx, pxPer);
                           },
                           onScaleUpdate: (d) {
+                            if (useFixed) return;
                             if (_scaleAnchor == null) return;
                             if (d.scale == 1.0) return;
                             // Отключаем Fit All только при реальном зуме
@@ -491,6 +510,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTapUp: (d) {
+                                if (useFixed) return;
                                 // Зум в точку клика по таймлайну (кроме полос сессий — они перехватят событие)
                                 _setFitAll(false);
                                 final anchor = _xToTime(
@@ -531,11 +551,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                           color:
                                               context.appColors.textSecondary,
                                         ),
-                                        showMilliseconds:
-                                            _viewEnd
-                                                .difference(_viewStart)
-                                                .inMilliseconds <=
-                                            5000,
+                                        showMilliseconds: showMs,
                                       ),
                                     ),
                                   ),
@@ -556,11 +572,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                           color:
                                               context.appColors.textSecondary,
                                         ),
-                                        showMilliseconds:
-                                            _viewEnd
-                                                .difference(_viewStart)
-                                                .inMilliseconds <=
-                                            5000,
+                                        showMilliseconds: showMs,
                                       ),
                                     ),
                                   ),
@@ -568,19 +580,41 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                   ...items.map((it) {
                                     final ts =
                                         it.session.startedAt ?? dataStart;
-                                    final startMs =
+                                    final startMsRaw =
                                         ts
                                             .difference(dataStart)
                                             .inMilliseconds
                                             .toDouble();
                                     // Для активных — правая граница = now
-                                    final endTs =
-                                        it.session.closedAt ?? DateTime.now();
-                                    final durMs = (endTs
+                                    final endTs = it.session.closedAt ?? now;
+                                    double durMs = (endTs
                                             .difference(ts)
                                             .inMilliseconds
                                             .toDouble())
                                         .clamp(1.0, double.infinity);
+                                    double startMs = startMsRaw;
+                                    // Жёсткое обрезание по краям окна
+                                    if (useFixed) {
+                                      final leftEdgeMs =
+                                          0.0; // dataStart == windowStart
+                                      if (startMs < leftEdgeMs) {
+                                        final delta = leftEdgeMs - startMs;
+                                        startMs = leftEdgeMs;
+                                        durMs = math.max(0.0, durMs - delta);
+                                      }
+                                      final rightEdgeMs =
+                                          (dataEnd
+                                              .difference(dataStart)
+                                              .inMilliseconds
+                                              .toDouble());
+                                      final barEndMs = startMs + durMs;
+                                      if (barEndMs > rightEdgeMs) {
+                                        durMs = math.max(
+                                          0.0,
+                                          rightEdgeMs - startMs,
+                                        );
+                                      }
+                                    }
                                     double left =
                                         widget.padding.left +
                                         (startMs * pxPerMs);

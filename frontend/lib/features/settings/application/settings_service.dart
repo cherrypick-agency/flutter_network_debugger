@@ -1,6 +1,7 @@
 import 'package:app_http_client/application/app_http_client.dart';
-import '../../../core/di/di.dart';
 import '../../../services/prefs.dart';
+import '../../../core/di/di.dart';
+import '../../inspector/application/services/recent_window_service.dart';
 
 class SettingsService {
   Future<void> syncPrefsToBackend() async {
@@ -31,5 +32,14 @@ class SettingsService {
       respDelayValue: value.trim(),
     );
     await syncPrefsToBackend();
+  }
+
+  Future<void> saveRecentWindow({
+    required bool enabled,
+    required int minutes,
+  }) async {
+    // Сохраняем и отдаём в сервис, чтобы он обновил since и дёрнул перезагрузку
+    await PrefsService().saveRecentWindow(enabled: enabled, minutes: minutes);
+    sl<RecentWindowService>().apply(enabled: enabled, minutes: minutes);
   }
 }

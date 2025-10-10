@@ -177,21 +177,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ),
           const SizedBox(height: 8),
         ],
-        Text('Headers', style: context.appText.subtitle),
-        const SizedBox(height: 4),
-        ...headers.entries
-            .map(
-              (e) => Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: _HeaderItem(
-                  name: e.key,
-                  value: e.value,
-                  raw: headersRaw[e.key],
-                ),
-              ),
-            )
-            .toList(),
-        const SizedBox(height: 8),
         if (body.isNotEmpty)
           Row(
             children: [
@@ -236,6 +221,21 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               : (_isJson(body) && _prettyReq)
               ? JsonViewer(jsonString: body, forceTree: false)
               : SelectableText(body, style: context.appText.monospace),
+        const SizedBox(height: 8),
+        Text('Headers', style: context.appText.subtitle),
+        const SizedBox(height: 4),
+        ...headers.entries
+            .map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: _HeaderItem(
+                  name: e.key,
+                  value: e.value,
+                  raw: headersRaw[e.key],
+                ),
+              ),
+            )
+            .toList(),
       ],
     );
   }
@@ -337,21 +337,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
             ),
           ),
         const SizedBox(height: 8),
-        Text('Headers', style: context.appText.subtitle),
-        const SizedBox(height: 4),
-        ...headers.entries
-            .map(
-              (e) => Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: _HeaderItem(
-                  name: e.key,
-                  value: e.value,
-                  raw: headersRaw[e.key],
-                ),
-              ),
-            )
-            .toList(),
-        const SizedBox(height: 8),
         if (body.isNotEmpty)
           Row(
             children: [
@@ -408,6 +393,21 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               : (_isJson(body) && _prettyResp)
               ? JsonViewer(jsonString: body, forceTree: false)
               : SelectableText(body, style: context.appText.monospace),
+        const SizedBox(height: 8),
+        Text('Headers', style: context.appText.subtitle),
+        const SizedBox(height: 4),
+        ...headers.entries
+            .map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: _HeaderItem(
+                  name: e.key,
+                  value: e.value,
+                  raw: headersRaw[e.key],
+                ),
+              ),
+            )
+            .toList(),
         const SizedBox(height: 12),
         // Security section (TLS & Cookies)
         Text('Security', style: context.appText.subtitle),

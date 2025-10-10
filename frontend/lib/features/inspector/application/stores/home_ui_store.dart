@@ -21,6 +21,8 @@ class HomeUiStore {
     isRecording = mobx.Observable<bool>(true);
     captureScope = mobx.Observable<String>('current'); // current | all
     includePaused = mobx.Observable<bool>(false);
+    recentWindowEnabled = mobx.Observable<bool>(false);
+    recentWindowMinutes = mobx.Observable<int>(5);
   }
 
   late final mobx.Observable<String?> selectedSessionId;
@@ -40,6 +42,8 @@ class HomeUiStore {
   late final mobx.Observable<bool> isRecording;
   late final mobx.Observable<String> captureScope;
   late final mobx.Observable<bool> includePaused;
+  late final mobx.Observable<bool> recentWindowEnabled;
+  late final mobx.Observable<int> recentWindowMinutes;
 
   void setSelectedSessionId(String? v) =>
       mobx.runInAction(() => selectedSessionId.value = v);
@@ -78,4 +82,8 @@ class HomeUiStore {
       mobx.runInAction(() => captureScope.value = v);
   void setIncludePaused(bool v) =>
       mobx.runInAction(() => includePaused.value = v);
+  void setRecentWindowEnabled(bool v) =>
+      mobx.runInAction(() => recentWindowEnabled.value = v);
+  void setRecentWindowMinutes(int v) =>
+      mobx.runInAction(() => recentWindowMinutes.value = v);
 }

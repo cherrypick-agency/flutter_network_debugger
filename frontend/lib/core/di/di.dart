@@ -19,6 +19,7 @@ import '../../features/inspector/application/stores/home_ui_store.dart';
 import '../../features/inspector/application/services/monitor_service.dart';
 import '../../features/inspector/application/services/http_meta_service.dart';
 import '../../features/inspector/application/services/sessions_polling_service.dart';
+import '../../features/inspector/application/services/recent_window_service.dart';
 
 final sl = GetIt.instance;
 
@@ -68,6 +69,7 @@ Future<void> setupDI({required String baseUrl}) async {
   sl.registerLazySingleton<SessionsPollingService>(
     () => SessionsPollingService(),
   );
+  sl.registerLazySingleton<RecentWindowService>(() => RecentWindowService());
   // Filters store
   sl.registerLazySingleton<SessionsFiltersStore>(() => SessionsFiltersStore());
   // Notifications
@@ -81,4 +83,7 @@ Future<void> setupDI({required String baseUrl}) async {
   // Первичная синхронизация настроек (задержка ответа)
   // ignore: unawaited_futures
   sl<SettingsService>().syncPrefsToBackend();
+  // Recent window init
+  // ignore: unawaited_futures
+  sl<RecentWindowService>().initFromPrefs();
 }

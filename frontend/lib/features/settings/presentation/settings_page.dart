@@ -12,6 +12,11 @@ class _SettingsPageState extends State<SettingsPage> {
   final TextEditingController _delayCtrl = TextEditingController();
   bool _enabled = false;
   bool _saving = false;
+  // recent window controls
+  bool _recentEnabled = false;
+  final TextEditingController _recentMinutesCtrl = TextEditingController(
+    text: '5',
+  );
 
   @override
   void initState() {
@@ -30,6 +35,8 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _enabled = (data['respDelayEnabled'] ?? 'false') == 'true';
       _delayCtrl.text = data['respDelayValue'] ?? '';
+      _recentEnabled = (data['recentWindowEnabled'] ?? 'false') == 'true';
+      _recentMinutesCtrl.text = (data['recentWindowMinutes'] ?? '5');
     });
   }
 
@@ -41,6 +48,11 @@ class _SettingsPageState extends State<SettingsPage> {
       await SettingsService().saveResponseDelay(
         enabled: _enabled,
         value: _delayCtrl.text,
+      );
+      final minutes = int.tryParse(_recentMinutesCtrl.text.trim()) ?? 5;
+      await SettingsService().saveRecentWindow(
+        enabled: _recentEnabled,
+        minutes: minutes.clamp(1, 1440),
       );
       if (mounted) Navigator.of(context).pop();
     } finally {
@@ -96,6 +108,27 @@ class _SettingsPageState extends State<SettingsPage> {
                 labelText: 'Response delay (ms or range)',
                 hintText: 'например: 1000 или 1000-3000',
                 helperText: 'Оставьте пустым или 0, чтобы отключить',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _recentEnabled,
+              onChanged: (v) => setState(() => _recentEnabled = v ?? false),
+              title: const Text('Show only last N minutes'),
+              subtitle: const Text(
+                'Отображать только последние N минут в Sessions и Timeline',
+              ),
+            ),
+            TextField(
+              controller: _recentMinutesCtrl,
+              enabled: _recentEnabled,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'N minutes',
+                hintText: 'например: 5',
                 isDense: true,
               ),
             ),

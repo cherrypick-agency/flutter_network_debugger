@@ -22,6 +22,8 @@ class PrefsService {
   static const _keyRespDelayValue =
       'resp_delay_value'; // "1500" или "1000-3000"
   static const _keyIsRecording = 'is_recording';
+  static const _keyRecentWindowEnabled = 'recent_window_enabled';
+  static const _keyRecentWindowMinutes = 'recent_window_minutes';
 
   Future<void> save({
     required String baseUrl,
@@ -82,6 +84,11 @@ class PrefsService {
       'headerVal': p.getString(_keyHeaderVal) ?? '',
       'respDelayEnabled': (p.getBool(_keyRespDelayEnabled) ?? false).toString(),
       'respDelayValue': p.getString(_keyRespDelayValue) ?? '',
+      // recent window (stringified for legacy map)
+      'recentWindowEnabled':
+          (p.getBool(_keyRecentWindowEnabled) ?? false).toString(),
+      'recentWindowMinutes':
+          (p.getInt(_keyRecentWindowMinutes) ?? 5).toString(),
     };
   }
 
@@ -141,5 +148,29 @@ extension PrefsServiceRecording on PrefsService {
   Future<bool> loadIsRecording() async {
     final p = await SharedPreferences.getInstance();
     return p.getBool(PrefsService._keyIsRecording) ?? true;
+  }
+}
+
+extension PrefsServiceRecentWindow on PrefsService {
+  Future<void> saveRecentWindow({
+    required bool enabled,
+    required int minutes,
+  }) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(PrefsService._keyRecentWindowEnabled, enabled);
+    await p.setInt(
+      PrefsService._keyRecentWindowMinutes,
+      minutes.clamp(1, 1440),
+    );
+  }
+
+  Future<bool> loadRecentWindowEnabled() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(PrefsService._keyRecentWindowEnabled) ?? false;
+  }
+
+  Future<int> loadRecentWindowMinutes() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt(PrefsService._keyRecentWindowMinutes) ?? 5;
   }
 }

@@ -16,8 +16,9 @@ List<dynamic> filterVisibleSessions({
       .where((s) {
         if (ignoredIds.contains(s.id)) return false;
         if (since != null) {
-          final st = s.startedAt;
-          if (st != null && st.isBefore(since)) return false;
+          final end = s.closedAt ?? DateTime.now();
+          // Показываем только сессии, у которых конец \(закрытие или now\) >= since
+          if (end.isBefore(since)) return false;
         }
         if (selectedRange != null) {
           final start = s.startedAt;

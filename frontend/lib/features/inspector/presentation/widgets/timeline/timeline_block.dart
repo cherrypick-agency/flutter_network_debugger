@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 
 import '../../../application/stores/sessions_store.dart';
-import '../waterfall_timeline.dart';
+import '../waterfall_timeline.dart' show WaterfallTimeline;
 import '../waterfall_timeline_fullscreen.dart';
 import '../timeline_settings_button.dart';
 import '../../../application/stores/home_ui_store.dart';
 import '../../../../../../core/di/di.dart';
+import '../../../application/services/recent_window_service.dart';
 
 // Блок с таймлайном и плавающими контролами (fit/clear/settings/fullscreen)
 class TimelineBlock extends StatelessWidget {
@@ -51,13 +52,20 @@ class TimelineBlock extends StatelessWidget {
                       ? visibleRaw
                       : visibleRaw
                           .where((s) {
-                            final st = s.startedAt;
-                            return st == null || !st.isBefore(since!);
+                            final end = s.closedAt ?? DateTime.now();
+                            // Показываем если конец >= since
+                            return !end.isBefore(since!);
                           })
                           .toList(growable: false);
+              final ui = sl<HomeUiStore>();
+              final fixedWindow =
+                  ui.recentWindowEnabled.value
+                      ? Duration(minutes: ui.recentWindowMinutes.value)
+                      : null;
               return WaterfallTimeline(
                 sessions: sessions,
                 autoCompressLanes: true,
+                fixedWindow: fixedWindow,
                 fitAll: wfFitAll,
                 onFitAllChanged: onFitAllChanged,
                 onIntervalSelected: (range) => onRangeChanged(range),
@@ -74,7 +82,7 @@ class TimelineBlock extends StatelessWidget {
           ),
           Positioned(
             right: 0,
-            bottom: 0,
+            bottom: -40,
             child: Container(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface.withOpacity(0.45),
@@ -130,6 +138,66 @@ class TimelineBlock extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Мини-чекбокс обрезки по окну (crop)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        final ui = sl<HomeUiStore>();
+                        final enabled = ui.recentWindowEnabled.value;
+                        sl<RecentWindowService>().apply(
+                          enabled: !enabled,
+                          minutes: ui.recentWindowMinutes.value,
+                        );
+                      },
+                      child: Builder(
+                        builder: (context) {
+                          final crop =
+                              sl<HomeUiStore>().recentWindowEnabled.value;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              color:
+                                  crop
+                                      ? Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.15)
+                                      : Colors.transparent,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  crop
+                                      ? Icons.check_box
+                                      : Icons.check_box_outline_blank,
+                                  size: 14,
+                                  color:
+                                      crop
+                                          ? Theme.of(
+                                            context,
+                                          ).colorScheme.primary
+                                          : Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'crop',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                   IconButton(
                     tooltip: 'Clear all sessions',
                     iconSize: 16,
@@ -152,6 +220,18 @@ class TimelineBlock extends StatelessWidget {
                       child: TimelineSettingsButton(
                         getFit: () => wfFitAll,
                         setFit: (v) => onFitAllChanged(v),
+                        getCrop:
+                            () => sl<HomeUiStore>().recentWindowEnabled.value,
+                        setCrop: (v) {
+                          final ui = sl<HomeUiStore>();
+                          ui.setRecentWindowEnabled(v);
+                          // моментально пересчитать since и обновить список
+                          final minutes = ui.recentWindowMinutes.value;
+                          sl<RecentWindowService>().apply(
+                            enabled: v,
+                            minutes: minutes,
+                          );
+                        },
                       ),
                     ),
                   ),
