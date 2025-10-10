@@ -84,55 +84,84 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              value: _enabled,
-              onChanged: (v) {
-                setState(() {
-                  _enabled = v ?? false;
-                });
-              },
-              title: const Text('Response delay'),
-              subtitle: const Text(
-                'Искусственная задержка ответа для всех проксируемых запросов',
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final twoCols = c.maxWidth >= 900;
+            final left = <Widget>[
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _enabled,
+                onChanged: (v) {
+                  setState(() {
+                    _enabled = (v ?? false);
+                  });
+                },
+                title: const Text('Response delay'),
+                subtitle: const Text(
+                  'Искусственная задержка ответа для всех проксируемых запросов',
+                ),
               ),
-            ),
-            TextField(
-              controller: _delayCtrl,
-              enabled: _enabled,
-              decoration: const InputDecoration(
-                labelText: 'Response delay (ms or range)',
-                hintText: 'например: 1000 или 1000-3000',
-                helperText: 'Оставьте пустым или 0, чтобы отключить',
-                isDense: true,
+              TextField(
+                controller: _delayCtrl,
+                enabled: _enabled,
+                decoration: const InputDecoration(
+                  labelText: 'Response delay (ms or range)',
+                  hintText: 'например: 1000 или 1000-3000',
+                  helperText: 'Оставьте пустым или 0, чтобы отключить',
+                  isDense: true,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              value: _recentEnabled,
-              onChanged: (v) => setState(() => _recentEnabled = v ?? false),
-              title: const Text('Show only last N minutes'),
-              subtitle: const Text(
-                'Отображать только последние N минут в Sessions и Timeline',
+            ];
+            final right = <Widget>[
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _recentEnabled,
+                onChanged: (v) => setState(() => _recentEnabled = (v ?? false)),
+                title: const Text('Show only last N minutes'),
+                subtitle: const Text(
+                  'Отображать только последние N минут в Sessions и Timeline',
+                ),
               ),
-            ),
-            TextField(
-              controller: _recentMinutesCtrl,
-              enabled: _recentEnabled,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'N minutes',
-                hintText: 'например: 5',
-                isDense: true,
+              TextField(
+                controller: _recentMinutesCtrl,
+                enabled: _recentEnabled,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'N minutes',
+                  hintText: 'например: 5',
+                  isDense: true,
+                ),
               ),
-            ),
-          ],
+            ];
+            if (!twoCols) {
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [...left, const SizedBox(height: 16), ...right],
+                ),
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: left,
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: right,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

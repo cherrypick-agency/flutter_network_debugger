@@ -82,7 +82,7 @@ class TimelineBlock extends StatelessWidget {
           ),
           Positioned(
             right: 0,
-            bottom: -40,
+            bottom: 0,
             child: Container(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface.withOpacity(0.45),
@@ -230,6 +230,16 @@ class TimelineBlock extends StatelessWidget {
                           sl<RecentWindowService>().apply(
                             enabled: v,
                             minutes: minutes,
+                          );
+                        },
+                        getMinutes:
+                            () => sl<HomeUiStore>().recentWindowMinutes.value,
+                        setMinutes: (m) {
+                          final ui = sl<HomeUiStore>();
+                          ui.setRecentWindowMinutes(m);
+                          sl<RecentWindowService>().apply(
+                            enabled: ui.recentWindowEnabled.value,
+                            minutes: m,
                           );
                         },
                       ),

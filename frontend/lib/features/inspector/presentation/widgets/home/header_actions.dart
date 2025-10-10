@@ -19,6 +19,8 @@ class HeaderActions extends StatelessWidget {
     required this.isRecording,
     required this.onToggleRecording,
     required this.themeMode,
+    this.timelineVisible = true,
+    required this.onToggleTimeline,
   });
 
   final bool showFilters;
@@ -29,6 +31,8 @@ class HeaderActions extends StatelessWidget {
   final bool isRecording;
   final VoidCallback onToggleRecording;
   final ThemeMode themeMode;
+  final bool timelineVisible;
+  final VoidCallback onToggleTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -81,13 +85,18 @@ class HeaderActions extends StatelessWidget {
         Observer(
           builder: (_) {
             final hasActive = context.read<SessionsFiltersStore>().hasActive;
+            final showFiltersActive = showFilters;
+            final color =
+                showFiltersActive
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant;
             return Stack(
               clipBehavior: Clip.none,
               children: [
                 IconButton(
                   onPressed: onToggleFilters,
                   tooltip: 'Filters',
-                  icon: const Icon(Icons.filter_list),
+                  icon: Icon(Icons.filter_list, color: color),
                 ),
                 if (hasActive)
                   Positioned(
@@ -105,6 +114,18 @@ class HeaderActions extends StatelessWidget {
               ],
             );
           },
+        ),
+        // Toggle timeline visibility
+        IconButton(
+          onPressed: onToggleTimeline,
+          tooltip: 'Timeline',
+          icon: Icon(
+            Icons.view_timeline,
+            color:
+                timelineVisible
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         IconButton(
           onPressed: onToggleTheme,

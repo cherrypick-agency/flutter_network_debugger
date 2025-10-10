@@ -46,6 +46,8 @@ class _SessionsColumnState extends State<SessionsColumn> {
   int _lastSessionsLen = 0;
   final FocusNode _searchFocus = FocusNode();
   bool _stickToBottom = true; // автопрокрутка только если пользователь у низа
+  // Для появления с анимацией только новых элементов
+  final Set<String> _seenSessionIds = <String>{};
 
   @override
   void initState() {
@@ -232,6 +234,20 @@ class _SessionsColumnState extends State<SessionsColumn> {
   }
 
   Widget _buildSessionsList(BuildContext context) {
+    if (widget.sessions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            'Make a request to see items',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return ListView.builder(
       controller: widget.sessionsCtrl,
       itemCount: widget.sessions.length,
@@ -274,6 +290,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
             hasResponse ? ((meta['cors']?['ok'] ?? false) == true) : true;
         final isWs = (s.kind == 'ws') || (method.isEmpty && (s.kind == null));
 
+        final idStr = (s.id as String);
+        final isNew = !_seenSessionIds.contains(idStr);
+        _seenSessionIds.add(idStr);
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -287,211 +307,223 @@ class _SessionsColumnState extends State<SessionsColumn> {
                   ),
                 ),
               ),
-            MouseRegion(
-              onEnter: (_) {
-                sl<HomeUiStore>().setHoveredSessionId(s.id);
-              },
-              onExit: (_) {
-                sl<HomeUiStore>().setHoveredSessionId(null);
-              },
-              child: InkWell(
-                onTap: () => widget.onSelectSession(s.id),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        widget.selectedSessionId == s.id
-                            ? Theme.of(
+            _Appear(
+              key: ValueKey('s_row_$idStr'),
+              animate: isNew,
+              child: MouseRegion(
+                onEnter: (_) {
+                  sl<HomeUiStore>().setHoveredSessionId(s.id);
+                },
+                onExit: (_) {
+                  sl<HomeUiStore>().setHoveredSessionId(null);
+                },
+                child: InkWell(
+                  onTap: () => widget.onSelectSession(s.id),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          widget.selectedSessionId == s.id
+                              ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withOpacity(0.06)
+                              : null,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // URL
+                        Builder(
+                          builder: (context) {
+                            final errCode =
+                                (meta['errorCode'] ?? '').toString();
+                            final warn =
+                                errCode == 'TIMEOUT' ||
+                                errCode == 'DNS' ||
+                                errCode == 'TLS';
+                            final mark = Theme.of(context).colorScheme.tertiary;
+                            final child = _buildHighlightedUrl(
                               context,
-                            ).colorScheme.primary.withOpacity(0.06)
-                            : null,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // URL
-                      Builder(
-                        builder: (context) {
-                          final errCode = (meta['errorCode'] ?? '').toString();
-                          final warn =
-                              errCode == 'TIMEOUT' ||
-                              errCode == 'DNS' ||
-                              errCode == 'TLS';
-                          final mark = Theme.of(context).colorScheme.tertiary;
-                          final child = _buildHighlightedUrl(
-                            context,
-                            s.target,
-                            widget.sessionSearchCtrl.text,
-                          );
-                          if (!warn) return child;
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: mark.withOpacity(0.06),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border(
-                                left: BorderSide(color: mark, width: 2),
+                              s.target,
+                              widget.sessionSearchCtrl.text,
+                            );
+                            if (!warn) return child;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
                               ),
-                            ),
-                            child: child,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                if (isWs)
-                                  _chip(
-                                    (s.closedAt == null)
-                                        ? 'WS open'
-                                        : 'WS closed',
-                                    backgroundColor:
-                                        (s.closedAt == null)
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .secondaryContainer
-                                                .withOpacity(0.18)
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .error
-                                                .withOpacity(0.12),
-                                    foregroundColor:
-                                        (s.closedAt == null)
-                                            ? context.appColors.success
-                                            : Theme.of(
-                                              context,
-                                            ).colorScheme.error,
-                                  ),
-                                if (!isWs && method.isNotEmpty)
-                                  _chip(
-                                    method.toUpperCase(),
-                                    backgroundColor:
-                                        Theme.of(
+                              decoration: BoxDecoration(
+                                color: mark.withOpacity(0.06),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border(
+                                  left: BorderSide(color: mark, width: 2),
+                                ),
+                              ),
+                              child: child,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  if (isWs)
+                                    _chip(
+                                      (s.closedAt == null)
+                                          ? 'WS open'
+                                          : 'WS closed',
+                                      backgroundColor:
+                                          (s.closedAt == null)
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .secondaryContainer
+                                                  .withOpacity(0.18)
+                                              : Theme.of(context)
+                                                  .colorScheme
+                                                  .error
+                                                  .withOpacity(0.12),
+                                      foregroundColor:
+                                          (s.closedAt == null)
+                                              ? context.appColors.success
+                                              : Theme.of(
+                                                context,
+                                              ).colorScheme.error,
+                                    ),
+                                  if (!isWs && method.isNotEmpty)
+                                    _chip(
+                                      method.toUpperCase(),
+                                      backgroundColor:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.surfaceVariant,
+                                      foregroundColor:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                    ),
+                                  if (!isWs && status > 0)
+                                    _chip(
+                                      'HTTP $status',
+                                      backgroundColor: _statusBg(
+                                        context,
+                                        status,
+                                      ),
+                                      foregroundColor: _statusFg(
+                                        context,
+                                        status,
+                                      ),
+                                    ),
+                                  if (!isWs &&
+                                      !hasResponse &&
+                                      isClosed &&
+                                      hasError)
+                                    Tooltip(
+                                      message: s.error?.toString() ?? '',
+                                      child: _chip(
+                                        (() {
+                                          final m =
+                                              (widget.httpMeta[s.id] ??
+                                                  const {});
+                                          final code =
+                                              (m['errorCode'] ?? '').toString();
+                                          return code.isNotEmpty ? code : 'ERR';
+                                        })(),
+                                        backgroundColor: Theme.of(
                                           context,
-                                        ).colorScheme.surfaceVariant,
-                                    foregroundColor:
-                                        Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                  ),
-                                if (!isWs && status > 0)
-                                  _chip(
-                                    'HTTP $status',
-                                    backgroundColor: _statusBg(context, status),
-                                    foregroundColor: _statusFg(context, status),
-                                  ),
-                                if (!isWs &&
-                                    !hasResponse &&
-                                    isClosed &&
-                                    hasError)
-                                  Tooltip(
-                                    message: s.error?.toString() ?? '',
-                                    child: _chip(
-                                      (() {
-                                        final m =
-                                            (widget.httpMeta[s.id] ?? const {});
-                                        final code =
-                                            (m['errorCode'] ?? '').toString();
-                                        return code.isNotEmpty ? code : 'ERR';
-                                      })(),
+                                        ).colorScheme.error.withOpacity(0.12),
+                                        foregroundColor:
+                                            Theme.of(context).colorScheme.error,
+                                      ),
+                                    ),
+                                  if (!isWs && !hasResponse && !isClosed)
+                                    const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  if (!isWs && durationMs >= 0)
+                                    _chip(
+                                      '${durationMs} ms',
+                                      backgroundColor: _durationBg(
+                                        context,
+                                        durationMs,
+                                      ),
+                                      foregroundColor: _durationFg(
+                                        context,
+                                        durationMs,
+                                      ),
+                                    ),
+                                  if (!isWs && cacheStatus.isNotEmpty)
+                                    (cacheStatus.toUpperCase() == 'MISS')
+                                        ? _chipStrike(
+                                          'cache',
+                                          backgroundColor:
+                                              Theme.of(
+                                                context,
+                                              ).colorScheme.surfaceVariant,
+                                          foregroundColor:
+                                              Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                        )
+                                        : _chip(
+                                          'cache: ${cacheStatus.toUpperCase()}',
+                                        ),
+                                  if (!isWs && !corsOk)
+                                    _chip(
+                                      'CORS',
                                       backgroundColor: Theme.of(
                                         context,
                                       ).colorScheme.error.withOpacity(0.12),
                                       foregroundColor:
                                           Theme.of(context).colorScheme.error,
                                     ),
-                                  ),
-                                if (!isWs && !hasResponse && !isClosed)
-                                  const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                if (!isWs && durationMs >= 0)
-                                  _chip(
-                                    '${durationMs} ms',
-                                    backgroundColor: _durationBg(
-                                      context,
-                                      durationMs,
-                                    ),
-                                    foregroundColor: _durationFg(
-                                      context,
-                                      durationMs,
-                                    ),
-                                  ),
-                                if (!isWs && cacheStatus.isNotEmpty)
-                                  (cacheStatus.toUpperCase() == 'MISS')
-                                      ? _chipStrike(
-                                        'cache',
-                                        backgroundColor:
-                                            Theme.of(
-                                              context,
-                                            ).colorScheme.surfaceVariant,
-                                        foregroundColor:
-                                            Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
-                                      )
-                                      : _chip(
-                                        'cache: ${cacheStatus.toUpperCase()}',
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _formatTimeHMSSafe(s.startedAt as DateTime?),
+                                  textAlign: TextAlign.right,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (s.closedAt != null)
+                                  (() {
+                                    final code =
+                                        (meta['errorCode'] ?? '').toString();
+                                    if (code.isEmpty)
+                                      return const SizedBox.shrink();
+                                    return Text(
+                                      'Closed ($code)',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall?.copyWith(
+                                        color:
+                                            Theme.of(context).colorScheme.error,
                                       ),
-                                if (!isWs && !corsOk)
-                                  _chip(
-                                    'CORS',
-                                    backgroundColor: Theme.of(
-                                      context,
-                                    ).colorScheme.error.withOpacity(0.12),
-                                    foregroundColor:
-                                        Theme.of(context).colorScheme.error,
-                                  ),
+                                    );
+                                  })(),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                _formatTimeHMSSafe(s.startedAt as DateTime?),
-                                textAlign: TextAlign.right,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              if (s.closedAt != null)
-                                (() {
-                                  final code =
-                                      (meta['errorCode'] ?? '').toString();
-                                  if (code.isEmpty)
-                                    return const SizedBox.shrink();
-                                  return Text(
-                                    'Closed ($code)',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelSmall?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.error,
-                                    ),
-                                  );
-                                })(),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -647,6 +679,31 @@ class _SessionsColumnState extends State<SessionsColumn> {
     const threshold = 48.0;
     final atBottom = (pos.maxScrollExtent - pos.pixels) <= threshold;
     _stickToBottom = atBottom;
+  }
+}
+
+class _Appear extends StatelessWidget {
+  const _Appear({super.key, required this.child, required this.animate});
+  final Widget child;
+  final bool animate;
+  @override
+  Widget build(BuildContext context) {
+    if (!animate) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) {
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 8),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
   }
 }
 

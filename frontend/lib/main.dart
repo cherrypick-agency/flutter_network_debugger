@@ -585,27 +585,42 @@ class _MyHomePageState extends State<MyHomePage> {
                                           >()
                                           ?._mode) ??
                                       ThemeMode.system,
+                                  timelineVisible: ui.showTimeline.value,
+                                  onToggleTimeline: () {
+                                    ui.setShowTimeline(!ui.showTimeline.value);
+                                  },
                                 );
                               },
                             ),
                           ),
-                          // Waterfall timeline
+                          // Waterfall timeline (animated)
                           Observer(
                             builder: (_) {
                               final ui = sl<HomeUiStore>();
-                              return TimelineBlock(
-                                since: ui.since.value,
-                                wfFitAll: ui.wfFitAll.value,
-                                onFitAllChanged: (v) => ui.setWfFitAll(v),
-                                onSelectSession: (id) {
-                                  ui.setSelectedSessionId(id);
-                                  _loadDetails(id);
-                                },
-                                onClearAllSessions: _clearAllSessions,
-                                selectedRange: ui.selectedRange.value,
-                                onRangeChanged:
-                                    (range) => ui.setSelectedRange(range),
-                                onRangeCleared: () => ui.clearSelectedRange(),
+                              return AnimatedSize(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeInOutCubic,
+                                alignment: Alignment.topCenter,
+                                child:
+                                    ui.showTimeline.value
+                                        ? TimelineBlock(
+                                          since: ui.since.value,
+                                          wfFitAll: ui.wfFitAll.value,
+                                          onFitAllChanged:
+                                              (v) => ui.setWfFitAll(v),
+                                          onSelectSession: (id) {
+                                            ui.setSelectedSessionId(id);
+                                            _loadDetails(id);
+                                          },
+                                          onClearAllSessions: _clearAllSessions,
+                                          selectedRange: ui.selectedRange.value,
+                                          onRangeChanged:
+                                              (range) =>
+                                                  ui.setSelectedRange(range),
+                                          onRangeCleared:
+                                              () => ui.clearSelectedRange(),
+                                        )
+                                        : const SizedBox.shrink(),
                               );
                             },
                           ),
@@ -613,25 +628,35 @@ class _MyHomePageState extends State<MyHomePage> {
                           Observer(
                             builder: (_) {
                               final show = sl<HomeUiStore>().showFilters.value;
-                              if (!show) return const SizedBox.shrink();
-                              return Theme(
-                                data: Theme.of(context).copyWith(
-                                  inputDecorationTheme:
-                                      const InputDecorationTheme(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        labelStyle: TextStyle(fontSize: 12),
-                                      ),
-                                ),
-                                child: SessionsFilters(
-                                  onApply: () async {
-                                    await _savePrefs();
-                                    await _loadSessions();
-                                  },
-                                ),
+                              return AnimatedSize(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeInOutCubic,
+                                alignment: Alignment.topCenter,
+                                child:
+                                    show
+                                        ? Theme(
+                                          data: Theme.of(context).copyWith(
+                                            inputDecorationTheme:
+                                                const InputDecorationTheme(
+                                                  isDense: true,
+                                                  contentPadding:
+                                                      EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      ),
+                                                  labelStyle: TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                          ),
+                                          child: SessionsFilters(
+                                            onApply: () async {
+                                              await _savePrefs();
+                                              await _loadSessions();
+                                            },
+                                          ),
+                                        )
+                                        : const SizedBox.shrink(),
                               );
                             },
                           ),

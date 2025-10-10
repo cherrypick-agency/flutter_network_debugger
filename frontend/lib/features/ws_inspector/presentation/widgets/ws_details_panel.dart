@@ -168,8 +168,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
           atBottom = pos.pixels >= (pos.maxScrollExtent - 16);
         } catch (_) {}
       } else {
-        // если скролл ещё не прикреплён — считаем, что можно прилипать к низу
-        atBottom = true;
+        // если скролл ещё не прикреплён — считаем, что пользователь не внизу
+        atBottom = false;
       }
       _autoScrollPending = atBottom;
       WidgetsBinding.instance.addPostFrameCallback((_) {

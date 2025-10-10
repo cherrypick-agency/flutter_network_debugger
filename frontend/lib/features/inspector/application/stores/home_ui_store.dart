@@ -9,6 +9,7 @@ class HomeUiStore {
     showFilters = mobx.Observable<bool>(false);
     hideHeartbeats = mobx.Observable<bool>(false);
     wfFitAll = mobx.Observable<bool>(true);
+    showTimeline = mobx.Observable<bool>(true);
     showSearch = mobx.Observable<bool>(false);
     since = mobx.Observable<DateTime?>(null);
     selectedRange = mobx.Observable<DateTimeRange?>(null);
@@ -30,6 +31,7 @@ class HomeUiStore {
   late final mobx.Observable<bool> showFilters;
   late final mobx.Observable<bool> hideHeartbeats;
   late final mobx.Observable<bool> wfFitAll;
+  late final mobx.Observable<bool> showTimeline;
   late final mobx.Observable<bool> showSearch;
   late final mobx.Observable<DateTime?> since;
   late final mobx.Observable<DateTimeRange?> selectedRange;
@@ -55,6 +57,8 @@ class HomeUiStore {
   void setHideHeartbeats(bool v) =>
       mobx.runInAction(() => hideHeartbeats.value = v);
   void setWfFitAll(bool v) => mobx.runInAction(() => wfFitAll.value = v);
+  void setShowTimeline(bool v) =>
+      mobx.runInAction(() => showTimeline.value = v);
   void setShowSearch(bool v) => mobx.runInAction(() => showSearch.value = v);
   void setSince(DateTime? v) => mobx.runInAction(() => since.value = v);
   void setSelectedRange(DateTimeRange? v) =>
