@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     ports:
-      - "8080:8080"
+      - "9091:9091"
     environment:
       - ADDR=:8080
       - LOG_LEVEL=info
