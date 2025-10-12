@@ -1,0 +1,22 @@
+name: dio_debugger
+description: "Lightweight utility to attach a reverse/forward proxy to an existing Dio instance for local debugging."
+version: 0.1.1
+repository: https://github.com/cherrypick-agency/flutter_network_debugger
+homepage: https://github.com/cherrypick-agency/flutter_network_debugger
+issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues
+topics:
+  - dio
+  - http
+  - debug
+  - proxy
+  - reverse
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  dio: ^5.4.0
+
+dev_dependencies:
+  lints: ^3.0.0
+

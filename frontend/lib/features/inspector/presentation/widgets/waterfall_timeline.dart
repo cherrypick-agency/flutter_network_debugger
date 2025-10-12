@@ -290,8 +290,26 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
               final dataBounds = _timesOf(widget.sessions);
               final rawStart = dataBounds.start ?? _viewStart;
               final rawEnd = dataBounds.end ?? _viewEnd;
-              final dataStart = useFixed ? (windowStart!) : rawStart;
+              DateTime dataStart = useFixed ? (windowStart!) : rawStart;
               final dataEnd = useFixed ? (windowEnd!) : rawEnd;
+
+              // Crop mode: убираем пустоту до первого бара в окне, но оставляем правый край = now
+              if (useFixed) {
+                DateTime? minLeft;
+                for (final s in widget.sessions) {
+                  final st = s.startedAt;
+                  final en = s.closedAt ?? now;
+                  if (st == null) continue;
+                  if (!en.isAfter(windowStart!) || !st.isBefore(windowEnd!)) {
+                    continue; // вне окна
+                  }
+                  final left = st.isAfter(windowStart) ? st : windowStart;
+                  if (minLeft == null || left.isBefore(minLeft)) minLeft = left;
+                }
+                if (minLeft != null && minLeft.isAfter(dataStart)) {
+                  dataStart = minLeft;
+                }
+              }
 
               final fullMs = (dataEnd
                       .difference(dataStart)

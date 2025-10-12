@@ -23,6 +23,7 @@ import (
 	"network-debugger/internal/domain"
 	"network-debugger/pkg/shared/id"
 	"network-debugger/pkg/shared/redact"
+	"sync/atomic"
 )
 
 // handleHTTPProxy implements a simple reverse proxy that forwards requests to the `_target` upstream.
@@ -91,7 +92,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	transport := newTransport(d.Cfg)
 	// timings via httptrace
 	var tStart = time.Now()
-	var tDNS, tConnStart, tTLSStart, tFirstByte time.Time
+	var tDNSNs, tConnStartNs, tTLSStartNs, tFirstByteNs int64
 	hadError := false
 	proxy := &httputil.ReverseProxy{
 		Director:  director,
@@ -101,7 +102,8 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			sleepResponseDelay(d.Cfg)
 			// Log response frame with timings embedded
 			basePreview := buildHTTPResponsePreview(resp)
-			ttfb := durationMs(tStart, tFirstByte)
+			firstByte := timeFromUnixNanoOrZero(atomic.LoadInt64(&tFirstByteNs))
+			ttfb := durationMs(tStart, firstByte)
 			total := durationMs(tStart, time.Now())
 			preview := augmentPreviewWithTimings(basePreview, ttfb, total)
 			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
@@ -110,16 +112,20 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
 			// Persist HTTP transaction summary
+			dnsStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tDNSNs))
+			connStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tConnStartNs))
+			tlsStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tTLSStartNs))
+			firstByte = timeFromUnixNanoOrZero(atomic.LoadInt64(&tFirstByteNs))
 			tx := domain.HTTPTransaction{
 				ID: id.New(), SessionID: sessionID, Method: r.Method, URL: strings.TrimSuffix(upstream.String(), "?"),
 				Status:  resp.StatusCode,
 				ReqSize: int(r.ContentLength), RespSize: int(resp.ContentLength),
 				StartedAt: tStart, EndedAt: time.Now().UTC(),
 				Timings: domain.HTTPTimings{
-					DNS:     durationMs(tDNS, tConnStart),
-					Connect: durationMs(tConnStart, useOrFallback(tTLSStart, tFirstByte)),
-					TLS:     durationMs(useOrFallback(tTLSStart, tFirstByte), tFirstByte),
-					TTFB:    durationMs(tStart, tFirstByte),
+					DNS:     durationMs(dnsStart, connStart),
+					Connect: durationMs(connStart, useOrFallback(tlsStart, firstByte)),
+					TLS:     durationMs(useOrFallback(tlsStart, firstByte), firstByte),
+					TTFB:    durationMs(tStart, firstByte),
 					Total:   durationMs(tStart, time.Now()),
 				},
 			}
@@ -193,12 +199,20 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	// (ws flow already broadcasts in network-debugger)
 	// d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID}) // already sent above
 
-	// Attach httptrace to catch milestones
+	// Attach httptrace to catch milestones (write times atomically; parallel dial may trigger concurrently)
 	r = r.WithContext(httptrace.WithClientTrace(r.Context(), &httptrace.ClientTrace{
-		DNSStart:             func(info httptrace.DNSStartInfo) { tDNS = time.Now() },
-		ConnectStart:         func(network, addr string) { tConnStart = time.Now() },
-		TLSHandshakeStart:    func() { tTLSStart = time.Now() },
-		GotFirstResponseByte: func() { tFirstByte = time.Now() },
+		DNSStart: func(info httptrace.DNSStartInfo) {
+			atomic.CompareAndSwapInt64(&tDNSNs, 0, time.Now().UnixNano())
+		},
+		ConnectStart: func(network, addr string) {
+			atomic.CompareAndSwapInt64(&tConnStartNs, 0, time.Now().UnixNano())
+		},
+		TLSHandshakeStart: func() {
+			atomic.CompareAndSwapInt64(&tTLSStartNs, 0, time.Now().UnixNano())
+		},
+		GotFirstResponseByte: func() {
+			atomic.CompareAndSwapInt64(&tFirstByteNs, 0, time.Now().UnixNano())
+		},
 	}))
 
 	// Standard forwarding headers (useful for logs/upstream)
@@ -585,4 +599,12 @@ func useOrFallback(a, b time.Time) time.Time {
 		return b
 	}
 	return a
+}
+
+// timeFromUnixNanoOrZero конвертирует монотонно-независимые наносекунды в time.Time или возвращает нулевое время.
+func timeFromUnixNanoOrZero(ns int64) time.Time {
+	if ns <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns)
 }
