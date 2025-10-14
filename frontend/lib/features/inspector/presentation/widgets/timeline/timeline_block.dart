@@ -10,7 +10,7 @@ import '../../../application/stores/home_ui_store.dart';
 import '../../../../../../core/di/di.dart';
 import '../../../application/services/recent_window_service.dart';
 
-// Блок с таймлайном и плавающими контролами (fit/clear/settings/fullscreen)
+// Block with timeline and floating controls (fit/clear/settings/fullscreen)
 class TimelineBlock extends StatelessWidget {
   const TimelineBlock({
     super.key,
@@ -25,7 +25,7 @@ class TimelineBlock extends StatelessWidget {
     this.ignoredIds = const <String>{},
   });
 
-  // Если не null — скрываем сессии, начавшиеся раньше этой даты
+  // If not null — hide sessions that started before this date
   final DateTime? since;
   final bool wfFitAll;
   final ValueChanged<bool> onFitAllChanged;
@@ -53,7 +53,7 @@ class TimelineBlock extends StatelessWidget {
                       : visibleRaw
                           .where((s) {
                             final end = s.closedAt ?? DateTime.now();
-                            // Показываем если конец >= since
+                            // Show if end >= since
                             return !end.isBefore(since!);
                           })
                           .toList(growable: false);
@@ -138,7 +138,7 @@ class TimelineBlock extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Мини-чекбокс обрезки по окну (crop)
+                  // Mini-checkbox for window cropping (crop)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
                     child: InkWell(
@@ -225,7 +225,7 @@ class TimelineBlock extends StatelessWidget {
                         setCrop: (v) {
                           final ui = sl<HomeUiStore>();
                           ui.setRecentWindowEnabled(v);
-                          // моментально пересчитать since и обновить список
+                          // instantly recalculate since and update list
                           final minutes = ui.recentWindowMinutes.value;
                           sl<RecentWindowService>().apply(
                             enabled: v,

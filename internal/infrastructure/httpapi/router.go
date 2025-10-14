@@ -21,6 +21,7 @@ type Deps struct {
 	Svc     *usecase.SessionService
 	Monitor *MonitorHub
 	Live    *LiveSessions
+	MITM    *MITM
 }
 
 func NewRouter(cfg config.Config, logger *zerolog.Logger, metrics *obs.Metrics) http.Handler {
@@ -125,6 +126,11 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	mux.HandleFunc("/_api/v1/monitor/ws", d.Monitor.HandleWS)
 	mux.HandleFunc("/_api/v1/httpproxy", d.handleHTTPProxy)
 	mux.HandleFunc("/_api/v1/httpproxy/", d.handleHTTPProxy)
+
+	// MITM helpers (dev tooling)
+	mux.HandleFunc("/_api/v1/mitm/status", d.handleV1MITMStatus)
+	mux.HandleFunc("/_api/v1/mitm/ca", d.handleV1MITMGetCA)
+	mux.HandleFunc("/_api/v1/mitm/ca/generate", d.handleV1MITMGenerate)
 
 	return mux
 }

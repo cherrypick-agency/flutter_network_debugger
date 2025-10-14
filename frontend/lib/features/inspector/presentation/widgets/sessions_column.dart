@@ -42,11 +42,11 @@ class SessionsColumn extends StatefulWidget {
 }
 
 class _SessionsColumnState extends State<SessionsColumn> {
-  // Локально храним длину для автопрокрутки к низу при добавлении новых элементов
+  // Locally store length for auto-scroll to bottom when adding new items
   int _lastSessionsLen = 0;
   final FocusNode _searchFocus = FocusNode();
-  bool _stickToBottom = true; // автопрокрутка только если пользователь у низа
-  // Для появления с анимацией только новых элементов
+  bool _stickToBottom = true; // auto-scroll only if user is at bottom
+  // For animated appearance of only new items
   final Set<String> _seenSessionIds = <String>{};
 
   @override
@@ -118,10 +118,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
           ],
         ),
         const SizedBox(height: 6),
-        // Домены инлайн (до 3 рядов), далее скролл — только из отфильтрованных сессий
+        // Domains inline (up to 3 rows), then scroll — only from filtered sessions
         Builder(
           builder: (_) {
-            // Собираем счётчики доменов из текущего списка сессий
+            // Collect domain counters from current sessions list
             final Map<String, int> counts = <String, int>{};
             for (final s in widget.sessions) {
               try {
@@ -130,11 +130,11 @@ class _SessionsColumnState extends State<SessionsColumn> {
                 counts[host] = (counts[host] ?? 0) + 1;
               } catch (_) {}
             }
-            // Гарантируем наличие выбранных доменов даже если они обнулились по другим фильтрам
+            // Ensure selected domains are present even if they zeroed out by other filters
             for (final d in widget.selectedDomains) {
               counts.putIfAbsent(d, () => 0);
             }
-            // Стабильная сортировка по имени домена
+            // Stable sort by domain name
             final domains =
                 counts.keys.toList()
                   ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -254,7 +254,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
       itemBuilder: (ctx, i) {
         final s = widget.sessions[i];
 
-        // Автопрокрутка к низу после билда, если список увеличился
+        // Auto-scroll to bottom after build if list increased
         if (i == widget.sessions.length - 1 &&
             widget.sessions.length >= _lastSessionsLen &&
             _stickToBottom) {
@@ -535,7 +535,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
     );
   }
 
-  // ===== helpers (UI форматирование) =====
+  // ===== helpers (UI formatting) =====
   Widget _buildHighlightedUrl(BuildContext context, String text, String query) {
     final baseStyle =
         Theme.of(
@@ -556,7 +556,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
     final String qLower = q.toLowerCase();
     int start = 0;
     final spans = <InlineSpan>[];
-    // Жёлтая подсветка как в других поисках
+    // Yellow highlighting like in other searches
     final Color hl = context.appColors.warning.withValues(alpha: 0.35);
     while (true) {
       final idx = srcLower.indexOf(qLower, start);
@@ -655,7 +655,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
   }
 
   String _groupKey(dynamic s) {
-    // Дублируем простую группировку по домену/роуту
+    // Duplicate simple grouping by domain/route
     try {
       final uri = Uri.parse(s.target as String);
       if (widget.groupBy == 'domain') return uri.host;
@@ -707,7 +707,7 @@ class _Appear extends StatelessWidget {
   }
 }
 
-// Простая диагональная зачёркивающая линия для чипа
+// Simple diagonal strike-through line for chip
 class ChipStrikePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

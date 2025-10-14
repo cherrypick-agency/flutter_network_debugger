@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bufio"
 	"bytes"
+	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
@@ -24,6 +26,11 @@ func (d *Deps) handleForwardOrNotFound(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
+		// Если MITM включен и домен подходит — перехватываем TLS
+		if d.MITM != nil && d.MITM.CA != nil && d.MITM.shouldIntercept(r.Host) {
+			d.handleConnectMITM(w, r)
+			return
+		}
 		d.handleConnectTunnel(w, r)
 		return
 	}
@@ -72,6 +79,149 @@ func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
 	_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
 	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
 	d.Metrics.ActiveSessions.Dec()
+}
+
+// handleConnectMITM: устанавливает TLS с клиентом, используя leaf-сертификат от локального CA,
+// и параллельно инициирует исходящее соединение к upstream (TLS). Все HTTP/1.1 запросы/ответы
+// внутри TLS расшифрованы и могут быть проинструментированы аналогично reverse proxy.
+func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
+	upstream := r.Host
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "HIJACK_NOT_SUPPORTED", "proxy: hijacking not supported", nil)
+		return
+	}
+	clientConn, bufrw, err := hj.Hijack()
+	if err != nil {
+		return
+	}
+	// Отвечаем клиенту, что туннель установлен
+	_, _ = bufrw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+	_ = bufrw.Flush()
+
+	// Получаем сертификат под этот host
+	leaf, err := d.MITM.CA.IssueFor(upstream)
+	if err != nil {
+		_ = clientConn.Close()
+		return
+	}
+	// Настраиваем TLS сервер для клиента
+	tlsSrv := tls.Server(clientConn, &tls.Config{
+		Certificates: []tls.Certificate{leaf},
+		NextProtos:   []string{"http/1.1"}, // упрощаем: только H1 внутри
+	})
+	if err := tlsSrv.Handshake(); err != nil {
+		_ = tlsSrv.Close()
+		return
+	}
+
+	// Dial к upstream TCP, затем TLS клиент
+	upstreamTCP, err := net.DialTimeout("tcp", upstream, 10*time.Second)
+	if err != nil {
+		_ = tlsSrv.Close()
+		return
+	}
+	// Клиентская сторона TLS к реальному серверу
+	serverName := upstream
+	if h, _, err := net.SplitHostPort(upstream); err == nil {
+		serverName = h
+	}
+	tlsCli := tls.Client(upstreamTCP, &tls.Config{ServerName: serverName, InsecureSkipVerify: d.Cfg.InsecureTLS})
+	if err := tlsCli.Handshake(); err != nil {
+		_ = tlsCli.Close()
+		_ = tlsSrv.Close()
+		return
+	}
+
+	// Создаем сессию (тип http), будем логировать запросы/ответы
+	sessionID := id.New()
+	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "mitm://" + upstream, ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "http"})
+	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
+	d.Metrics.ActiveSessions.Inc()
+
+	// Простой цикл: читаем HTTP запросы от клиента, отправляем к апстриму, читаем ответ, отдаем назад.
+	// Работает для keep-alive последовательности запросов.
+	go func() {
+		defer func() {
+			_ = tlsCli.Close()
+			_ = tlsSrv.Close()
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+			d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+			d.Metrics.ActiveSessions.Dec()
+		}()
+
+		clientBR := bufio.NewReader(tlsSrv)
+		serverBR := bufio.NewReader(tlsCli)
+		for {
+			// Читаем запрос от клиента
+			req, err := http.ReadRequest(clientBR)
+			if err != nil {
+				return
+			}
+			// Переписываем схему/хост для апстрима
+			req.URL.Scheme = "https"
+			req.URL.Host = upstream
+			req.RequestURI = ""
+			removeHopHeaders(req.Header)
+			if ip := clientHost(r.RemoteAddr); ip != "" {
+				req.Header.Set("X-Forwarded-For", ip)
+			}
+			req.Header.Set("Via", "network-debugger")
+
+			// Для превью: аккуратно пикнем тело
+			var reqBodyBuf []byte
+			if req.Body != nil {
+				peekSize := previewMaxBytes
+				if peekSize <= 0 {
+					peekSize = 65536
+				}
+				if peekSize > 65536 {
+					peekSize = 65536
+				}
+				peek := make([]byte, peekSize)
+				n, _ := io.ReadFull(req.Body, peek)
+				if n > 0 {
+					reqBodyBuf = peek[:n]
+					req.Body = io.NopCloser(io.MultiReader(bytes.NewReader(reqBodyBuf), req.Body))
+				}
+			}
+			// Логируем запрос как в reverse proxy
+			rPrev := &http.Request{Method: req.Method, URL: req.URL, Header: req.Header}
+			reqPreview := buildHTTPRequestPreview(rPrev, reqBodyBuf)
+			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(req.ContentLength), Preview: reqPreview}
+			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+
+			// Отправляем запрос к апстриму
+			if err := req.Write(tlsCli); err != nil {
+				return
+			}
+			// Читаем ответ
+			resp, err := http.ReadResponse(serverBR, req)
+			if err != nil {
+				return
+			}
+			// Если апгрейд (например, WebSocket) — после записи 101 переключаемся на тупой прокач байтов
+			preview := buildHTTPResponsePreview(resp)
+			fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
+			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+
+			// Отдаём ответ клиенту
+			if err := resp.Write(tlsSrv); err != nil {
+				return
+			}
+
+			if resp.StatusCode == http.StatusSwitchingProtocols {
+				// После 101 HTTP больше нет — просто копируем байты в обе стороны до закрытия.
+				go func() { _, _ = io.Copy(tlsCli, tlsSrv); _ = tlsCli.Close() }()
+				_, _ = io.Copy(tlsSrv, tlsCli)
+				return
+			}
+		}
+	}()
 }
 
 func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) {

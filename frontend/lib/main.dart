@@ -28,6 +28,7 @@ import 'package:app_http_client/application/app_http_client.dart'
 import 'features/hotkeys/presentation/hotkeys_settings_page.dart';
 import 'features/landing/presentation/pages/download_page.dart';
 import 'features/settings/presentation/settings_page.dart';
+import 'features/landing/presentation/pages/integrations_page.dart';
 import 'core/hotkeys/hotkeys_service.dart';
 import 'core/utils/debouncer.dart';
 import 'features/common/notifications/notifications_overlay.dart';
@@ -63,7 +64,7 @@ class _MyAppState extends State<MyApp> {
     final m = await PrefsService().loadThemeModeString();
     if (!mounted) return;
     if (_themeToggled)
-      return; // не затираем выбор пользователя, если он уже нажал
+      return; // don't overwrite user's choice if they already clicked
     setState(() {
       _mode = _fromString(m);
     });
@@ -84,7 +85,7 @@ class _MyAppState extends State<MyApp> {
     _themeToggled = true;
     setState(() {
       if (_mode == ThemeMode.system) {
-        // если система светлая — переключаемся сразу в тёмную (и наоборот), чтобы был видимый эффект
+        // if system is light — switch to dark immediately (and vice versa) for visible effect
         final system =
             WidgetsBinding.instance.platformDispatcher.platformBrightness;
         _mode = (system == Brightness.light) ? ThemeMode.dark : ThemeMode.light;
@@ -125,6 +126,7 @@ class _MyAppState extends State<MyApp> {
               '/hotkeys': (_) => const HotkeysSettingsPage(),
               '/settings': (_) => const SettingsPage(),
               '/download': (_) => const DownloadPage(),
+              '/integrations': (_) => const IntegrationsPage(),
             },
             home: MyHomePage(onToggleTheme: _toggleTheme),
           );
@@ -149,7 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _loadingSessions = false;
   final ScrollController _framesCtrl = ScrollController();
   final ScrollController _eventsCtrl = ScrollController();
-  // Скролл сессий: если пользователь на самом дне — липнем к низу при новых элементах
+  // Sessions scroll: if user is at the bottom — stick to bottom when new items arrive
   final ScrollController _sessionsCtrl = ScrollController();
   Timer? _pollTimer;
   Debouncer _sessionsReloadDebounce = Debouncer(
@@ -158,7 +160,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Debouncer _detailsRefreshDebounce = Debouncer(
     const Duration(milliseconds: 150),
   );
-  // Фоновый пуллинг списка сессий как запасной канал обновления
+  // Background polling of sessions list as backup update channel
 
   final FocusNode _searchFocus = FocusNode();
   MonitorListener? _monitorListener;
@@ -168,7 +170,7 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     _connectMonitor();
     _restorePrefs().then((_) {
-      // После восстановления сохранённых фильтров сразу подгружаем список
+      // After restoring saved filters, immediately load the list
       _loadSessions();
     });
 
@@ -179,7 +181,7 @@ class _MyHomePageState extends State<MyHomePage> {
       sl<HomeUiStore>().setSessionSearchQuery(_sessionSearchCtrl.text);
       _scheduleSessionsReload();
     });
-    // Фоновая подзагрузка через сервис
+    // Background loading via service
     sl<features_inspector_application_services.SessionsPollingService>().start(
       onTick: () async {
         if (!mounted) return;
@@ -227,7 +229,7 @@ class _MyHomePageState extends State<MyHomePage> {
           });
         }
         if (!ui.isRecording.value && t == 'session_started') {
-          return; // paused: не подхватываем обновления
+          return; // paused: don't pick up updates
         }
         if (t == 'frame_added' || t == 'event_added' || t == 'sio_probe') {
           final sid = (ev['id'] ?? '').toString();
@@ -326,7 +328,7 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       context.read<AggregateStore>().clear();
     } catch (_) {}
-    // сразу перезагрузим агрегатор доменов, чтобы счётчики обнулились мгновенно
+    // immediately reload domain aggregator so counters reset instantly
     try {
       await context.read<AggregateStore>().load(groupBy: 'domain');
     } catch (_) {}
@@ -363,7 +365,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ui.setDirectionFilter(data['direction'] ?? 'all');
       _namespaceFilterCtrl.text = data['namespace']!;
     });
-    // восстановим фильтры в Store
+    // restore filters in Store
     final f = context.read<SessionsFiltersStore>();
     f.setTarget(data['targetFilter'] ?? '');
     f.setHttpMethod(data['httpMethod'] ?? 'any');
@@ -452,11 +454,11 @@ class _MyHomePageState extends State<MyHomePage> {
   void _onSessionsScroll() {
     if (!_sessionsCtrl.hasClients) return;
     final pos = _sessionsCtrl.position;
-    // Считаем "внизу", если остался небольшой хвост (для стабилизации на резайзах)
+    // Consider "at bottom" if there's a small tail left (for resize stabilization)
     (pos.maxScrollExtent - pos.pixels) < 48;
   }
 
-  // фильтры перенесены в WsDetailsPanel
+  // filters moved to WsDetailsPanel
 
   Future<void> _deleteSelected() async {
     final ui = sl<HomeUiStore>();
@@ -555,6 +557,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                     Navigator.of(
                                       context,
                                     ).pushNamed('/settings');
+                                  },
+                                  onOpenIntegrations: () {
+                                    Navigator.of(
+                                      context,
+                                    ).pushNamed('/integrations');
                                   },
                                   isRecording: ui.isRecording.value,
                                   onToggleRecording: () async {
@@ -678,7 +685,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   ),
                                 ),
                                 const VerticalDivider(width: 1),
-                                // если есть selectedSessionId, то отображаем details panel
+                                // if there's selectedSessionId, show details panel
                                 Observer(
                                   builder: (_) {
                                     final has =

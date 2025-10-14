@@ -3,24 +3,24 @@
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
 
-Простой универсальный прокси для отладки HTTP и WebSocket. Подходит для локальной разработки и тестовых окружений. Есть веб‑интерфейс (открывается в браузере), десктоп и cli.
+Simple universal proxy for debugging HTTP and WebSocket. Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
 
-Что умеет
-- Перехват и просмотр HTTP и WebSocket‑трафика
-- Waterfall timeline запросов
-- группировка по домену/маршруту
-- Фильтры: метод, статус, MIME, минимальная длительность, по заголовкам
-- Удобный поиск с подсветкой
-- Детали HTTP: заголовки (с маскировкой чувствительных), тело (pretty/JSON‑дерево), TTFB/Total
-- Подсказки по CORS/Cache, сводка по cookies и TLS
-- Детали WebSocket: события/фреймы, пинги/понги, превью payload
-- Экспорт HAR
-- Искусственная задержка ответа (удобно воспроизводить «медленные сети»)
-- Запись/стоп и управление записями
+What it can do
+- Intercept and view HTTP and WebSocket traffic
+- Waterfall timeline of requests
+- grouping by domain/route
+- Filters: method, status, MIME, minimum duration, by headers
+- Convenient search with highlighting
+- HTTP details: headers (with sensitive data masking), body (pretty/JSON tree), TTFB/Total
+- CORS/Cache hints, cookies and TLS summary
+- WebSocket details: events/frames, pings/pongs, payload preview
+- HAR export
+- Artificial response delay (useful for simulating "slow networks")
+- Record/stop and record management
 ...
 
-Быстрый старт
-- Через CLI (автоматически скачает бинарь и откроет UI):
+Quick start
+- Via CLI (automatically downloads binary and opens UI):
   ```bash
   dart pub global activate network_debugger_cli
   network-debugger
@@ -29,40 +29,40 @@
   ```bash
   docker compose -f deploy/docker-compose.yml up -d
   ```
-- Из исходников (Go):
+- From source (Go):
   ```bash
-  # сервер/десктопный бинарь
+  # server/desktop binary
   go build -o ./network-debugger ./cmd/network-debugger
   ./network-debugger
 
-  # веб‑вариант, который сам открывает браузер
+  # web version that opens browser automatically
   go build -o ./network-debugger-web ./cmd/network-debugger-web
   ./network-debugger-web
   ```
 
-Где открывается UI
-- По умолчанию сервер слушает на :9091, UI доступен по адресу:
-  - http://localhost:9091/_ui (или корень, если включён авто‑редирект)
+Where UI opens
+- By default server listens on :9091, UI is available at:
+  - http://localhost:9091/_ui (or root if auto-redirect is enabled)
 
-Основные настройки (ENV)
-- `ADDR` — адрес сервера (по умолчанию :9091)
-- `DEV_MODE` — режим разработки (1/true)
-- `DEFAULT_TARGET` — целевой upstream по умолчанию
-- `CAPTURE_BODIES` — сохранять тела запросов/ответов (1/true)
-- `RESPONSE_DELAY_MS` — фикс или диапазон, напр. `1000` или `1000-3000`
-- `INSECURE_TLS` — доверять самоподписанным сертификатам (1/true)
+Main settings (ENV)
+- `ADDR` — server address (default :9091)
+- `DEV_MODE` — development mode (1/true)
+- `DEFAULT_TARGET` — default target upstream
+- `CAPTURE_BODIES` — save request/response bodies (1/true)
+- `RESPONSE_DELAY_MS` — fixed or range, e.g. `1000` or `1000-3000`
+- `INSECURE_TLS` — trust self-signed certificates (1/true)
 
-Локальная разработка (без GitHub)
-- Готовый бинарь/архив в `./dist`:
+Local development (without GitHub)
+- Ready binary/archive in `./dist`:
   ```bash
   network-debugger --local-dir ./dist --no-remote
   ```
-- Локальный сервер артефактов:
+- Local artifacts server:
   ```bash
   network-debugger serve-artifacts --dir ./dist --port 8099
   network-debugger --base-url http://127.0.0.1:8099 --no-remote
   ```
 
-Полезно знать
-- Кеш бинарей: macOS `~/Library/Caches/network-debugger/bin-cache`, Linux `~/.cache/network-debugger/bin-cache`, Windows `%LOCALAPPDATA%/network-debugger/bin-cache`
-- Имя бинаря: `network-debugger-web` (Windows — `network-debugger-web.exe`)
+Useful to know
+- Binary cache: macOS `~/Library/Caches/network-debugger/bin-cache`, Linux `~/.cache/network-debugger/bin-cache`, Windows `%LOCALAPPDATA%/network-debugger/bin-cache`
+- Binary name: `network-debugger-web` (Windows — `network-debugger-web.exe`)

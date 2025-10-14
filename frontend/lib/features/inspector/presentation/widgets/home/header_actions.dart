@@ -7,7 +7,7 @@ import '../../../application/stores/sessions_store.dart';
 import '../../../application/stores/home_ui_store.dart';
 import 'capture_settings_dialog.dart';
 
-// Верхняя панель действий: запись, фильтры, тема, хоткеи, настройки
+// Top action bar: recording, filters, theme, hotkeys, settings
 class HeaderActions extends StatelessWidget {
   const HeaderActions({
     super.key,
@@ -16,6 +16,7 @@ class HeaderActions extends StatelessWidget {
     required this.onToggleTheme,
     required this.onOpenHotkeys,
     required this.onOpenSettings,
+    this.onOpenIntegrations,
     required this.isRecording,
     required this.onToggleRecording,
     required this.themeMode,
@@ -28,6 +29,7 @@ class HeaderActions extends StatelessWidget {
   final VoidCallback? onToggleTheme;
   final VoidCallback onOpenHotkeys;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenIntegrations;
   final bool isRecording;
   final VoidCallback onToggleRecording;
   final ThemeMode themeMode;
@@ -148,6 +150,12 @@ class HeaderActions extends StatelessWidget {
           tooltip: 'Settings',
           icon: const Icon(Icons.settings),
         ),
+        if (onOpenIntegrations != null)
+          IconButton(
+            onPressed: onOpenIntegrations,
+            tooltip: 'Integrations',
+            icon: const Icon(Icons.shield),
+          ),
       ],
     );
   }

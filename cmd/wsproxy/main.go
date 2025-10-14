@@ -27,6 +27,14 @@ func main() {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: cfg, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
+	if cfg.MITMEnabled && cfg.MITMCACertFile != "" && cfg.MITMCAKeyFile != "" {
+		if ca, err := httpapi.LoadCertAuthority(cfg.MITMCACertFile, cfg.MITMCAKeyFile); err != nil {
+			logger.Error().Err(err).Msg("mitm init failed")
+		} else {
+			deps.MITM = &httpapi.MITM{CA: ca, AllowSuffix: cfg.MITMDomainsAllow, DenySuffix: cfg.MITMDomainsDeny}
+			logger.Info().Msg("MITM enabled for forward proxy")
+		}
+	}
 
 	// HTTP server (plain). Keeps forward-proxy CONNECT (HTTP/1.1) behavior.
 	srv := &http.Server{

@@ -18,7 +18,7 @@ String _fmtTime(String ts) {
   }
 }
 
-// Локальное состояние поиска для одного фрейма
+// Local search state for a single frame
 class _LocalSearchState {
   _LocalSearchState()
     : controller = TextEditingController(),
@@ -69,14 +69,14 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   bool _tree = false;
   bool _showTimeline = true;
   final ScrollController _listCtrl = ScrollController();
-  // Последняя известная длина списка фреймов (для автопрокрутки)
+  // Last known frames list length (for auto-scroll)
   int _lastFramesLen = 0;
-  // Флаг, что после следующего кадра стоит прокрутить вниз
+  // Flag that after next frame we should scroll down
   bool _autoScrollPending = false;
   DateTimeRange? _brushRange;
   String? _expandedId;
 
-  // Глобальный поиск по всем фреймам
+  // Global search across all frames
   bool _showGlobalSearch = false;
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
@@ -91,12 +91,12 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   String? _pendingFocusFrameId;
   int _pendingFocusLocalIndex = 0;
 
-  // Ключи контейнеров тайлов для точного ensureVisible по внешнему списку
+  // Keys of tile containers for precise ensureVisible in external list
   final Map<String, GlobalKey> _frameTileKeys = <String, GlobalKey>{};
   GlobalKey _tileKeyFor(String id) =>
       _frameTileKeys.putIfAbsent(id, () => GlobalKey());
 
-  // Локальный поиск на уровне фреймов
+  // Local search at frame level
   final Map<String, _LocalSearchState> _localSearch =
       <String, _LocalSearchState>{};
   _LocalSearchState _localFor(String id) =>
@@ -144,7 +144,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     return true;
   }
 
-  // events sidebar временно отключён
+  // events sidebar temporarily disabled
 
   bool _isHeartbeat(Map<String, dynamic> f) {
     final opcode = (f['opcode'] ?? '').toString();
@@ -156,19 +156,19 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     return isWsPingPong || isEnginePingPong;
   }
 
-  // Если появились новые фреймы — при необходимости прокручиваем вниз,
-  // но только если пользователь уже был у конца списка
+  // If new frames appeared — scroll down if necessary,
+  // but only if user was already at the end of the list
   void _maybeAutoScrollToBottomOnNewFrames() {
     if (widget.frames.length > _lastFramesLen) {
       bool atBottom = false;
       if (_listCtrl.hasClients) {
         try {
           final pos = _listCtrl.position;
-          // небольшой допуск, чтобы не дёргать, если почти внизу
+          // small tolerance to not jerk if almost at bottom
           atBottom = pos.pixels >= (pos.maxScrollExtent - 16);
         } catch (_) {}
       } else {
-        // если скролл ещё не прикреплён — считаем, что пользователь не внизу
+        // if scroll not attached yet — consider user not at bottom
         atBottom = false;
       }
       _autoScrollPending = atBottom;
@@ -199,7 +199,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   }
 
   void _scrollToFrame(String frameId) {
-    // 1) Грубая прокрутка по индексу, чтобы построился виджет в зоне экрана
+    // 1) Rough scroll by index to build widget in screen area
     final idx = widget.frames.indexWhere(
       (e) => (e as Map)['id']?.toString() == frameId,
     );
@@ -214,7 +214,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         )
         .whenComplete(() {
           if (!mounted) return;
-          // 2) Точная доводка: ensureVisible по ключу контейнера тайла
+          // 2) Precise adjustment: ensureVisible by tile container key
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final key = _tileKeyFor(frameId);
             final ctx = key.currentContext;
@@ -370,9 +370,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     setState(() {
       _expandedId = fid;
     });
-    // Прокрутка к тайлу (грубо + точная доводка)
+    // Scroll to tile (rough + precise adjustment)
     _scrollToFrame(fid);
-    // Всегда откладываем фокус на внутренний матч до готовности ключей
+    // Always defer focus to internal match until keys are ready
     _pendingFocusFrameId = fid;
     _pendingFocusLocalIndex = local;
   }
@@ -409,9 +409,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   void _onChildMatches(String frameId, int count, List<GlobalKey> keys) {
     if (!_showGlobalSearch)
-      return; // локальный поиск не должен перетирать глобальные ключи
+      return; // local search should not overwrite global keys
     _frameMatchKeys[frameId] = keys;
-    // если ждём фокус именно этого фрейма — попробуем перейти
+    // if waiting for focus on this specific frame — try to navigate
     if (_pendingFocusFrameId == frameId) {
       final local = _pendingFocusLocalIndex;
       if (local >= 0 && local < keys.length) {
@@ -515,7 +515,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
     return Column(
       children: [
-        // Диаграмма и поиск над заголовком
+        // Timeline and search above header
         timelineSection,
         Expanded(
           child: _Card(
@@ -576,7 +576,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                 },
               ),
               const SizedBox(width: 6),
-              // Глобальный поиск
+              // Global search
               if (!_showGlobalSearch)
                 IconButton(
                   tooltip: 'Search',
@@ -671,7 +671,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                       }
                       final idStr = (f['id'] ?? '').toString();
                       final isExpanded = idStr == _expandedId;
-                      // Локальный focusedIndex для этого фрейма
+                      // Local focusedIndex for this frame
                       int localFocusedIndex = -1;
                       if (_globalTotalMatches > 0 &&
                           _frameMatchCounts.isNotEmpty) {
@@ -1162,16 +1162,16 @@ bool _isJsonLocal(String s) {
   }
 }
 
-// Некоторые фреймы содержат обёртку протокола (socket.io) вида '42/namespace,[...]' или '2'/'3'
-// Попробуем безопасно извлечь JSON часть, если она есть
+// Some frames contain protocol wrapper (socket.io) like '42/namespace,[...]' or '2'/'3'
+// Try to safely extract JSON part if it exists
 String? _extractJsonPayload(String preview) {
   final trimmed = preview.trim();
   if (trimmed.isEmpty) return null;
-  // чистый JSON
+  // clean JSON
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     if (_isJsonLocal(trimmed)) return trimmed;
   }
-  // socket.io payload: цифры/код + опциональный namespace + запятая + JSON-массив/объект
+  // socket.io payload: digits/code + optional namespace + comma + JSON array/object
   final idxBrace = trimmed.indexOf('[');
   final idxBraceObj = trimmed.indexOf('{');
   int idx = -1;
@@ -1239,7 +1239,7 @@ class _JsonToggleRowState extends State<_JsonToggleRow> {
           ],
         ),
         const SizedBox(height: 6),
-        // Контент
+        // Content
         if (tree)
           JsonViewer(jsonString: widget.json, forceTree: true)
         else

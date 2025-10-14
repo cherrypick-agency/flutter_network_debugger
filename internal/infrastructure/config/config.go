@@ -30,6 +30,16 @@ type Config struct {
 	// Optional range support: if set, each response delay will be random in [min,max]
 	ResponseDelayMinMs int
 	ResponseDelayMaxMs int
+
+	// Forward proxy MITM (HTTPS inspection)
+	// If enabled and CA is provided, CONNECT requests will be intercepted and
+	// decrypted using dynamically issued certificates for requested hosts.
+	MITMEnabled    bool
+	MITMCACertFile string
+	MITMCAKeyFile  string
+	// Comma-separated domain suffix allow/deny lists (e.g. ".example.com,api.test")
+	MITMDomainsAllow []string
+	MITMDomainsDeny  []string
 }
 
 func FromEnv() Config {
@@ -86,6 +96,19 @@ func FromEnv() Config {
 	} else {
 		cfg.ExposeSensitiveHeaders = true
 	}
+
+	// MITM settings
+	if os.Getenv("MITM_ENABLE") == "1" || os.Getenv("MITM_ENABLE") == "true" {
+		cfg.MITMEnabled = true
+	}
+	cfg.MITMCACertFile = getEnv("MITM_CA_CERT_FILE", "")
+	cfg.MITMCAKeyFile = getEnv("MITM_CA_KEY_FILE", "")
+	if v := strings.TrimSpace(os.Getenv("MITM_DOMAINS_ALLOW")); v != "" {
+		cfg.MITMDomainsAllow = splitCSV(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("MITM_DOMAINS_DENY")); v != "" {
+		cfg.MITMDomainsDeny = splitCSV(v)
+	}
 	return cfg
 }
 
@@ -103,4 +126,17 @@ func getEnvInt(key string, def int) int {
 		}
 	}
 	return def
+}
+
+// splitCSV splits comma-separated tokens trimming whitespace and skipping empties.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

@@ -57,7 +57,7 @@ class TimelineSettingsButton extends StatelessWidget {
                         },
                         title: const Text('Crop to recent window'),
                         subtitle: const Text(
-                          'Ограничить таймлайн окном последних N минут',
+                          'Limit timeline to window of last N minutes',
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
@@ -69,7 +69,7 @@ class TimelineSettingsButton extends StatelessWidget {
                         decoration: const InputDecoration(
                           isDense: true,
                           labelText: 'N minutes',
-                          hintText: 'например: 5',
+                          hintText: 'e.g.: 5',
                         ),
                         onChanged: (v) {
                           final parsed = int.tryParse(v) ?? localMinutes;

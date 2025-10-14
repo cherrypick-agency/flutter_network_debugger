@@ -46,14 +46,26 @@ class DioDebugger {
     final enabledEffective = enabled ?? _computeEnabledFromEnv();
     if (!enabledEffective) return dio;
 
-    final upstream = upstreamBaseUrl ??
-        _firstNonEmpty([
-          _kDefineUpstream,
-          _kDefineApiHost,
-          readEnvVar('UPSTREAM_BASE_URL'),
-          readEnvVar('API_HOST'),
-        ]) ??
-        '';
+    // Источник upstream в порядке приоритета:
+    // 1) явный аргумент upstreamBaseUrl
+    // 2) dio.options.baseUrl (если не пустой)
+    // 3) --dart-define / ENV
+    String upstream = upstreamBaseUrl ?? '';
+    if (upstream.trim().isEmpty) {
+      final fromDio = dio.options.baseUrl;
+      if (fromDio.trim().isNotEmpty) {
+        upstream = fromDio;
+      }
+    }
+    if (upstream.trim().isEmpty) {
+      upstream = _firstNonEmpty([
+            _kDefineUpstream,
+            _kDefineApiHost,
+            readEnvVar('UPSTREAM_BASE_URL'),
+            readEnvVar('API_HOST'),
+          ]) ??
+          '';
+    }
 
     final proxy = proxyBaseUrl ??
         _firstNonEmpty([

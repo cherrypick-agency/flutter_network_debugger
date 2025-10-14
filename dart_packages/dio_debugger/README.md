@@ -6,8 +6,9 @@ Lightweight utility that patches the provided `Dio` and attaches a reverse/forwa
 - One-liner attach: `DioDebugger.attach(dio)`
 - Config sources (priority):
   1) `attach` arguments
-  2) `--dart-define` (`UPSTREAM_BASE_URL`, `PROXY_BASE_URL`, `PROXY_HTTP_PATH`, `DIO_DEBUGGER_ENABLED`/`HTTP_PROXY_ENABLED`)
-  3) OS ENV (via conditional import; web-safe)
+  2) `dio.options.baseUrl` (fallback)
+  3) `--dart-define` (`UPSTREAM_BASE_URL`, `PROXY_BASE_URL`, `PROXY_HTTP_PATH`, `DIO_DEBUGGER_ENABLED`/`HTTP_PROXY_ENABLED`)
+  4) OS ENV (via conditional import; web-safe)
 - Handles absolute URLs in `RequestOptions.path` — if `path` is already `http(s)://…`, it is proxied as is.
 - Interceptor ordering: `insertFirst` (default `true`) — places the interceptor first.
 - Skip/allow filters: `skip*`/`allow*` by paths/hosts/methods.
@@ -18,7 +19,7 @@ Add to your `pubspec.yaml`:
 ```yaml
 dependencies:
   dio: ^5.4.0
-  dio_debugger: ^0.1.0
+  dio_debugger: ^0.1.2
 ```
 
 ## Quick start
@@ -27,11 +28,11 @@ dependencies:
 import 'package:dio/dio.dart';
 import 'package:dio_debugger/dio_debugger.dart';
 
-final dio = Dio(BaseOptions(baseUrl: 'https://41098f05e20d.ngrok-free.app'));
-// Explicit attach with proxy params
+const baseUrl = 'https://api.example.test';
+final dio = Dio(BaseOptions(baseUrl: baseUrl));
+
 DioDebugger.attach(
   dio,
-  upstreamBaseUrl: 'https://41098f05e20d.ngrok-free.app',
   proxyBaseUrl: 'http://localhost:9091',
   proxyHttpPath: '/httpproxy',
 );
@@ -49,7 +50,7 @@ DioDebugger.attach(
   allowPaths: null,          // when allow* is set, only matching requests go through proxy
   allowHosts: null,
   allowMethods: null,
-  upstreamBaseUrl: 'https://41098f05e20d.ngrok-free.app',
+  upstreamBaseUrl: 'https://api.example.test',
   proxyBaseUrl: 'http://localhost:9091',
   proxyHttpPath: '/httpproxy',
 );
@@ -58,7 +59,7 @@ DioDebugger.attach(
 ### Configuration examples
 - Via `--dart-define`:
 ```bash
---dart-define=UPSTREAM_BASE_URL=https://dev.api.padelme.app \
+--dart-define=UPSTREAM_BASE_URL=https://api.example.test \
 --dart-define=PROXY_BASE_URL=http://localhost:9091 \
 --dart-define=PROXY_HTTP_PATH=/httpproxy \
 --dart-define=DIO_DEBUGGER_ENABLED=true
@@ -66,7 +67,7 @@ DioDebugger.attach(
 
 - Via OS ENV (on platforms with `dart:io`):
 ```
-UPSTREAM_BASE_URL=https://dev.api.padelme.app
+UPSTREAM_BASE_URL=https://api.example.test
 PROXY_BASE_URL=http://localhost:9091
 PROXY_HTTP_PATH=/httpproxy
 DIO_DEBUGGER_ENABLED=true
@@ -74,7 +75,7 @@ DIO_DEBUGGER_ENABLED=true
 
 After attach a request `GET /path` will go to:
 ```
-http://localhost:9091/httpproxy?_target=https://dev.api.padelme.app/path
+http://localhost:9091/httpproxy?_target=https://api.example.test/path
 ```
 If `options.path` is already an absolute `http(s)://…`, it is proxied without concatenating with `upstreamBaseUrl`.
 

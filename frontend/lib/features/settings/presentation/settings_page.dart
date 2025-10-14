@@ -99,7 +99,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
                 title: const Text('Response delay'),
                 subtitle: const Text(
-                  'Искусственная задержка ответа для всех проксируемых запросов',
+                  'Artificial response delay for all proxied requests',
                 ),
               ),
               TextField(
@@ -107,8 +107,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 enabled: _enabled,
                 decoration: const InputDecoration(
                   labelText: 'Response delay (ms or range)',
-                  hintText: 'например: 1000 или 1000-3000',
-                  helperText: 'Оставьте пустым или 0, чтобы отключить',
+                  hintText: 'e.g.: 1000 or 1000-3000',
+                  helperText: 'Leave empty or 0 to disable',
                   isDense: true,
                 ),
               ),
@@ -121,7 +121,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: (v) => setState(() => _recentEnabled = (v ?? false)),
                 title: const Text('Show only last N minutes'),
                 subtitle: const Text(
-                  'Отображать только последние N минут в Sessions и Timeline',
+                  'Show only last N minutes in Sessions and Timeline',
                 ),
               ),
               TextField(
@@ -130,7 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'N minutes',
-                  hintText: 'например: 5',
+                  hintText: 'e.g.: 5',
                   isDense: true,
                 ),
               ),

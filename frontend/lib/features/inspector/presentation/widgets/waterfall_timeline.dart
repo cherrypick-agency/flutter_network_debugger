@@ -33,21 +33,21 @@ class WaterfallTimeline extends StatefulWidget {
   final double height;
   final bool expandToParent;
 
-  /// Если true — дорожки будут автоматически ужиматься по высоте,
-  /// чтобы все сессии помещались в доступную высоту контейнера.
-  /// По умолчанию поведение наследуется от `expandToParent` для обратной совместимости.
+  /// If true — lanes will automatically compress in height,
+  /// so all sessions fit in the available container height.
+  /// By default behavior is inherited from `expandToParent` for backward compatibility.
   final bool? autoCompressLanes;
   final EdgeInsets padding;
   final Duration initialViewportPadding;
   final DateTimeRange? initialRange;
   final bool? fitAll;
   final ValueChanged<bool>? onFitAllChanged;
-  // Колбэк, который дёргаем при сбросе выделения (двойной клик по таймлайну)
+  // Callback we call when selection is reset (double click on timeline)
   final VoidCallback? onIntervalCleared;
-  // Внешняя подсветка по наведению/выбору элемента в списке сессий
+  // External highlighting on hover/selection of item in sessions list
   final String? hoveredSessionIdExt;
   final String? selectedSessionIdExt;
-  // Если задано — таймлайн фиксируется в окне [now - fixedWindow .. now]
+  // If set — timeline is fixed in window [now - fixedWindow .. now]
   final Duration? fixedWindow;
 
   @override
@@ -182,8 +182,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
     DateTime? e;
     for (final it in list) {
       final st = it.startedAt;
-      // Для активных сессий берём текущий момент как правую границу,
-      // чтобы таймлайн имел актуальный dataEnd и полоса росла анимированно
+      // For active sessions we take current moment as right boundary,
+      // so timeline has up-to-date dataEnd and bar grows animated
       final en = it.closedAt ?? (st != null ? DateTime.now() : null);
       if (st != null) {
         s = (s == null || st.isBefore(s)) ? st : s;
@@ -293,7 +293,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
               DateTime dataStart = useFixed ? (windowStart!) : rawStart;
               final dataEnd = useFixed ? (windowEnd!) : rawEnd;
 
-              // Crop mode: убираем пустоту до первого бара в окне, но оставляем правый край = now
+              // Crop mode: remove emptiness before first bar in window, but keep right edge = now
               if (useFixed) {
                 DateTime? minLeft;
                 for (final s in widget.sessions) {
@@ -301,7 +301,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                   final en = s.closedAt ?? now;
                   if (st == null) continue;
                   if (!en.isAfter(windowStart!) || !st.isBefore(windowEnd!)) {
-                    continue; // вне окна
+                    continue; // outside window
                   }
                   final left = st.isAfter(windowStart) ? st : windowStart;
                   if (minLeft == null || left.isBefore(minLeft)) minLeft = left;
@@ -325,7 +325,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                 1.0,
                 minContent,
               );
-              // При фиксированном окне всегда используем fit по окну
+              // With fixed window we always use fit to window
               final bool useFitAllNow = useFixed ? true : _isFitAll;
               final double pxPerMs =
                   useFitAllNow
@@ -342,8 +342,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                   items.isEmpty
                       ? 1
                       : (items.map((e) => e.lane).reduce(math.max) + 1);
-              // динамическая высота дорожек: чем выше сам таймлайн, тем выше полосы
-              // если включено авто-сжатие (autoCompressLanes == true) — подгоняем под доступную высоту
+              // dynamic lane height: higher timeline = higher bars
+              // if auto-compression enabled (autoCompressLanes == true) — fit to available height
               double laneHeight = _laneHeight;
               final bool compressLanes =
                   (widget.autoCompressLanes ?? widget.expandToParent);
@@ -393,24 +393,24 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                         child: GestureDetector(
                           onScaleStart: (d) {
                             if (useFixed) return;
-                            // Не отключаем Fit All на старте жеста; только когда реально меняется scale
+                            // Don't disable Fit All at gesture start; only when scale actually changes
                             final dx = d.localFocalPoint.dx;
                             final pxPer =
-                                pxPerMs; // согласованный мэппинг как при рендере
+                                pxPerMs; // consistent mapping as during render
                             _scaleAnchor = _xToTime(dx, pxPer);
                           },
                           onScaleUpdate: (d) {
                             if (useFixed) return;
                             if (_scaleAnchor == null) return;
                             if (d.scale == 1.0) return;
-                            // Отключаем Fit All только при реальном зуме
+                            // Disable Fit All only on actual zoom
                             _setFitAll(false);
                             final raw = (1 / d.scale);
                             final spanMs =
                                 _viewEnd.difference(_viewStart).inMilliseconds;
                             int div;
                             if (spanMs <= 2000)
-                              div = 8; // супер-мягкий при близком зуме
+                              div = 8; // super soft at close zoom
                             else if (spanMs <= 5000)
                               div = 6;
                             else if (spanMs <= 15000)
@@ -438,7 +438,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                 _resizingStart = false;
                                 _resizingEnd = false;
                                 final pxPer =
-                                    pxPerMs; // использовать ту же шкалу, что и рендер
+                                    pxPerMs; // use same scale as render
                                 if (_selectedRange != null) {
                                   final sx = _timeToX(
                                     _selectedRange!.start,
@@ -464,8 +464,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                             },
                             onPointerMove: (ev) {
                               setState(() {
-                                final pxPer =
-                                    pxPerMs; // согласованная конверсия
+                                final pxPer = pxPerMs; // consistent conversion
                                 if (_resizingStart && _selectedRange != null) {
                                   final t = _xToTime(
                                     ev.localPosition.dx,
@@ -529,20 +528,20 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                               behavior: HitTestBehavior.opaque,
                               onTapUp: (d) {
                                 if (useFixed) return;
-                                // Зум в точку клика по таймлайну (кроме полос сессий — они перехватят событие)
+                                // Zoom to click point on timeline (except session bars — they will intercept event)
                                 _setFitAll(false);
                                 final anchor = _xToTime(
                                   d.localPosition.dx,
                                   pxPerMs,
                                 );
-                                _applyZoomAround(anchor, 0.8); // приближение
+                                _applyZoomAround(anchor, 0.8); // zoom in
                               },
                               onDoubleTap: () {
                                 setState(() {
                                   _selectedRange = null;
                                 });
-                                // Сообщаем наверх, что выделение сброшено,
-                                // чтобы внешний фильтр по интервалу тоже очистился
+                                // Notify above that selection is reset,
+                                // so external interval filter also clears
                                 widget.onIntervalCleared?.call();
                               },
                               child: Stack(
@@ -603,7 +602,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                             .difference(dataStart)
                                             .inMilliseconds
                                             .toDouble();
-                                    // Для активных — правая граница = now
+                                    // For active — right boundary = now
                                     final endTs = it.session.closedAt ?? now;
                                     double durMs = (endTs
                                             .difference(ts)
@@ -611,7 +610,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                             .toDouble())
                                         .clamp(1.0, double.infinity);
                                     double startMs = startMsRaw;
-                                    // Жёсткое обрезание по краям окна
+                                    // Hard cropping at window edges
                                     if (useFixed) {
                                       final leftEdgeMs =
                                           0.0; // dataStart == windowStart
@@ -784,7 +783,7 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                                         ),
                                                       ),
                                                     ),
-                                                  // убрали точку; пульсация самой полосы ускорена выше
+                                                  // removed point; bar pulse accelerated above
                                                 ],
                                               ),
                                             ),

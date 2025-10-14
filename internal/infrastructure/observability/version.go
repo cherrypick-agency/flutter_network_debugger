@@ -1,9 +1,9 @@
 package observability
 
-// Версионирование бинарников для логов и метрик.
-// Значения перезаписываются через -ldflags при сборке.
+// Binary versioning for logs and metrics.
+// Values are overwritten via -ldflags during build.
 var (
-	Version = "dev"  // версия релиза
-	Commit  = "none" // короткий коммит
-	Date    = ""     // ISO8601 UTC время сборки
+	Version = "dev"  // release version
+	Commit  = "none" // short commit
+	Date    = ""     // ISO8601 UTC build time
 )
