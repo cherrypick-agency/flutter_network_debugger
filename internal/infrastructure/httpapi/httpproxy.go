@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/http/httputil"
@@ -146,8 +149,33 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
 			hadError = true
 			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-			d.Logger.Error().Err(err).Msg("reverse proxy error")
-			writeError(rw, http.StatusBadGateway, "UPSTREAM_ERROR", err.Error(), map[string]any{"target": upstream.String()})
+
+			// Get human-readable error message and code
+			errorCode, errorMessage := humanizeProxyError(err)
+
+			// Enhanced logging with context
+			d.Logger.Error().
+				Err(err).
+				Str("sessionID", sessionID).
+				Str("target", upstream.String()).
+				Str("method", r.Method).
+				Str("clientAddr", clientHost(r.RemoteAddr)).
+				Str("errorCode", errorCode).
+				Msg(errorMessage)
+
+			// Broadcast error to frontend with user-friendly message
+			d.Monitor.Broadcast(MonitorEvent{
+				Type: "session_error",
+				ID:   sessionID,
+				Error: &ErrorDetails{
+					Code:    errorCode,
+					Message: errorMessage,
+					Raw:     err.Error(),
+					Target:  upstream.String(),
+					Method:  r.Method,
+				},
+			})
+			writeError(rw, http.StatusBadGateway, errorCode, errorMessage, map[string]any{"target": upstream.String(), "raw": err.Error()})
 		},
 	}
 
@@ -286,6 +314,91 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 				b = dec
 			}
 		}
+
+		// Попробуем распознать form-data/urlencoded по Content-Type
+		ct := strings.ToLower(r.Header.Get("Content-Type"))
+		// urlencoded: разбираем пары ключ-значение
+		if strings.Contains(ct, "application/x-www-form-urlencoded") {
+			// Для превью достаточно распарсить первые байты
+			// Внимание: body может быть усечён, это нормально для предпросмотра
+			vals, err := url.ParseQuery(string(b))
+			if err == nil && len(vals) > 0 {
+				fields := make([]map[string]any, 0, len(vals))
+				for k, vv := range vals {
+					for _, v := range vv {
+						fields = append(fields, map[string]any{
+							"name":  k,
+							"value": v,
+						})
+					}
+				}
+				preview["form"] = map[string]any{
+					"type":   "urlencoded",
+					"fields": fields,
+				}
+			}
+		} else if strings.Contains(ct, "multipart/form-data") {
+			// multipart: пробежимся по частям, читаем немного из каждой части
+			if mr := multipartReaderFrom(ct, b); mr != nil {
+				const perPartLimit = 2048 // ~2KB на часть для превью
+				fields := make([]map[string]any, 0, 8)
+				files := make([]map[string]any, 0, 4)
+				for {
+					part, err := mr.NextPart()
+					if err != nil {
+						break
+					}
+					name := part.FormName()
+					filename := part.FileName()
+					pct := part.Header.Get("Content-Type")
+
+					// Считаем ограниченное количество байт, чтобы не раздувать превью
+					buf := make([]byte, perPartLimit+1)
+					n, _ := io.ReadFull(part, buf)
+					truncated := n > perPartLimit
+					previewSize := n
+					if previewSize > perPartLimit {
+						previewSize = perPartLimit
+					}
+					if n > perPartLimit {
+						n = perPartLimit
+					}
+					data := buf[:n]
+
+					if filename == "" {
+						// Обычное текстовое поле формы
+						fields = append(fields, map[string]any{
+							"name":         name,
+							"valuePreview": string(data),
+							"truncated":    truncated,
+						})
+					} else {
+						// Файл: показываем метаданные и небольшой превью для текстовых типов
+						file := map[string]any{
+							"name":        name,
+							"filename":    filename,
+							"contentType": pct,
+							"truncated":   truncated,
+							"previewSize": previewSize,
+						}
+						lct := strings.ToLower(pct)
+						if lct == "" || strings.Contains(lct, "text") || strings.Contains(lct, "+json") || strings.Contains(lct, "json") || strings.Contains(lct, "xml") || strings.Contains(lct, "csv") {
+							file["valuePreview"] = string(data)
+						}
+						files = append(files, file)
+					}
+				}
+				if len(fields) > 0 || len(files) > 0 {
+					preview["form"] = map[string]any{
+						"type":   "multipart",
+						"fields": fields,
+						"files":  files,
+					}
+				}
+			}
+		}
+
+		// Сохраним также сырой body в превью (усечённый), чтобы не терять исходник
 		if tryJSON := tryCompactJSON(b); tryJSON != "" {
 			if len(tryJSON) > max {
 				tryJSON = tryJSON[:max]
@@ -607,4 +720,64 @@ func timeFromUnixNanoOrZero(ns int64) time.Time {
 		return time.Time{}
 	}
 	return time.Unix(0, ns)
+}
+
+// humanizeProxyError converts technical proxy errors into user-friendly messages with error codes
+func humanizeProxyError(err error) (code string, message string) {
+	if err == nil {
+		return "UNKNOWN_ERROR", "An unknown error occurred"
+	}
+
+	errStr := err.Error()
+	errStrLower := strings.ToLower(errStr)
+
+	// EOF - connection closed unexpectedly
+	if errors.Is(err, io.EOF) || errStr == "EOF" {
+		return "CONNECTION_CLOSED", "Server closed connection unexpectedly"
+	}
+
+	// Connection refused
+	if strings.Contains(errStrLower, "connection refused") {
+		return "SERVER_UNAVAILABLE", "Server unavailable (connection refused)"
+	}
+
+	// No such host / DNS resolution failure
+	if strings.Contains(errStrLower, "no such host") {
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) {
+			return "DNS_ERROR", "Domain not found: " + dnsErr.Name
+		}
+		return "DNS_ERROR", "Domain not found"
+	}
+
+	// Timeout errors
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(errStrLower, "context deadline exceeded") {
+		return "TIMEOUT", "Request timeout"
+	}
+	if strings.Contains(errStrLower, "timeout") || strings.Contains(errStrLower, "i/o timeout") {
+		return "TIMEOUT", "Connection timeout"
+	}
+
+	// TLS/SSL errors
+	if strings.Contains(errStrLower, "tls") || strings.Contains(errStrLower, "certificate") {
+		return "TLS_ERROR", "SSL/TLS certificate error"
+	}
+
+	// Network unreachable
+	if strings.Contains(errStrLower, "network is unreachable") {
+		return "NETWORK_UNREACHABLE", "Network unreachable"
+	}
+
+	// Connection reset
+	if strings.Contains(errStrLower, "connection reset") {
+		return "CONNECTION_RESET", "Connection reset by server"
+	}
+
+	// Too many redirects
+	if strings.Contains(errStrLower, "stopped after") && strings.Contains(errStrLower, "redirect") {
+		return "TOO_MANY_REDIRECTS", "Too many redirects"
+	}
+
+	// Default: return original error with generic code
+	return "UPSTREAM_ERROR", errStr
 }

@@ -204,6 +204,13 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "SESSIONS_CLEAR_FAILED", err.Error(), nil)
 			return
 		}
+		// Закрываем активные WS-сессии и уведомляем фронты, чтобы не прилетали новые события в старые сессии
+		if d.Live != nil {
+			d.Live.CloseAll()
+		}
+		if d.Monitor != nil {
+			d.Monitor.Broadcast(MonitorEvent{Type: "sessions_cleared", ID: "*"})
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

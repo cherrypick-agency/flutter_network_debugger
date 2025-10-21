@@ -50,6 +50,7 @@ dependencies:
   modules_basis:
     path: modules/modules_basis
   json_tree_viewer: ^0.0.2
+  webview_flutter: ^4.7.0
 
 dependency_overrides:
   flexible_tree_view:

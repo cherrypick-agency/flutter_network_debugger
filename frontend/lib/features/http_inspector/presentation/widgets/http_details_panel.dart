@@ -5,6 +5,8 @@ import '../../../../core/network/error_utils.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../widgets/json_viewer.dart';
 import '../../../../core/di/di.dart';
+import '../../../../widgets/html_preview.dart';
+import 'form_data_view.dart';
 
 class HttpDetailsPanel extends StatefulWidget {
   const HttpDetailsPanel({
@@ -30,6 +32,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
   int? _respTtfbMs;
   int? _respTotalMs;
   String? _bodyOverride;
+  bool _htmlResp = true;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +94,19 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ) ??
         <String, String>{};
     final body = _normalizeMaybeQuotedJson((req['body'] ?? '').toString());
+    final ctHeader =
+        headers.entries
+            .firstWhere(
+              (e) => e.key.toLowerCase() == 'content-type',
+              orElse: () => const MapEntry('', ''),
+            )
+            .value;
+    final ctLower = ctHeader.toLowerCase();
+    final hasFormObj = req['form'] is Map && (req['form'] as Map).isNotEmpty;
+    final isFormCt =
+        ctLower.contains('multipart/form-data') ||
+        ctLower.contains('application/x-www-form-urlencoded');
+    final hideRawBody = hasFormObj || isFormCt;
     final url = (req['url'] ?? '').toString();
     final uri = _tryParseUri(url);
     final qp = uri?.queryParametersAll ?? <String, List<String>>{};
@@ -177,7 +193,17 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ),
           const SizedBox(height: 8),
         ],
-        if (body.isNotEmpty)
+        // Form Data (multipart/urlencoded) – если есть, показываем перед сырым Body
+        FormDataView(
+          form:
+              (req['form'] is Map)
+                  ? (req['form'] as Map).cast<String, dynamic>()
+                  : null,
+          contentType: ctHeader,
+          rawBody: body,
+        ),
+        const SizedBox(height: 6),
+        if (body.isNotEmpty && !hideRawBody)
           Row(
             children: [
               Text('Body', style: context.appText.subtitle),
@@ -214,8 +240,8 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               ),
             ],
           ),
-        if (body.isNotEmpty) const SizedBox(height: 6),
-        if (body.isNotEmpty)
+        if (body.isNotEmpty && !hideRawBody) const SizedBox(height: 6),
+        if (body.isNotEmpty && !hideRawBody)
           (_isJson(body) && _treeReq)
               ? JsonViewer(jsonString: body, forceTree: true)
               : (_isJson(body) && _prettyReq)
@@ -262,6 +288,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
             .value
             .toLowerCase();
     final isJsonCt = ctHeader.contains('json') || ctHeader.contains('+json');
+    final isHtmlCt = ctHeader.contains('html');
     final body = _normalizeMaybeQuotedJson(
       (_bodyOverride ?? rawBody).toString(),
     );
@@ -365,6 +392,21 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
                   },
                 ),
               const SizedBox(width: 8),
+              if (isHtmlCt || _looksLikeHtml(body))
+                FilterChip(
+                  label: const Text('HTML'),
+                  selected: _htmlResp,
+                  onSelected: (v) {
+                    setState(() {
+                      _htmlResp = v;
+                      if (v) {
+                        _treeResp = false;
+                        _prettyResp = false;
+                      }
+                    });
+                  },
+                ),
+              const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: body));
@@ -388,7 +430,15 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ),
         if (body.isNotEmpty) const SizedBox(height: 6),
         if (body.isNotEmpty)
-          (_isJson(body) && _treeResp)
+          _htmlResp && (isHtmlCt || _looksLikeHtml(body))
+              ? SizedBox(
+                height: 480,
+                child: HtmlPreview(
+                  html: body,
+                  baseUrl: url.isNotEmpty ? url : null,
+                ),
+              )
+              : (_isJson(body) && _treeResp)
               ? JsonViewer(jsonString: body, forceTree: true)
               : (_isJson(body) && _prettyResp)
               ? JsonViewer(jsonString: body, forceTree: false)
@@ -465,6 +515,16 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ),
       ],
     );
+  }
+
+  bool _looksLikeHtml(String s) {
+    final t = s.trimLeft();
+    if (t.isEmpty) return false;
+    final lower = t.toLowerCase();
+    return lower.startsWith('<!doctype html') ||
+        lower.startsWith('<html') ||
+        lower.contains('<head>') ||
+        lower.contains('<body');
   }
 
   Map<String, dynamic>? _findByType(List<dynamic> frames, String type) {

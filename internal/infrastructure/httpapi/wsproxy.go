@@ -70,7 +70,22 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	clientConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		d.Logger.Error().Err(err).Msg("upgrade failed")
+		errorCode, errorMessage := humanizeProxyError(err)
+		d.Logger.Error().Err(err).Str("errorCode", errorCode).Msg(errorMessage)
+
+		// Broadcast error to frontend
+		d.Monitor.Broadcast(MonitorEvent{
+			Type: "session_error",
+			ID:   sessionID,
+			Error: &ErrorDetails{
+				Code:    errorCode,
+				Message: "WebSocket upgrade failed: " + errorMessage,
+				Raw:     err.Error(),
+				Target:  tgt,
+				Method:  "WS",
+			},
+		})
+
 		_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 		return
 	}
@@ -105,17 +120,34 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 
 	upstreamConn, resp, err := dialer.Dial(u.String(), hdr)
 	if err != nil {
+		// Get human-readable error message
+		errorCode, errorMessage := humanizeProxyError(err)
+
 		// Log handshake debug details when available
 		if resp != nil {
 			status := resp.Status
 			if resp.Body != nil {
 				_ = resp.Body.Close()
 			}
-			d.Logger.Error().Err(err).Str("status", status).Msg("dial upstream failed")
+			d.Logger.Error().Err(err).Str("status", status).Str("errorCode", errorCode).Msg(errorMessage)
 		} else {
-			d.Logger.Error().Err(err).Msg("dial upstream failed")
+			d.Logger.Error().Err(err).Str("errorCode", errorCode).Msg(errorMessage)
 		}
-		_ = clientConn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream dial failed"), time.Now().Add(2*time.Second))
+
+		// Broadcast error to frontend
+		d.Monitor.Broadcast(MonitorEvent{
+			Type: "session_error",
+			ID:   sessionID,
+			Error: &ErrorDetails{
+				Code:    errorCode,
+				Message: errorMessage,
+				Raw:     err.Error(),
+				Target:  u.String(),
+				Method:  "WS",
+			},
+		})
+
+		_ = clientConn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, errorMessage), time.Now().Add(2*time.Second))
 		_ = clientConn.Close()
 		_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 		return

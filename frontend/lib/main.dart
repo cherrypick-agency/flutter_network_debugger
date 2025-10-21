@@ -18,6 +18,7 @@ import 'features/filters/presentation/widgets/sessions_filters.dart';
 import 'features/filters/application/stores/sessions_filters_store.dart';
 import 'core/di/di.dart';
 import 'core/network/connectivity_banner.dart';
+import 'core/notifications/notifications_service.dart';
 import 'features/inspector/application/services/monitor_service.dart';
 import 'features/inspector/application/services/http_meta_service.dart';
 import 'features/inspector/application/services/sessions_polling_service.dart'
@@ -218,6 +219,23 @@ class _MyHomePageState extends State<MyHomePage> {
       try {
         final ui = sl<HomeUiStore>();
         final t = (ev['type'] ?? '').toString();
+        if (t == 'sessions_cleared') {
+          // мгновенно очищаем стора и мету, чтобы список не восстанавливался от фонового поллинга
+          try {
+            context.read<SessionsStore>().clear();
+          } catch (_) {}
+          try {
+            context.read<AggregateStore>().clear();
+          } catch (_) {}
+          ui.setSelectedSessionId(null);
+          ui.setSelectedRange(null);
+          ui.setWfFitAll(true);
+          // выровняем since на сейчас, чтобы повторная подгрузка не схватила старые
+          ui.setSince(DateTime.now().toUtc());
+          // финальный мягкий перезагруз списка (без гонок с дебаунсером)
+          _scheduleSessionsReload();
+          return;
+        }
         if (t == 'session_started' || t == 'session_ended') {
           if (!ui.isRecording.value) return;
           if (_loadingSessions) return;
@@ -236,6 +254,51 @@ class _MyHomePageState extends State<MyHomePage> {
           if (ui.selectedSessionId.value != null &&
               sid == ui.selectedSessionId.value) {
             _tickRefresh();
+          }
+        }
+        if (t == 'session_error') {
+          // Display user-friendly error notification
+          final errorData = ev['error'] as Map<String, dynamic>?;
+          if (errorData != null) {
+            final code = errorData['code']?.toString() ?? 'UNKNOWN_ERROR';
+            final message =
+                errorData['message']?.toString() ?? 'Unknown error occurred';
+            final target = errorData['target']?.toString() ?? '';
+            final method = errorData['method']?.toString() ?? '';
+            final sessionId = (ev['id'] ?? '').toString();
+
+            // Build user-friendly title based on error code
+            String title = 'Proxy Error';
+            if (code == 'CONNECTION_CLOSED') {
+              title = 'Connection Closed';
+            } else if (code == 'SERVER_UNAVAILABLE') {
+              title = 'Server Unavailable';
+            } else if (code == 'TIMEOUT') {
+              title = 'Request Timeout';
+            } else if (code == 'DNS_ERROR') {
+              title = 'Domain Not Found';
+            } else if (code == 'TLS_ERROR') {
+              title = 'Certificate Error';
+            }
+
+            // Truncate long URLs for readability
+            final displayTarget =
+                target.length > 50 ? '${target.substring(0, 47)}...' : target;
+
+            // Handle empty or short session IDs
+            final sessionDisplay =
+                sessionId.isEmpty
+                    ? 'Unknown'
+                    : (sessionId.length >= 8
+                        ? sessionId.substring(0, 8)
+                        : sessionId);
+
+            sl<NotificationsService>().error(
+              title,
+              '$method $displayTarget\n$message\nSession: $sessionDisplay...',
+            );
+            // Reload sessions to show error state
+            _scheduleSessionsReload();
           }
         }
       } catch (_) {}
