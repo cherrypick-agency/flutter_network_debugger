@@ -40,6 +40,11 @@ jobs:
             exit 1
           fi
 
+      - name: Create placeholder _web directories
+        run: |
+          mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
+          touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
+
       - name: Run go vet
         run: go vet ./...
 
@@ -67,6 +72,12 @@ jobs:
 
       - name: Verify dependencies
         run: go mod verify
+
+      - name: Create placeholder _web directories
+        shell: bash
+        run: |
+          mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
+          touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
@@ -97,6 +108,12 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
+
+      - name: Create placeholder _web directories
+        shell: bash
+        run: |
+          mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
+          touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
 
       - name: Build network-debugger
         run: |
@@ -135,6 +152,11 @@ jobs:
           go-version: '1.22.x'
           cache: true
 
+      - name: Create placeholder _web directories
+        run: |
+          mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
+          touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
+
       - name: Cross-compile for all platforms
         run: make build-cross
 
@@ -163,6 +185,11 @@ jobs:
         with:
           go-version: '1.22.x'
           cache: true
+
+      - name: Create placeholder _web directories
+        run: |
+          mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
+          touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
 
       - name: Run integration tests
         run: go test -v ./internal/integration
