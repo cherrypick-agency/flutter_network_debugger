@@ -16,55 +16,90 @@ class GitHubRelease {
   http.Client get client => _client ?? http.Client();
 
   /// Fetches the latest release from GitHub.
-  Future<ReleaseInfo> getLatestRelease() async {
+  Future<ReleaseInfo> getLatestRelease({
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     final url = Uri.parse(
       'https://api.github.com/repos/$owner/$repo/releases/latest',
     );
 
-    final response = await client.get(
-      url,
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-      },
-    );
+    try {
+      final response = await client.get(
+        url,
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      ).timeout(
+        timeout,
+        onTimeout: () {
+          throw GitHubReleaseException(
+            'Timeout fetching latest release after ${timeout.inSeconds}s',
+          );
+        },
+      );
 
-    if (response.statusCode != 200) {
+      if (response.statusCode != 200) {
+        throw GitHubReleaseException(
+          'Failed to fetch latest release: ${response.statusCode} ${response.reasonPhrase}',
+        );
+      }
+
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return ReleaseInfo.fromJson(json);
+    } on GitHubReleaseException {
+      rethrow;
+    } catch (e) {
       throw GitHubReleaseException(
-        'Failed to fetch latest release: ${response.statusCode} ${response.reasonPhrase}',
+        'Error fetching latest release: $e',
       );
     }
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return ReleaseInfo.fromJson(json);
   }
 
   /// Fetches a specific release by tag name.
-  Future<ReleaseInfo> getRelease(String tagName) async {
+  Future<ReleaseInfo> getRelease(
+    String tagName, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     final url = Uri.parse(
       'https://api.github.com/repos/$owner/$repo/releases/tags/$tagName',
     );
 
-    final response = await client.get(
-      url,
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-      },
-    );
+    try {
+      final response = await client.get(
+        url,
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      ).timeout(
+        timeout,
+        onTimeout: () {
+          throw GitHubReleaseException(
+            'Timeout fetching release "$tagName" after ${timeout.inSeconds}s',
+          );
+        },
+      );
 
-    if (response.statusCode == 404) {
+      if (response.statusCode == 404) {
+        throw GitHubReleaseException(
+          'Release with tag "$tagName" not found',
+        );
+      }
+
+      if (response.statusCode != 200) {
+        throw GitHubReleaseException(
+          'Failed to fetch release: ${response.statusCode} ${response.reasonPhrase}',
+        );
+      }
+
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return ReleaseInfo.fromJson(json);
+    } on GitHubReleaseException {
+      rethrow;
+    } catch (e) {
       throw GitHubReleaseException(
-        'Release with tag "$tagName" not found',
+        'Error fetching release "$tagName": $e',
       );
     }
-
-    if (response.statusCode != 200) {
-      throw GitHubReleaseException(
-        'Failed to fetch release: ${response.statusCode} ${response.reasonPhrase}',
-      );
-    }
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return ReleaseInfo.fromJson(json);
   }
 
   /// Finds the download URL for a specific asset by name.
