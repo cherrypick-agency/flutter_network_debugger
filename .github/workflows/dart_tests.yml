@@ -96,9 +96,3 @@ jobs:
         env:
           # Ensure we have a clean cache for testing
           CI: true
-
-      - name: Display cache info after tests
-        working-directory: dart_packages/network_debugger
-        run: dart run example/main.dart || true
-        timeout-minutes: 2
-        if: always()
