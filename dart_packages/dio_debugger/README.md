@@ -1,5 +1,7 @@
 # dio_debugger
 
+> Part of the [network_debugger](https://pub.dev/packages/network_debugger) ecosystem
+
 Lightweight utility that patches the provided `Dio` and attaches a reverse/forward proxy interceptor. Useful for local debugging, traffic interception, and bypassing CORS/certificates via your local proxy.
 
 ## Features
@@ -21,6 +23,22 @@ dependencies:
   dio: ^5.4.0
   dio_debugger: ^0.1.2
 ```
+
+## Starting the Proxy
+
+Before using `dio_debugger`, you need to start the network debugger proxy server. Install and run it with:
+
+```bash
+# Install the CLI globally
+dart pub global activate network_debugger
+
+# Start the proxy (default port 9091)
+network_debugger
+```
+
+The proxy will start on `http://localhost:9091` and automatically open the web UI where you can inspect all intercepted traffic.
+
+For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
 
 ## Quick start
 

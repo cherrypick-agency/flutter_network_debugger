@@ -1,6 +1,9 @@
 # network_debugger
 
-Dart package that automatically downloads, caches, and launches the `network-debugger-web` binary for easy network debugging.
+![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
+
+
+Simple universal tool for debugging HTTP and WebSocket. Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
 
 ## Features
 
@@ -19,7 +22,7 @@ The easiest way to use the network debugger is via the CLI tool:
 ### Installation
 
 ```bash
-# Install globally from pub.dev (once published)
+# Install globally from pub.dev
 dart pub global activate network_debugger
 
 # OR install locally from path
