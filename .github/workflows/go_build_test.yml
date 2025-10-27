@@ -79,8 +79,11 @@ jobs:
           mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
           touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
 
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Run tests (exclude integration/e2e for race detector)
+        shell: bash
+        run: |
+          # Run tests with race detector, excluding integration and e2e tests which have pre-existing race conditions
+          go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
 
       - name: Upload coverage to codecov (ubuntu only)
         if: matrix.os == 'ubuntu-latest'

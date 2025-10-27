@@ -1024,8 +1024,9 @@ func TestRichServerManyEvents(t *testing.T) {
 	// send a couple of client frames too
 	_ = c.WriteMessage(websocket.TextMessage, []byte("client-hello"))
 	_ = c.WriteMessage(websocket.TextMessage, []byte("42/chat,[\"cli_event\",{}]"))
-	time.Sleep(600 * time.Millisecond)
+	time.Sleep(800 * time.Millisecond) // increased from 600ms to ensure all server frames are sent
 	_ = c.Close()
+	time.Sleep(200 * time.Millisecond) // additional wait for frame persistence
 
 	// validate via REST
 	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
