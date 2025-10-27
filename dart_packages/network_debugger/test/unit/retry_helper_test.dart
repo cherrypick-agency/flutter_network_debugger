@@ -205,7 +205,6 @@ void main() {
       );
 
       var attempts = 0;
-      final startTime = DateTime.now();
       DateTime? lastAttemptTime;
 
       try {

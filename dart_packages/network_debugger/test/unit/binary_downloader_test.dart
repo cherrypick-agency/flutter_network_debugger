@@ -32,11 +32,17 @@ void main() {
     });
 
     test('downloadFile succeeds with valid response', () async {
-      final mockClient = MockClient((request) async {
-        return http.Response('test content', 200, headers: {
-          'content-length': '12',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          return http.Response(
+            'test content',
+            200,
+            headers: {
+              'content-length': '12',
+            },
+          );
+        },
+      );
 
       final downloader = BinaryDownloader(
         client: mockClient,
@@ -56,11 +62,17 @@ void main() {
     });
 
     test('downloadFile calls progress callback', () async {
-      final mockClient = MockClient((request) async {
-        return http.Response('test content', 200, headers: {
-          'content-length': '12',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          return http.Response(
+            'test content',
+            200,
+            headers: {
+              'content-length': '12',
+            },
+          );
+        },
+      );
 
       final downloader = BinaryDownloader(
         client: mockClient,
@@ -86,15 +98,21 @@ void main() {
 
     test('downloadFile retries on failure', () async {
       var attempts = 0;
-      final mockClient = MockClient((request) async {
-        attempts++;
-        if (attempts < 2) {
-          throw SocketException('Connection refused');
-        }
-        return http.Response('test content', 200, headers: {
-          'content-length': '12',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          attempts++;
+          if (attempts < 2) {
+            throw SocketException('Connection refused');
+          }
+          return http.Response(
+            'test content',
+            200,
+            headers: {
+              'content-length': '12',
+            },
+          );
+        },
+      );
 
       final downloader = BinaryDownloader(
         client: mockClient,
@@ -265,11 +283,17 @@ void main() {
       final gzipEncoder = GZipEncoder();
       final gzipBytes = gzipEncoder.encode(tarBytes);
 
-      final mockClient = MockClient((request) async {
-        return http.Response.bytes(gzipBytes!, 200, headers: {
-          'content-length': '${gzipBytes.length}',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          return http.Response.bytes(
+            gzipBytes!,
+            200,
+            headers: {
+              'content-length': '${gzipBytes.length}',
+            },
+          );
+        },
+      );
 
       final mockChecksumValidator = ChecksumValidator(client: mockClient);
 
@@ -302,11 +326,17 @@ void main() {
       final gzipEncoder = GZipEncoder();
       final gzipBytes = gzipEncoder.encode(tarBytes);
 
-      final mockClient = MockClient((request) async {
-        return http.Response.bytes(gzipBytes!, 200, headers: {
-          'content-length': '${gzipBytes.length}',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          return http.Response.bytes(
+            gzipBytes!,
+            200,
+            headers: {
+              'content-length': '${gzipBytes.length}',
+            },
+          );
+        },
+      );
 
       final downloader = BinaryDownloader(
         client: mockClient,
@@ -340,11 +370,17 @@ void main() {
       final gzipEncoder = GZipEncoder();
       final gzipBytes = gzipEncoder.encode(tarBytes);
 
-      final mockClient = MockClient((request) async {
-        return http.Response.bytes(gzipBytes!, 200, headers: {
-          'content-length': '${gzipBytes.length}',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          return http.Response.bytes(
+            gzipBytes!,
+            200,
+            headers: {
+              'content-length': '${gzipBytes.length}',
+            },
+          );
+        },
+      );
 
       final downloader = BinaryDownloader(
         client: mockClient,
@@ -376,15 +412,21 @@ void main() {
       final gzipEncoder = GZipEncoder();
       final gzipBytes = gzipEncoder.encode(tarBytes);
 
-      final mockClient = MockClient((request) async {
-        attempts++;
-        if (attempts < 2) {
-          throw SocketException('Connection refused');
-        }
-        return http.Response.bytes(gzipBytes!, 200, headers: {
-          'content-length': '${gzipBytes.length}',
-        });
-      });
+      final mockClient = MockClient(
+        (request) async {
+          attempts++;
+          if (attempts < 2) {
+            throw SocketException('Connection refused');
+          }
+          return http.Response.bytes(
+            gzipBytes!,
+            200,
+            headers: {
+              'content-length': '${gzipBytes.length}',
+            },
+          );
+        },
+      );
 
       final downloader = BinaryDownloader(
         client: mockClient,
