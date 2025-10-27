@@ -10,8 +10,49 @@ Dart package that automatically downloads, caches, and launches the `network-deb
 - Download progress tracking
 - Simple process management
 - Automatic browser opening to web UI
+- **CLI tool for instant launch**
 
-## Installation
+## Quick Start (CLI)
+
+The easiest way to use the network debugger is via the CLI tool:
+
+### Installation
+
+```bash
+# Install globally from pub.dev (once published)
+dart pub global activate network_debugger
+
+# OR install locally from path
+cd dart_packages/network_debugger
+dart pub global activate --source path .
+```
+
+### Usage
+
+```bash
+# Launch debugger (downloads binary if needed, opens browser automatically)
+network_debugger
+
+# Custom port
+network_debugger --port 8080
+
+# Without opening browser
+network_debugger --no-browser
+
+# Specific binary version
+network_debugger --version v1.0.0
+
+# Show help
+network_debugger --help
+```
+
+Press `Ctrl+C` to stop the debugger.
+
+## Quick Start (Dart API)
+
+You can also use the package programmatically in your Dart code:
+
+### Installation
 
 Add to your `pubspec.yaml`:
 
@@ -20,7 +61,7 @@ dependencies:
   network_debugger: ^0.1.0
 ```
 
-## Quick Start
+### Usage
 
 ```dart
 import 'package:network_debugger/network_debugger.dart';
