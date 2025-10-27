@@ -1,0 +1,25 @@
+name: network_debugger
+description: Launcher for network-debugger binary with automatic download, caching, and process management.
+version: 0.1.0
+repository: https://github.com/cherrypick-agency/flutter_network_debugger
+homepage: https://github.com/cherrypick-agency/flutter_network_debugger
+issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues
+topics:
+  - network
+  - debug
+  - proxy
+  - debugger
+  - launcher
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  http: ^1.2.0
+  path_provider: ^2.1.0
+  path: ^1.9.0
+  archive: ^3.4.0
+
+dev_dependencies:
+  lints: ^3.0.0
+  test: ^1.24.0

@@ -61,10 +61,24 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            web/downloads/**
+          files: web/downloads/*
           body: |
-            Downloads page: https://<my-pages-domain>/download.html
+            ## Network Debugger Release
+
+            Download binaries for your platform:
+
+            ### macOS
+            - [darwin_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_darwin_amd64.tar.gz) (Intel)
+            - [darwin_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_darwin_arm64.tar.gz) (Apple Silicon)
+
+            ### Linux
+            - [linux_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_linux_amd64.tar.gz) (64-bit)
+            - [linux_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_linux_arm64.tar.gz) (ARM64)
+
+            ### Windows
+            - [windows_amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_windows_amd64.zip) (64-bit)
+            - [windows_386.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_windows_386.zip) (32-bit)
+            - [windows_arm64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/network-debugger-web_windows_arm64.zip) (ARM64)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

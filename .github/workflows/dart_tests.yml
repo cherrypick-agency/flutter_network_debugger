@@ -1,0 +1,102 @@
+name: Dart Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'dart_packages/**'
+      - '.github/workflows/dart_tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'dart_packages/**'
+      - '.github/workflows/dart_tests.yml'
+
+jobs:
+  test:
+    name: Test Dart Packages
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        flutter-version: ['3.x']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.flutter-version }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies (dio_debugger)
+        working-directory: dart_packages/dio_debugger
+        run: flutter pub get
+
+      - name: Get Flutter dependencies (socket_io_debugger)
+        working-directory: dart_packages/socket_io_debugger
+        run: flutter pub get
+
+      - name: Get Flutter dependencies (network_debugger)
+        working-directory: dart_packages/network_debugger
+        run: flutter pub get
+
+      - name: Analyze dio_debugger
+        working-directory: dart_packages/dio_debugger
+        run: flutter analyze
+
+      - name: Analyze socket_io_debugger
+        working-directory: dart_packages/socket_io_debugger
+        run: flutter analyze
+
+      - name: Analyze network_debugger
+        working-directory: dart_packages/network_debugger
+        run: flutter analyze
+
+      # Unit tests
+      - name: Run unit tests (network_debugger)
+        working-directory: dart_packages/network_debugger
+        run: flutter test test/unit/
+
+  integration-test:
+    name: Integration Tests (network_debugger)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        flutter-version: ['3.x']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.flutter-version }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        working-directory: dart_packages/network_debugger
+        run: flutter pub get
+
+      # Integration tests (these will download real binaries)
+      - name: Run integration tests
+        working-directory: dart_packages/network_debugger
+        run: flutter test test/integration/
+        timeout-minutes: 10
+        env:
+          # Ensure we have a clean cache for testing
+          CI: true
+
+      - name: Display cache info after tests
+        working-directory: dart_packages/network_debugger
+        run: dart run example/main.dart || true
+        timeout-minutes: 2
+        if: always()

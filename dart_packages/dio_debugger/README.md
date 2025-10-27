@@ -30,10 +30,12 @@ import 'package:dio_debugger/dio_debugger.dart';
 
 const baseUrl = 'https://api.example.test';
 final dio = Dio(BaseOptions(baseUrl: baseUrl));
+// Use 'http://10.0.2.2:9091 if Android emulator
+final proxyBaseUrl = Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091'; 
 
 DioDebugger.attach(
   dio,
-  proxyBaseUrl: 'http://localhost:9091',
+  proxyBaseUrl: proxyBaseUrl,
   proxyHttpPath: '/httpproxy',
 );
 ```
@@ -44,9 +46,9 @@ DioDebugger.attach(
   dio,
   insertFirst: true,         // place interceptor first
   enabled: null,             // if null — read from env: DIO_DEBUGGER_ENABLED/HTTP_PROXY_ENABLED (true|1|yes|on)
-  skipPaths: ["/metrics"],  // bypass proxy for these paths
-  skipHosts: ["auth.local"],
-  skipMethods: ["OPTIONS"],
+  skipPaths: ['/metrics'],  // bypass proxy for these paths
+  skipHosts: ['auth.local'],
+  skipMethods: ['OPTIONS'],
   allowPaths: null,          // when allow* is set, only matching requests go through proxy
   allowHosts: null,
   allowMethods: null,

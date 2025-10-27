@@ -54,12 +54,15 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		prefix = "/proxy"
 	}
 	suffix := strings.TrimPrefix(r.URL.Path, prefix)
-	if !strings.HasPrefix(suffix, "/") {
+	// Если суффикс пустой — не добавляем завершающий "/" к исходному пути таргета
+	if suffix != "" && !strings.HasPrefix(suffix, "/") {
 		suffix = "/" + suffix
 	}
 	upstream := *u
 	// Join paths
-	upstream.Path = strings.TrimRight(upstream.Path, "/") + suffix
+	if suffix != "" {
+		upstream.Path = strings.TrimRight(upstream.Path, "/") + suffix
+	}
 
 	// Filter query params (drop `_target`)
 	qp := r.URL.Query()
