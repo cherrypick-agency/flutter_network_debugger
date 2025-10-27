@@ -157,7 +157,7 @@ class BinaryDownloader {
         if (!Platform.isWindows && (expectedBinaryName == null || filename == expectedBinaryName)) {
           await Process.run('chmod', ['+x', outputPath]);
           binaryPath = outputPath;
-        } else if (Platform.isWindows && filename.endsWith('.exe')) {
+        } else if (Platform.isWindows && (filename.endsWith('.exe') || (expectedBinaryName != null && filename == expectedBinaryName))) {
           binaryPath = outputPath;
         }
       }
