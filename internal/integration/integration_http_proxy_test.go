@@ -236,7 +236,10 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 	_, _ = app.Client().Get(app.URL + "/httpproxy/gzip?_target=" + url.QueryEscape(upstreamURL))
 
 	// list sessions filtered by upstream URL substring (q filter is contains)
-	r, _ := app.Client().Get(app.URL + "/api/sessions?limit=1000&q=" + url.QueryEscape(upstreamURL))
+	r, err := app.Client().Get(app.URL + "/api/sessions?limit=1000&q=" + url.QueryEscape(upstreamURL))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer r.Body.Close()
 	var list struct {
 		Items []struct {
@@ -263,7 +266,10 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 	}
 
 	// Check redaction on /get session (Authorization and Set-Cookie)
-	rf1, _ := app.Client().Get(app.URL + "/api/sessions/" + sidGet + "/frames?limit=100")
+	rf1, err := app.Client().Get(app.URL + "/api/sessions/" + sidGet + "/frames?limit=100")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer rf1.Body.Close()
 	var frames1 struct {
 		Items []struct{ Preview string } `json:"items"`
@@ -294,7 +300,10 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 	}
 
 	// Check big body preview on /gzip session
-	rf2, _ := app.Client().Get(app.URL + "/api/sessions/" + sidGzip + "/frames?limit=100")
+	rf2, err := app.Client().Get(app.URL + "/api/sessions/" + sidGzip + "/frames?limit=100")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer rf2.Body.Close()
 	var frames2 struct {
 		Items []struct{ Preview string } `json:"items"`

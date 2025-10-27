@@ -435,10 +435,7 @@ func TestBinaryCounters(t *testing.T) {
 	_ = c.Close()
 
 	// list sessions and assert counters
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct {
@@ -482,10 +479,7 @@ func TestPaginationFramesAndEvents(t *testing.T) {
 	_ = c.Close()
 
 	// get last session id
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -654,10 +648,7 @@ func TestSocketIO_AckWithoutNamespace(t *testing.T) {
 	_ = c.Close()
 
 	// last session
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -667,10 +658,7 @@ func TestSocketIO_AckWithoutNamespace(t *testing.T) {
 		t.Fatalf("no sessions")
 	}
 	sid := list.Items[len(list.Items)-1].ID
-	r, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=100")
-	if err != nil {
-		t.Fatal(err)
-	}
+	r, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=100")
 	defer r.Body.Close()
 	var evs struct {
 		Items []struct {
@@ -708,10 +696,7 @@ func TestSessionsFilterByQuery(t *testing.T) {
 	// query by part of target host
 	u, _ := url.Parse(echoWS)
 	host := u.Host
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&q=" + url.QueryEscape(host[:3]))
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&q=" + url.QueryEscape(host[:3]))
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ Target string } `json:"items"`
@@ -803,10 +788,7 @@ func TestSustainedRealtimeSession(t *testing.T) {
 	_ = c.Close()
 
 	// fetch latest session and validate counters and existence of at least one event
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct {
@@ -917,10 +899,7 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 	cancel()
 
 	// list sessions filtered by target
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -932,10 +911,7 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 
 	// pick last session and validate redaction + events present
 	sid := list.Items[len(list.Items)-1].ID
-	rf, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/frames?limit=200")
-	if err != nil {
-		t.Fatal(err)
-	}
+	rf, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/frames?limit=200")
 	defer rf.Body.Close()
 	var frames struct {
 		Items []struct{ Preview string } `json:"items"`
@@ -952,10 +928,7 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 		t.Fatalf("expected redacted access_token in preview")
 	}
 
-	re, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=200")
-	if err != nil {
-		t.Fatal(err)
-	}
+	re, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=200")
 	defer re.Body.Close()
 	var events struct {
 		Items []struct {
@@ -1028,10 +1001,7 @@ func TestRichServerManyEvents(t *testing.T) {
 	_ = c.Close()
 
 	// validate via REST
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -1042,10 +1012,7 @@ func TestRichServerManyEvents(t *testing.T) {
 	}
 	sid := list.Items[len(list.Items)-1].ID
 
-	rf, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/frames?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	rf, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/frames?limit=1000")
 	defer rf.Body.Close()
 	var frames struct {
 		Items []struct {
@@ -1078,10 +1045,7 @@ func TestRichServerManyEvents(t *testing.T) {
 		t.Fatalf("expected srv_event frame preview")
 	}
 
-	re, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	re, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=1000")
 	defer re.Body.Close()
 	var evs struct {
 		Items []struct {
@@ -1124,10 +1088,7 @@ func TestDeleteSessionAnd404(t *testing.T) {
 	_ = c.Close()
 
 	// find session id
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -1150,10 +1111,7 @@ func TestDeleteSessionAnd404(t *testing.T) {
 	}
 
 	// get should 404
-	resp3, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp3, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid)
 	defer resp3.Body.Close()
 	if resp3.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp3.StatusCode)
@@ -1172,10 +1130,7 @@ func TestUpstreamDialFailureSetsClosedError(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// проверим, что есть сессия с ошибкой/закрытием
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct {
@@ -1220,10 +1175,7 @@ func TestListFiltersAndRedaction(t *testing.T) {
 	}
 
 	// list with target filter
-	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ Target string } `json:"items"`
@@ -1236,20 +1188,14 @@ func TestListFiltersAndRedaction(t *testing.T) {
 
 	// frames and redaction check
 	// pick latest session
-	resp2, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp2, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	defer resp2.Body.Close()
 	var list2 struct {
 		Items []struct{ ID string } `json:"items"`
 	}
 	_ = json.NewDecoder(resp2.Body).Decode(&list2)
 	sid := list2.Items[len(list2.Items)-1].ID
-	r3, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/frames?limit=100")
-	if err != nil {
-		t.Fatal(err)
-	}
+	r3, _ := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/frames?limit=100")
 	defer r3.Body.Close()
 	var frames struct {
 		Items []struct{ Preview string } `json:"items"`

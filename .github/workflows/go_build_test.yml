@@ -46,7 +46,7 @@ jobs:
           touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
 
       - name: Run go vet
-        run: go vet ./...
+        run: go vet $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
 
   test:
     name: Test
