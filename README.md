@@ -22,8 +22,8 @@ What it can do
 Quick start
 - Via CLI (automatically downloads binary and opens UI):
   ```bash
-  dart pub global activate network_debugger_cli
-  network-debugger
+  dart pub global activate network_debugger
+  network_debugger
   ```
 - Docker:
   ```bash
@@ -64,5 +64,5 @@ Local development (without GitHub)
   ```
 
 Useful to know
-- Binary cache: macOS `~/Library/Caches/network-debugger/bin-cache`, Linux `~/.cache/network-debugger/bin-cache`, Windows `%LOCALAPPDATA%/network-debugger/bin-cache`
+- Binary cache: macOS/Linux `~/.cache/network_debugger/`, Windows `%LOCALAPPDATA%\network_debugger\Cache\`
 - Binary name: `network-debugger-web` (Windows — `network-debugger-web.exe`)
