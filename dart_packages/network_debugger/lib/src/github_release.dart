@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'logger.dart';
 
 /// Handles interactions with GitHub Releases API.
 class GitHubRelease {
   final String owner;
   final String repo;
   final http.Client? _client;
+  final Logger _logger = Logger('GitHubRelease');
 
   GitHubRelease({
     required this.owner,
@@ -19,6 +21,8 @@ class GitHubRelease {
   Future<ReleaseInfo> getLatestRelease({
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    _logger.debug('Fetching latest release from $owner/$repo');
+
     final url = Uri.parse(
       'https://api.github.com/repos/$owner/$repo/releases/latest',
     );
@@ -32,6 +36,7 @@ class GitHubRelease {
       ).timeout(
         timeout,
         onTimeout: () {
+          _logger.error('Timeout fetching latest release');
           throw GitHubReleaseException(
             'Timeout fetching latest release after ${timeout.inSeconds}s',
           );
@@ -39,13 +44,16 @@ class GitHubRelease {
       );
 
       if (response.statusCode != 200) {
+        _logger.error('Failed to fetch latest release: ${response.statusCode}');
         throw GitHubReleaseException(
           'Failed to fetch latest release: ${response.statusCode} ${response.reasonPhrase}',
         );
       }
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return ReleaseInfo.fromJson(json);
+      final release = ReleaseInfo.fromJson(json);
+      _logger.info('Found latest release: ${release.tagName}');
+      return release;
     } on GitHubReleaseException {
       rethrow;
     } catch (e) {

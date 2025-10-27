@@ -20,10 +20,28 @@ void main(List<String> arguments) async {
       'binary-version',
       help: 'Specific binary version to use (e.g., v1.0.0)',
     )
+    ..addOption(
+      'log-level',
+      abbr: 'l',
+      defaultsTo: 'info',
+      allowed: ['debug', 'info', 'warning', 'error', 'none'],
+      help: 'Log level: debug, info, warning, error, none',
+    )
     ..addFlag(
       'no-browser',
       negatable: false,
       help: 'Do not automatically open browser',
+    )
+    ..addFlag(
+      'verbose',
+      negatable: false,
+      help: 'Enable verbose logging (same as --log-level=debug)',
+    )
+    ..addFlag(
+      'quiet',
+      abbr: 'q',
+      negatable: false,
+      help: 'Quiet mode - only show errors (same as --log-level=error)',
     )
     ..addFlag(
       'help',
@@ -55,6 +73,19 @@ void main(List<String> arguments) async {
   if (args['version'] as bool) {
     print('network_debugger version $version');
     exit(0);
+  }
+
+  // Configure logging based on flags
+  final verbose = args['verbose'] as bool;
+  final quiet = args['quiet'] as bool;
+  final logLevelArg = args['log-level'] as String;
+
+  if (verbose) {
+    Logger.enableVerboseMode();
+  } else if (quiet) {
+    Logger.enableQuietMode();
+  } else {
+    Logger.setLevelFromString(logLevelArg);
   }
 
   final port = int.tryParse(args['port'] as String);
@@ -151,6 +182,9 @@ void _printUsage(ArgParser parser) {
   print('  network_debugger                          # Default: port 9091, auto-open browser');
   print('  network_debugger --port 8080              # Custom port');
   print('  network_debugger --no-browser             # Without opening browser');
+  print('  network_debugger --verbose                # Enable verbose logging');
+  print('  network_debugger --quiet                  # Quiet mode (errors only)');
+  print('  network_debugger --log-level=debug        # Set custom log level');
   print('  network_debugger --binary-version v1.0.0  # Specific binary version');
   print('  network_debugger --version                # Show version information');
 }

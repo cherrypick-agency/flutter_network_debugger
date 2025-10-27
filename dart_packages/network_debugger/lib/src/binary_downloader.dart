@@ -4,6 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 import 'retry_helper.dart';
 import 'checksum_validator.dart';
+import 'logger.dart';
 
 /// Callback for download progress updates.
 typedef ProgressCallback = void Function(int received, int total);
@@ -19,6 +20,7 @@ class BinaryDownloader {
   final http.Client? _client;
   final RetryHelper retryHelper;
   final ChecksumValidator checksumValidator;
+  final Logger _logger = Logger('BinaryDownloader');
 
   BinaryDownloader({
     http.Client? client,
@@ -57,12 +59,16 @@ class BinaryDownloader {
     ProgressCallback? onProgress,
     required Duration timeout,
   }) async {
+    _logger.debug('Starting download: $url');
+    _logger.debug('Destination: $destinationPath');
+
     final uri = Uri.parse(url);
     final request = http.Request('GET', uri);
 
     final response = await client.send(request).timeout(
       timeout,
       onTimeout: () {
+        _logger.error('Download timeout after ${timeout.inMinutes} minutes');
         throw DownloadException(
           'Download timeout after ${timeout.inMinutes} minutes',
         );
@@ -70,6 +76,7 @@ class BinaryDownloader {
     );
 
     if (response.statusCode != 200) {
+      _logger.error('Download failed with status ${response.statusCode}');
       throw DownloadException(
         'Failed to download from $url: ${response.statusCode} ${response.reasonPhrase}',
       );
@@ -80,6 +87,12 @@ class BinaryDownloader {
 
     final total = response.contentLength ?? 0;
     var received = 0;
+
+    if (total > 0) {
+      _logger.info('Downloading ${_formatBytes(total)}');
+    } else {
+      _logger.info('Downloading (size unknown)');
+    }
 
     final sink = file.openWrite();
 
@@ -97,10 +110,13 @@ class BinaryDownloader {
     }
 
     if (total > 0 && received != total) {
+      _logger.error('Download incomplete: $received/$total bytes');
       throw DownloadException(
         'Download incomplete: received $received bytes, expected $total bytes',
       );
     }
+
+    _logger.info('Download complete: ${_formatBytes(received)}');
   }
 
   /// Extracts an archive file (tar.gz or zip) to a destination directory.
@@ -109,13 +125,20 @@ class BinaryDownloader {
     String destinationDir, {
     String? expectedBinaryName,
   }) async {
+    _logger.debug('Extracting archive: $archivePath');
+    _logger.debug('Destination dir: $destinationDir');
+
     final file = File(archivePath);
     if (!await file.exists()) {
+      _logger.error('Archive file not found: $archivePath');
       throw DownloadException('Archive file not found: $archivePath');
     }
 
     final bytes = await file.readAsBytes();
+    _logger.debug('Archive size: ${_formatBytes(bytes.length)}');
+
     final archive = _decodeArchive(archivePath, bytes);
+    _logger.info('Extracting ${archive.length} files from archive');
 
     await Directory(destinationDir).create(recursive: true);
 
@@ -141,11 +164,13 @@ class BinaryDownloader {
     }
 
     if (binaryPath == null) {
+      _logger.error('Binary not found in archive. Expected: $expectedBinaryName');
       throw DownloadException(
         'Binary not found in archive. Expected: $expectedBinaryName',
       );
     }
 
+    _logger.info('Extraction complete. Binary: $binaryPath');
     return binaryPath;
   }
 
@@ -176,10 +201,13 @@ class BinaryDownloader {
     bool skipChecksumValidation = false,
     Duration timeout = const Duration(minutes: 5),
   }) async {
+    _logger.info('Starting download and extract from: $url');
+
     final archiveName = p.basename(Uri.parse(url).path);
     final archivePath = p.join(cacheDir, archiveName);
 
     // Download
+    _logger.debug('Downloading to: $archivePath');
     await downloadFile(
       url,
       archivePath,
@@ -190,12 +218,19 @@ class BinaryDownloader {
 
     // Validate checksum if not skipped
     if (!skipChecksumValidation && availableAssetUrls != null) {
+      _logger.debug('Validating checksum...');
       try {
         final validated = await checksumValidator.tryValidateFromGitHubAssets(
           archivePath,
           url,
           availableAssetUrls,
         );
+
+        if (validated) {
+          _logger.info('Checksum validation: PASSED');
+        } else {
+          _logger.warning('Checksum validation: SKIPPED (no .sha256 file found)');
+        }
 
         if (onChecksum != null) {
           // Get actual checksum for callback
@@ -208,15 +243,19 @@ class BinaryDownloader {
 
         if (!validated && availableAssetUrls.any((u) => u.contains('.sha256'))) {
           // Checksum file exists but validation failed - this is an error
+          _logger.error('Checksum validation FAILED');
           throw DownloadException(
             'Checksum validation failed for $archiveName. File may be corrupted or tampered with.',
           );
         }
       } on ChecksumValidationException {
         // Clean up downloaded file on checksum failure
+        _logger.error('Checksum validation exception - cleaning up');
         await File(archivePath).delete();
         rethrow;
       }
+    } else {
+      _logger.warning('Checksum validation SKIPPED by user request');
     }
 
     // Extract
@@ -227,9 +266,21 @@ class BinaryDownloader {
     );
 
     // Clean up archive
+    _logger.debug('Cleaning up archive file');
     await File(archivePath).delete();
 
+    _logger.info('Download and extract complete');
     return binaryPath;
+  }
+
+  /// Formats bytes into human-readable string.
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }
 

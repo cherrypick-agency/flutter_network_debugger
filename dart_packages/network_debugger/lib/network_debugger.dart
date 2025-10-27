@@ -5,6 +5,7 @@ export 'src/debugger_process.dart' show DebuggerInstance, ProcessException;
 export 'src/binary_downloader.dart' show ProgressCallback, RetryCallback, ChecksumCallback;
 export 'src/platform_detector.dart' show PlatformDetector;
 export 'src/binary_cache.dart' show BinaryCache, CacheException;
+export 'src/logger.dart' show Logger, LogLevel;
 
 import 'dart:io';
 import 'src/platform_detector.dart';
@@ -13,6 +14,7 @@ import 'src/binary_cache.dart';
 import 'src/binary_downloader.dart';
 import 'src/debugger_process.dart';
 import 'src/error_formatter.dart';
+import 'src/logger.dart';
 
 /// Main entry point for launching the network debugger.
 class NetworkDebugger {
@@ -53,9 +55,15 @@ class NetworkDebugger {
     String repo = _defaultRepo,
     Map<String, String>? environment,
   }) async {
+    final logger = Logger('NetworkDebugger');
+
     try {
+      logger.info('Launching network debugger on port $port');
+      logger.debug('Platform: ${PlatformDetector.getPlatformDescription()}');
+
       // Check platform support
       if (!PlatformDetector.isSupported()) {
+        logger.error('Platform not supported: ${Platform.operatingSystem}');
         throw UnsupportedError(
           'Platform not supported: ${Platform.operatingSystem}',
         );
@@ -67,23 +75,29 @@ class NetworkDebugger {
 
       // Determine version to use
       final githubClient = GitHubRelease(owner: owner, repo: repo);
+      logger.debug('Fetching release information...');
       final release = version == null
           ? await githubClient.getLatestRelease()
           : await githubClient.getRelease(version);
 
       final versionTag = release.tagName;
+      logger.info('Using version: $versionTag');
 
       // Check cache first
+      logger.debug('Checking cache for version $versionTag...');
       var binaryPath = await BinaryCache.getBinaryPath(versionTag, binaryName);
 
       if (binaryPath != null) {
+        logger.debug('Found cached binary: $binaryPath');
         // Validate cached binary
         if (await BinaryCache.validateBinary(binaryPath)) {
+          logger.info('Using cached binary (validated)');
           // Binary found in cache and valid
           if (onProgress != null) {
             onProgress(1, 1); // Report 100% since we're using cache
           }
         } else {
+          logger.warning('Cached binary invalid, will re-download');
           // Invalid binary, download fresh
           binaryPath = null;
         }
@@ -91,6 +105,7 @@ class NetworkDebugger {
 
       // Download if not in cache
       if (binaryPath == null) {
+        logger.info('Binary not in cache, downloading...');
         final archiveName = PlatformDetector.getArchiveName(
           binaryBaseName: _binaryBaseName,
         );
@@ -121,6 +136,9 @@ class NetworkDebugger {
       }
 
       // Launch the process
+      logger.info('Starting debugger process...');
+      logger.debug('Binary path: $binaryPath');
+
       final process = DebuggerProcess(
         binaryPath: binaryPath,
         port: port,
@@ -133,16 +151,20 @@ class NetworkDebugger {
       final instance = DebuggerInstance(process);
 
       // Wait for the debugger to be ready
+      logger.debug('Waiting for debugger to be ready...');
       final isReady = await instance.waitUntilReady();
       if (!isReady) {
+        logger.error('Debugger failed to become ready');
         await instance.stop();
         throw ProcessException(
           'Debugger failed to become ready within timeout',
         );
       }
 
+      logger.info('Network debugger started successfully on http://localhost:$port');
       return instance;
     } catch (e) {
+      logger.error('Failed to launch debugger', e);
       // Format error with user-friendly message
       final formattedError = ErrorFormatter.format(e);
       throw Exception(formattedError);
