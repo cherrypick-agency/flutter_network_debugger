@@ -50,6 +50,8 @@ class DebuggerProcess {
     final env = <String, String>{
       ...Platform.environment,
       'ADDR': ':$port',
+      // DEV_MODE=1 prevents the binary from automatically opening the browser
+      // This allows us to control browser opening from the Dart launcher instead
       if (!autoOpenBrowser) 'DEV_MODE': '1',
       ...environment,
     };

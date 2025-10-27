@@ -17,8 +17,7 @@ void main(List<String> arguments) async {
       help: 'Port to run the debugger on',
     )
     ..addOption(
-      'version',
-      abbr: 'v',
+      'binary-version',
       help: 'Specific binary version to use (e.g., v1.0.0)',
     )
     ..addFlag(
@@ -31,6 +30,12 @@ void main(List<String> arguments) async {
       abbr: 'h',
       negatable: false,
       help: 'Show this help message',
+    )
+    ..addFlag(
+      'version',
+      abbr: 'v',
+      negatable: false,
+      help: 'Show version information',
     );
 
   late final ArgResults args;
@@ -47,6 +52,11 @@ void main(List<String> arguments) async {
     exit(0);
   }
 
+  if (args['version'] as bool) {
+    print('network_debugger version $version');
+    exit(0);
+  }
+
   final port = int.tryParse(args['port'] as String);
   if (port == null || port < 1 || port > 65535) {
     print('Error: Invalid port number "${args['port']}"\n');
@@ -54,7 +64,7 @@ void main(List<String> arguments) async {
     exit(1);
   }
 
-  final binaryVersion = args['version'] as String?;
+  final binaryVersion = args['binary-version'] as String?;
   final noBrowser = args['no-browser'] as bool;
 
   print('🚀 Network Debugger Launcher v$version\n');
@@ -138,8 +148,9 @@ void _printUsage(ArgParser parser) {
   print('Options:');
   print(parser.usage);
   print('\nExamples:');
-  print('  network_debugger                    # Default: port 9091, auto-open browser');
-  print('  network_debugger --port 8080        # Custom port');
-  print('  network_debugger --no-browser       # Without opening browser');
-  print('  network_debugger --version v1.0.0   # Specific binary version');
+  print('  network_debugger                          # Default: port 9091, auto-open browser');
+  print('  network_debugger --port 8080              # Custom port');
+  print('  network_debugger --no-browser             # Without opening browser');
+  print('  network_debugger --binary-version v1.0.0  # Specific binary version');
+  print('  network_debugger --version                # Show version information');
 }

@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 /// Detects the current platform and returns the identifier used in binary names.
@@ -43,21 +44,37 @@ class PlatformDetector {
   }
 
   static String _getArchitecture() {
-    // Platform.version contains architecture information
-    final version = Platform.version;
+    // Use dart:ffi for precise architecture detection
+    final abi = Abi.current();
 
-    // Try to detect from Dart VM version string
-    // Example: "2.19.0 (stable) on 'macos_arm64'"
-    if (version.contains('arm64') || version.contains('aarch64')) {
+    // Check for ARM64 architectures
+    if (abi == Abi.androidArm64 ||
+        abi == Abi.linuxArm64 ||
+        abi == Abi.macosArm64 ||
+        abi == Abi.windowsArm64) {
       return 'arm64';
     }
 
-    if (version.contains('x64') || version.contains('amd64')) {
+    // Check for x64/AMD64 architectures
+    if (abi == Abi.androidX64 ||
+        abi == Abi.linuxX64 ||
+        abi == Abi.macosX64 ||
+        abi == Abi.windowsX64) {
       return 'amd64';
     }
 
+    // Check for Windows 32-bit (IA32)
+    if (abi == Abi.windowsIA32) {
+      return '386';
+    }
+
+    // Fallback: try to detect from Dart VM version string
+    // This handles any edge cases not covered by Abi enum
+    final version = Platform.version;
+    if (version.contains('arm64') || version.contains('aarch64')) {
+      return 'arm64';
+    }
     if (version.contains('ia32') || version.contains('x86')) {
-      // Only Windows has 386 builds
       return Platform.isWindows ? '386' : 'amd64';
     }
 

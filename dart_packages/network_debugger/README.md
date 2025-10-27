@@ -40,7 +40,10 @@ network_debugger --port 8080
 network_debugger --no-browser
 
 # Specific binary version
-network_debugger --version v1.0.0
+network_debugger --binary-version v1.0.0
+
+# Show version
+network_debugger --version
 
 # Show help
 network_debugger --help
