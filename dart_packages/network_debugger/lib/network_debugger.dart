@@ -2,7 +2,7 @@
 library network_debugger;
 
 export 'src/debugger_process.dart' show DebuggerInstance, ProcessException;
-export 'src/binary_downloader.dart' show ProgressCallback;
+export 'src/binary_downloader.dart' show ProgressCallback, RetryCallback, ChecksumCallback;
 export 'src/platform_detector.dart' show PlatformDetector;
 export 'src/binary_cache.dart' show BinaryCache, CacheException;
 
@@ -12,6 +12,7 @@ import 'src/github_release.dart';
 import 'src/binary_cache.dart';
 import 'src/binary_downloader.dart';
 import 'src/debugger_process.dart';
+import 'src/error_formatter.dart';
 
 /// Main entry point for launching the network debugger.
 class NetworkDebugger {
@@ -25,6 +26,9 @@ class NetworkDebugger {
   /// - [port]: Port to run the debugger on (default: 9091).
   /// - [autoOpenBrowser]: Whether to automatically open browser (default: true).
   /// - [onProgress]: Optional callback for download progress.
+  /// - [onRetry]: Optional callback for retry attempts.
+  /// - [onChecksum]: Optional callback for checksum validation.
+  /// - [skipChecksumValidation]: Skip SHA256 checksum validation (NOT RECOMMENDED, default: false).
   /// - [owner]: GitHub repository owner (default: 'cherrypick-agency').
   /// - [repo]: GitHub repository name (default: 'flutter_network_debugger').
   /// - [environment]: Additional environment variables to pass to the process.
@@ -35,97 +39,114 @@ class NetworkDebugger {
   /// - [UnsupportedError] if the platform is not supported.
   /// - [GitHubReleaseException] if fetching release information fails.
   /// - [DownloadException] if downloading or extracting fails.
+  /// - [ChecksumValidationException] if checksum validation fails.
   /// - [ProcessException] if starting the process fails.
   static Future<DebuggerInstance> launch({
     String? version,
     int port = 9091,
     bool autoOpenBrowser = true,
     ProgressCallback? onProgress,
+    RetryCallback? onRetry,
+    ChecksumCallback? onChecksum,
+    bool skipChecksumValidation = false,
     String owner = _defaultOwner,
     String repo = _defaultRepo,
     Map<String, String>? environment,
   }) async {
-    // Check platform support
-    if (!PlatformDetector.isSupported()) {
-      throw UnsupportedError(
-        'Platform not supported: ${Platform.operatingSystem}',
-      );
-    }
-
-    final binaryName = PlatformDetector.getBinaryName(
-      binaryBaseName: _binaryBaseName,
-    );
-
-    // Determine version to use
-    final githubClient = GitHubRelease(owner: owner, repo: repo);
-    final release = version == null
-        ? await githubClient.getLatestRelease()
-        : await githubClient.getRelease(version);
-
-    final versionTag = release.tagName;
-
-    // Check cache first
-    var binaryPath = await BinaryCache.getBinaryPath(versionTag, binaryName);
-
-    if (binaryPath != null) {
-      // Validate cached binary
-      if (await BinaryCache.validateBinary(binaryPath)) {
-        // Binary found in cache and valid
-        if (onProgress != null) {
-          onProgress(1, 1); // Report 100% since we're using cache
-        }
-      } else {
-        // Invalid binary, download fresh
-        binaryPath = null;
-      }
-    }
-
-    // Download if not in cache
-    if (binaryPath == null) {
-      final archiveName = PlatformDetector.getArchiveName(
-        binaryBaseName: _binaryBaseName,
-      );
-
-      final downloadUrl = githubClient.findAssetUrl(release, archiveName);
-      if (downloadUrl == null) {
-        throw DownloadException(
-          'Asset not found for platform: $archiveName',
+    try {
+      // Check platform support
+      if (!PlatformDetector.isSupported()) {
+        throw UnsupportedError(
+          'Platform not supported: ${Platform.operatingSystem}',
         );
       }
 
-      final cacheDir = await BinaryCache.ensureVersionCacheDir(versionTag);
-      final downloader = BinaryDownloader();
-
-      binaryPath = await downloader.downloadAndExtract(
-        downloadUrl,
-        cacheDir,
-        expectedBinaryName: binaryName,
-        onProgress: onProgress,
+      final binaryName = PlatformDetector.getBinaryName(
+        binaryBaseName: _binaryBaseName,
       );
-    }
 
-    // Launch the process
-    final process = DebuggerProcess(
-      binaryPath: binaryPath,
-      port: port,
-      autoOpenBrowser: autoOpenBrowser,
-      environment: environment,
-    );
+      // Determine version to use
+      final githubClient = GitHubRelease(owner: owner, repo: repo);
+      final release = version == null
+          ? await githubClient.getLatestRelease()
+          : await githubClient.getRelease(version);
 
-    await process.start();
+      final versionTag = release.tagName;
 
-    final instance = DebuggerInstance(process);
+      // Check cache first
+      var binaryPath = await BinaryCache.getBinaryPath(versionTag, binaryName);
 
-    // Wait for the debugger to be ready
-    final isReady = await instance.waitUntilReady();
-    if (!isReady) {
-      await instance.stop();
-      throw ProcessException(
-        'Debugger failed to become ready within timeout',
+      if (binaryPath != null) {
+        // Validate cached binary
+        if (await BinaryCache.validateBinary(binaryPath)) {
+          // Binary found in cache and valid
+          if (onProgress != null) {
+            onProgress(1, 1); // Report 100% since we're using cache
+          }
+        } else {
+          // Invalid binary, download fresh
+          binaryPath = null;
+        }
+      }
+
+      // Download if not in cache
+      if (binaryPath == null) {
+        final archiveName = PlatformDetector.getArchiveName(
+          binaryBaseName: _binaryBaseName,
+        );
+
+        final downloadUrl = githubClient.findAssetUrl(release, archiveName);
+        if (downloadUrl == null) {
+          throw DownloadException(
+            'Asset not found for platform: $archiveName',
+          );
+        }
+
+        // Get all asset URLs for checksum validation
+        final allAssetUrls = githubClient.getAllAssetUrls(release);
+
+        final cacheDir = await BinaryCache.ensureVersionCacheDir(versionTag);
+        final downloader = BinaryDownloader();
+
+        binaryPath = await downloader.downloadAndExtract(
+          downloadUrl,
+          cacheDir,
+          expectedBinaryName: binaryName,
+          onProgress: onProgress,
+          onRetry: onRetry,
+          onChecksum: onChecksum,
+          availableAssetUrls: allAssetUrls,
+          skipChecksumValidation: skipChecksumValidation,
+        );
+      }
+
+      // Launch the process
+      final process = DebuggerProcess(
+        binaryPath: binaryPath,
+        port: port,
+        autoOpenBrowser: autoOpenBrowser,
+        environment: environment,
       );
-    }
 
-    return instance;
+      await process.start();
+
+      final instance = DebuggerInstance(process);
+
+      // Wait for the debugger to be ready
+      final isReady = await instance.waitUntilReady();
+      if (!isReady) {
+        await instance.stop();
+        throw ProcessException(
+          'Debugger failed to become ready within timeout',
+        );
+      }
+
+      return instance;
+    } catch (e) {
+      // Format error with user-friendly message
+      final formattedError = ErrorFormatter.format(e);
+      throw Exception(formattedError);
+    }
   }
 
   /// Clears the cache.

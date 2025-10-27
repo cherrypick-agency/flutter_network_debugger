@@ -113,6 +113,13 @@ class GitHubRelease {
     );
     return asset.browserDownloadUrl;
   }
+
+  /// Returns all asset download URLs for a release.
+  ///
+  /// Useful for finding checksum files or alternative downloads.
+  List<String> getAllAssetUrls(ReleaseInfo release) {
+    return release.assets.map((a) => a.browserDownloadUrl).toList();
+  }
 }
 
 /// Information about a GitHub release.

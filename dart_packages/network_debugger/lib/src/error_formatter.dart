@@ -32,7 +32,9 @@ class ErrorFormatter {
     if (error is SocketException || errorString.contains('SocketException')) {
       return formatNetworkError(error);
     }
-    if (error is HttpException || errorString.contains('HttpException')) {
+    if (error is HttpException || errorString.contains('HttpException') ||
+        errorString.contains('HTTP 404') || errorString.contains('HTTP 403') ||
+        errorString.contains('HTTP 5')) {
       return formatHttpError(error);
     }
     if (error is TimeoutException || errorString.contains('TimeoutException')) {

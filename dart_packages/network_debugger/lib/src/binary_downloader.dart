@@ -2,15 +2,31 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
+import 'retry_helper.dart';
+import 'checksum_validator.dart';
 
 /// Callback for download progress updates.
 typedef ProgressCallback = void Function(int received, int total);
 
+/// Callback for retry attempts.
+typedef RetryCallback = void Function(int attempt, Exception error);
+
+/// Callback for checksum validation.
+typedef ChecksumCallback = void Function(bool validated, String? checksum);
+
 /// Downloads and extracts binary files.
 class BinaryDownloader {
   final http.Client? _client;
+  final RetryHelper retryHelper;
+  final ChecksumValidator checksumValidator;
 
-  BinaryDownloader({http.Client? client}) : _client = client;
+  BinaryDownloader({
+    http.Client? client,
+    RetryHelper? retryHelper,
+    ChecksumValidator? checksumValidator,
+  })  : _client = client,
+        retryHelper = retryHelper ?? RetryHelper(),
+        checksumValidator = checksumValidator ?? ChecksumValidator(client: client);
 
   http.Client get client => _client ?? http.Client();
 
@@ -19,10 +35,39 @@ class BinaryDownloader {
     String url,
     String destinationPath, {
     ProgressCallback? onProgress,
+    RetryCallback? onRetry,
+    Duration timeout = const Duration(minutes: 5),
+  }) async {
+    // Wrap download in retry logic
+    await retryHelper.executeNetworkOperation(
+      () => _downloadFileInternal(
+        url,
+        destinationPath,
+        onProgress: onProgress,
+        timeout: timeout,
+      ),
+      onRetry: onRetry,
+    );
+  }
+
+  /// Internal download implementation (can be retried).
+  Future<void> _downloadFileInternal(
+    String url,
+    String destinationPath, {
+    ProgressCallback? onProgress,
+    required Duration timeout,
   }) async {
     final uri = Uri.parse(url);
     final request = http.Request('GET', uri);
-    final response = await client.send(request);
+
+    final response = await client.send(request).timeout(
+      timeout,
+      onTimeout: () {
+        throw DownloadException(
+          'Download timeout after ${timeout.inMinutes} minutes',
+        );
+      },
+    );
 
     if (response.statusCode != 200) {
       throw DownloadException(
@@ -125,12 +170,54 @@ class BinaryDownloader {
     String cacheDir, {
     String? expectedBinaryName,
     ProgressCallback? onProgress,
+    RetryCallback? onRetry,
+    ChecksumCallback? onChecksum,
+    List<String>? availableAssetUrls,
+    bool skipChecksumValidation = false,
+    Duration timeout = const Duration(minutes: 5),
   }) async {
     final archiveName = p.basename(Uri.parse(url).path);
     final archivePath = p.join(cacheDir, archiveName);
 
     // Download
-    await downloadFile(url, archivePath, onProgress: onProgress);
+    await downloadFile(
+      url,
+      archivePath,
+      onProgress: onProgress,
+      onRetry: onRetry,
+      timeout: timeout,
+    );
+
+    // Validate checksum if not skipped
+    if (!skipChecksumValidation && availableAssetUrls != null) {
+      try {
+        final validated = await checksumValidator.tryValidateFromGitHubAssets(
+          archivePath,
+          url,
+          availableAssetUrls,
+        );
+
+        if (onChecksum != null) {
+          // Get actual checksum for callback
+          String? checksum;
+          if (validated) {
+            checksum = await checksumValidator.computeFileChecksum(archivePath);
+          }
+          onChecksum(validated, checksum);
+        }
+
+        if (!validated && availableAssetUrls.any((u) => u.contains('.sha256'))) {
+          // Checksum file exists but validation failed - this is an error
+          throw DownloadException(
+            'Checksum validation failed for $archiveName. File may be corrupted or tampered with.',
+          );
+        }
+      } on ChecksumValidationException {
+        // Clean up downloaded file on checksum failure
+        await File(archivePath).delete();
+        rethrow;
+      }
+    }
 
     // Extract
     final binaryPath = await extractArchive(
