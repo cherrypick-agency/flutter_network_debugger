@@ -195,7 +195,7 @@ void main() {
 
       // Write to temp file
       final archivePath = '${tempDir.path}/test.tar.gz';
-      await File(archivePath).writeAsBytes(gzipBytes!);
+      await File(archivePath).writeAsBytes(gzipBytes);
 
       final downloader = BinaryDownloader();
 
@@ -221,7 +221,7 @@ void main() {
 
       // Write to temp file
       final archivePath = '${tempDir.path}/test.zip';
-      await File(archivePath).writeAsBytes(zipBytes!);
+      await File(archivePath).writeAsBytes(zipBytes);
 
       final downloader = BinaryDownloader();
 
@@ -259,7 +259,7 @@ void main() {
       final gzipBytes = gzipEncoder.encode(tarBytes);
 
       final archivePath = '${tempDir.path}/test.tar.gz';
-      await File(archivePath).writeAsBytes(gzipBytes!);
+      await File(archivePath).writeAsBytes(gzipBytes);
 
       final downloader = BinaryDownloader();
 
@@ -288,7 +288,7 @@ void main() {
       final mockClient = MockClient(
         (request) async {
           return http.Response.bytes(
-            gzipBytes!,
+            gzipBytes,
             200,
             headers: {
               'content-length': '${gzipBytes.length}',
@@ -332,7 +332,7 @@ void main() {
       final mockClient = MockClient(
         (request) async {
           return http.Response.bytes(
-            gzipBytes!,
+            gzipBytes,
             200,
             headers: {
               'content-length': '${gzipBytes.length}',
@@ -377,7 +377,7 @@ void main() {
       final mockClient = MockClient(
         (request) async {
           return http.Response.bytes(
-            gzipBytes!,
+            gzipBytes,
             200,
             headers: {
               'content-length': '${gzipBytes.length}',
@@ -424,7 +424,7 @@ void main() {
             throw SocketException('Connection refused');
           }
           return http.Response.bytes(
-            gzipBytes!,
+            gzipBytes,
             200,
             headers: {
               'content-length': '${gzipBytes.length}',
