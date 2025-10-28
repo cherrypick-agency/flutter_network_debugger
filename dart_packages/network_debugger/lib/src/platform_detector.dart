@@ -22,8 +22,9 @@ class PlatformDetector {
 
   /// Returns the binary name with platform identifier.
   /// Example: 'network-debugger-web_darwin_arm64' or 'network-debugger-web_windows_amd64.exe'
-  static String getBinaryName(
-      {String binaryBaseName = 'network-debugger-web',}) {
+  static String getBinaryName({
+    String binaryBaseName = 'network-debugger-web',
+  }) {
     final platform = getPlatformIdentifier();
     final ext = getFileExtension();
     return '${binaryBaseName}_$platform$ext';
@@ -31,8 +32,9 @@ class PlatformDetector {
 
   /// Returns the archive name for download.
   /// Example: 'network-debugger-web_darwin_arm64.tar.gz' or 'network-debugger-web_windows_amd64.zip'
-  static String getArchiveName(
-      {String binaryBaseName = 'network-debugger-web',}) {
+  static String getArchiveName({
+    String binaryBaseName = 'network-debugger-web',
+  }) {
     final platform = getPlatformIdentifier();
     final ext = getArchiveExtension();
     return '${binaryBaseName}_$platform$ext';
@@ -43,7 +45,7 @@ class PlatformDetector {
     if (Platform.isWindows) return 'windows';
     if (Platform.isLinux) return 'linux';
     throw UnsupportedError(
-        'Unsupported operating system: ${Platform.operatingSystem}',
+      'Unsupported operating system: ${Platform.operatingSystem}',
     );
   }
 
