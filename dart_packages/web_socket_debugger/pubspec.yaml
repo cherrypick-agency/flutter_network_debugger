@@ -1,0 +1,23 @@
+name: web_socket_debugger
+description: "Helper to attach network-debugger proxy to package:web_socket (reverse/forward)."
+version: 0.1.0
+repository: https://github.com/cherrypick-agency/flutter_network_debugger
+homepage: https://github.com/cherrypick-agency/flutter_network_debugger
+issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues
+topics:
+  - websocket
+  - web-socket
+  - debug
+  - proxy
+  - reverse
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  web_socket: ^1.0.1
+
+dev_dependencies:
+  test: ^1.25.0
+  shelf: ^1.4.2
+  shelf_web_socket: ^3.0.0

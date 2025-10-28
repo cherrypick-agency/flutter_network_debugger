@@ -64,7 +64,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  network_debugger: ^0.1.0
+  network_debugger: ^0.1.2
 ```
 
 ### Usage

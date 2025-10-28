@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:network_debugger/network_debugger.dart';
 
-const String version = '0.1.1';
+const String version = '0.1.2';
 
 void main(List<String> arguments) async {
   final parser = ArgParser()
@@ -153,8 +153,7 @@ void main(List<String> arguments) async {
     // Subscribe to output
     debugger.stdout.listen((line) {
       // Only show important logs
-      if (line.contains('"level":"error"') ||
-          line.contains('"level":"warn"')) {
+      if (line.contains('"level":"error"') || line.contains('"level":"warn"')) {
         print('[LOG] $line');
       }
     });
@@ -179,12 +178,17 @@ void _printUsage(ArgParser parser) {
   print('Options:');
   print(parser.usage);
   print('\nExamples:');
-  print('  network_debugger                          # Default: port 9091, auto-open browser');
+  print(
+      '  network_debugger                          # Default: port 9091, auto-open browser');
   print('  network_debugger --port 8080              # Custom port');
-  print('  network_debugger --no-browser             # Without opening browser');
+  print(
+      '  network_debugger --no-browser             # Without opening browser');
   print('  network_debugger --verbose                # Enable verbose logging');
-  print('  network_debugger --quiet                  # Quiet mode (errors only)');
+  print(
+      '  network_debugger --quiet                  # Quiet mode (errors only)');
   print('  network_debugger --log-level=debug        # Set custom log level');
-  print('  network_debugger --binary-version v1.0.0  # Specific binary version');
-  print('  network_debugger --version                # Show version information');
+  print(
+      '  network_debugger --binary-version v1.0.0  # Specific binary version');
+  print(
+      '  network_debugger --version                # Show version information');
 }

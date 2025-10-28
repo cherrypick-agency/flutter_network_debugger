@@ -1,0 +1,100 @@
+name: web_socket_debugger CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'web_socket_debugger-v*'
+    paths:
+      - 'dart_packages/web_socket_debugger/**'
+      - '.github/workflows/web_socket_debugger.yml'
+  pull_request:
+    paths:
+      - 'dart_packages/web_socket_debugger/**'
+      - '.github/workflows/web_socket_debugger.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to pub.dev'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      PKG_DIR: dart_packages/web_socket_debugger
+      PUB_ENVIRONMENT: bot.github
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('dart_packages/web_socket_debugger/pubspec.lock', 'dart_packages/web_socket_debugger/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+      - name: Pub get
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart pub get
+      - name: Format check
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart format --output=none --set-exit-if-changed .
+      - name: Analyze
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart analyze .
+      - name: Tests
+        working-directory: ${{ env.PKG_DIR }}
+        shell: bash
+        run: |
+          if [ -d test/unit ]; then
+            dart test test/unit -r expanded
+          elif [ -d test ]; then
+            dart test -r expanded
+          else
+            echo "No tests"
+          fi
+      - name: Build docs
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart doc
+      - name: Publish dry-run
+        if: github.event_name != 'pull_request'
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart pub publish --dry-run
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.publish == 'true' ||
+      startsWith(github.ref, 'refs/tags/web_socket_debugger-v')
+    env:
+      PKG_DIR: dart_packages/web_socket_debugger
+      PUB_ENVIRONMENT: bot.github
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Pub get
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart pub get
+      - name: Configure pub credentials
+        run: |
+          mkdir -p ~/.pub-cache
+          echo "${{ secrets.PUB_CREDENTIALS }}" > ~/.pub-cache/credentials.json
+      - name: Publish to pub.dev
+        working-directory: ${{ env.PKG_DIR }}
+        run: dart pub publish --force
+
+
