@@ -14,7 +14,8 @@ Future<void> main() async {
 
   final cachedVersions = await NetworkDebugger.listCachedVersions();
   print(
-      'Cached versions: ${cachedVersions.isEmpty ? "none" : cachedVersions.join(", ")}');
+      'Cached versions: ${cachedVersions.isEmpty ? "none" : cachedVersions.join(", ")}',
+  );
 
   if (cachedVersions.isNotEmpty) {
     final cacheSize = await NetworkDebugger.getCacheSizeFormatted();

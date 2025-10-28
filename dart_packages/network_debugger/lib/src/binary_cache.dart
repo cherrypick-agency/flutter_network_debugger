@@ -41,7 +41,7 @@ class BinaryCache {
 
   /// Checks if a binary exists in cache for the given version and name.
   static Future<String?> getBinaryPath(
-      String version, String binaryName) async {
+      String version, String binaryName,) async {
     final versionDir = await getVersionCacheDir(version);
     final binaryPath = p.join(versionDir, binaryName);
 

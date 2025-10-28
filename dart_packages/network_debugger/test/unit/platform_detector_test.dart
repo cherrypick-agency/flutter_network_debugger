@@ -5,8 +5,10 @@ void main() {
   group('PlatformDetector', () {
     test('getPlatformIdentifier returns valid format', () {
       final identifier = PlatformDetector.getPlatformIdentifier();
-      expect(identifier,
-          matches(RegExp(r'^(darwin|windows|linux)_(amd64|arm64|386)$')));
+      expect(
+        identifier,
+        matches(RegExp(r'^(darwin|windows|linux)_(amd64|arm64|386)$')),
+      );
     });
 
     test('getBinaryName returns correct format', () {

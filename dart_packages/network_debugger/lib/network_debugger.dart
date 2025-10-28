@@ -163,7 +163,8 @@ class NetworkDebugger {
       }
 
       logger.info(
-          'Network debugger started successfully on http://localhost:$port');
+          'Network debugger started successfully on http://localhost:$port',
+      );
       return instance;
     } catch (e) {
       logger.error('Failed to launch debugger', e);

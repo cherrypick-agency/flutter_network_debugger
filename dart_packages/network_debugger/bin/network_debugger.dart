@@ -179,16 +179,21 @@ void _printUsage(ArgParser parser) {
   print(parser.usage);
   print('\nExamples:');
   print(
-      '  network_debugger                          # Default: port 9091, auto-open browser');
+      '  network_debugger                          # Default: port 9091, auto-open browser',
+  );
   print('  network_debugger --port 8080              # Custom port');
   print(
-      '  network_debugger --no-browser             # Without opening browser');
+      '  network_debugger --no-browser             # Without opening browser',
+  );
   print('  network_debugger --verbose                # Enable verbose logging');
   print(
-      '  network_debugger --quiet                  # Quiet mode (errors only)');
+      '  network_debugger --quiet                  # Quiet mode (errors only)',
+  );
   print('  network_debugger --log-level=debug        # Set custom log level');
   print(
-      '  network_debugger --binary-version v1.0.0  # Specific binary version');
+      '  network_debugger --binary-version v1.0.0  # Specific binary version',
+  );
   print(
-      '  network_debugger --version                # Show version information');
+      '  network_debugger --version                # Show version information',
+  );
 }
