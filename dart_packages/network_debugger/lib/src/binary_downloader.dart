@@ -28,7 +28,8 @@ class BinaryDownloader {
     ChecksumValidator? checksumValidator,
   })  : _client = client,
         retryHelper = retryHelper ?? RetryHelper(),
-        checksumValidator = checksumValidator ?? ChecksumValidator(client: client);
+        checksumValidator =
+            checksumValidator ?? ChecksumValidator(client: client);
 
   http.Client get client => _client ?? http.Client();
 
@@ -154,17 +155,22 @@ class BinaryDownloader {
         await outputFile.writeAsBytes(file.content as List<int>);
 
         // Make executable on Unix-like systems
-        if (!Platform.isWindows && (expectedBinaryName == null || filename == expectedBinaryName)) {
+        if (!Platform.isWindows &&
+            (expectedBinaryName == null || filename == expectedBinaryName)) {
           await Process.run('chmod', ['+x', outputPath]);
           binaryPath = outputPath;
-        } else if (Platform.isWindows && (filename.endsWith('.exe') || (expectedBinaryName != null && filename == expectedBinaryName))) {
+        } else if (Platform.isWindows &&
+            (filename.endsWith('.exe') ||
+                (expectedBinaryName != null &&
+                    filename == expectedBinaryName))) {
           binaryPath = outputPath;
         }
       }
     }
 
     if (binaryPath == null) {
-      _logger.error('Binary not found in archive. Expected: $expectedBinaryName');
+      _logger
+          .error('Binary not found in archive. Expected: $expectedBinaryName');
       throw DownloadException(
         'Binary not found in archive. Expected: $expectedBinaryName',
       );
@@ -229,7 +235,8 @@ class BinaryDownloader {
         if (validated) {
           _logger.info('Checksum validation: PASSED');
         } else {
-          _logger.warning('Checksum validation: SKIPPED (no .sha256 file found)');
+          _logger
+              .warning('Checksum validation: SKIPPED (no .sha256 file found)');
         }
 
         if (onChecksum != null) {
@@ -241,7 +248,8 @@ class BinaryDownloader {
           onChecksum(validated, checksum);
         }
 
-        if (!validated && availableAssetUrls.any((u) => u.contains('.sha256'))) {
+        if (!validated &&
+            availableAssetUrls.any((u) => u.contains('.sha256'))) {
           // Checksum file exists but validation failed - this is an error
           _logger.error('Checksum validation FAILED');
           throw DownloadException(

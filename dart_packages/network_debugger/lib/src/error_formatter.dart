@@ -32,8 +32,10 @@ class ErrorFormatter {
     if (error is SocketException || errorString.contains('SocketException')) {
       return formatNetworkError(error);
     }
-    if (error is HttpException || errorString.contains('HttpException') ||
-        errorString.contains('HTTP 404') || errorString.contains('HTTP 403') ||
+    if (error is HttpException ||
+        errorString.contains('HttpException') ||
+        errorString.contains('HTTP 404') ||
+        errorString.contains('HTTP 403') ||
         errorString.contains('HTTP 5')) {
       return formatHttpError(error);
     }
@@ -140,8 +142,10 @@ Technical details: $error
 ''';
     }
 
-    if (errorString.contains('500') || errorString.contains('502') ||
-        errorString.contains('503') || errorString.contains('504')) {
+    if (errorString.contains('500') ||
+        errorString.contains('502') ||
+        errorString.contains('503') ||
+        errorString.contains('504')) {
       return '''
 Server error (HTTP 5xx).
 

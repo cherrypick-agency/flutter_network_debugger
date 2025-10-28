@@ -40,22 +40,18 @@ The proxy will start on `http://localhost:9091` and automatically open the web U
 
 For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
 
-## Quick start
+## Quick start (only 2 lines)
 
 ```dart
 import 'package:dio/dio.dart';
-import 'package:dio_debugger/dio_debugger.dart';
+import 'package:flutter/foundation.dart';
+import 'package:dio_debugger/dio_debugger.dart'; // 1
 
-const baseUrl = 'https://api.example.test';
-final dio = Dio(BaseOptions(baseUrl: baseUrl));
-// Use 'http://10.0.2.2:9091 if Android emulator
-final proxyBaseUrl = Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091'; 
-
-DioDebugger.attach(
-  dio,
-  proxyBaseUrl: proxyBaseUrl,
-  proxyHttpPath: '/httpproxy',
+final dio = Dio(
+  BaseOptions(baseUrl: 'https://api.example.com'),
 );
+
+if (kDebugMode) DioDebugger.attach(dio); // 2
 ```
 
 ### Advanced options
@@ -71,6 +67,8 @@ DioDebugger.attach(
   allowHosts: null,
   allowMethods: null,
   upstreamBaseUrl: 'https://api.example.test',
+  // Custom URL where debug proxy is running
+  // Use 'http://10.0.2.2:9091 if Android emulator
   proxyBaseUrl: 'http://localhost:9091',
   proxyHttpPath: '/httpproxy',
 );

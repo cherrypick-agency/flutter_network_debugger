@@ -13,7 +13,8 @@ Future<void> main() async {
   print('Cache directory: $cacheDir');
 
   final cachedVersions = await NetworkDebugger.listCachedVersions();
-  print('Cached versions: ${cachedVersions.isEmpty ? "none" : cachedVersions.join(", ")}');
+  print(
+      'Cached versions: ${cachedVersions.isEmpty ? "none" : cachedVersions.join(", ")}');
 
   if (cachedVersions.isNotEmpty) {
     final cacheSize = await NetworkDebugger.getCacheSizeFormatted();

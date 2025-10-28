@@ -181,7 +181,8 @@ void main() {
     test('extractArchive extracts tar.gz correctly', () async {
       // Create a simple tar.gz archive in memory
       final archive = Archive();
-      final file = ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      final file =
+          ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       archive.addFile(file);
 
       // Encode to tar
@@ -275,7 +276,8 @@ void main() {
     test('downloadAndExtract completes successfully', () async {
       // Create a simple tar.gz archive in memory
       final archive = Archive();
-      final file = ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      final file =
+          ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       archive.addFile(file);
 
       final tarEncoder = TarEncoder();
@@ -318,7 +320,8 @@ void main() {
 
     test('downloadAndExtract calls progress callback', () async {
       final archive = Archive();
-      final file = ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      final file =
+          ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       archive.addFile(file);
 
       final tarEncoder = TarEncoder();
@@ -362,7 +365,8 @@ void main() {
 
     test('downloadAndExtract cleans up archive after extraction', () async {
       final archive = Archive();
-      final file = ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      final file =
+          ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       archive.addFile(file);
 
       final tarEncoder = TarEncoder();
@@ -404,7 +408,8 @@ void main() {
     test('downloadAndExtract calls retry callback on failure', () async {
       var attempts = 0;
       final archive = Archive();
-      final file = ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      final file =
+          ArchiveFile('test_binary', 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       archive.addFile(file);
 
       final tarEncoder = TarEncoder();

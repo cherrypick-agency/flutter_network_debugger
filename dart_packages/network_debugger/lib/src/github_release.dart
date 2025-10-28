@@ -189,7 +189,8 @@ class ReleaseAsset {
       name: json['name'] as String,
       size: json['size'] as int,
       browserDownloadUrl: json['browser_download_url'] as String,
-      contentType: json['content_type'] as String? ?? 'application/octet-stream',
+      contentType:
+          json['content_type'] as String? ?? 'application/octet-stream',
     );
   }
 

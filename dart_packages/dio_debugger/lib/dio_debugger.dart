@@ -1,5 +1,7 @@
 library dio_debugger;
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import 'package:dio_debugger/src/reverse_proxy_interceptor.dart';
@@ -74,7 +76,7 @@ class DioDebugger {
           readEnvVar('PROXY_BASE_URL'),
           readEnvVar('HTTP_PROXY'),
         ]) ??
-        '';
+        (Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091');
 
     final path = (proxyHttpPath ??
         _firstNonEmpty([

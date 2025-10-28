@@ -120,7 +120,8 @@ class RetryHelper {
         pow(config.backoffMultiplier, attempt);
 
     // Cap at max delay
-    var delayMs = min(exponentialDelay, config.maxDelay.inMilliseconds.toDouble());
+    var delayMs =
+        min(exponentialDelay, config.maxDelay.inMilliseconds.toDouble());
 
     // Add jitter if enabled (0-50% random variation)
     if (config.useJitter) {

@@ -5,7 +5,8 @@ void main() {
   group('PlatformDetector', () {
     test('getPlatformIdentifier returns valid format', () {
       final identifier = PlatformDetector.getPlatformIdentifier();
-      expect(identifier, matches(RegExp(r'^(darwin|windows|linux)_(amd64|arm64|386)$')));
+      expect(identifier,
+          matches(RegExp(r'^(darwin|windows|linux)_(amd64|arm64|386)$')));
     });
 
     test('getBinaryName returns correct format', () {
@@ -16,8 +17,8 @@ void main() {
 
     test('getArchiveName returns correct extension', () {
       final archiveName = PlatformDetector.getArchiveName();
-      final hasValidExtension = archiveName.endsWith('.tar.gz') ||
-                                archiveName.endsWith('.zip');
+      final hasValidExtension =
+          archiveName.endsWith('.tar.gz') || archiveName.endsWith('.zip');
       expect(hasValidExtension, isTrue);
     });
 

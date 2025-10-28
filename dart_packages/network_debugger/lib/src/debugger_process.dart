@@ -199,7 +199,8 @@ class DebuggerInstance {
   /// Waits for the debugger to be ready.
   Future<bool> waitUntilReady({
     Duration timeout = const Duration(seconds: 10),
-  }) => _process.waitUntilReady(timeout: timeout);
+  }) =>
+      _process.waitUntilReady(timeout: timeout);
 }
 
 /// Exception thrown when process operations fail.

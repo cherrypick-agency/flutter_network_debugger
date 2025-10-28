@@ -24,7 +24,8 @@ void main() {
     });
 
     test('ensureVersionCacheDir creates directory', () async {
-      final testVersion = 'test-version-${DateTime.now().millisecondsSinceEpoch}';
+      final testVersion =
+          'test-version-${DateTime.now().millisecondsSinceEpoch}';
       final versionDir = await BinaryCache.ensureVersionCacheDir(testVersion);
 
       expect(await Directory(versionDir).exists(), isTrue);
@@ -35,7 +36,8 @@ void main() {
 
     test('listVersions returns list of versions', () async {
       // Create a test version
-      final testVersion = 'test-version-${DateTime.now().millisecondsSinceEpoch}';
+      final testVersion =
+          'test-version-${DateTime.now().millisecondsSinceEpoch}';
       await BinaryCache.ensureVersionCacheDir(testVersion);
 
       final versions = await BinaryCache.listVersions();
@@ -46,7 +48,8 @@ void main() {
     });
 
     test('clearVersion removes version directory', () async {
-      final testVersion = 'test-version-${DateTime.now().millisecondsSinceEpoch}';
+      final testVersion =
+          'test-version-${DateTime.now().millisecondsSinceEpoch}';
       final versionDir = await BinaryCache.ensureVersionCacheDir(testVersion);
 
       expect(await Directory(versionDir).exists(), isTrue);

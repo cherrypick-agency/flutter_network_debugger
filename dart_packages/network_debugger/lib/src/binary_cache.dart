@@ -40,7 +40,8 @@ class BinaryCache {
   }
 
   /// Checks if a binary exists in cache for the given version and name.
-  static Future<String?> getBinaryPath(String version, String binaryName) async {
+  static Future<String?> getBinaryPath(
+      String version, String binaryName) async {
     final versionDir = await getVersionCacheDir(version);
     final binaryPath = p.join(versionDir, binaryName);
 
@@ -149,7 +150,8 @@ class BinaryCache {
       final stat = await file.stat();
       // Check if file has execute permission (simplified check)
       final mode = stat.mode;
-      final isExecutable = (mode & 0x49) != 0; // Check user, group, or other execute bit
+      final isExecutable =
+          (mode & 0x49) != 0; // Check user, group, or other execute bit
 
       if (!isExecutable) {
         return false;

@@ -32,7 +32,8 @@ void main() {
       // Known SHA256 hash for "Hello, World!"
       expect(
         checksum,
-        equals('dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f'),
+        equals(
+            'dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f'),
       );
     });
 
@@ -108,7 +109,8 @@ void main() {
 
       expect(
         checksum,
-        equals('dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f'),
+        equals(
+            'dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f'),
       );
     });
 
@@ -127,7 +129,8 @@ void main() {
 
       expect(
         checksum,
-        equals('dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f'),
+        equals(
+            'dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f'),
       );
     });
 

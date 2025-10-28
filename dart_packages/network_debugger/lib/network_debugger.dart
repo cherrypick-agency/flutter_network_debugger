@@ -2,7 +2,8 @@
 library network_debugger;
 
 export 'src/debugger_process.dart' show DebuggerInstance, ProcessException;
-export 'src/binary_downloader.dart' show ProgressCallback, RetryCallback, ChecksumCallback;
+export 'src/binary_downloader.dart'
+    show ProgressCallback, RetryCallback, ChecksumCallback;
 export 'src/platform_detector.dart' show PlatformDetector;
 export 'src/binary_cache.dart' show BinaryCache, CacheException;
 export 'src/logger.dart' show Logger, LogLevel;
@@ -161,7 +162,8 @@ class NetworkDebugger {
         );
       }
 
-      logger.info('Network debugger started successfully on http://localhost:$port');
+      logger.info(
+          'Network debugger started successfully on http://localhost:$port');
       return instance;
     } catch (e) {
       logger.error('Failed to launch debugger', e);

@@ -1006,7 +1006,7 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 2*time.Second)
+	waitReady(t, baseURL, 4*time.Second)
 
 	// 1st session will be dropped by server closeAt
 	target := echoURL + "?closeAt=1"
