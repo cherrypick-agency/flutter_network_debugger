@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+- Docs: Added "Part of network_debugger ecosystem" reference
+- Docs: Added "Starting the Proxy" section with setup instructions
+- Docs: Added cross-references to network_debugger package
+- Docs: Improved documentation structure and clarity
+
 ## 0.1.2
 - Feature: `attach` now falls back to `dio.options.baseUrl` when `upstreamBaseUrl` is not provided.
 - Docs: updated README with configuration precedence and a simplified quick start example.

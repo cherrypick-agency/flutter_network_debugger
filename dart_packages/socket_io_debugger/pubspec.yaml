@@ -1,6 +1,6 @@
 name: socket_io_debugger
 description: "One-call proxy helper for Socket.IO client: reverse/forward modes for local debugging."
-version: 0.1.1
+version: 0.1.2
 repository: https://github.com/cherrypick-agency/flutter_network_debugger
 homepage: https://github.com/cherrypick-agency/flutter_network_debugger
 issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues

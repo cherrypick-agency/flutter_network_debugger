@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+### Documentation
+- Removed outdated "(once published)" comment from installation instructions
+- Package is now live on pub.dev
+
 ## 0.1.0
 
 ### Initial Release
