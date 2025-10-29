@@ -231,6 +231,134 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         });
   }
 
+  // (заголовок рендерим через _buildTitleRich)
+
+  dynamic _decodeNestedJsonStrings(dynamic v) {
+    if (v is Map) {
+      final out = <String, dynamic>{};
+      v.forEach((k, val) {
+        out[k.toString()] = _decodeNestedJsonStrings(
+          _maybeDecodeJsonString(val),
+        );
+      });
+      return out;
+    }
+    if (v is List) {
+      return v
+          .map((e) => _decodeNestedJsonStrings(_maybeDecodeJsonString(e)))
+          .toList();
+    }
+    return v;
+  }
+
+  dynamic _maybeDecodeJsonString(dynamic val) {
+    if (val is String) {
+      final s = val.trim();
+      if (s.isNotEmpty && (s.startsWith('{') || s.startsWith('['))) {
+        try {
+          final parsed = jsonDecode(s);
+          // Интересуют только объекты/массивы — примитивы как строки не трогаем
+          if (parsed is Map || parsed is List) {
+            return _decodeNestedJsonStrings(parsed);
+          }
+        } catch (_) {}
+      }
+    }
+    return val;
+  }
+
+  // Пытаемся получить нормализованный объект для заголовка (если preview — JSON)
+  dynamic _tryDecodeNormalizedForHeader(String preview) {
+    final t = preview.trim();
+    if (t.isEmpty) return null;
+    if (!(t.startsWith('{') || t.startsWith('['))) return null;
+    try {
+      final decoded = jsonDecode(t);
+      return _decodeNestedJsonStrings(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Однострочный рендер JSON с подсветкой токенов для заголовка
+  Widget _buildTitleRich(BuildContext context, String preview) {
+    final obj = _tryDecodeNormalizedForHeader(preview);
+    if (obj == null) {
+      return Text(
+        preview,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: context.appText.body,
+      );
+    }
+    final spans = _buildInlineJsonSpans(context, obj);
+    return Text.rich(
+      TextSpan(children: spans),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: context.appText.body,
+    );
+  }
+
+  List<InlineSpan> _buildInlineJsonSpans(BuildContext context, dynamic node) {
+    final base = context.appText.body;
+    final punct = base;
+    final keyStyle = base.copyWith(color: context.appColors.primary);
+    final stringStyle = base.copyWith(color: context.appColors.success);
+    final numberStyle = base.copyWith(color: context.appColors.warning);
+    final boolStyle = base.copyWith(color: context.appColors.warning);
+    final nullStyle = base.copyWith(color: context.appColors.danger);
+
+    List<InlineSpan> build(dynamic n) {
+      final List<InlineSpan> out = [];
+      void add(String s, TextStyle st) => out.add(TextSpan(text: s, style: st));
+
+      if (n is Map) {
+        add('{', punct);
+        int i = 0;
+        final last = n.length - 1;
+        for (final e in n.entries) {
+          add('"${e.key}"', keyStyle);
+          add(': ', punct);
+          out.addAll(build(e.value));
+          if (i != last) add(', ', punct);
+          i++;
+        }
+        add('}', punct);
+        return out;
+      }
+      if (n is List) {
+        add('[', punct);
+        for (int i = 0; i < n.length; i++) {
+          out.addAll(build(n[i]));
+          if (i != n.length - 1) add(', ', punct);
+        }
+        add(']', punct);
+        return out;
+      }
+      if (n is String) {
+        add('"$n"', stringStyle);
+        return out;
+      }
+      if (n is num) {
+        add(n.toString(), numberStyle);
+        return out;
+      }
+      if (n is bool) {
+        add(n ? 'true' : 'false', boolStyle);
+        return out;
+      }
+      if (n == null) {
+        add('null', nullStyle);
+        return out;
+      }
+      add(n.toString(), punct);
+      return out;
+    }
+
+    return build(node);
+  }
+
   void _reindexGlobalMatches() {
     final query = _searchCtrl.text.trim();
     _frameMatchCounts.clear();
@@ -705,12 +833,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                             Text(f['opcode'].toString()),
                           ],
                         ),
-                        title: Text(
-                          preview,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.appText.body,
-                        ),
+                        title: _buildTitleRich(context, preview),
                         subtitle: Row(
                           children: [
                             Expanded(
@@ -798,18 +921,25 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                       },
                                     );
                                     if (extractedJson != null) {
-                                      if (_tree) {
-                                        return JsonTreeRich(
-                                          data: jsonDecode(extractedJson),
-                                          search: cfg,
+                                      try {
+                                        final parsed = jsonDecode(
+                                          extractedJson,
                                         );
-                                      }
-                                      if (_pretty) {
-                                        return JsonPrettyRich(
-                                          data: jsonDecode(extractedJson),
-                                          search: cfg,
-                                        );
-                                      }
+                                        final normalized =
+                                            _decodeNestedJsonStrings(parsed);
+                                        if (_tree) {
+                                          return JsonTreeRich(
+                                            data: normalized,
+                                            search: cfg,
+                                          );
+                                        }
+                                        if (_pretty) {
+                                          return JsonPrettyRich(
+                                            data: normalized,
+                                            search: cfg,
+                                          );
+                                        }
+                                      } catch (_) {}
                                     }
                                     return SearchableTextRich(
                                       text: preview,

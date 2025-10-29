@@ -7,6 +7,8 @@ import 'src/env/env_reader_stub.dart'
 import 'src/forward_proxy_stub.dart'
     if (dart.library.io) 'src/forward_proxy_io.dart';
 import 'src/utils/url_tools.dart';
+import 'src/ws_connector_stub.dart'
+    if (dart.library.io) 'src/ws_connector_io.dart';
 
 const String _kDefineProxy = String.fromEnvironment('SOCKET_PROXY');
 const String _kDefineProxyPath = String.fromEnvironment('SOCKET_PROXY_PATH');
@@ -38,7 +40,7 @@ class WebSocketDebugger {
 
   static WebSocketProxyConfig attach({
     required String baseUrl,
-    String proxyBaseUrl = '',
+    String proxyBaseUrl = 'http://localhost:9091',
     String proxyPath = '/wsproxy',
     bool? enabled,
     String? mode,
@@ -56,11 +58,12 @@ class WebSocketDebugger {
     final proxy = proxyBaseUrl.isNotEmpty
         ? proxyBaseUrl
         : (_firstNonEmpty([_kDefineProxy, readEnvVar('SOCKET_PROXY')]) ?? '');
-    final path = proxyPath.isNotEmpty
+    final rawPath = proxyPath.isNotEmpty
         ? proxyPath
         : (_firstNonEmpty(
                 [_kDefineProxyPath, readEnvVar('SOCKET_PROXY_PATH')]) ??
             '/wsproxy');
+    final path = _normalizeProxyPath(rawPath);
 
     // ignore: avoid_print
     print(
@@ -126,14 +129,23 @@ class WebSocketDebugger {
 
   static Future<ws.WebSocket> connect({
     required WebSocketProxyConfig config,
+    Map<String, dynamic>? headers,
   }) async {
-    final uri = config.query.isEmpty
-        ? config.connectUrl
-        : config.connectUrl.replace(queryParameters: {
-            ...config.connectUrl.queryParameters,
-            ...config.query.map((k, v) => MapEntry(k, v.toString())),
-          });
-    return ws.WebSocket.connect(uri);
+    // Собираем query вручную, чтобы не ломать ws:// схему и не добавлять '#'
+    Uri uri;
+    if (config.query.isEmpty) {
+      uri = config.connectUrl;
+    } else {
+      final merged = <String, String>{
+        ...config.connectUrl.queryParameters,
+        ...config.query.map((k, v) => MapEntry(k, v.toString())),
+      };
+      final encodedQuery = Uri(queryParameters: merged).query;
+      uri = config.connectUrl.replace(query: encodedQuery, fragment: null);
+    }
+    // В IO окружении пробрасываем заголовки (Authorization/Cookie и т.п.),
+    // в web – заголовки игнорируются на уровне транспорта
+    return connectWS(uri, headers: headers);
   }
 
   static bool _computeEnabledFromEnv() {
@@ -166,5 +178,27 @@ class WebSocketDebugger {
       if (v != null && v.trim().isNotEmpty) return v;
     }
     return null;
+  }
+
+  // Защита от кривых значений пути прокси: убираем схему/хост, обрезаем всё после '?',
+  // приводим к виду с ведущим '/'. Без этого в окончательном URL может появляться
+  // последовательность вида '%3F_target'.
+  static String _normalizeProxyPath(String value) {
+    var v = value.trim();
+    if (v.isEmpty) return '/wsproxy';
+    if (v.startsWith('http://') ||
+        v.startsWith('https://') ||
+        v.startsWith('ws://') ||
+        v.startsWith('wss://')) {
+      final u = Uri.parse(v);
+      v = u.path;
+    }
+    final q = v.indexOf('?');
+    if (q >= 0) v = v.substring(0, q);
+    if (!v.startsWith('/')) v = '/$v';
+    while (v.contains('//')) {
+      v = v.replaceAll('//', '/');
+    }
+    return v.isEmpty ? '/wsproxy' : v;
   }
 }

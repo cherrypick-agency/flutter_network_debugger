@@ -111,31 +111,39 @@ class ReverseProxyInterceptor extends Interceptor {
   }) {
     final qpAll = <String, List<String>>{};
     // из baseQuery (уже String -> String)
-    baseQuery.forEach((k, v) => qpAll[k] = [v]);
+    baseQuery.forEach((k, v) {
+      final key = k.startsWith('?') ? k.substring(1) : k;
+      qpAll[key] = [v];
+    });
     // из overrideQuery (dynamic)
     overrideQuery.forEach((k, v) {
       if (v == null) return;
+      final kk = k.toString();
+      final key = kk.startsWith('?') ? kk.substring(1) : kk;
       if (v is Iterable) {
         final list = <String>[];
         for (final item in v) {
           if (item == null) continue;
           list.add(item.toString());
         }
-        if (list.isNotEmpty) qpAll[k] = list;
+        if (list.isNotEmpty) qpAll[key] = list;
       } else {
-        qpAll[k] = [v.toString()];
+        qpAll[key] = [v.toString()];
       }
     });
 
-    // Сборка query строки вручную
-    final qp = <String>[];
+    // Сборка query строки вручную, затем безопасно подставляем через Uri.replace
+    final parts = <String>[];
     qpAll.forEach((k, values) {
       for (final v in values) {
-        qp.add('${Uri.encodeQueryComponent(k)}=${Uri.encodeQueryComponent(v)}');
+        parts.add(
+            '${Uri.encodeQueryComponent(k)}=${Uri.encodeQueryComponent(v)}');
       }
     });
-    final query = qp.isEmpty ? '' : '?${qp.join('&')}';
-    return Uri.parse('$base$query');
+    final q = parts.join('&');
+    // Убираем возможный существующий query из base и подставляем новый
+    final cleanBase = base.replace(query: null, queryParameters: null);
+    return cleanBase.replace(query: q);
   }
 
   bool _isAbsoluteHttpUrl(String value) {

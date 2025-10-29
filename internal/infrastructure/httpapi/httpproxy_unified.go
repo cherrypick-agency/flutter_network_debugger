@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"crypto/tls"
+	"net"
 	"net/http"
 	"time"
 
@@ -36,11 +37,16 @@ func isWebSocketRequest(r *http.Request) bool {
 // newTransport centralizes http.Transport creation with TLS options/timeouts.
 func newTransport(cfg config.Config) *http.Transport {
 	tr := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy: http.ProxyFromEnvironment,
+		// Жёсткий таймаут на установление TCP-соединения к апстриму,
+		// чтобы не зависать и не доводить клиента до connectTimeout
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		// Сколько ждём заголовки ответа от апстрима после установления соединения
+		ResponseHeaderTimeout: 25 * time.Second,
 	}
 	if cfg.InsecureTLS {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}

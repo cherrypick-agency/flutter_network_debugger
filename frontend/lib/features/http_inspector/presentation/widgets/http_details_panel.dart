@@ -109,7 +109,10 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     final hideRawBody = hasFormObj || isFormCt;
     final url = (req['url'] ?? '').toString();
     final uri = _tryParseUri(url);
-    final qp = uri?.queryParametersAll ?? <String, List<String>>{};
+    // Нормализуем возможные артефакты вида "?%3F..." и ключи параметров, начинающиеся с '?'
+    final rawQp = uri?.queryParametersAll ?? <String, List<String>>{};
+    final qp = _normalizeQueryKeys(rawQp);
+    final normalizedUrl = (uri == null) ? null : _rebuildUrlWithQuery(uri, qp);
     // cookies: prefer raw (unmasked) if available
     final cookieHeader =
         headersRaw.entries
@@ -138,7 +141,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SelectableText(
-            '${(req['method'] ?? '').toString().toUpperCase()}  $url',
+            '${(req['method'] ?? '').toString().toUpperCase()}  ${normalizedUrl ?? url}',
             style: context.appText.subtitle,
           ),
         ),
@@ -149,7 +152,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           children: [
             TextButton.icon(
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: url));
+                Clipboard.setData(ClipboardData(text: normalizedUrl ?? url));
               },
               icon: const Icon(Icons.link, size: 16),
               label: const Text('Copy URL'),
@@ -687,6 +690,33 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ),
         )
         .toList();
+  }
+
+  Map<String, List<String>> _normalizeQueryKeys(Map<String, List<String>> src) {
+    if (src.isEmpty) return const {};
+    final out = <String, List<String>>{};
+    src.forEach((k, values) {
+      final key = k.startsWith('?') ? k.substring(1) : k;
+      final dst = out.putIfAbsent(key, () => <String>[]);
+      dst.addAll(values);
+    });
+    return out;
+  }
+
+  String _rebuildUrlWithQuery(Uri uri, Map<String, List<String>> qp) {
+    // Собираем URL из базовой части + нормализованный query
+    final base = uri.replace(query: null, queryParameters: null);
+    if (qp.isEmpty) return base.toString();
+    final parts = <String>[];
+    qp.forEach((k, values) {
+      for (final v in values) {
+        parts.add(
+          '${Uri.encodeQueryComponent(k)}=${Uri.encodeQueryComponent(v)}',
+        );
+      }
+    });
+    final q = parts.join('&');
+    return base.replace(query: q).toString();
   }
 
   Uri? _tryParseUri(String s) {

@@ -2,8 +2,9 @@
 
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
+Free tool for debugging HTTP and WebSocket which is MUCH BETTER than the built-in Flutter Netwrok Devtools. 
 
-Simple universal proxy for debugging HTTP and WebSocket. Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
+Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
 
 What it can do
 - Intercept and view HTTP and WebSocket traffic
@@ -16,7 +17,10 @@ What it can do
 - WebSocket details: events/frames, pings/pongs, payload preview
 - HAR export
 - Artificial response delay (useful for simulating "slow networks")
-- Record/stop and record management
+- Record/stop and records management
+- HTML preview
+- Form Data (show files) For example Flutter devtools don't show at all
+
 ...
 
 Quick start

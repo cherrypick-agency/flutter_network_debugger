@@ -1,6 +1,8 @@
 library web_socket_channel_debugger;
 
 import 'package:web_socket_channel/web_socket_channel.dart' as wsc;
+import 'package:web_socket_channel_debugger/src/wsc_connector_stub.dart'
+    if (dart.library.io) 'package:web_socket_channel_debugger/src/wsc_connector_io.dart';
 
 import 'src/env/env_reader_stub.dart'
     if (dart.library.io) 'src/env/env_reader_io.dart';
@@ -38,7 +40,7 @@ class WebSocketChannelDebugger {
 
   static WscProxyConfig attach({
     required String baseUrl,
-    String proxyBaseUrl = '',
+    String proxyBaseUrl = 'http://localhost:9091',
     String proxyPath = '/wsproxy',
     bool? enabled,
     String? mode,
@@ -56,11 +58,13 @@ class WebSocketChannelDebugger {
     final proxy = proxyBaseUrl.isNotEmpty
         ? proxyBaseUrl
         : (_firstNonEmpty([_kDefineProxy, readEnvVar('SOCKET_PROXY')]) ?? '');
-    final path = proxyPath.isNotEmpty
+    // Нормализуем путь до proxy: убираем схему/хост, хвост после '?', добавляем ведущий '/'
+    final rawPath = proxyPath.isNotEmpty
         ? proxyPath
         : (_firstNonEmpty(
                 [_kDefineProxyPath, readEnvVar('SOCKET_PROXY_PATH')]) ??
             '/wsproxy');
+    final path = _normalizeProxyPath(rawPath);
 
     // ignore: avoid_print
     print(
@@ -107,6 +111,7 @@ class WebSocketChannelDebugger {
 
       final uri = Uri.parse(proxyHttp);
       final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
+      // Собираем конечный URL подключения к прокси без мусорных символов в пути
       final effective = uri.replace(scheme: wsScheme, path: path);
       return WscProxyConfig(
         connectUrl: effective,
@@ -126,13 +131,23 @@ class WebSocketChannelDebugger {
     required WscProxyConfig config,
     Map<String, dynamic>? headers,
   }) {
-    final uri = config.query.isEmpty
-        ? config.connectUrl
-        : config.connectUrl.replace(queryParameters: {
-            ...config.connectUrl.queryParameters,
-            ...config.query.map((k, v) => MapEntry(k, v.toString())),
-          });
-    return wsc.WebSocketChannel.connect(uri);
+    // Важно: не использовать replace(queryParameters: ...), т.к. в некоторых
+    // окружениях это может приводить к смене схемы ws:// -> http:// и добавлению '#'.
+    // Собираем финальный URI вручную, сохраняя исходную схему и без фрагмента.
+    Uri uri;
+    if (config.query.isEmpty) {
+      uri = config.connectUrl;
+    } else {
+      final merged = <String, String>{
+        ...config.connectUrl.queryParameters,
+        ...config.query.map((k, v) => MapEntry(k, v.toString())),
+      };
+      final encodedQuery =
+          Uri(queryParameters: merged).query; // безопасное кодирование
+      uri = config.connectUrl.replace(query: encodedQuery, fragment: null);
+    }
+    // Пробрасываем заголовки (в IO), на web игнорируем — см. коннектор
+    return connectWS(uri, headers: headers);
   }
 
   static bool _computeEnabledFromEnv() {
@@ -165,5 +180,30 @@ class WebSocketChannelDebugger {
       if (v != null && v.trim().isNotEmpty) return v;
     }
     return null;
+  }
+
+  // Страхуемся от кривых значений proxyPath: удаляем схему/хост, обрезаем всё после '?',
+  // приводим к виду с ведущим '/'. Это предотвращает появление последовательностей вида
+  // "?%3F_target=..." в запросах.
+  static String _normalizeProxyPath(String value) {
+    var v = value.trim();
+    if (v.isEmpty) return '/wsproxy';
+    // Если случайно передали полный URL – берём только путь
+    if (v.startsWith('http://') ||
+        v.startsWith('https://') ||
+        v.startsWith('ws://') ||
+        v.startsWith('wss://')) {
+      final u = Uri.parse(v);
+      v = u.path;
+    }
+    // Отрезаем всё после '?' (никаких query в path быть не должно)
+    final q = v.indexOf('?');
+    if (q >= 0) v = v.substring(0, q);
+    if (!v.startsWith('/')) v = '/$v';
+    // Упростим двойные слэши
+    while (v.contains('//')) {
+      v = v.replaceAll('//', '/');
+    }
+    return v.isEmpty ? '/wsproxy' : v;
   }
 }

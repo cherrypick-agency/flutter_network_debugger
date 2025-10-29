@@ -64,11 +64,33 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		upstream.Path = strings.TrimRight(upstream.Path, "/") + suffix
 	}
 
-	// Filter query params (drop `_target`)
-	qp := r.URL.Query()
-	qp.Del("_target")
-	upstream.RawQuery = qp.Encode()
+	// Объединяем query из таргета и входящего запроса (кроме `_target`)
+	// Важно: параметры из запроса имеют приоритет поверх параметров таргета
+	// Бывают случаи, когда в таргете или во входящих параметрах ключи приходят с ведущим '?'
+	// (например, если клиент ошибочно включил '?' в имя параметра). Нормализуем такие ключи.
+	rawTargetQ := strings.TrimPrefix(u.RawQuery, "?")
+	targetQ, _ := url.ParseQuery(rawTargetQ)
+
+	incomingQ := r.URL.Query()
+	incomingQ.Del("_target")
+	// Нормализуем ключи входящих параметров: убираем ведущий '?'
+	cleanedIncoming := url.Values{}
+	for k, vv := range incomingQ {
+		ck := strings.TrimPrefix(k, "?")
+		for _, v := range vv {
+			cleanedIncoming.Add(ck, v)
+		}
+	}
+	for k, vv := range cleanedIncoming {
+		// затираем существующие значения из таргета значениями из входящего запроса
+		delete(targetQ, k)
+		for _, v := range vv {
+			targetQ.Add(k, v)
+		}
+	}
+	upstream.RawQuery = targetQ.Encode()
 	if upstream.RawQuery == "" {
+		// если итоговый query пуст, не форсируем `?`
 		upstream.ForceQuery = false
 	}
 
@@ -246,15 +268,36 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		},
 	}))
 
-	// Standard forwarding headers (useful for logs/upstream)
+	// Standard forwarding headers (useful для логов/апстрима)
 	if ip := clientHost(r.RemoteAddr); ip != "" {
 		r.Header.Set("X-Forwarded-For", ip)
 	}
+	// X-Forwarded-Proto — как на входе (схема клиента), чтобы не ломать бэкенды,
+	// завязанные на исходную схему при вычислении security/redirect логики
 	if r.TLS != nil {
 		r.Header.Set("X-Forwarded-Proto", "https")
 	} else {
 		r.Header.Set("X-Forwarded-Proto", "http")
 	}
+	// if upstream.Host != "" {
+	// 	r.Header.Set("X-Forwarded-Host", upstream.Host)
+	// 	// Порт из upstream.Host, если присутствует
+	// 	if h, p, err := net.SplitHostPort(upstream.Host); err == nil {
+	// 		_ = h
+	// 		r.Header.Set("X-Forwarded-Port", p)
+	// 	} else {
+	// 		// если порт не указан — выставим по умолчанию для схемы
+	// 		if upstream.Scheme == "https" {
+	// 			r.Header.Set("X-Forwarded-Port", "443")
+	// 		} else if upstream.Scheme == "http" {
+	// 			r.Header.Set("X-Forwarded-Port", "80")
+	// 		}
+	// 	}
+	// }
+	// // X-Real-IP для некоторых бэков
+	// if ip := clientHost(r.RemoteAddr); ip != "" {
+	// 	r.Header.Set("X-Real-IP", ip)
+	// }
 	r.Header.Set("Via", "network-debugger")
 
 	// Serve

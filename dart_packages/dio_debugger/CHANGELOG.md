@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+- Fix: исключены артефакты двойного `?` и закодированного `%3F` в query при построении target URL.
+  Теперь `ReverseProxyInterceptor` нормализует ключи (срезает ведущий `?`) и
+  собирает query строку через `Uri.replace(query: ...)`, что предотвращает ошибки
+  вида `??page=...` и `?%3Fpage=...` в редких кейсах.
+- Internal: безломные изменения, API не менялся.
+
 ## 0.1.3
 - Docs: Added "Part of network_debugger ecosystem" reference
 - Docs: Added "Starting the Proxy" section with setup instructions

@@ -11,6 +11,7 @@ class Session extends Equatable {
     this.kind,
     this.httpMeta,
     this.sizes,
+    this.isSocketIo = false,
   });
   final String id;
   final String target;
@@ -21,9 +22,20 @@ class Session extends Equatable {
   final String? kind; // ws | http
   final Map<String, dynamic>? httpMeta; // server-provided
   final Map<String, dynamic>? sizes;
+  // Признак, что в сессии присутствуют Socket.IO события (по данным бэка)
+  final bool isSocketIo;
 
   @override
-  List<Object?> get props => [id, target, clientAddr, startedAt, closedAt, error, kind, httpMeta, sizes];
+  List<Object?> get props => [
+    id,
+    target,
+    clientAddr,
+    startedAt,
+    closedAt,
+    error,
+    kind,
+    httpMeta,
+    sizes,
+    isSocketIo,
+  ];
 }
-
-

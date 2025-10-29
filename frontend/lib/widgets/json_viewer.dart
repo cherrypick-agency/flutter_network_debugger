@@ -115,15 +115,15 @@ class _JsonViewerState extends State<JsonViewer> {
           );
           final content = JsonTreeRich(data: data, search: searchCfgTree);
           if (!constraints.hasBoundedHeight) {
-            return SizedBox(
-              height: widget.treeHeight,
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: widget.treeHeight),
               child: Stack(
                 children: [
-                  Positioned.fill(
-                    child: SingleChildScrollView(
-                      controller: _innerScrollCtrl,
-                      child: content,
-                    ),
+                  // Высота подстраивается под контент до maxHeight,
+                  // без обязательного заполнения по высоте
+                  SingleChildScrollView(
+                    controller: _innerScrollCtrl,
+                    child: content,
                   ),
                   Positioned(
                     top: 6,
@@ -175,16 +175,14 @@ class _JsonViewerState extends State<JsonViewer> {
         );
 
         if (!constraints.hasBoundedHeight) {
-          // Внутренний скролл и закрепленная сверху панель поиска
-          return SizedBox(
-            height: widget.treeHeight,
+          // Внутренний скролл и закрепленная сверху панель поиска, контейнер сжимается до контента
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: widget.treeHeight),
             child: Stack(
               children: [
-                Positioned.fill(
-                  child: SingleChildScrollView(
-                    controller: _innerScrollCtrl,
-                    child: JsonPrettyRich(data: data, search: searchCfg),
-                  ),
+                SingleChildScrollView(
+                  controller: _innerScrollCtrl,
+                  child: JsonPrettyRich(data: data, search: searchCfg),
                 ),
                 Positioned(
                   top: 6,
@@ -305,6 +303,7 @@ class JsonTreeRich extends StatefulWidget {
 
 class _JsonTreeRichState extends State<JsonTreeRich> {
   final Set<String> _userExpanded = <String>{};
+  final Set<String> _userCollapsedTop = <String>{};
 
   bool _containsQuery(String text) {
     final cfg = widget.search;
@@ -398,8 +397,50 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       autoExpand,
     );
 
-    bool isExpanded(String path) =>
-        _userExpanded.contains(path) || autoExpand.contains(path);
+    bool _isTopLevelPath(String path) {
+      if (path.isEmpty) return false;
+      if (path.startsWith('.')) {
+        final rest = path.substring(1);
+        return !rest.contains('.') && !rest.contains('[');
+      }
+      if (path.startsWith('[')) {
+        final close = path.indexOf(']');
+        if (close == -1) return false;
+        final rest = path.substring(close + 1);
+        return !rest.contains('.') && !rest.contains('[');
+      }
+      return false;
+    }
+
+    bool isExpanded(String path) {
+      final isTop = _isTopLevelPath(path);
+      if (isTop && _userCollapsedTop.contains(path)) return false;
+      if (_userExpanded.contains(path)) return true;
+      if (autoExpand.contains(path)) return true;
+      if (isTop) return true;
+      return false;
+    }
+
+    void _toggle(String path, bool currentlyExpanded) {
+      final isTop = _isTopLevelPath(path);
+      setState(() {
+        if (currentlyExpanded) {
+          if (isTop) {
+            _userCollapsedTop.add(path);
+            _userExpanded.remove(path);
+          } else {
+            _userExpanded.remove(path);
+          }
+        } else {
+          if (isTop) {
+            _userCollapsedTop.remove(path);
+            _userExpanded.add(path);
+          } else {
+            _userExpanded.add(path);
+          }
+        }
+      });
+    }
 
     const double indentPx = 14;
     const double iconSize = 14;
@@ -485,112 +526,86 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           out.add(
             Padding(
               padding: EdgeInsets.only(left: indent * indentPx),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (!container) return;
-                  setState(() {
-                    if (expanded) {
-                      _userExpanded.remove(childPath);
-                    } else {
-                      _userExpanded.add(childPath);
-                    }
-                  });
-                },
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (container)
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: IconButton(
-                          padding: const EdgeInsets.all(iconPad),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          iconSize: iconSize,
-                          onPressed: () {
-                            setState(() {
-                              if (expanded) {
-                                _userExpanded.remove(childPath);
-                              } else {
-                                _userExpanded.add(childPath);
-                              }
-                            });
-                          },
-                          icon: Icon(
-                            expanded ? Icons.expand_more : Icons.chevron_right,
-                            size: iconSize,
-                          ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (container)
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: IconButton(
+                        padding: const EdgeInsets.all(iconPad),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
                         ),
-                      )
-                    else
-                      const SizedBox(width: 18, height: 18),
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          children: [
+                        iconSize: iconSize,
+                        onPressed: () => _toggle(childPath, expanded),
+                        icon: Icon(
+                          expanded ? Icons.expand_more : Icons.chevron_right,
+                          size: iconSize,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 18, height: 18),
+                  Expanded(
+                    child: SelectableText.rich(
+                      TextSpan(
+                        children: [
+                          ..._splitWithHighlights(
+                            '"${entry.key}": ',
+                            baseStyle: keyStyle,
+                            highlight: hl,
+                            highlightFocused: hlFocus,
+                            matchCounter: () => matchCounter,
+                            incMatchCounter: () {
+                              matchCounter++;
+                            },
+                            keys: keys,
+                            onTap: () {
+                              if (!container) return;
+                              _toggle(childPath, expanded);
+                            },
+                          ),
+                          if (!container)
+                            ..._valueToSpans(
+                              value,
+                              stringStyle,
+                              numberStyle,
+                              boolStyle,
+                              nullStyle,
+                              hl,
+                              hlFocus,
+                              () => matchCounter,
+                              () {
+                                matchCounter++;
+                              },
+                              keys,
+                            )
+                          else
                             TextSpan(
-                              children: _splitWithHighlights(
-                                '"${entry.key}": ',
-                                baseStyle: keyStyle,
-                                highlight: hl,
-                                highlightFocused: hlFocus,
-                                matchCounter: () => matchCounter,
-                                incMatchCounter: () {
-                                  matchCounter++;
-                                },
-                                keys: keys,
-                              ),
+                              text:
+                                  expanded
+                                      ? (value is Map ? '{' : '[')
+                                      : (value is Map
+                                          ? '{… ${value.length}}'
+                                          : '[… ${value.length}]'),
+                              style: punct,
                               recognizer:
                                   TapGestureRecognizer()
                                     ..onTap = () {
-                                      if (!container) return;
-                                      setState(() {
-                                        if (expanded) {
-                                          _userExpanded.remove(childPath);
-                                        } else {
-                                          _userExpanded.add(childPath);
-                                        }
-                                      });
+                                      _toggle(childPath, expanded);
                                     },
                             ),
-                            if (!container)
-                              ..._valueToSpans(
-                                value,
-                                stringStyle,
-                                numberStyle,
-                                boolStyle,
-                                nullStyle,
-                                hl,
-                                hlFocus,
-                                () => matchCounter,
-                                () {
-                                  matchCounter++;
-                                },
-                                keys,
-                              )
-                            else
-                              TextSpan(
-                                text:
-                                    expanded
-                                        ? (value is Map ? '{' : '[')
-                                        : (value is Map
-                                            ? '{… ${value.length}}'
-                                            : '[… ${value.length}]'),
-                                style: punct,
-                              ),
-                            TextSpan(
-                              text: (expanded ? '' : (idx != last ? ',' : '')),
-                            ),
-                          ],
-                        ),
+                          TextSpan(
+                            text: (expanded ? '' : (idx != last ? ',' : '')),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
@@ -622,100 +637,78 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           out.add(
             Padding(
               padding: EdgeInsets.only(left: indent * indentPx),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (!container) return;
-                  setState(() {
-                    if (expanded) {
-                      _userExpanded.remove(childPath);
-                    } else {
-                      _userExpanded.add(childPath);
-                    }
-                  });
-                },
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (container)
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: IconButton(
-                          padding: const EdgeInsets.all(iconPad),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          iconSize: iconSize,
-                          onPressed: () {
-                            setState(() {
-                              if (expanded) {
-                                _userExpanded.remove(childPath);
-                              } else {
-                                _userExpanded.add(childPath);
-                              }
-                            });
-                          },
-                          icon: Icon(
-                            expanded ? Icons.expand_more : Icons.chevron_right,
-                            size: iconSize,
-                          ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (container)
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: IconButton(
+                        padding: const EdgeInsets.all(iconPad),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
                         ),
-                      )
-                    else
-                      const SizedBox(width: 18, height: 18),
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          children: [
+                        iconSize: iconSize,
+                        onPressed: () => _toggle(childPath, expanded),
+                        icon: Icon(
+                          expanded ? Icons.expand_more : Icons.chevron_right,
+                          size: iconSize,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 18, height: 18),
+                  Expanded(
+                    child: SelectableText.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '$i: ',
+                            style: punct,
+                            recognizer:
+                                TapGestureRecognizer()
+                                  ..onTap = () {
+                                    if (!container) return;
+                                    _toggle(childPath, expanded);
+                                  },
+                          ),
+                          if (!container)
+                            ..._valueToSpans(
+                              value,
+                              stringStyle,
+                              numberStyle,
+                              boolStyle,
+                              nullStyle,
+                              hl,
+                              hlFocus,
+                              () => matchCounter,
+                              () {
+                                matchCounter++;
+                              },
+                              keys,
+                            )
+                          else
                             TextSpan(
-                              text: '$i: ',
+                              text:
+                                  expanded
+                                      ? (value is Map ? '{' : '[')
+                                      : (value is Map
+                                          ? '{… ${value.length}}'
+                                          : '[… ${value.length}]'),
                               style: punct,
                               recognizer:
                                   TapGestureRecognizer()
                                     ..onTap = () {
-                                      if (!container) return;
-                                      setState(() {
-                                        if (expanded) {
-                                          _userExpanded.remove(childPath);
-                                        } else {
-                                          _userExpanded.add(childPath);
-                                        }
-                                      });
+                                      _toggle(childPath, expanded);
                                     },
                             ),
-                            if (!container)
-                              ..._valueToSpans(
-                                value,
-                                stringStyle,
-                                numberStyle,
-                                boolStyle,
-                                nullStyle,
-                                hl,
-                                hlFocus,
-                                () => matchCounter,
-                                () {
-                                  matchCounter++;
-                                },
-                                keys,
-                              )
-                            else
-                              TextSpan(
-                                text:
-                                    expanded
-                                        ? (value is Map ? '{' : '[')
-                                        : (value is Map
-                                            ? '{… ${value.length}}'
-                                            : '[… ${value.length}]'),
-                                style: punct,
-                              ),
-                          ],
-                        ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
@@ -765,10 +758,18 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
     required int Function() matchCounter,
     required void Function() incMatchCounter,
     required List<GlobalKey> keys,
+    VoidCallback? onTap,
   }) {
     final query = widget.search.query;
     if (query.isEmpty) {
-      return [TextSpan(text: text, style: baseStyle)];
+      return [
+        TextSpan(
+          text: text,
+          style: baseStyle,
+          recognizer:
+              onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+        ),
+      ];
     }
     final List<InlineSpan> out = [];
     if (widget.search.useRegex) {
@@ -776,7 +777,14 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       try {
         re = RegExp(query, caseSensitive: widget.search.matchCase);
       } catch (_) {
-        return [TextSpan(text: text, style: baseStyle)];
+        return [
+          TextSpan(
+            text: text,
+            style: baseStyle,
+            recognizer:
+                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+          ),
+        ];
       }
       int last = 0;
       Iterable<RegExpMatch> matches = re.allMatches(text);
@@ -800,7 +808,16 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           }
         }
         if (s > last) {
-          out.add(TextSpan(text: text.substring(last, s), style: baseStyle));
+          out.add(
+            TextSpan(
+              text: text.substring(last, s),
+              style: baseStyle,
+              recognizer:
+                  onTap == null
+                      ? null
+                      : (TapGestureRecognizer()..onTap = onTap),
+            ),
+          );
         }
         final key = GlobalKey();
         keys.add(key);
@@ -817,15 +834,26 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           TextSpan(
             text: text.substring(s, e),
             style: baseStyle.copyWith(
-              backgroundColor: isFocused ? highlightFocused : highlight,
+              decoration: TextDecoration.underline,
+              decorationColor: isFocused ? highlightFocused : highlight,
+              decorationThickness: 2,
             ),
+            recognizer:
+                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
           ),
         );
         incMatchCounter();
         last = e;
       }
       if (last < text.length) {
-        out.add(TextSpan(text: text.substring(last), style: baseStyle));
+        out.add(
+          TextSpan(
+            text: text.substring(last),
+            style: baseStyle,
+            recognizer:
+                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+          ),
+        );
       }
       return out;
     }
@@ -843,7 +871,16 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       final idx = src.indexOf(q, start);
       if (idx < 0) {
         if (start < text.length) {
-          out.add(TextSpan(text: text.substring(start), style: baseStyle));
+          out.add(
+            TextSpan(
+              text: text.substring(start),
+              style: baseStyle,
+              recognizer:
+                  onTap == null
+                      ? null
+                      : (TapGestureRecognizer()..onTap = onTap),
+            ),
+          );
         }
         break;
       }
@@ -861,7 +898,14 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         }
       }
       if (idx > start) {
-        out.add(TextSpan(text: text.substring(start, idx), style: baseStyle));
+        out.add(
+          TextSpan(
+            text: text.substring(start, idx),
+            style: baseStyle,
+            recognizer:
+                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+          ),
+        );
       }
       final key = GlobalKey();
       keys.add(key);
@@ -877,8 +921,12 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         TextSpan(
           text: text.substring(idx, idx + q.length),
           style: baseStyle.copyWith(
-            backgroundColor: isFocused ? highlightFocused : highlight,
+            decoration: TextDecoration.underline,
+            decorationColor: isFocused ? highlightFocused : highlight,
+            decorationThickness: 2,
           ),
+          recognizer:
+              onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
         ),
       );
       incMatchCounter();
@@ -1190,7 +1238,9 @@ class JsonPrettyRich extends StatelessWidget {
         TextSpan(
           text: text.substring(idx, idx + q.length),
           style: baseStyle.copyWith(
-            backgroundColor: isFocused ? highlightFocused : highlight,
+            decoration: TextDecoration.underline,
+            decorationColor: isFocused ? highlightFocused : highlight,
+            decorationThickness: 2,
           ),
         ),
       );

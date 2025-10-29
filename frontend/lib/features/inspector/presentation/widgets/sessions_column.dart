@@ -248,6 +248,26 @@ class _SessionsColumnState extends State<SessionsColumn> {
         ),
       );
     }
+    // Определяем общий домен среди текущих видимых сессий.
+    // Если у всех сессий один и тот же host — в списке ниже домен скрываем,
+    // чтобы строка была короче и читалась проще.
+    final String? commonHost =
+        (() {
+          String? host;
+          for (final s in widget.sessions) {
+            try {
+              final h = Uri.parse((s.target as String)).host;
+              if (h.isEmpty)
+                return null; // встретилась пустая/битая ссылка — не скрываем
+              host ??= h;
+              if (host != h) return null; // разные домены — показываем как есть
+            } catch (_) {
+              return null;
+            }
+          }
+          return host; // одинаковый host у всех элементов
+        })();
+
     return ListView.builder(
       controller: widget.sessionsCtrl,
       itemCount: widget.sessions.length,
@@ -348,7 +368,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
                             final mark = Theme.of(context).colorScheme.tertiary;
                             final child = _buildHighlightedUrl(
                               context,
-                              s.target,
+                              _formatDisplayUrl(
+                                s.target as String,
+                                suppressHost: commonHost,
+                              ),
                               widget.sessionSearchCtrl.text,
                             );
                             if (!warn) return child;
@@ -399,6 +422,8 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                                 context,
                                               ).colorScheme.error,
                                     ),
+                                  if (isWs && s.isSocketIo == true)
+                                    _chip('socket.io'),
                                   if (!isWs && method.isNotEmpty)
                                     _chip(
                                       method.toUpperCase(),
@@ -582,6 +607,37 @@ class _SessionsColumnState extends State<SessionsColumn> {
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
     );
+  }
+
+  // Компактное представление URL для списка: при необходимости скрываем домен
+  // и аккуратно восстанавливаем path + query без двойного кодирования типа "%3F".
+  String _formatDisplayUrl(String raw, {String? suppressHost}) {
+    try {
+      final u = Uri.parse(raw);
+      // Если у всех элементов один и тот же домен — скрываем схему/домен/порт
+      if (suppressHost != null &&
+          suppressHost.isNotEmpty &&
+          u.host == suppressHost) {
+        final String path =
+            u.path.startsWith('/') ? u.path.substring(1) : u.path;
+        final String q = u.query.isNotEmpty ? '?${u.query}' : '';
+        final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
+        return '/$path$q$frag';
+      }
+      // Иначе — оставляем как есть, но нормализуем двойное кодирование
+      // (например, если пришло messages?%3Flimit=20, восстановим как messages?limit=20).
+      // Для этого собираем строку из разобранных компонентов.
+      final String auth =
+          u.hasAuthority ? '${u.host}${u.hasPort ? ':${u.port}' : ''}' : '';
+      final String base = u.scheme.isNotEmpty ? '${u.scheme}://$auth' : auth;
+      final String q = u.query.isNotEmpty ? '?${u.query}' : '';
+      final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
+      return '$base${u.path}$q$frag';
+    } catch (_) {
+      // На всякий случай возвращаем исходную строку
+      // (например, если это невалидный URL).
+      return raw;
+    }
   }
 
   Widget _chip(String text, {Color? backgroundColor, Color? foregroundColor}) {

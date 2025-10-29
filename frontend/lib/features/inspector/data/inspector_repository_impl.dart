@@ -59,6 +59,17 @@ class InspectorRepositoryImpl implements InspectorRepository {
               kind: m['kind']?.toString(),
               httpMeta: (m['httpMeta'] as Map?)?.cast<String, dynamic>(),
               sizes: (m['sizes'] as Map?)?.cast<String, dynamic>(),
+              isSocketIo:
+                  (() {
+                    try {
+                      final ev = (m['events'] as Map?)?.cast<String, dynamic>();
+                      final sio =
+                          int.tryParse((ev?['sio'] ?? '0').toString()) ?? 0;
+                      return sio > 0;
+                    } catch (_) {
+                      return false;
+                    }
+                  })(),
             ),
           )
           .toList(growable: false);
