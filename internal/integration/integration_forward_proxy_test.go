@@ -39,18 +39,12 @@ func rawProxyGET(t *testing.T, proxyHost string, absoluteURL string, extraHeader
     }
     br := bufio.NewReader(conn)
     status, _ := br.ReadString('\n')
-    // skip headers until blank line
-    for {
-        line, _ := br.ReadString('\n')
-        if line == "\r\n" || line == "\n" || line == "" {
-            break
-        }
+    body, _ := br.ReadString(0)
+    // body may not be fully read with ReadString(0) if no NUL; fallback to read remaining buffered
+    if body == "" {
+        rest, _ := br.ReadBytes(0)
+        body = string(rest)
     }
-    // read small body with deadline to avoid hanging on keep-alive/no Content-Length
-    _ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-    buf := make([]byte, 4096)
-    n, _ := br.Read(buf)
-    body := string(buf[:n])
     return status, body
 }
 
