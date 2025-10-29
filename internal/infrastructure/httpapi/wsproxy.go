@@ -13,7 +13,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	sio "network-debugger/internal/adapters/decoders/socketio"
 	"network-debugger/internal/domain"
 	"network-debugger/pkg/shared/id"
 	"network-debugger/pkg/shared/redact"
@@ -213,54 +212,26 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 			d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Str("opcode", string(opcode)).Int("size", len(data)).Msg("network-debugger: first frame proxied")
 			loggedFirst = true
 		}
-		if opcode == domain.OpcodeText {
-			// Parse from raw text (not from preview), to preserve SIO prefixes 42/43
-			raw := strings.TrimSpace(string(data))
-			if direction == domain.DirectionUpstreamToClient && !loggedFirstUpstreamText {
-				// emit lightweight probe (no payload exposure)
-				// payload: {dir:"upstream", prefix:"<first 6>", len:n}
-				pref := raw
-				if len(pref) > 6 {
-					pref = pref[:6]
-				}
-				_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{
-					ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "sio_probe", AckID: nil,
-					ArgsPreview: "{\"dir\":\"upstream\",\"prefix\":\"" + pref + "\",\"len\":" + strconv.Itoa(len(raw)) + "}",
-					FrameIDs:    []string{fr.ID},
-				})
-				d.Monitor.Broadcast(MonitorEvent{Type: "sio_probe", ID: sessionID, Ref: pref})
-				loggedFirstUpstreamText = true
-			}
-			if nsp, ev, argsJSON, ok := sio.ParseEvent(raw); ok {
-				var ack *int64
-				if a := tryExtractAckID(raw); a >= 0 {
-					ack = &a
-				}
-				e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: nsp, Name: ev, AckID: ack, ArgsPreview: argsJSON, FrameIDs: []string{fr.ID}}
-				_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-				d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
-			} else {
-				// Fallbacks for common forms to avoid missing events in e2e
-				if strings.HasPrefix(raw, "43") {
-					if a := tryExtractAckID(raw); a >= 0 {
-						aa := a
-						e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "ack", AckID: &aa, ArgsPreview: "[]", FrameIDs: []string{fr.ID}}
-						_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-						d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
-					}
-				} else if strings.HasPrefix(raw, "42/") || strings.HasPrefix(raw, "42[") || strings.HasPrefix(raw, "42,") || strings.HasPrefix(raw, "42") {
-					if nsp, ev, argsJSON, ok2 := sio.ParseEvent(raw); ok2 {
-						var ack *int64
-						if a := tryExtractAckID(raw); a >= 0 {
-							ack = &a
-						}
-						e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: nsp, Name: ev, AckID: ack, ArgsPreview: argsJSON, FrameIDs: []string{fr.ID}}
-						_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-						d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
-					}
-				}
-			}
-		}
+        if opcode == domain.OpcodeText {
+            // Parse from raw text (not from preview), to preserve SIO prefixes 42/43
+            raw := strings.TrimSpace(string(data))
+            if direction == domain.DirectionUpstreamToClient && !loggedFirstUpstreamText {
+                // emit lightweight probe (no payload exposure)
+                // payload: {dir:"upstream", prefix:"<first 6>", len:n}
+                pref := raw
+                if len(pref) > 6 {
+                    pref = pref[:6]
+                }
+                _ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{
+                    ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "sio_probe", AckID: nil,
+                    ArgsPreview: "{\"dir\":\"upstream\",\"prefix\":\"" + pref + "\",\"len\":" + strconv.Itoa(len(raw)) + "}",
+                    FrameIDs:    []string{fr.ID},
+                })
+                d.Monitor.Broadcast(MonitorEvent{Type: "sio_probe", ID: sessionID, Ref: pref})
+                loggedFirstUpstreamText = true
+            }
+            _ = d.recordSIOIfAny(sessionID, raw, fr.ID)
+        }
 	}
 }
 

@@ -112,7 +112,11 @@ class WebSocketChannelDebugger {
       final uri = Uri.parse(proxyHttp);
       final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
       // Собираем конечный URL подключения к прокси без мусорных символов в пути
-      final effective = uri.replace(scheme: wsScheme, path: path);
+      final effective = uri.replace(scheme: wsScheme, path: path, queryParameters: {});
+      // ignore: avoid_print
+      print('[WscDebugger] effective URL (should be proxy): $effective');
+      // ignore: avoid_print
+      print('[WscDebugger] target (upstream): $target');
       return WscProxyConfig(
         connectUrl: effective,
         query: {'_target': target},
@@ -131,22 +135,30 @@ class WebSocketChannelDebugger {
     required WscProxyConfig config,
     Map<String, dynamic>? headers,
   }) {
-    // Важно: не использовать replace(queryParameters: ...), т.к. в некоторых
-    // окружениях это может приводить к смене схемы ws:// -> http:// и добавлению '#'.
-    // Собираем финальный URI вручную, сохраняя исходную схему и без фрагмента.
     Uri uri;
     if (config.query.isEmpty) {
       uri = config.connectUrl;
     } else {
-      final merged = <String, String>{
+      // Строим URI вручную, чтобы сохранить ws:// схему
+      final allParams = <String, String>{
         ...config.connectUrl.queryParameters,
         ...config.query.map((k, v) => MapEntry(k, v.toString())),
       };
-      final encodedQuery =
-          Uri(queryParameters: merged).query; // безопасное кодирование
-      uri = config.connectUrl.replace(query: encodedQuery, fragment: null);
+      // Используем Uri конструктор напрямую
+      uri = Uri(
+        scheme: config.connectUrl.scheme,
+        userInfo: config.connectUrl.hasAuthority ? config.connectUrl.userInfo : '',
+        host: config.connectUrl.host,
+        port: config.connectUrl.hasPort ? config.connectUrl.port : null,
+        path: config.connectUrl.path,
+        queryParameters: allParams.isNotEmpty ? allParams : null,
+      );
     }
     // Пробрасываем заголовки (в IO), на web игнорируем — см. коннектор
+    // ignore: avoid_print
+    print('[WscDebugger] Final URI for connection: $uri');
+    // ignore: avoid_print
+    print('[WscDebugger] Headers: ${headers?.keys.join(", ")}');
     return connectWS(uri, headers: headers);
   }
 
