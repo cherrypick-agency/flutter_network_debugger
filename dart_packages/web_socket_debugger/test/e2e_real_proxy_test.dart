@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:web_socket_debugger/web_socket_debugger.dart';
 
+bool _hasProxyBinary() => _findProxyBinaryPath().isNotEmpty;
+
 String _findProxyBinaryPath() {
   final override = Platform.environment['NETWORK_DEBUGGER_BIN'];
   if (override != null && override.isNotEmpty && File(override).existsSync()) {
@@ -91,5 +93,5 @@ void main() {
       await c.future.timeout(const Duration(seconds: 4));
       await socket.close();
     });
-  });
+  }, skip: _hasProxyBinary() ? false : 'proxy binary not found');
 }
