@@ -3,10 +3,12 @@ package integration
 import (
     "bufio"
     "encoding/json"
+    "io"
     "net"
     "net/http"
     "net/http/httptest"
     "net/url"
+    "strconv"
     "strings"
     "testing"
     "time"
@@ -39,13 +41,34 @@ func rawProxyGET(t *testing.T, proxyHost string, absoluteURL string, extraHeader
     }
     br := bufio.NewReader(conn)
     status, _ := br.ReadString('\n')
-    body, _ := br.ReadString(0)
-    // body may not be fully read with ReadString(0) if no NUL; fallback to read remaining buffered
-    if body == "" {
-        rest, _ := br.ReadBytes(0)
-        body = string(rest)
+    // Read and parse headers to determine body length
+    headers := map[string]string{}
+    for {
+        line, _ := br.ReadString('\n')
+        if line == "\r\n" || line == "\n" || line == "" {
+            break
+        }
+        if i := strings.IndexByte(line, ':'); i > 0 {
+            k := strings.TrimSpace(line[:i])
+            v := strings.TrimSpace(strings.TrimRight(line[i+1:], "\r\n"))
+            headers[strings.ToLower(k)] = v
+        }
     }
-    return status, body
+    // Prefer Content-Length if present, otherwise read until close
+    var body []byte
+    if cl, ok := headers["content-length"]; ok {
+        if n, err := strconv.Atoi(cl); err == nil && n >= 0 {
+            buf := make([]byte, n)
+            _, _ = io.ReadFull(br, buf)
+            body = buf
+        } else {
+            // fallback
+            body, _ = io.ReadAll(br)
+        }
+    } else {
+        body, _ = io.ReadAll(br)
+    }
+    return status, string(body)
 }
 
 func TestForwardProxy_AbsoluteURI_SetsForwardHeaders(t *testing.T) {

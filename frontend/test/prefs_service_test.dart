@@ -5,7 +5,7 @@ import 'package:frontend/services/prefs.dart';
 void main() {
   setUp(() async {
     // Чистим мок перед каждым тестом
-    SharedPreferences.setMockInitialValues(<String, Object?>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
   test('save/load сохраняет только переданные поля и подставляет дефолты', () async {
@@ -17,8 +17,6 @@ void main() {
       baseUrl: 'http://x',
       targetWs: 'ws://y',
       q: 'abc',
-      httpMethod: 'GET',
-      httpStatus: '2xx',
       httpMinDurationMs: 250,
       groupBy: 'domain',
       respDelayEnabled: true,

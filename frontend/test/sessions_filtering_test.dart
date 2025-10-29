@@ -4,6 +4,8 @@ import 'package:frontend/features/inspector/application/stores/sessions_store.da
 import 'package:frontend/features/inspector/application/usecases/list_sessions.dart';
 import 'package:frontend/features/inspector/domain/repositories/inspector_repository.dart';
 import 'package:frontend/features/inspector/domain/entities/session.dart';
+import 'package:frontend/features/inspector/domain/entities/frame.dart';
+import 'package:frontend/features/inspector/domain/entities/event.dart';
 import 'package:frontend/features/filters/application/stores/sessions_filters_store.dart';
 import 'package:frontend/features/inspector/presentation/utils/sessions_filtering.dart';
 
@@ -13,9 +15,9 @@ class _FakeRepo implements InspectorRepository {
   @override
   Future<List<Map<String, dynamic>>> aggregateSessions({String groupBy = 'domain'}) async => [];
   @override
-  Future<List> listEvents(String sessionId, {String? from, int limit = 100}) async => [];
+  Future<List<EventEntity>> listEvents(String sessionId, {String? from, int limit = 100}) async => <EventEntity>[];
   @override
-  Future<List> listFrames(String sessionId, {String? from, int limit = 100}) async => [];
+  Future<List<Frame>> listFrames(String sessionId, {String? from, int limit = 100}) async => <Frame>[];
 }
 
 void main() {

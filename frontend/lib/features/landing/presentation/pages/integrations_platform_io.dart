@@ -83,57 +83,50 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
     await f.writeAsString(pem);
   } catch (_) {}
 
-  // 3) Enable system proxy and trust CA via AppleScript (admin prompt)
-  final port = _tryParsePort(baseUrl) ?? 9091;
-  final dollar = String.fromCharCode(36);
-  final shell =
-      "security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '" +
+  // 3) Trust CA (admin prompt)
+  final trustCmd =
+      'security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "' +
       tmpPath +
-      "'" +
-      "; networksetup -listallnetworkservices | tail -n +2 | sed \"s/^\\* \\?//\" | while IFS= read -r svc; do " +
-      "networksetup -setwebproxy \"" +
-      dollar +
-      "svc\" 127.0.0.1 " +
-      port.toString() +
-      "; " +
-      "networksetup -setsecurewebproxy \"" +
-      dollar +
-      "svc\" 127.0.0.1 " +
-      port.toString() +
-      "; " +
-      "networksetup -setwebproxystate \"" +
-      dollar +
-      "svc\" on; " +
-      "networksetup -setsecurewebproxystate \"" +
-      dollar +
-      "svc\" on; " +
-      "done";
-  final script =
-      'do shell script "' +
-      shell.replaceAll('"', '\\"') +
-      '" with administrator privileges';
-  // The sed expression keeps service names as-is; we don't inject shell variables from Dart.
-  final res = await Process.run('osascript', ['-e', script]);
-  if (res.exitCode != 0) {
-    final fbShell =
-        "if networksetup -listallnetworkservices | grep -q \"Wi-Fi\"; then " +
-        "networksetup -setwebproxy \"Wi-Fi\" 127.0.0.1 " +
-        port.toString() +
-        "; " +
-        "networksetup -setsecurewebproxy \"Wi-Fi\" 127.0.0.1 " +
-        port.toString() +
-        "; " +
-        "networksetup -setwebproxystate \"Wi-Fi\" on; " +
-        "networksetup -setsecurewebproxystate \"Wi-Fi\" on; " +
-        "fi; " +
-        "security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '" +
-        tmpPath +
-        "'";
-    final fbScript =
+      '"';
+  await Process.run('osascript', [
+    '-e',
+    'do shell script "' +
+        trustCmd.replaceAll('"', '\\"') +
+        '" with administrator privileges',
+  ]);
+
+  // 4) Enable HTTP/HTTPS proxy for every service (call networksetup per service)
+  final port = _tryParsePort(baseUrl) ?? 9091;
+  final servicesRes = await Process.run('bash', [
+    '-lc',
+    'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
+  ]);
+  final services =
+      (servicesRes.stdout ?? '')
+          .toString()
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+  for (final svc in services) {
+    final qSvc = svc.replaceAll('"', '\\"');
+    final cmds = [
+      'networksetup -setwebproxy "' + qSvc + '" 127.0.0.1 ' + port.toString(),
+      'networksetup -setsecurewebproxy "' +
+          qSvc +
+          '" 127.0.0.1 ' +
+          port.toString(),
+      'networksetup -setwebproxystate "' + qSvc + '" on',
+      'networksetup -setsecurewebproxystate "' + qSvc + '" on',
+    ];
+    for (final c in cmds) {
+      await Process.run('osascript', [
+        '-e',
         'do shell script "' +
-        fbShell.replaceAll('"', '\\"') +
-        '" with administrator privileges';
-    await Process.run('osascript', ['-e', fbScript]);
+            c.replaceAll('"', '\\"') +
+            '" with administrator privileges',
+      ]);
+    }
   }
 }
 

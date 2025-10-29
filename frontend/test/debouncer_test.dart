@@ -35,7 +35,8 @@ void main() {
         // Assert — ещё рано
         expect(value, 0);
 
-        async.elapse(const Duration(milliseconds: 1));
+        // Дождёмся полного интервала для второго вызова
+        async.elapse(const Duration(milliseconds: 61));
         // Assert — сработал только второй вызов
         expect(value, 2);
       });

@@ -86,3 +86,5 @@ frontend/windows/flutter/ephemeral/
 
 # Embedded web build for desktop wrapper
 cmd/network-debugger-web/_web/
+
+/.dart_tool/*

@@ -112,7 +112,8 @@ class WebSocketChannelDebugger {
       final uri = Uri.parse(proxyHttp);
       final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
       // Собираем конечный URL подключения к прокси без мусорных символов в пути
-      final effective = uri.replace(scheme: wsScheme, path: path, queryParameters: {});
+      final effective =
+          uri.replace(scheme: wsScheme, path: path, queryParameters: null);
       // ignore: avoid_print
       print('[WscDebugger] effective URL (should be proxy): $effective');
       // ignore: avoid_print
@@ -147,7 +148,8 @@ class WebSocketChannelDebugger {
       // Используем Uri конструктор напрямую
       uri = Uri(
         scheme: config.connectUrl.scheme,
-        userInfo: config.connectUrl.hasAuthority ? config.connectUrl.userInfo : '',
+        userInfo:
+            config.connectUrl.hasAuthority ? config.connectUrl.userInfo : '',
         host: config.connectUrl.host,
         port: config.connectUrl.hasPort ? config.connectUrl.port : null,
         path: config.connectUrl.path,

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -429,7 +430,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
-	// Send using unified transport
+    // Send using unified transport
 	tr := newTransport(d.Cfg)
 	resp, err := tr.RoundTrip(outReq)
 	if err != nil {
@@ -450,10 +451,13 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 
 	// Optional artificial response delay
 	sleepResponseDelay(d.Cfg)
-	// Write back to client
-	copyHeader(w.Header(), resp.Header)
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+    // Fallback: standard ResponseWriter path (buffer response to set Content-Length)
+    bodyAll, _ := io.ReadAll(resp.Body)
+    copyHeader(w.Header(), resp.Header)
+    w.Header().Set("Connection", "close")
+    w.Header().Set("Content-Length", strconv.Itoa(len(bodyAll)))
+    w.WriteHeader(resp.StatusCode)
+    if len(bodyAll) > 0 { _, _ = w.Write(bodyAll) }
 
 	_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
 	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})

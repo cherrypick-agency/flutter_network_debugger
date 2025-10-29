@@ -238,6 +238,24 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                           ),
                                           actions: [
                                             TextButton(
+                                              onPressed: () async {
+                                                await Clipboard.setData(
+                                                  ClipboardData(text: txt),
+                                                );
+                                                if (!mounted) return;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Diagnostics copied',
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              child: const Text('Copy'),
+                                            ),
+                                            TextButton(
                                               onPressed:
                                                   () => Navigator.pop(context),
                                               child: const Text('Close'),
