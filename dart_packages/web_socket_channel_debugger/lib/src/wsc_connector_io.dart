@@ -6,3 +6,4 @@ wsc.WebSocketChannel connectWS(Uri uri, {Map<String, dynamic>? headers}) {
   return io.IOWebSocketChannel.connect(uri, headers: headers);
 }
 
+
