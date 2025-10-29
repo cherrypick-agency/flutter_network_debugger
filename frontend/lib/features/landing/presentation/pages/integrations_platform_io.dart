@@ -78,6 +78,7 @@ Future<bool> isSystemProxyEnabled() async {
   return false;
 }
 
+<<<<<<< HEAD
 Future<String> proxyDiagnostics() async {
   try {
     if (Platform.isMacOS) {
@@ -139,6 +140,8 @@ Future<String> proxyDiagnostics() async {
   return 'N/A';
 }
 
+=======
+>>>>>>> 2025-10-29-j6fe-lXNxs
 Future<bool> autoIntegrate(String baseUrl) async {
   if (Platform.isMacOS) {
   // 1) Ensure CA exists
@@ -215,6 +218,7 @@ Future<bool> autoIntegrate(String baseUrl) async {
         '" with administrator privileges';
     await Process.run('osascript', ['-e', fbScript]);
   }
+<<<<<<< HEAD
   // Additionally target the active service (by interface)
   try {
     final defIf = await Process.run('bash', [
@@ -241,6 +245,8 @@ Future<bool> autoIntegrate(String baseUrl) async {
       }
     }
   } catch (_) {}
+=======
+>>>>>>> 2025-10-29-j6fe-lXNxs
     // Verify
     return await isSystemProxyEnabled();
   }

@@ -3,12 +3,16 @@ package httpapi
 import (
     "net/http"
     "net/url"
+<<<<<<< HEAD
     "regexp"
     "sort"
+=======
+>>>>>>> 2025-10-29-j6fe-lXNxs
     "strings"
     "testing"
 )
 
+<<<<<<< HEAD
 func TestCookies_Utils(t *testing.T) {
     t.Parallel()
 
@@ -315,6 +319,8 @@ func Test_rewriteOutboundCookieHeaderForUpstream_nonIsolate_noChange(t *testing.
 }
 
 
+=======
+>>>>>>> 2025-10-29-j6fe-lXNxs
 type headerAdapter http.Header
 
 func (h headerAdapter) Values(key string) []string { return http.Header(h).Values(key) }
@@ -582,3 +588,7 @@ func TestRewriteSetCookie_PreserveUnknownAttributesAtEnd(t *testing.T) {
     }
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2025-10-29-j6fe-lXNxs

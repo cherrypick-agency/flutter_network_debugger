@@ -216,6 +216,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                         tooltip: 'Refresh status',
                         icon: const Icon(Icons.refresh),
                       ),
+<<<<<<< HEAD
                       IconButton(
                         onPressed:
                             _loading
@@ -249,6 +250,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                         tooltip: 'Diagnostics',
                         icon: const Icon(Icons.terminal),
                       ),
+=======
+>>>>>>> 2025-10-29-j6fe-lXNxs
                     ],
                   ),
                   const SizedBox(height: 16),
