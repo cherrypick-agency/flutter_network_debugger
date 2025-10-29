@@ -1,15 +1,16 @@
 package httpapi
 
 import (
-	"context"
-	"encoding/json"
-	"net/http"
-	mem "network-debugger/internal/adapters/storage/memory"
-	"network-debugger/internal/domain"
-	"network-debugger/internal/usecase"
-	"strconv"
-	"strings"
-	"time"
+    "context"
+    "compress/gzip"
+    "encoding/json"
+    "net/http"
+    mem "network-debugger/internal/adapters/storage/memory"
+    "network-debugger/internal/domain"
+    "network-debugger/internal/usecase"
+    "strconv"
+    "strings"
+    "time"
 )
 
 func (d *Deps) handleListSessions(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +142,7 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		exportHARForSession(w, r, d, id)
 		return
 	case "export":
-		// aggregate full session with all frames and events
+		// streaming export to reduce memory footprint
 		sess, ok, err := d.Svc.Get(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "SESSION_GET_FAILED", err.Error(), map[string]any{"id": id})
@@ -151,43 +152,65 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "session not found", map[string]any{"id": id})
 			return
 		}
-		// collect frames
-		allFrames := make([]any, 0, 1024)
+        // decide gzip by flag or Accept-Encoding
+        useGzip := false
+        if g := r.URL.Query().Get("gzip"); g == "1" || strings.ToLower(g) == "true" {
+            useGzip = true
+        } else if strings.Contains(strings.ToLower(r.Header.Get("Accept-Encoding")), "gzip") {
+            useGzip = true
+        }
+        var outWriter interface{ Write([]byte) (int, error) }
+        var gz *gzip.Writer
+        w.Header().Set("Content-Type", "application/json")
+        w.Header().Set("Content-Disposition", "attachment; filename=network-debugger_session_"+id+".json")
+        if useGzip {
+            w.Header().Set("Content-Encoding", "gzip")
+            gz = gzip.NewWriter(w)
+            outWriter = gz
+        } else {
+            outWriter = w
+        }
+        flush := func() {
+            if gz != nil { _ = gz.Flush() }
+            if f, ok := w.(http.Flusher); ok { f.Flush() }
+        }
+        write := func(b []byte) { _, _ = outWriter.Write(b) }
+        b, _ := json.Marshal(sess)
+        write([]byte("{\"session\":"))
+        write(b)
+        write([]byte(",\"frames\":["))
 		from := ""
+		first := true
 		for {
 			frames, next, err := d.Svc.ListFrames(r.Context(), id, from, 1000)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "FRAMES_LIST_FAILED", err.Error(), map[string]any{"id": id})
-				return
+			if err != nil { break }
+			for _, fr := range frames {
+				fb, _ := json.Marshal(fr)
+                if !first { write([]byte(",")) } else { first = false }
+                write(fb)
 			}
-			for _, f := range frames {
-				allFrames = append(allFrames, f)
-			}
-			if next == "" {
-				break
-			}
+            flush()
+			if next == "" { break }
 			from = next
 		}
-		// collect events
-		allEvents := make([]any, 0, 256)
+        write([]byte("],\"events\":["))
 		from = ""
+		first = true
 		for {
-			events, next, err := d.Svc.ListEvents(r.Context(), id, from, 1000)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "EVENTS_LIST_FAILED", err.Error(), map[string]any{"id": id})
-				return
+			ev, next, err := d.Svc.ListEvents(r.Context(), id, from, 1000)
+			if err != nil { break }
+			for _, e := range ev {
+				eb, _ := json.Marshal(e)
+                if !first { write([]byte(",")) } else { first = false }
+                write(eb)
 			}
-			for _, e := range events {
-				allEvents = append(allEvents, e)
-			}
-			if next == "" {
-				break
-			}
+            flush()
+			if next == "" { break }
 			from = next
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Disposition", "attachment; filename=network-debugger_session_"+id+".json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"session": sess, "frames": allFrames, "events": allEvents})
+        write([]byte("]}"))
+        if gz != nil { _ = gz.Close() }
+		return
 	default:
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
 	}

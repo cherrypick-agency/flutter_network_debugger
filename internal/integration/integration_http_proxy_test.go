@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -177,6 +178,74 @@ func TestForwardProxy_HTTP_AbsoluteURI(t *testing.T) {
 	}
 }
 
+func TestForwardProxy_HTTP_HopByHopHeadersStripped(t *testing.T) {
+	t.Parallel()
+	upstream, upstreamURL := startUpstreamHTTP(t)
+	defer upstream.Close()
+	app, _ := startHTTPApp(t)
+	defer app.Close()
+
+	proxyURL, _ := url.Parse(app.URL)
+	conn, err := net.DialTimeout("tcp", proxyURL.Host, 3*time.Second)
+	if err != nil {
+		t.Fatalf("dial proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// upstream /hop echoes Connection,Proxy-Connection,Te
+	raw := "GET " + upstreamURL + "/hop HTTP/1.1\r\n" +
+		"Host: " + proxyURL.Host + "\r\n" +
+		"Connection: keep-alive\r\n" +
+		"Proxy-Connection: keep-alive\r\n" +
+		"Te: trailers\r\n\r\n"
+	if _, err := conn.Write([]byte(raw)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	br := bufio.NewReader(conn)
+	// read status line
+	if _, err := br.ReadString('\n'); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	// skip headers
+	for {
+		line, _ := br.ReadString('\n')
+		if line == "\r\n" || line == "\n" || line == "" {
+			break
+		}
+	}
+	// Read small body with deadline to avoid hang on keep-alive
+	_ = conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	buf := make([]byte, 64)
+	n, _ := br.Read(buf)
+	s := string(buf[:n])
+	if s != ",," && s != ",,trailers" {
+		t.Fatalf("hop-by-hop not stripped (got %q)", s)
+	}
+}
+
+func TestForwardProxy_HTTP_DNSErrorReturns502(t *testing.T) {
+	t.Parallel()
+	app, _ := startHTTPApp(t)
+	defer app.Close()
+	proxyURL, _ := url.Parse(app.URL)
+	conn, err := net.DialTimeout("tcp", proxyURL.Host, 3*time.Second)
+	if err != nil {
+		t.Fatalf("dial proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// non-existent domain
+	raw := "GET http://nonexistent.invalid/ HTTP/1.1\r\nHost: " + proxyURL.Host + "\r\n\r\n"
+	if _, err := conn.Write([]byte(raw)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	br := bufio.NewReader(conn)
+	status, _ := br.ReadString('\n')
+	if status == "" || status[:12] != "HTTP/1.1 502" {
+		t.Fatalf("expected 502, got %q", status)
+	}
+}
+
 func TestForwardProxy_CONNECT_TunnelToHTTP(t *testing.T) {
 	t.Parallel()
 	upstream, upstreamURL := startUpstreamHTTP(t)
@@ -323,4 +392,215 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 		t.Fatalf("expected big response body preview in /gzip session")
 	}
 	_ = deps
+}
+
+func TestHTTPReverseProxy_Cookies_Isolation(t *testing.T) {
+	t.Parallel()
+	// Upstream A
+	muxA := http.NewServeMux()
+	muxA.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+		// echo received Cookie header back
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Add("Set-Cookie", "sidA=aaa; Path=/; SameSite=None")
+		_ = json.NewEncoder(w).Encode(map[string]any{"cookie": r.Header.Get("Cookie")})
+	})
+	srvA := httptest.NewServer(muxA)
+	defer srvA.Close()
+
+	// Upstream B
+	muxB := http.NewServeMux()
+	muxB.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Add("Set-Cookie", "sidB=bbb; Path=/; SameSite=None")
+		_ = json.NewEncoder(w).Encode(map[string]any{"cookie": r.Header.Get("Cookie")})
+	})
+	srvB := httptest.NewServer(muxB)
+	defer srvB.Close()
+
+	// App
+	app, deps := startHTTPApp(t)
+	defer app.Close()
+	// Enable isolate by default
+	deps.Cfg.Cookies.Mode = "isolate"
+	deps.Cfg.Cookies.PathStrategy = "prefix"
+	deps.Cfg.Cookies.DomainStrategy = "hostOnly"
+
+	// Client with cookie jar to persist browser cookies on proxy domain
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	// Request A (sets sidA on proxy domain)
+	uA := app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvA.URL)
+	rA, err := client.Get(uA)
+	if err != nil {
+		t.Fatalf("request A: %v", err)
+	}
+	_ = rA.Body.Close()
+
+	// Request B (sets sidB)
+	uB := app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvB.URL)
+	rB, err := client.Get(uB)
+	if err != nil {
+		t.Fatalf("request B: %v", err)
+	}
+	_ = rB.Body.Close()
+
+	// Back to A: only sidA should be forwarded upstream (after unwrapping), sidB must be filtered out
+	rA2, err := client.Get(uA)
+	if err != nil {
+		t.Fatalf("request A2: %v", err)
+	}
+	defer rA2.Body.Close()
+	var got map[string]any
+	_ = json.NewDecoder(rA2.Body).Decode(&got)
+	cookieHdr, _ := got["cookie"].(string)
+	if cookieHdr == "" || !strings.Contains(cookieHdr, "sidA=") || strings.Contains(cookieHdr, "sidB=") {
+		t.Fatalf("unexpected upstream cookies (want only sidA): %q", cookieHdr)
+	}
+}
+
+func TestHTTPReverseProxy_StealthHeaders_OnOff(t *testing.T) {
+	t.Parallel()
+	// Upstream that echoes proxy-related headers
+	mux := http.NewServeMux()
+	mux.HandleFunc("/hdr", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"xff":  r.Header.Get("X-Forwarded-For"),
+			"xfp":  r.Header.Get("X-Forwarded-Proto"),
+			"via":  r.Header.Get("Via"),
+			"host": r.Host,
+		})
+	})
+	upstream := httptest.NewServer(mux)
+	defer upstream.Close()
+
+	app, deps := startHTTPApp(t)
+	defer app.Close()
+	deps.Cfg.StealthHeaders = true
+
+	// Stealth ON (default): headers must be empty
+	uOn := app.URL + "/httpproxy/hdr?_target=" + url.QueryEscape(upstream.URL)
+	rOn, err := app.Client().Get(uOn)
+	if err != nil {
+		t.Fatalf("stealth on: %v", err)
+	}
+	defer rOn.Body.Close()
+	var gotOn map[string]string
+	_ = json.NewDecoder(rOn.Body).Decode(&gotOn)
+	if gotOn["xfp"] != "" || gotOn["via"] != "" {
+		t.Fatalf("stealth on should suppress Via and X-Forwarded-Proto: %+v", gotOn)
+	}
+
+	// Stealth OFF via query override
+	uOff := app.URL + "/httpproxy/hdr?_target=" + url.QueryEscape(upstream.URL) + "&_stealth=0"
+	rOff, err := app.Client().Get(uOff)
+	if err != nil {
+		t.Fatalf("stealth off: %v", err)
+	}
+	defer rOff.Body.Close()
+	var gotOff map[string]string
+	_ = json.NewDecoder(rOff.Body).Decode(&gotOff)
+	if gotOff["xfp"] == "" || gotOff["via"] == "" { // Via и X-Forwarded-Proto должны быть выставлены
+		t.Fatalf("stealth off should set Via and X-Forwarded-Proto: %+v", gotOff)
+	}
+}
+
+func TestHTTPReverseProxy_Cookies_AutoMode_NoIsolation(t *testing.T) {
+	t.Parallel()
+	// Upstream A echoes Cookie header
+	muxA := http.NewServeMux()
+	muxA.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "sidA=aaa; Path=/; SameSite=None")
+		_ = json.NewEncoder(w).Encode(map[string]any{"cookie": r.Header.Get("Cookie")})
+	})
+	srvA := httptest.NewServer(muxA)
+	defer srvA.Close()
+
+	// Upstream B sets another cookie
+	muxB := http.NewServeMux()
+	muxB.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "sidB=bbb; Path=/; SameSite=None")
+		_ = json.NewEncoder(w).Encode(map[string]any{"cookie": r.Header.Get("Cookie")})
+	})
+	srvB := httptest.NewServer(muxB)
+	defer srvB.Close()
+
+	app, deps := startHTTPApp(t)
+	defer app.Close()
+	deps.Cfg.Cookies.Mode = "auto"
+	deps.Cfg.Cookies.PathStrategy = "prefix"
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	// set both cookies under proxy domain
+	_, _ = client.Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvA.URL) + "&_cookie_mode=auto")
+	_, _ = client.Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvB.URL) + "&_cookie_mode=auto")
+
+	// request to A should carry both sidA and sidB since auto не изолирует имена
+	rA, err := client.Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvA.URL) + "&_cookie_mode=auto")
+	if err != nil {
+		t.Fatalf("auto A: %v", err)
+	}
+	defer rA.Body.Close()
+	var got map[string]any
+	_ = json.NewDecoder(rA.Body).Decode(&got)
+	cookieHdr, _ := got["cookie"].(string)
+	if !(strings.Contains(cookieHdr, "sidA=") && strings.Contains(cookieHdr, "sidB=")) {
+		t.Fatalf("auto mode should forward both cookies: %q", cookieHdr)
+	}
+}
+
+func TestHTTPReverseProxy_Cookies_HeaderDomainForLocalhostIP_Omitted(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "x=1; Path=/; SameSite=Lax")
+	})
+	upstream := httptest.NewServer(mux)
+	defer upstream.Close()
+
+	app, deps := startHTTPApp(t)
+	defer app.Close()
+	deps.Cfg.Cookies.DomainStrategy = "proxyHost"
+
+	resp, err := app.Client().Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(upstream.URL))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	sc := resp.Header.Get("Set-Cookie")
+	if strings.Contains(strings.ToLower(sc), "domain=") {
+		t.Fatalf("Domain attribute must be omitted for localhost/IP proxy host: %s", sc)
+	}
+}
+
+func TestHTTPReverseProxy_Cookies_ModeOff_PassThrough(t *testing.T) {
+	t.Parallel()
+	// Upstream sets Domain and specific Path
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "sid=abc; Domain=api.example.com; Path=/api; SameSite=None")
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("ok"))
+	})
+	upstream := httptest.NewServer(mux)
+	defer upstream.Close()
+
+	app, _ := startHTTPApp(t)
+	defer app.Close()
+
+	// cookie_mode=off — прокси не должен переписывать Set-Cookie
+	resp, err := app.Client().Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(upstream.URL) + "&_cookie_mode=off")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	sc := resp.Header.Get("Set-Cookie")
+	if !strings.Contains(sc, "Domain=api.example.com") || !strings.Contains(sc, "; Path=/api") {
+		t.Fatalf("expected passthrough Set-Cookie with Domain and Path intact: %s", sc)
+	}
+	if strings.Contains(sc, "/httpproxy") {
+		t.Fatalf("path must not be rewritten under mode=off: %s", sc)
+	}
 }

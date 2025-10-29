@@ -85,11 +85,11 @@ func main() {
 		}
 	}()
 
-	// Try to open browser with Web UI once server is up
+    // Try to open browser with Web UI once server is up
 	go func() {
 		// small delay to allow server to bind
 		time.Sleep(300 * time.Millisecond)
-		if cfg.DevMode {
+        if cfg.DevMode || cfg.NoBrowser {
 			return
 		}
 		addr := cfg.Addr

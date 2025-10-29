@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"network-debugger/internal/domain"
@@ -34,8 +35,152 @@ func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
 		d.handleConnectTunnel(w, r)
 		return
 	}
+	// WebSocket upgrade over plain HTTP (ws://) via forward proxy
+	// Если схема ws — считаем это WS‑апгрейдом, даже если Upgrade заголовок нестандартный.
+	if r.URL != nil && r.URL.Scheme == "ws" {
+		d.handleHTTPForwardWebSocket(w, r)
+		return
+	}
+	// Либо явный Upgrade на ws поверх обычного http абсолютного URL
+	if isWebSocketRequest(r) && (r.URL != nil && r.URL.Scheme == "http") {
+		d.handleHTTPForwardWebSocket(w, r)
+		return
+	}
 	// Forward regular HTTP request with absolute URI in r.URL
 	d.handleHTTPForwardRequest(w, r)
+}
+
+// handleHTTPForwardWebSocket проксирует WebSocket Upgrade (ws://) в режиме forward‑proxy.
+// Делает hijack клиентского соединения, устанавливает соединение к апстриму,
+// передаёт исходный Upgrade‑запрос (origin‑form) и после 101 прокачивает байты в обе стороны.
+func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Создаём сессию (ws)
+	sessionID := id.New()
+	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "ws"})
+	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
+	d.Metrics.ActiveSessions.Inc()
+
+	// Hijack клиента
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "HIJACK_NOT_SUPPORTED", "proxy: hijacking not supported", nil)
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("hijack not supported"))
+		d.Metrics.ActiveSessions.Dec()
+		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		return
+	}
+	clientConn, clientBuf, err := hj.Hijack()
+	if err != nil {
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		d.Metrics.ActiveSessions.Dec()
+		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		return
+	}
+
+	// Dial к апстриму (ws:// => tcp:80)
+	upstreamAddr := r.URL.Host
+	if !strings.Contains(upstreamAddr, ":") {
+		upstreamAddr = net.JoinHostPort(upstreamAddr, "80")
+	}
+	upstreamConn, err := net.DialTimeout("tcp", upstreamAddr, 10*time.Second)
+	if err != nil {
+		// Сообщаем клиенту о 502 и закрываем
+		_, _ = clientBuf.WriteString("HTTP/1.1 502 Bad Gateway\r\n\r\n")
+		_ = clientBuf.Flush()
+		_ = clientConn.Close()
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		d.Metrics.ActiveSessions.Dec()
+		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		return
+	}
+
+	// Подготовим исходящий запрос к апстриму (origin-form)
+	outReq := r.Clone(contextWithNoCancel())
+	// Origin-form: пустой RequestURI, URL указывает на цель (scheme/host для Host заголовка)
+	outURL := *r.URL
+	outURL.Scheme = "http"
+	outReq.URL = &outURL
+	outReq.Host = outURL.Host
+	outReq.RequestURI = "" // важно для корректной записи origin-form
+	// Удаляем hop-by-hop, но сохраняем Upgrade/Connection
+	sanitizeForUpgrade(outReq.Header)
+
+	// Лёгкое превью запроса (кадр вниз по потоку)
+	reqPreview := buildHTTPRequestPreview(outReq, nil)
+	fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: 0, Preview: reqPreview}
+	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+
+	// Пишем апстриму Upgrade‑запрос
+	if err := outReq.Write(upstreamConn); err != nil {
+		_, _ = clientBuf.WriteString("HTTP/1.1 502 Bad Gateway\r\n\r\n")
+		_ = clientBuf.Flush()
+		_ = clientConn.Close()
+		_ = upstreamConn.Close()
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		d.Metrics.ActiveSessions.Dec()
+		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		return
+	}
+
+	// Читаем ответ апстрима и отдаем клиенту «как есть»
+	upr := bufio.NewReader(upstreamConn)
+	resp, err := http.ReadResponse(upr, outReq)
+	if err != nil {
+		_, _ = clientBuf.WriteString("HTTP/1.1 502 Bad Gateway\r\n\r\n")
+		_ = clientBuf.Flush()
+		_ = clientConn.Close()
+		_ = upstreamConn.Close()
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		d.Metrics.ActiveSessions.Dec()
+		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		return
+	}
+	// Отдадим клиенту статус/заголовки
+	_ = resp.Write(clientBuf)
+	_ = clientBuf.Flush()
+
+	// 101 — переключаемся на двунаправленную прокачку WebSocket кадров
+	if resp.StatusCode == http.StatusSwitchingProtocols {
+		// Учтём возможные байты, уже буферизированные в upr (первые WS‑кадры) и у клиента
+		if n := upr.Buffered(); n > 0 {
+			if b, _ := upr.Peek(n); len(b) > 0 {
+				upstreamConn = &prependConn{Conn: upstreamConn, r: bytes.NewReader(append([]byte(nil), b...))}
+			}
+		}
+		if n := clientBuf.Reader.Buffered(); n > 0 {
+			if b, _ := clientBuf.Reader.Peek(n); len(b) > 0 {
+				clientConn = &prependConn{Conn: clientConn, r: bytes.NewReader(append([]byte(nil), b...))}
+			}
+		}
+		// Сигнализируем в монитор о факте апгрейда (минимальное событие),
+		// далее полноценные события будут приходить из pipeWSMessages при разборе SIO
+		e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "/_sys", Name: "upgraded", ArgsPreview: "[]"}
+		_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
+		d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
+
+		go d.pipeWSMessages(sessionID, clientConn, upstreamConn, domain.DirectionClientToUpstream)
+		d.pipeWSMessages(sessionID, upstreamConn, clientConn, domain.DirectionUpstreamToClient)
+		return
+	}
+
+	// Не 101 — считаем завершённой попытку Upgrade
+	_ = clientConn.Close()
+	_ = upstreamConn.Close()
+	_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+	d.Metrics.ActiveSessions.Dec()
+}
+
+// sanitizeForUpgrade удаляет hop-by-hop заголовки, оставляя Upgrade/Connection.
+func sanitizeForUpgrade(h http.Header) {
+	// Базовый список hop‑by‑hop без Upgrade/Connection
+	hop := []string{"Proxy-Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding"}
+	for _, k := range hop {
+		h.Del(k)
+	}
+	// Оставляем Upgrade и Connection как есть
 }
 
 func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
@@ -62,11 +207,14 @@ func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
 	_, _ = bufrw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
 	_ = bufrw.Flush()
 
-	// minimal session for CONNECT (no payload introspection)
+	// minimal session for CONNECT (add a synthetic event for observability)
 	sessionID := id.New()
 	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "connect://" + upstream, ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC()})
 	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
+	// Synthetic event to signal established tunnel (useful for tests and UI)
+	_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "/_sys", Name: "tunnel_established", ArgsPreview: "{}"})
+	d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID})
 
 	// bidirectional copy
 	go func() {
@@ -145,9 +293,12 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			_ = tlsCli.Close()
 			_ = tlsSrv.Close()
-			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-			d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-			d.Metrics.ActiveSessions.Dec()
+			ctx := contextWithNoCancel()
+			if sess, ok, _ := d.Svc.Get(ctx, sessionID); !ok || sess.ClosedAt == nil {
+				_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), nil)
+				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
+			}
 		}()
 
 		clientBR := bufio.NewReader(tlsSrv)
@@ -215,9 +366,9 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if resp.StatusCode == http.StatusSwitchingProtocols {
-				// После 101 HTTP больше нет — просто копируем байты в обе стороны до закрытия.
-				go func() { _, _ = io.Copy(tlsCli, tlsSrv); _ = tlsCli.Close() }()
-				_, _ = io.Copy(tlsSrv, tlsCli)
+				// После 101 HTTP больше нет — переключаемся на прокачку WS с логированием кадров.
+				go d.pipeWSMessages(sessionID, tlsSrv, tlsCli, domain.DirectionClientToUpstream)
+				d.pipeWSMessages(sessionID, tlsCli, tlsSrv, domain.DirectionUpstreamToClient)
 				return
 			}
 		}
@@ -325,6 +476,28 @@ func copyHeader(dst http.Header, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+// prependConn сначала читает подготовленные байты из r, затем читает из базового соединения.
+type prependConn struct {
+	net.Conn
+	r io.Reader
+}
+
+func (p *prependConn) Read(b []byte) (int, error) {
+	if p.r != nil {
+		n, err := p.r.Read(b)
+		if err == io.EOF {
+			p.r = nil
+			if n > 0 {
+				return n, nil
+			}
+			// перейти к чтению из Conn
+		} else if n > 0 || err != nil {
+			return n, err
+		}
+	}
+	return p.Conn.Read(b)
 }
 
 // isAbsoluteURL returns true if s looks like an absolute URI.

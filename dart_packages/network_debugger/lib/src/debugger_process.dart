@@ -53,6 +53,7 @@ class DebuggerProcess {
       // DEV_MODE=1 prevents the binary from automatically opening the browser
       // This allows us to control browser opening from the Dart launcher instead
       if (!autoOpenBrowser) 'DEV_MODE': '1',
+      if (!autoOpenBrowser) 'NO_BROWSER': '1',
       ...environment,
     };
 
