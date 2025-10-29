@@ -59,7 +59,8 @@ class AppHttpException implements Exception {
 
   @override
   String toString() {
-    var msg = '$runtimeType [$type]: \nRequest: ${requestOptions.method} ${requestOptions.uri}${(response != null) ? '\nResponse: ${response?.statusCode} ${response?.statusMessage}' : ''}\nMessage:$message';
+    var msg =
+        '$runtimeType [$type]: \nRequest: ${requestOptions.method} ${requestOptions.uri}${(response != null) ? '\nResponse: ${response?.statusCode} ${response?.statusMessage}' : ''}\nMessage:$message';
     if (error is Error) {
       msg += '\n${(error as Error).stackTrace}';
     }

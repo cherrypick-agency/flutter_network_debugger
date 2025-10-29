@@ -55,5 +55,3 @@ ServerErrorCode parseServerErrorCode(String? code) {
       return ServerErrorCode.unknown;
   }
 }
-
-

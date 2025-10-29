@@ -19,5 +19,3 @@ class NotificationMessage {
     this.details,
   }) : ts = ts ?? DateTime.now();
 }
-
-

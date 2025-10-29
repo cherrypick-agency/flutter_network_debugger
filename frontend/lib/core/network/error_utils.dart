@@ -35,7 +35,10 @@ ResolvedErrorMessage resolveErrorMessage(Object e, [StackTrace? stackTrace]) {
   }
   if (e is AppHttpServerException) {
     final c = e.code;
-    final msg = e.messageFromServer.isNotEmpty ? e.messageFromServer : _defaultMessageForCode(c);
+    final msg =
+        e.messageFromServer.isNotEmpty
+            ? e.messageFromServer
+            : _defaultMessageForCode(c);
     final req = e.requestOptions;
     final resp = e.response;
     final mergedDetails = <String, dynamic>{
@@ -141,5 +144,3 @@ String _defaultMessageForCode(ServerErrorCode c) {
       return 'Request failed.';
   }
 }
-
-

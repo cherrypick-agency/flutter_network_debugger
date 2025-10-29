@@ -22,11 +22,11 @@ Future<int> runBinary({required String execPath}) async {
   StreamSubscription? sigTerm;
   if (!Platform.isWindows) {
     sigInt = ProcessSignal.sigint.watch().listen(
-      (_) => proc.kill(ProcessSignal.sigint),
-    );
+          (_) => proc.kill(ProcessSignal.sigint),
+        );
     sigTerm = ProcessSignal.sigterm.watch().listen(
-      (_) => proc.kill(ProcessSignal.sigterm),
-    );
+          (_) => proc.kill(ProcessSignal.sigterm),
+        );
   }
 
   final code = await proc.exitCode;

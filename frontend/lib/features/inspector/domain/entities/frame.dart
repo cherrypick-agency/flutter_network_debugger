@@ -1,7 +1,14 @@
 import 'package:equatable/equatable.dart';
 
 class Frame extends Equatable {
-  const Frame({required this.id, required this.ts, required this.direction, required this.opcode, required this.size, required this.preview});
+  const Frame({
+    required this.id,
+    required this.ts,
+    required this.direction,
+    required this.opcode,
+    required this.size,
+    required this.preview,
+  });
   final String id;
   final DateTime ts;
   final String direction;
@@ -11,5 +18,3 @@ class Frame extends Equatable {
   @override
   List<Object?> get props => [id, ts, direction, opcode, size, preview];
 }
-
-

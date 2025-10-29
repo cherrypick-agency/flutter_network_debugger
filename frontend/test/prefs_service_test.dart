@@ -8,43 +8,57 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('save/load сохраняет только переданные поля и подставляет дефолты', () async {
-    // Arrange
-    final prefs = PrefsService();
+  test(
+    'save/load сохраняет только переданные поля и подставляет дефолты',
+    () async {
+      // Arrange
+      final prefs = PrefsService();
 
-    // Act
-    await prefs.save(
-      baseUrl: 'http://x',
-      targetWs: 'ws://y',
-      q: 'abc',
-      httpMinDurationMs: 250,
-      groupBy: 'domain',
-      respDelayEnabled: true,
-      respDelayValue: '1000-2000',
-    );
-    final loaded = await prefs.load();
+      // Act
+      await prefs.save(
+        baseUrl: 'http://x',
+        targetWs: 'ws://y',
+        q: 'abc',
+        httpMinDurationMs: 250,
+        groupBy: 'domain',
+        respDelayEnabled: true,
+        respDelayValue: '1000-2000',
+      );
+      final loaded = await prefs.load();
 
-    // Assert
-    expect(loaded['baseUrl'], 'http://x');
-    expect(loaded['targetWs'], 'ws://y');
-    expect(loaded['q'], 'abc');
-    expect(loaded['httpMethod'], 'any', reason: 'не передавали — должен быть дефолт');
-    expect(loaded['httpStatus'], 'any', reason: 'дефолт, если не сохраняли явным образом');
-    expect(loaded['httpMinDuration'], '250');
-    expect(loaded['groupBy'], 'domain');
-    expect(loaded['respDelayEnabled'], 'true');
-    expect(loaded['respDelayValue'], '1000-2000');
-  });
+      // Assert
+      expect(loaded['baseUrl'], 'http://x');
+      expect(loaded['targetWs'], 'ws://y');
+      expect(loaded['q'], 'abc');
+      expect(
+        loaded['httpMethod'],
+        'any',
+        reason: 'не передавали — должен быть дефолт',
+      );
+      expect(
+        loaded['httpStatus'],
+        'any',
+        reason: 'дефолт, если не сохраняли явным образом',
+      );
+      expect(loaded['httpMinDuration'], '250');
+      expect(loaded['groupBy'], 'domain');
+      expect(loaded['respDelayEnabled'], 'true');
+      expect(loaded['respDelayValue'], '1000-2000');
+    },
+  );
 
-  test('saveThemeModeString/loadThemeModeString: дефолт system и запись значения', () async {
-    // Arrange
-    final prefs = PrefsService();
+  test(
+    'saveThemeModeString/loadThemeModeString: дефолт system и запись значения',
+    () async {
+      // Arrange
+      final prefs = PrefsService();
 
-    // Act / Assert
-    expect(await prefs.loadThemeModeString(), 'system');
-    await prefs.saveThemeModeString('dark');
-    expect(await prefs.loadThemeModeString(), 'dark');
-  });
+      // Act / Assert
+      expect(await prefs.loadThemeModeString(), 'system');
+      await prefs.saveThemeModeString('dark');
+      expect(await prefs.loadThemeModeString(), 'dark');
+    },
+  );
 
   test('saveSince/loadSince: корректный ISO-UTC и обработка мусора', () async {
     // Arrange
@@ -104,5 +118,3 @@ void main() {
     expect(await prefs.loadRecentWindowMinutes(), 1440);
   });
 }
-
-

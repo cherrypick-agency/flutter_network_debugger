@@ -21,7 +21,8 @@ class FramesTimelineSparkline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bins = _buildBins();
-    final maxVal = bins.isEmpty ? 0.0 : bins.map((e) => e.value).reduce(math.max);
+    final maxVal =
+        bins.isEmpty ? 0.0 : bins.map((e) => e.value).reduce(math.max);
     final color = switch (metric) {
       SparkMetric.messagesPerSecond => context.appColors.primary,
       SparkMetric.bytesPerSecond => context.appColors.success,
@@ -41,9 +42,14 @@ class FramesTimelineSparkline extends StatelessWidget {
     final bins = <int, double>{};
     for (final f in frames) {
       DateTime? ts;
-      try { ts = DateTime.parse((f['ts'] ?? '').toString()); } catch (_) {}
+      try {
+        ts = DateTime.parse((f['ts'] ?? '').toString());
+      } catch (_) {}
       if (ts == null) continue;
-      final idx = ((ts.millisecondsSinceEpoch - minTs.millisecondsSinceEpoch) / bucketMs).floor();
+      final idx =
+          ((ts.millisecondsSinceEpoch - minTs.millisecondsSinceEpoch) /
+                  bucketMs)
+              .floor();
       if (!bins.containsKey(idx)) bins[idx] = 0;
       switch (metric) {
         case SparkMetric.messagesPerSecond:
@@ -51,12 +57,16 @@ class FramesTimelineSparkline extends StatelessWidget {
           break;
         case SparkMetric.bytesPerSecond:
           final szRaw = f['size'];
-          final sz = szRaw is int ? szRaw.toDouble() : double.tryParse(szRaw?.toString() ?? '0') ?? 0.0;
+          final sz =
+              szRaw is int
+                  ? szRaw.toDouble()
+                  : double.tryParse(szRaw?.toString() ?? '0') ?? 0.0;
           bins[idx] = (bins[idx] ?? 0) + sz;
           break;
       }
     }
-    return bins.entries.map((e) => _Bin(index: e.key, value: e.value)).toList()..sort((a,b)=>a.index.compareTo(b.index));
+    return bins.entries.map((e) => _Bin(index: e.key, value: e.value)).toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
   }
 }
 
@@ -69,7 +79,11 @@ class _Bin {
 }
 
 class _SparklinePainter extends CustomPainter {
-  _SparklinePainter({required this.bins, required this.maxVal, required this.color});
+  _SparklinePainter({
+    required this.bins,
+    required this.maxVal,
+    required this.color,
+  });
   final List<_Bin> bins;
   final double maxVal;
   final Color color;
@@ -77,25 +91,29 @@ class _SparklinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (bins.isEmpty || maxVal <= 0) return;
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = color;
+    final paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = color;
     final path = Path();
     final dx = size.width / math.max(1, bins.length - 1);
     for (var i = 0; i < bins.length; i++) {
       final x = i * dx;
       final v = bins[i].value / maxVal;
       final y = size.height - v * (size.height - 2) - 1;
-      if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+      if (i == 0)
+        path.moveTo(x, y);
+      else
+        path.lineTo(x, y);
     }
     canvas.drawPath(path, paint);
   }
 
   @override
   bool shouldRepaint(covariant _SparklinePainter oldDelegate) {
-    return oldDelegate.bins != bins || oldDelegate.maxVal != maxVal || oldDelegate.color != color;
+    return oldDelegate.bins != bins ||
+        oldDelegate.maxVal != maxVal ||
+        oldDelegate.color != color;
   }
 }
-
-

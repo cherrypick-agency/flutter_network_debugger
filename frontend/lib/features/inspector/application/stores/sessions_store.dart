@@ -39,5 +39,3 @@ abstract class _SessionsStore with Store {
     }
   }
 }
-
-

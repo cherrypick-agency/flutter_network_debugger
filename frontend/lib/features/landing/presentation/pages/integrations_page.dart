@@ -650,7 +650,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     ),
                   const SizedBox(height: 16),
 
-                  if (nativeAutomationAvailable() && _sysProxy && _hasCA)
+                  if (nativeAutomationAvailable() &&
+                      _sysProxy &&
+                      _hasCA &&
+                      _osCAInstalled)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Card(

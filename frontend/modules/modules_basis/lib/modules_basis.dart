@@ -6,7 +6,8 @@ class ContainerDI {
 
   T call<T extends Object>() => _getIt<T>();
 
-  void registerSingleton<T extends Object>(T instance) => _getIt.registerSingleton<T>(instance);
+  void registerSingleton<T extends Object>(T instance) =>
+      _getIt.registerSingleton<T>(instance);
 
   void unregister<T extends Object>() {
     if (_getIt.isRegistered<T>()) {

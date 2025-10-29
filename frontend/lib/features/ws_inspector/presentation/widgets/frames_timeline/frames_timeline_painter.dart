@@ -51,7 +51,10 @@ class FramesTimelinePainter extends CustomPainter {
     final opcode = (f['opcode'] ?? '').toString();
     final preview = (f['preview'] ?? '').toString();
     final sizeStr = (f['size'] ?? '').toString();
-    final isEnginePingPong = opcode == 'text' && (preview == '2' || preview == '3') && sizeStr == '1';
+    final isEnginePingPong =
+        opcode == 'text' &&
+        (preview == '2' || preview == '3') &&
+        sizeStr == '1';
     if (opcode == 'pong' || isEnginePingPong) return style.pongColor;
     if (opcode == 'ping') return style.pingColor;
     if (opcode == 'binary') return style.binaryColor;
@@ -76,9 +79,10 @@ class FramesTimelinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final axisPaint = Paint()
-      ..color = style.axisColor
-      ..strokeWidth = 1;
+    final axisPaint =
+        Paint()
+          ..color = style.axisColor
+          ..strokeWidth = 1;
 
     final centerY = size.height / 2;
     final laneOffset = math.min(12.0, (size.height - padding.vertical) / 4);
@@ -97,7 +101,9 @@ class FramesTimelinePainter extends CustomPainter {
     for (final f in frames) {
       final tsStr = (f['ts'] ?? '').toString();
       DateTime? ts;
-      try { ts = DateTime.parse(tsStr); } catch (_) {}
+      try {
+        ts = DateTime.parse(tsStr);
+      } catch (_) {}
       if (ts == null) continue;
 
       final x = _tsToX(ts, size.width);
@@ -123,13 +129,21 @@ class FramesTimelinePainter extends CustomPainter {
         final bucketMs = math.max(1, (totalMs / binsCount).floor());
         for (final f in frames) {
           DateTime? ts;
-          try { ts = DateTime.parse((f['ts'] ?? '').toString()); } catch (_) {}
+          try {
+            ts = DateTime.parse((f['ts'] ?? '').toString());
+          } catch (_) {}
           if (ts == null) continue;
-          final idx = ((ts.millisecondsSinceEpoch - minTs.millisecondsSinceEpoch) / bucketMs).floor();
+          final idx =
+              ((ts.millisecondsSinceEpoch - minTs.millisecondsSinceEpoch) /
+                      bucketMs)
+                  .floor();
           if (idx < 0 || idx >= binsCount) continue;
           msgs[idx] += 1;
           final szRaw = f['size'];
-          final sz = szRaw is int ? (szRaw.toDouble()) : (double.tryParse(szRaw?.toString() ?? '0') ?? 0.0);
+          final sz =
+              szRaw is int
+                  ? (szRaw.toDouble())
+                  : (double.tryParse(szRaw?.toString() ?? '0') ?? 0.0);
           bytes[idx] += sz;
         }
         final maxMsgs = msgs.fold<double>(0, (p, n) => n > p ? n : p);
@@ -141,12 +155,16 @@ class FramesTimelinePainter extends CustomPainter {
             final t = binsCount == 1 ? 0.0 : (i / (binsCount - 1));
             final x = padding.left + innerW * t;
             final y = centerY - (msgs[i] / maxMsgs) * amp - 1;
-            if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+            if (i == 0)
+              path.moveTo(x, y);
+            else
+              path.lineTo(x, y);
           }
-          final p = Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2
-            ..color = style.msgsColor;
+          final p =
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.2
+                ..color = style.msgsColor;
           canvas.drawPath(path, p);
         }
         if (maxBytes > 0) {
@@ -154,13 +172,20 @@ class FramesTimelinePainter extends CustomPainter {
           for (var i = 0; i < binsCount; i++) {
             final t = binsCount == 1 ? 0.0 : (i / (binsCount - 1));
             final x = padding.left + innerW * t;
-            final y = centerY - (bytes[i] / maxBytes) * amp - 3; // немного сместим для различимости
-            if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+            final y =
+                centerY -
+                (bytes[i] / maxBytes) * amp -
+                3; // немного сместим для различимости
+            if (i == 0)
+              path.moveTo(x, y);
+            else
+              path.lineTo(x, y);
           }
-          final p = Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2
-            ..color = style.bytesColor;
+          final p =
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.2
+                ..color = style.bytesColor;
           canvas.drawPath(path, p);
         }
       }
@@ -176,5 +201,3 @@ class FramesTimelinePainter extends CustomPainter {
         oldDelegate.padding != padding;
   }
 }
-
-

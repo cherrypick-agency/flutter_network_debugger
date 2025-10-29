@@ -299,7 +299,7 @@ class DioHttpClientImpl implements AppHttpClient {
   }) {
     return performRequest<T>(
       method: HttpMethod.filePatch,
-      host: host,  
+      host: host,
       path: path,
       headers: headers,
       query: query,

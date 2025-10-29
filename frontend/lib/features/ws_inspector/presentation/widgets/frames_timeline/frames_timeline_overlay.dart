@@ -8,7 +8,7 @@ class FramesTimelineOverlay extends StatelessWidget {
     required this.frame,
   });
 
-    // Позиция курсора/тапа в локальных координатах таймлайна
+  // Позиция курсора/тапа в локальных координатах таймлайна
   final Offset position;
   // Данные фрейма (минимум: id, ts, direction, opcode, size, preview?)
   final Map<String, dynamic> frame;
@@ -39,7 +39,11 @@ class FramesTimelineOverlay extends StatelessWidget {
             border: Border.all(color: border),
             borderRadius: BorderRadius.circular(6),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2)),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           constraints: const BoxConstraints(maxWidth: 320),
@@ -54,7 +58,12 @@ class FramesTimelineOverlay extends StatelessWidget {
                 Text(ts, style: txt.body.copyWith(color: colors.textSecondary)),
                 if (preview.isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: txt.monospace.copyWith(color: colors.textSecondary)),
+                  Text(
+                    preview,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: txt.monospace.copyWith(color: colors.textSecondary),
+                  ),
                 ],
               ],
             ),
@@ -64,5 +73,3 @@ class FramesTimelineOverlay extends StatelessWidget {
     );
   }
 }
-
-

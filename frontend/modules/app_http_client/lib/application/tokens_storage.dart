@@ -54,8 +54,8 @@ class TokensStorageImpl implements TokensStorage {
 
     if (refreshToken != null) {
       _refreshToken = refreshToken;
-      futures.add(
-          _storage.write(key: TokensStorageKeys.refreshToken, value: refreshToken));
+      futures.add(_storage.write(
+          key: TokensStorageKeys.refreshToken, value: refreshToken));
     }
 
     await Future.wait(futures);

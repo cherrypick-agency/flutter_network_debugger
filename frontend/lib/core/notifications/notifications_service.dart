@@ -28,23 +28,33 @@ class NotificationsService {
     if (_isConnectionRefused(msg)) return;
     final details = msg.details ?? const {};
     final title = '[${msg.code?.name.toUpperCase() ?? 'ERROR'}] ${msg.title}';
-    var desc = msg.description + (details.isNotEmpty ? ' — ${details['method'] ?? ''} ${details['url'] ?? ''} ${details['statusCode'] ?? ''}' : '');
+    var desc =
+        msg.description +
+        (details.isNotEmpty
+            ? ' — ${details['method'] ?? ''} ${details['url'] ?? ''} ${details['statusCode'] ?? ''}'
+            : '');
     // Санитизация: если кто-то передал объект вместо строки
     if (desc.contains("Instance of 'ResolvedErrorMessage'")) {
-      desc = (msg.raw?.toString().trim().isNotEmpty ?? false) ? msg.raw!.toString() : msg.description;
+      desc =
+          (msg.raw?.toString().trim().isNotEmpty ?? false)
+              ? msg.raw!.toString()
+              : msg.description;
     }
     // Если совсем нечего показать и код unknown — не шумим
-    if ((desc.trim().isEmpty || desc.trim() == 'Unexpected error occurred.') && (msg.code == ServerErrorCode.unknown)) {
+    if ((desc.trim().isEmpty || desc.trim() == 'Unexpected error occurred.') &&
+        (msg.code == ServerErrorCode.unknown)) {
       return;
     }
-    _controller.add(NotificationMessage(
-      level: NotificationLevel.error,
-      title: title,
-      description: desc,
-      raw: msg.raw,
-      stack: msg.stack,
-      details: msg.details,
-    ));
+    _controller.add(
+      NotificationMessage(
+        level: NotificationLevel.error,
+        title: title,
+        description: desc,
+        raw: msg.raw,
+        stack: msg.stack,
+        details: msg.details,
+      ),
+    );
   }
 
   void dispose() {
@@ -61,14 +71,17 @@ class NotificationsService {
       return; // debounced duplicate
     }
     _recent[key] = now;
-    _controller.add(NotificationMessage(level: level, title: title, description: description));
+    _controller.add(
+      NotificationMessage(level: level, title: title, description: description),
+    );
   }
 
   bool _isConnectionRefused(ResolvedErrorMessage msg) {
     final raw = (msg.raw ?? '').toLowerCase();
     final desc = (msg.description).toLowerCase();
     // Признаки: SocketException + Connection refused (errno 61 и аналоги)
-    if (raw.contains('socketexception') && raw.contains('connection refused')) return true;
+    if (raw.contains('socketexception') && raw.contains('connection refused'))
+      return true;
     if (desc.contains('connection refused')) return true;
     return false;
   }
@@ -78,5 +91,3 @@ class NotificationsService {
     return t.contains('socketexception') && t.contains('connection refused');
   }
 }
-
-

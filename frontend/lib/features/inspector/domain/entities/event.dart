@@ -1,7 +1,14 @@
 import 'package:equatable/equatable.dart';
 
 class EventEntity extends Equatable {
-  const EventEntity({required this.id, required this.ts, required this.namespace, required this.event, this.ackId, required this.argsPreview});
+  const EventEntity({
+    required this.id,
+    required this.ts,
+    required this.namespace,
+    required this.event,
+    this.ackId,
+    required this.argsPreview,
+  });
   final String id;
   final DateTime ts;
   final String namespace;
@@ -11,5 +18,3 @@ class EventEntity extends Equatable {
   @override
   List<Object?> get props => [id, ts, namespace, event, ackId, argsPreview];
 }
-
-

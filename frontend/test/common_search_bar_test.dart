@@ -5,48 +5,56 @@ import 'package:frontend/widgets/common_search_bar.dart';
 import 'package:frontend/theme/app_theme.dart';
 
 void main() {
-  Widget _wrap(Widget child) => MaterialApp(theme: buildLightTheme(), home: Scaffold(body: Center(child: child)));
+  Widget _wrap(Widget child) => MaterialApp(
+    theme: buildLightTheme(),
+    home: Scaffold(body: Center(child: child)),
+  );
 
-  testWidgets('CommonSearchBar: onChanged и запрет навигации при canNavigate=false', (tester) async {
-    // Arrange
-    final ctrl = TextEditingController();
-    int changes = 0;
-    int next = 0;
-    int prev = 0;
+  testWidgets(
+    'CommonSearchBar: onChanged и запрет навигации при canNavigate=false',
+    (tester) async {
+      // Arrange
+      final ctrl = TextEditingController();
+      int changes = 0;
+      int next = 0;
+      int prev = 0;
 
-    final bar = CommonSearchBar(
-      controller: ctrl,
-      focusNode: FocusNode(),
-      countText: '0/0',
-      matchCase: false,
-      wholeWord: false,
-      useRegex: false,
-      canNavigate: false,
-      onChanged: () => changes++,
-      onNext: () => next++,
-      onPrev: () => prev++,
-      onClose: () {},
-      onToggleMatchCase: () {},
-      onToggleWholeWord: () {},
-      onToggleRegex: () {},
-    );
+      final bar = CommonSearchBar(
+        controller: ctrl,
+        focusNode: FocusNode(),
+        countText: '0/0',
+        matchCase: false,
+        wholeWord: false,
+        useRegex: false,
+        canNavigate: false,
+        onChanged: () => changes++,
+        onNext: () => next++,
+        onPrev: () => prev++,
+        onClose: () {},
+        onToggleMatchCase: () {},
+        onToggleWholeWord: () {},
+        onToggleRegex: () {},
+      );
 
-    // Act
-    await tester.pumpWidget(_wrap(bar));
-    await tester.enterText(find.byType(TextField), 'abc');
+      // Act
+      await tester.pumpWidget(_wrap(bar));
+      await tester.enterText(find.byType(TextField), 'abc');
 
-    // Assert
-    expect(changes, greaterThan(0));
+      // Assert
+      expect(changes, greaterThan(0));
 
-    // Нажимаем кнопки next/prev — не должны сработать
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_up));
-    await tester.pump();
-    expect(next, 0);
-    expect(prev, 0);
-  });
+      // Нажимаем кнопки next/prev — не должны сработать
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_up));
+      await tester.pump();
+      expect(next, 0);
+      expect(prev, 0);
+    },
+  );
 
-  testWidgets('CommonSearchBar: горячие клавиши Enter/Shift+Enter/Escape', (tester) async {
+  testWidgets('CommonSearchBar: горячие клавиши Enter/Shift+Enter/Escape', (
+    tester,
+  ) async {
     // Arrange
     final ctrl = TextEditingController();
     int next = 0;
@@ -88,5 +96,3 @@ void main() {
     expect(closed, 1);
   });
 }
-
-

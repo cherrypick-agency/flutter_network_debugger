@@ -13,11 +13,21 @@ class _FakeRepo implements InspectorRepository {
   @override
   Future<List<Session>> listSessions({String? q, String? target}) async => [];
   @override
-  Future<List<Map<String, dynamic>>> aggregateSessions({String groupBy = 'domain'}) async => [];
+  Future<List<Map<String, dynamic>>> aggregateSessions({
+    String groupBy = 'domain',
+  }) async => [];
   @override
-  Future<List<EventEntity>> listEvents(String sessionId, {String? from, int limit = 100}) async => <EventEntity>[];
+  Future<List<EventEntity>> listEvents(
+    String sessionId, {
+    String? from,
+    int limit = 100,
+  }) async => <EventEntity>[];
   @override
-  Future<List<Frame>> listFrames(String sessionId, {String? from, int limit = 100}) async => <Frame>[];
+  Future<List<Frame>> listFrames(
+    String sessionId, {
+    String? from,
+    int limit = 100,
+  }) async => <Frame>[];
 }
 
 void main() {
@@ -256,5 +266,3 @@ void main() {
     expect(targets.last, startsWith('https://c.com'));
   });
 }
-
-

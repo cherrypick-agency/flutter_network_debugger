@@ -26,10 +26,10 @@ class DioRefreshTokenInterceptor extends QueuedInterceptor {
       if (kDebugMode) {
         print('🔄 Intercepted 401 error - attempting token refresh');
       }
-      
+
       try {
         await _refresher.refresh(_httpClient);
-        
+
         if (kDebugMode) {
           print('✅ Token refresh successful - retrying original request');
         }
@@ -37,7 +37,7 @@ class DioRefreshTokenInterceptor extends QueuedInterceptor {
         if (kDebugMode) {
           print('❌ Token refresh failed: $e');
         }
-        
+
         if (e is AppHttp401Exception) {
           // Пробрасываем AppHttp401Exception дальше для глобальной обработки
           return handler.reject(DioException(

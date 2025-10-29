@@ -70,5 +70,3 @@ class HttpDebugger {
 
   static void enableAuto() {}
 }
-
-

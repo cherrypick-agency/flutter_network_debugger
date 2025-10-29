@@ -25,6 +25,28 @@ dev:
 tidy:
 	go mod tidy
 
+# Code formatting
+.PHONY: fmt fmt-go fmt-dart install-hooks
+fmt: fmt-go fmt-dart
+
+fmt-go:
+	@echo "Formatting Go files..."
+	@gofmt -w .
+	@go fmt ./...
+	@echo "✓ Go files formatted"
+
+fmt-dart:
+	@echo "Formatting Dart files..."
+	@if command -v dart >/dev/null 2>&1; then \
+		find . -name "*.dart" -not -path "*/.*" -not -path "*/build/*" | xargs dart format; \
+		echo "✓ Dart files formatted"; \
+	else \
+		echo "⚠ dart not found, skipping Dart formatting"; \
+	fi
+
+install-hooks:
+	@./scripts/install-git-hooks.sh
+
 test:
 	go test ./...
 

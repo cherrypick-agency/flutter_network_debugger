@@ -43,19 +43,25 @@ class FramesTimelineHighlightPainter extends CustomPainter {
     final f = hoverFrame;
     if (f == null) return;
     DateTime? ts;
-    try { ts = DateTime.parse((f['ts'] ?? '').toString()); } catch (_) {}
+    try {
+      ts = DateTime.parse((f['ts'] ?? '').toString());
+    } catch (_) {}
     if (ts == null) return;
 
     final x = _tsToX(ts, size.width);
     final centerY = size.height / 2;
     final laneOffset = math.min(12.0, (size.height - padding.vertical) / 4);
     final dir = (f['direction'] ?? '').toString();
-    final y = dir == 'upstream->client' ? (centerY - laneOffset) : (centerY + laneOffset);
+    final y =
+        dir == 'upstream->client'
+            ? (centerY - laneOffset)
+            : (centerY + laneOffset);
     final r = _radiusForSize(f['size']);
 
-    final paint = Paint()
-      ..color = color.withOpacity(1.0)
-      ..style = PaintingStyle.fill;
+    final paint =
+        Paint()
+          ..color = color.withOpacity(1.0)
+          ..style = PaintingStyle.fill;
     canvas.drawCircle(Offset(x, y), r, paint);
   }
 
@@ -68,5 +74,3 @@ class FramesTimelineHighlightPainter extends CustomPainter {
         oldDelegate.color != color;
   }
 }
-
-

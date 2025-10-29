@@ -28,11 +28,27 @@ class _HotkeysSettingsPageState extends State<HotkeysSettingsPage> {
               return ListTile(
                 dense: true,
                 title: Text(b.label),
-                subtitle: Text(_formatActivator(b.currentShortcut), style: Theme.of(context).textTheme.bodySmall),
-                trailing: Wrap(spacing: 8, children: [
-                  OutlinedButton(onPressed: () async { await _editBinding(context, b); }, child: const Text('Edit')),
-                  TextButton(onPressed: () async { await sl<HotkeysService>().resetToDefault(b.id); }, child: const Text('Reset')),
-                ]),
+                subtitle: Text(
+                  _formatActivator(b.currentShortcut),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () async {
+                        await _editBinding(context, b);
+                      },
+                      child: const Text('Edit'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await sl<HotkeysService>().resetToDefault(b.id);
+                      },
+                      child: const Text('Reset'),
+                    ),
+                  ],
+                ),
               );
             },
           );
@@ -57,7 +73,10 @@ class _HotkeysSettingsPageState extends State<HotkeysSettingsPage> {
       if (a.alt) mods.add('Alt');
       if (a.shift) mods.add('Shift');
       if (a.meta) mods.add('Meta');
-      final name = a.trigger.keyLabel.isNotEmpty ? a.trigger.keyLabel.toUpperCase() : (a.trigger.debugName ?? a.trigger.keyId.toString());
+      final name =
+          a.trigger.keyLabel.isNotEmpty
+              ? a.trigger.keyLabel.toUpperCase()
+              : (a.trigger.debugName ?? a.trigger.keyId.toString());
       mods.add(name);
       return mods.join(' + ');
     }
@@ -66,12 +85,18 @@ class _HotkeysSettingsPageState extends State<HotkeysSettingsPage> {
 
   Future<void> _editBinding(BuildContext context, HotkeyBinding b) async {
     ShortcutActivator? selected;
-    await showDialog(context: context, builder: (_) {
-      return _HotkeyCaptureDialog(
-        title: b.label,
-        onCaptured: (act){ selected = act; Navigator.of(context).pop(); },
-      );
-    });
+    await showDialog(
+      context: context,
+      builder: (_) {
+        return _HotkeyCaptureDialog(
+          title: b.label,
+          onCaptured: (act) {
+            selected = act;
+            Navigator.of(context).pop();
+          },
+        );
+      },
+    );
     if (selected != null) {
       await sl<HotkeysService>().setBinding(b.id, selected!);
     }
@@ -98,7 +123,10 @@ class _HotkeyCaptureDialogState extends State<_HotkeyCaptureDialog> {
           if (evt is! RawKeyDownEvent) return KeyEventResult.handled;
           final key = evt.logicalKey;
           // Skip pure modifier presses
-          if (key == LogicalKeyboardKey.shift || key == LogicalKeyboardKey.meta || key == LogicalKeyboardKey.control || key == LogicalKeyboardKey.alt) {
+          if (key == LogicalKeyboardKey.shift ||
+              key == LogicalKeyboardKey.meta ||
+              key == LogicalKeyboardKey.control ||
+              key == LogicalKeyboardKey.alt) {
             return KeyEventResult.handled;
           }
           final act = SingleActivator(
@@ -108,15 +136,21 @@ class _HotkeyCaptureDialogState extends State<_HotkeyCaptureDialog> {
             shift: evt.isShiftPressed,
             meta: evt.isMetaPressed,
           );
-          setState(() { _hint = 'Captured: ${key.keyLabel.isNotEmpty ? key.keyLabel : (key.debugName ?? key.keyId)}'; });
+          setState(() {
+            _hint =
+                'Captured: ${key.keyLabel.isNotEmpty ? key.keyLabel : (key.debugName ?? key.keyId)}';
+          });
           widget.onCaptured(act);
           return KeyEventResult.handled;
         },
         child: SizedBox(width: 320, child: Text(_hint)),
       ),
-      actions: [TextButton(onPressed: ()=> Navigator.of(context).pop(), child: const Text('Cancel'))],
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }
-
-

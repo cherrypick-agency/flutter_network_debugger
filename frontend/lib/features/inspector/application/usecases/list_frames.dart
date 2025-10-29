@@ -7,5 +7,3 @@ class ListFramesUseCase {
   Future<List<Frame>> call(String sessionId, {String? from, int limit = 100}) =>
       _repo.listFrames(sessionId, from: from, limit: limit);
 }
-
-

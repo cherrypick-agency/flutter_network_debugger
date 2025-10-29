@@ -16,18 +16,17 @@ class ReverseProxyHttpClient implements HttpClient {
     List<Pattern>? allowHosts,
     List<String>? allowMethods,
     SecurityContext? context,
-  })  : _inner = HttpClient(context: context),
-        _upstreamBaseUrl = upstreamBaseUrl,
-        _proxyBaseUrl = _ensureHttpScheme(proxyBaseUrl),
-        _proxyHttpPath = proxyHttpPath.startsWith('/')
-            ? proxyHttpPath
-            : '/$proxyHttpPath',
-        _skipPaths = skipPaths,
-        _skipHosts = skipHosts,
-        _skipMethods = _upper(skipMethods),
-        _allowPaths = allowPaths,
-        _allowHosts = allowHosts,
-        _allowMethods = _upper(allowMethods) {
+  }) : _inner = HttpClient(context: context),
+       _upstreamBaseUrl = upstreamBaseUrl,
+       _proxyBaseUrl = _ensureHttpScheme(proxyBaseUrl),
+       _proxyHttpPath =
+           proxyHttpPath.startsWith('/') ? proxyHttpPath : '/$proxyHttpPath',
+       _skipPaths = skipPaths,
+       _skipHosts = skipHosts,
+       _skipMethods = _upper(skipMethods),
+       _allowPaths = allowPaths,
+       _allowHosts = allowHosts,
+       _allowMethods = _upper(allowMethods) {
     if (allowBadCertificates) {
       _inner.badCertificateCallback = (cert, host, port) => true;
     }
@@ -47,9 +46,17 @@ class ReverseProxyHttpClient implements HttpClient {
   final List<String>? _allowMethods; // в верхнем регистре
 
   @override
-  Future<HttpClientRequest> open(String method, String host, int port, String path) {
+  Future<HttpClientRequest> open(
+    String method,
+    String host,
+    int port,
+    String path,
+  ) {
     final scheme = port == 443 ? 'https' : 'http';
-    return openUrl(method, Uri(scheme: scheme, host: host, port: port, path: path));
+    return openUrl(
+      method,
+      Uri(scheme: scheme, host: host, port: port, path: path),
+    );
   }
 
   @override
@@ -115,13 +122,18 @@ class ReverseProxyHttpClient implements HttpClient {
 
   // Делегируем прочие свойства/методы
   @override
-  set authenticate(Future<bool> Function(Uri url, String scheme, String? realm)? f) {
+  set authenticate(
+    Future<bool> Function(Uri url, String scheme, String? realm)? f,
+  ) {
     _inner.authenticate = f;
   }
 
   @override
-  void addCredentials(Uri url, String realm, HttpClientCredentials credentials) =>
-      _inner.addCredentials(url, realm, credentials);
+  void addCredentials(
+    Uri url,
+    String realm,
+    HttpClientCredentials credentials,
+  ) => _inner.addCredentials(url, realm, credentials);
 
   @override
   set connectionFactory(
@@ -129,7 +141,8 @@ class ReverseProxyHttpClient implements HttpClient {
       Uri url,
       String? proxyHost,
       int? proxyPort,
-    )? f,
+    )?
+    f,
   ) {
     _inner.connectionFactory = f;
   }
@@ -141,7 +154,8 @@ class ReverseProxyHttpClient implements HttpClient {
 
   @override
   set authenticateProxy(
-    Future<bool> Function(String host, int port, String scheme, String? realm)? f,
+    Future<bool> Function(String host, int port, String scheme, String? realm)?
+    f,
   ) {
     _inner.authenticateProxy = f;
   }
@@ -199,7 +213,8 @@ class ReverseProxyHttpClient implements HttpClient {
     final host = url.host;
     final path = url.path;
 
-    final hasAllow = (_allowPaths?.isNotEmpty ?? false) ||
+    final hasAllow =
+        (_allowPaths?.isNotEmpty ?? false) ||
         (_allowHosts?.isNotEmpty ?? false) ||
         (_allowMethods?.isNotEmpty ?? false);
 
@@ -227,7 +242,8 @@ class ReverseProxyHttpClient implements HttpClient {
     if (url.scheme != proxy.scheme) return false;
     if (url.host != proxy.host) return false;
     final urlPort = url.hasPort ? url.port : (url.scheme == 'https' ? 443 : 80);
-    final proxyPort = proxy.hasPort ? proxy.port : (proxy.scheme == 'https' ? 443 : 80);
+    final proxyPort =
+        proxy.hasPort ? proxy.port : (proxy.scheme == 'https' ? 443 : 80);
     if (urlPort != proxyPort) return false;
     return url.path.startsWith(_proxyHttpPath);
   }
@@ -255,7 +271,8 @@ class ReverseProxyHttpClient implements HttpClient {
     );
   }
 
-  static bool _isHttpScheme(String scheme) => scheme == 'http' || scheme == 'https';
+  static bool _isHttpScheme(String scheme) =>
+      scheme == 'http' || scheme == 'https';
 
   static String _ensureHttpScheme(String value) {
     final v = value.trim();
@@ -290,5 +307,3 @@ class ReverseProxyHttpClient implements HttpClient {
     return '$left/$right';
   }
 }
-
-

@@ -29,10 +29,18 @@ class FramesTimeline extends StatelessWidget {
     final tsList = <DateTime>[];
     for (final f in frames) {
       final tsStr = (f['ts'] ?? '').toString();
-      try { tsList.add(DateTime.parse(tsStr)); } catch (_) {}
+      try {
+        tsList.add(DateTime.parse(tsStr));
+      } catch (_) {}
     }
-    DateTime minTs = tsList.isEmpty ? DateTime.now().subtract(const Duration(seconds: 1)) : tsList.reduce((a, b) => a.isBefore(b) ? a : b);
-    DateTime maxTs = tsList.isEmpty ? DateTime.now().add(const Duration(seconds: 1)) : tsList.reduce((a, b) => a.isAfter(b) ? a : b);
+    DateTime minTs =
+        tsList.isEmpty
+            ? DateTime.now().subtract(const Duration(seconds: 1))
+            : tsList.reduce((a, b) => a.isBefore(b) ? a : b);
+    DateTime maxTs =
+        tsList.isEmpty
+            ? DateTime.now().add(const Duration(seconds: 1))
+            : tsList.reduce((a, b) => a.isAfter(b) ? a : b);
     if (!maxTs.isAfter(minTs)) {
       maxTs = minTs.add(const Duration(seconds: 2));
     }
@@ -49,28 +57,30 @@ class FramesTimeline extends StatelessWidget {
       bytesColor: colors.success,
     );
 
-    return LayoutBuilder(builder: (context, constraints) {
-      return SizedBox(
-        height: height,
-        width: double.infinity,
-        child: _InteractiveLayer(
-          frames: frames,
-          minTs: minTs,
-          maxTs: maxTs,
-          padding: padding,
-          painter: FramesTimelinePainter(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          height: height,
+          width: double.infinity,
+          child: _InteractiveLayer(
             frames: frames,
             minTs: minTs,
             maxTs: maxTs,
-            style: style,
             padding: padding,
+            painter: FramesTimelinePainter(
+              frames: frames,
+              minTs: minTs,
+              maxTs: maxTs,
+              style: style,
+              padding: padding,
+            ),
+            onTapFrame: onFrameTap,
+            onBrushChanged: onBrushChanged,
+            onHoverFrame: onFrameHover,
           ),
-          onTapFrame: onFrameTap,
-          onBrushChanged: onBrushChanged,
-          onHoverFrame: onFrameHover,
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -147,7 +157,9 @@ class _InteractiveLayerState extends State<_InteractiveLayer> {
       final f = widget.frames[i];
       final tsStr = (f['ts'] ?? '').toString();
       DateTime? ts;
-      try { ts = DateTime.parse(tsStr); } catch (_) {}
+      try {
+        ts = DateTime.parse(tsStr);
+      } catch (_) {}
       if (ts == null) continue;
       final x = _tsToX(ts, width);
       final dx = (x - pos.dx).abs();
@@ -171,104 +183,137 @@ class _InteractiveLayerState extends State<_InteractiveLayer> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      return MouseRegion(
-        onHover: (e) {
-          final r = _findNearest(e.localPosition, c.maxWidth);
-          setState(() {
-            _hoverPos = e.localPosition;
-            _hoverFrame = r.$2;
-            if (_hoverFrame != null) {
-              final centerY = c.maxHeight / 2;
-              final laneOffset = math.min(12.0, (c.maxHeight - widget.padding.vertical) / 4);
-              final dir = (_hoverFrame!['direction'] ?? '').toString();
-              final y = dir == 'upstream->client' ? (centerY - laneOffset) : (centerY + laneOffset);
-              _tooltipAnchor = Offset(e.localPosition.dx, (y - 12).clamp(0.0, c.maxHeight));
-            } else {
-              _tooltipAnchor = null;
-            }
-          });
-          if (widget.onHoverFrame != null && r.$1 != null && r.$1 != _lastHoverId) {
-            _lastHoverId = r.$1;
-            widget.onHoverFrame!(r.$1!);
-          }
-          if (_tooltipKey.currentState != null) {
-            _tooltipKey.currentState!.ensureTooltipVisible();
-          }
-        },
-        onExit: (_) { setState(() { _hoverFrame = null; _hoverPos = null; _tooltipAnchor = null; }); },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (d) => _handleTap(d.localPosition, c.maxWidth),
-          onPanStart: (d) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        return MouseRegion(
+          onHover: (e) {
+            final r = _findNearest(e.localPosition, c.maxWidth);
             setState(() {
-              _brushStartX = d.localPosition.dx;
-              _brushEndX = d.localPosition.dx;
+              _hoverPos = e.localPosition;
+              _hoverFrame = r.$2;
+              if (_hoverFrame != null) {
+                final centerY = c.maxHeight / 2;
+                final laneOffset = math.min(
+                  12.0,
+                  (c.maxHeight - widget.padding.vertical) / 4,
+                );
+                final dir = (_hoverFrame!['direction'] ?? '').toString();
+                final y =
+                    dir == 'upstream->client'
+                        ? (centerY - laneOffset)
+                        : (centerY + laneOffset);
+                _tooltipAnchor = Offset(
+                  e.localPosition.dx,
+                  (y - 12).clamp(0.0, c.maxHeight),
+                );
+              } else {
+                _tooltipAnchor = null;
+              }
+            });
+            if (widget.onHoverFrame != null &&
+                r.$1 != null &&
+                r.$1 != _lastHoverId) {
+              _lastHoverId = r.$1;
+              widget.onHoverFrame!(r.$1!);
+            }
+            if (_tooltipKey.currentState != null) {
+              _tooltipKey.currentState!.ensureTooltipVisible();
+            }
+          },
+          onExit: (_) {
+            setState(() {
+              _hoverFrame = null;
+              _hoverPos = null;
+              _tooltipAnchor = null;
             });
           },
-          onPanUpdate: (d) {
-            setState(() { _brushEndX = d.localPosition.dx; });
-          },
-          onPanEnd: (_) {
-            if (widget.onBrushChanged != null && _brushStartX != null && _brushEndX != null) {
-              final start = _xToTs(_brushStartX!, c.maxWidth);
-              final end = _xToTs(_brushEndX!, c.maxWidth);
-              final range = start.isBefore(end)
-                  ? DateTimeRange(start: start, end: end)
-                  : DateTimeRange(start: end, end: start);
-              widget.onBrushChanged!(range);
-            }
-          },
-          onDoubleTap: () {
-            setState(() { _brushStartX = null; _brushEndX = null; });
-            if (widget.onBrushChanged != null) { widget.onBrushChanged!(null); }
-          },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Positioned.fill(child: CustomPaint(painter: widget.painter)),
-              if (_hoverFrame != null)
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: FramesTimelineHighlightPainter(
-                      hoverFrame: _hoverFrame,
-                      minTs: widget.minTs,
-                      maxTs: widget.maxTs,
-                      padding: widget.padding,
-                      color: Theme.of(context).colorScheme.error,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) => _handleTap(d.localPosition, c.maxWidth),
+            onPanStart: (d) {
+              setState(() {
+                _brushStartX = d.localPosition.dx;
+                _brushEndX = d.localPosition.dx;
+              });
+            },
+            onPanUpdate: (d) {
+              setState(() {
+                _brushEndX = d.localPosition.dx;
+              });
+            },
+            onPanEnd: (_) {
+              if (widget.onBrushChanged != null &&
+                  _brushStartX != null &&
+                  _brushEndX != null) {
+                final start = _xToTs(_brushStartX!, c.maxWidth);
+                final end = _xToTs(_brushEndX!, c.maxWidth);
+                final range =
+                    start.isBefore(end)
+                        ? DateTimeRange(start: start, end: end)
+                        : DateTimeRange(start: end, end: start);
+                widget.onBrushChanged!(range);
+              }
+            },
+            onDoubleTap: () {
+              setState(() {
+                _brushStartX = null;
+                _brushEndX = null;
+              });
+              if (widget.onBrushChanged != null) {
+                widget.onBrushChanged!(null);
+              }
+            },
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fill(child: CustomPaint(painter: widget.painter)),
+                if (_hoverFrame != null)
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: FramesTimelineHighlightPainter(
+                        hoverFrame: _hoverFrame,
+                        minTs: widget.minTs,
+                        maxTs: widget.maxTs,
+                        padding: widget.padding,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ),
-                ),
-              if (_hoverFrame != null && _tooltipAnchor != null)
-                Positioned(
-                  left: _tooltipAnchor!.dx,
-                  top: _tooltipAnchor!.dy,
-                  child: Tooltip(
-                    key: _tooltipKey,
-                    triggerMode: TooltipTriggerMode.manual,
-                    waitDuration: Duration.zero,
-                    showDuration: const Duration(milliseconds: 800),
-                    preferBelow: false,
-                    verticalOffset: 0,
-                    message: _buildTooltipMessage(_hoverFrame!),
-                    child: const SizedBox(width: 1, height: 1),
+                if (_hoverFrame != null && _tooltipAnchor != null)
+                  Positioned(
+                    left: _tooltipAnchor!.dx,
+                    top: _tooltipAnchor!.dy,
+                    child: Tooltip(
+                      key: _tooltipKey,
+                      triggerMode: TooltipTriggerMode.manual,
+                      waitDuration: Duration.zero,
+                      showDuration: const Duration(milliseconds: 800),
+                      preferBelow: false,
+                      verticalOffset: 0,
+                      message: _buildTooltipMessage(_hoverFrame!),
+                      child: const SizedBox(width: 1, height: 1),
+                    ),
                   ),
-                ),
-              if (_brushStartX != null && _brushEndX != null)
-                Positioned(
-                  left: math.min(_brushStartX!, _brushEndX!),
-                  top: 0,
-                  width: (_brushEndX! - _brushStartX!).abs(),
-                  height: c.maxHeight,
-                  child: Container(color: Theme.of(context).colorScheme.primary.withOpacity(0.12)),
-                ),
-              if (_hoverFrame != null && _hoverPos != null)
-                const SizedBox.shrink(),
-            ],
+                if (_brushStartX != null && _brushEndX != null)
+                  Positioned(
+                    left: math.min(_brushStartX!, _brushEndX!),
+                    top: 0,
+                    width: (_brushEndX! - _brushStartX!).abs(),
+                    height: c.maxHeight,
+                    child: Container(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.12),
+                    ),
+                  ),
+                if (_hoverFrame != null && _hoverPos != null)
+                  const SizedBox.shrink(),
+              ],
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
   String _buildTooltipMessage(Map<String, dynamic> f) {
@@ -282,10 +327,10 @@ class _InteractiveLayerState extends State<_InteractiveLayer> {
     sb.write(ts);
     if (preview.isNotEmpty) {
       sb.write('\n');
-      sb.write(preview.length > 120 ? preview.substring(0, 120) + '…' : preview);
+      sb.write(
+        preview.length > 120 ? preview.substring(0, 120) + '…' : preview,
+      );
     }
     return sb.toString();
   }
 }
-
-

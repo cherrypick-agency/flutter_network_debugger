@@ -129,7 +129,10 @@ ThemeData buildLightTheme() {
 }
 
 ThemeData buildDarkTheme() {
-  final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF90CAF9), brightness: Brightness.dark);
+  final scheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF90CAF9),
+    brightness: Brightness.dark,
+  );
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
@@ -154,6 +157,3 @@ ThemeData buildDarkTheme() {
     ],
   );
 }
-
-
-

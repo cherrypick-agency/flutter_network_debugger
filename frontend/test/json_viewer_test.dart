@@ -4,9 +4,12 @@ import 'package:frontend/widgets/json_viewer.dart';
 import 'package:frontend/theme/app_theme.dart';
 
 void main() {
-  Widget _wrap(Widget child) => MaterialApp(theme: buildLightTheme(), home: Scaffold(body: child));
+  Widget _wrap(Widget child) =>
+      MaterialApp(theme: buildLightTheme(), home: Scaffold(body: child));
 
-  testWidgets('JsonViewer: невалидный JSON — показывает сырой текст', (tester) async {
+  testWidgets('JsonViewer: невалидный JSON — показывает сырой текст', (
+    tester,
+  ) async {
     // Arrange
     const raw = 'not json';
 
@@ -17,7 +20,9 @@ void main() {
     expect(find.text(raw), findsOneWidget);
   });
 
-  testWidgets('JsonPrettyRich: считает и подсвечивает совпадения', (tester) async {
+  testWidgets('JsonPrettyRich: считает и подсвечивает совпадения', (
+    tester,
+  ) async {
     // Arrange
     int count = -1;
     final cfg = JsonSearchConfig(
@@ -38,7 +43,9 @@ void main() {
     expect(count, 3);
   });
 
-  testWidgets('JsonViewer: валидный JSON рендерит prettified содержимое', (tester) async {
+  testWidgets('JsonViewer: валидный JSON рендерит prettified содержимое', (
+    tester,
+  ) async {
     // Arrange
     const src = '{"id":1}';
 
@@ -49,5 +56,3 @@ void main() {
     expect(find.textContaining('"id"'), findsWidgets);
   });
 }
-
-

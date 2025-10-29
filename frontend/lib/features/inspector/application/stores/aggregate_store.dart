@@ -38,5 +38,3 @@ abstract class _AggregateStore with Store {
     }
   }
 }
-
-

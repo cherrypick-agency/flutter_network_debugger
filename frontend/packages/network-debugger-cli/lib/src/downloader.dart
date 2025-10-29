@@ -42,10 +42,9 @@ Future<String> ensureBinary({
   final binName = binaryFileName(platform);
   final ext = archiveExtensionFor(platform);
   final tag = version ?? await _fetchLatestTag(repo);
-  final pkgFile =
-      artifactName?.isNotEmpty == true
-          ? artifactName!
-          : _archiveFileName(tag, platform, ext);
+  final pkgFile = artifactName?.isNotEmpty == true
+      ? artifactName!
+      : _archiveFileName(tag, platform, ext);
   final cacheSub = Directory(
     p.join(cacheDir.path, tag, '${platform.os}_${platform.arch}'),
   );
@@ -88,10 +87,9 @@ Future<String> ensureBinary({
   }
 
   await cacheSub.create(recursive: true);
-  final url =
-      (baseUrl != null && baseUrl.isNotEmpty)
-          ? _buildFromBase(baseUrl, pkgFile)
-          : _buildDownloadUrl(repo, pkgFile);
+  final url = (baseUrl != null && baseUrl.isNotEmpty)
+      ? _buildFromBase(baseUrl, pkgFile)
+      : _buildDownloadUrl(repo, pkgFile);
   final tmp = File(p.join(cacheSub.path, pkgFile));
   stdout.writeln('[network-debugger] Загружаем $url');
   if (url.startsWith('file://')) {
@@ -125,8 +123,7 @@ String _archiveFileName(String tag, PlatformSpec p, String ext) {
 
 String _buildDownloadUrl(String repo, String filename) {
   // По умолчанию используем GitHub Pages из /cmd/network-debugger-web/_web/assets/downloads/
-  final base =
-      Platform.environment['NETWORK_DEBUGGER_DOWNLOAD_BASE'] ??
+  final base = Platform.environment['NETWORK_DEBUGGER_DOWNLOAD_BASE'] ??
       'https://belief.github.io/network-debugger/assets/downloads';
   return '$base/$filename';
 }
@@ -144,15 +141,13 @@ Future<String> _fetchLatestTag(String repo) async {
   // Пытаемся сначала через GitHub API, затем fallback на 'latest'
   try {
     final uri = Uri.parse('https://api.github.com/repos/$repo/releases/latest');
-    final resp = await http
-        .get(
-          uri,
-          headers: {
-            'Accept': 'application/vnd.github+json',
-            'User-Agent': 'network-debugger-cli',
-          },
-        )
-        .timeout(const Duration(seconds: 8));
+    final resp = await http.get(
+      uri,
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'network-debugger-cli',
+      },
+    ).timeout(const Duration(seconds: 8));
     if (resp.statusCode == 200) {
       final map = jsonDecode(resp.body) as Map<String, dynamic>;
       final tag = (map['tag_name'] ?? '').toString();

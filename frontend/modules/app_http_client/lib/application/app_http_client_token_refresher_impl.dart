@@ -20,12 +20,13 @@ class AppHttpClientTokenRefresherImpl implements AppHttpClientTokenRefresher {
 
     try {
       final refreshToken = httpClient.refreshToken;
-      
+
       if (kDebugMode) {
         print('🔄 Attempting to refresh token with: $refreshToken');
-        print('🔄 Refresh URL: ${httpClient.defaultHost}${httpClient.refreshPath}');
+        print(
+            '🔄 Refresh URL: ${httpClient.defaultHost}${httpClient.refreshPath}');
       }
-      
+
       // Запрос на обновление токена
       final response = await dioForInternalRequests.post(
         '${httpClient.defaultHost}${httpClient.refreshPath}',
@@ -46,10 +47,12 @@ class AppHttpClientTokenRefresherImpl implements AppHttpClientTokenRefresher {
         print('✅ Token refresh successful');
       }
 
-      onTokenRefreshed?.call(TokensData(
-        accessToken: accessToken,
-        refreshToken: newRefreshToken,
-      ),);
+      onTokenRefreshed?.call(
+        TokensData(
+          accessToken: accessToken,
+          refreshToken: newRefreshToken,
+        ),
+      );
 
       await httpClient.rememberTokens(
         accessToken,
@@ -59,24 +62,27 @@ class AppHttpClientTokenRefresherImpl implements AppHttpClientTokenRefresher {
       if (kDebugMode) {
         print('❌ Token refresh failed: $e');
       }
-      
+
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
-        
+
         // НЕ разлогиниваем на 404 (эндпоинт может отсутствовать в окружении)
         // Разлогиниваем только на 401/403      TODO  || statusCode == 404)?
         if (statusCode == 401 || statusCode == 403) {
           if (kDebugMode) {
-            print('🚨 Token refresh failed with status $statusCode - clearing tokens');
+            print(
+                '🚨 Token refresh failed with status $statusCode - clearing tokens');
           }
-          
+
           await httpClient.clearTokens();
 
-          throw AppHttp401Exception(AppHttpException(
-            requestOptions: e.requestOptions,
-            error: e.error,
-            response: e.response,
-          ),);
+          throw AppHttp401Exception(
+            AppHttpException(
+              requestOptions: e.requestOptions,
+              error: e.error,
+              response: e.response,
+            ),
+          );
         }
       }
 

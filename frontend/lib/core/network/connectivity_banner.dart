@@ -53,10 +53,10 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
   Future<void> _checkOnce() async {
     _checking = true;
     try {
-      final url = Uri.parse(_normalizeBase(widget.baseUrl()) + '/_api/v1/version');
-      final resp = await http
-          .get(url)
-          .timeout(const Duration(seconds: 2));
+      final url = Uri.parse(
+        _normalizeBase(widget.baseUrl()) + '/_api/v1/version',
+      );
+      final resp = await http.get(url).timeout(const Duration(seconds: 2));
       final ok = resp.statusCode >= 200 && resp.statusCode < 500;
       _setConnected(ok);
     } catch (_) {
@@ -75,11 +75,17 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
     if (_connected == v) {
       if (v) {
         // при восстановлении связи снова разрешаем показывать баннер в будущем
-        if (_dismissed) setState(() { _dismissed = false; });
+        if (_dismissed)
+          setState(() {
+            _dismissed = false;
+          });
       }
       return;
     }
-    setState(() { _connected = v; if (v) _dismissed = false; });
+    setState(() {
+      _connected = v;
+      if (v) _dismissed = false;
+    });
     ConnectivityState.connected.value = v;
     // overlay больше не используем — баннер рисуется в build и сдвигает контент
   }
@@ -90,7 +96,8 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
     final theme = Theme.of(context);
     final bg = theme.colorScheme.errorContainer;
     final on = theme.colorScheme.onErrorContainer;
-    final insets = MediaQuery.of(context).padding; // используем только top для статуса
+    final insets =
+        MediaQuery.of(context).padding; // используем только top для статуса
     return Container(
       width: double.infinity,
       color: bg,
@@ -117,7 +124,9 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
                 minimumSize: const Size(40, 28),
                 textStyle: theme.textTheme.labelSmall,
               ),
-              onPressed: () { _checkOnce(); },
+              onPressed: () {
+                _checkOnce();
+              },
               child: Text('Retry', style: TextStyle(color: on)),
             ),
             const SizedBox(width: 6),
@@ -127,7 +136,11 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
                 minimumSize: const Size(40, 28),
                 textStyle: theme.textTheme.labelSmall,
               ),
-              onPressed: () { setState(() { _dismissed = true; }); },
+              onPressed: () {
+                setState(() {
+                  _dismissed = true;
+                });
+              },
               child: Text('Dismiss', style: TextStyle(color: on)),
             ),
           ],
@@ -136,5 +149,3 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
     );
   }
 }
-
-

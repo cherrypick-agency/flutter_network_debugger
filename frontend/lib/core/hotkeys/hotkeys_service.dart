@@ -28,42 +28,62 @@ class HotkeysService {
     // defaults (mac-friendly where appropriate)
     // defaults
     _bindings.clear();
-    _register(HotkeyBinding(
-      id: 'sessions.refresh',
-      label: 'Refresh sessions',
-      defaultShortcut: SingleActivator(LogicalKeyboardKey.keyR, meta: true),
-    ));
-    _register(HotkeyBinding(
-      id: 'sessions.refresh.ctrl',
-      label: 'Refresh sessions (Ctrl for non-macOS)',
-      defaultShortcut: const SingleActivator(LogicalKeyboardKey.keyR, control: true),
-    ));
-    _register(HotkeyBinding(
-      id: 'sessions.delete',
-      label: 'Delete selected session',
-      defaultShortcut: const SingleActivator(LogicalKeyboardKey.delete),
-    ));
-    _register(HotkeyBinding(
-      id: 'sessions.focusSearch',
-      label: 'Focus sessions search',
-      defaultShortcut: const CharacterActivator('/'),
-    ));
+    _register(
+      HotkeyBinding(
+        id: 'sessions.refresh',
+        label: 'Refresh sessions',
+        defaultShortcut: SingleActivator(LogicalKeyboardKey.keyR, meta: true),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'sessions.refresh.ctrl',
+        label: 'Refresh sessions (Ctrl for non-macOS)',
+        defaultShortcut: const SingleActivator(
+          LogicalKeyboardKey.keyR,
+          control: true,
+        ),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'sessions.delete',
+        label: 'Delete selected session',
+        defaultShortcut: const SingleActivator(LogicalKeyboardKey.delete),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'sessions.focusSearch',
+        label: 'Focus sessions search',
+        defaultShortcut: const CharacterActivator('/'),
+      ),
+    );
     // JSON search
-    _register(HotkeyBinding(
-      id: 'jsonSearch.next',
-      label: 'JSON search: Next match',
-      defaultShortcut: const SingleActivator(LogicalKeyboardKey.enter),
-    ));
-    _register(HotkeyBinding(
-      id: 'jsonSearch.prev',
-      label: 'JSON search: Previous match',
-      defaultShortcut: const SingleActivator(LogicalKeyboardKey.enter, shift: true),
-    ));
-    _register(HotkeyBinding(
-      id: 'jsonSearch.close',
-      label: 'JSON search: Close',
-      defaultShortcut: const SingleActivator(LogicalKeyboardKey.escape),
-    ));
+    _register(
+      HotkeyBinding(
+        id: 'jsonSearch.next',
+        label: 'JSON search: Next match',
+        defaultShortcut: const SingleActivator(LogicalKeyboardKey.enter),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'jsonSearch.prev',
+        label: 'JSON search: Previous match',
+        defaultShortcut: const SingleActivator(
+          LogicalKeyboardKey.enter,
+          shift: true,
+        ),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'jsonSearch.close',
+        label: 'JSON search: Close',
+        defaultShortcut: const SingleActivator(LogicalKeyboardKey.escape),
+      ),
+    );
 
     await _loadFromPrefs();
   }
@@ -88,7 +108,9 @@ class HotkeysService {
     _changes.add(null);
   }
 
-  Map<ShortcutActivator, VoidCallback> buildHandlers(Map<String, VoidCallback> byId) {
+  Map<ShortcutActivator, VoidCallback> buildHandlers(
+    Map<String, VoidCallback> byId,
+  ) {
     final map = <ShortcutActivator, VoidCallback>{};
     for (final e in byId.entries) {
       final b = _bindings[e.key];
@@ -137,7 +159,11 @@ class HotkeysService {
       if (a.alt) mods.add('Alt');
       if (a.shift) mods.add('Shift');
       if (a.meta) mods.add('Meta');
-      mods.add(a.trigger.keyLabel.isNotEmpty ? a.trigger.keyLabel : a.trigger.debugName ?? a.trigger.keyId.toString());
+      mods.add(
+        a.trigger.keyLabel.isNotEmpty
+            ? a.trigger.keyLabel
+            : a.trigger.debugName ?? a.trigger.keyId.toString(),
+      );
       return mods.join('+');
     }
     return a.toString();
@@ -148,10 +174,18 @@ class HotkeysService {
     bool ctrl = false, alt = false, shift = false, meta = false;
     for (int i = 0; i < parts.length - 1; i++) {
       switch (parts[i].toLowerCase()) {
-        case 'ctrl': ctrl = true; break;
-        case 'alt': alt = true; break;
-        case 'shift': shift = true; break;
-        case 'meta': meta = true; break;
+        case 'ctrl':
+          ctrl = true;
+          break;
+        case 'alt':
+          alt = true;
+          break;
+        case 'shift':
+          shift = true;
+          break;
+        case 'meta':
+          meta = true;
+          break;
       }
     }
     final last = parts.isNotEmpty ? parts.last : '';
@@ -162,7 +196,13 @@ class HotkeysService {
     // Map common names
     final key = _keyFromName(last);
     if (key != null) {
-      return SingleActivator(key, control: ctrl, alt: alt, shift: shift, meta: meta);
+      return SingleActivator(
+        key,
+        control: ctrl,
+        alt: alt,
+        shift: shift,
+        meta: meta,
+      );
     }
     return null;
   }
@@ -170,13 +210,19 @@ class HotkeysService {
   LogicalKeyboardKey? _keyFromName(String name) {
     final n = name.toLowerCase();
     switch (n) {
-      case 'enter': return LogicalKeyboardKey.enter;
+      case 'enter':
+        return LogicalKeyboardKey.enter;
       case 'escape':
-      case 'esc': return LogicalKeyboardKey.escape;
-      case 'delete': return LogicalKeyboardKey.delete;
-      case 'backspace': return LogicalKeyboardKey.backspace;
-      case 'r': return LogicalKeyboardKey.keyR;
-      case 'slash': return LogicalKeyboardKey.slash;
+      case 'esc':
+        return LogicalKeyboardKey.escape;
+      case 'delete':
+        return LogicalKeyboardKey.delete;
+      case 'backspace':
+        return LogicalKeyboardKey.backspace;
+      case 'r':
+        return LogicalKeyboardKey.keyR;
+      case 'slash':
+        return LogicalKeyboardKey.slash;
     }
     // Try map by keyLabel for letters
     if (n.length == 1) {
@@ -189,5 +235,3 @@ class HotkeysService {
     return null;
   }
 }
-
-
