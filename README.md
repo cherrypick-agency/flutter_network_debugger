@@ -1,5 +1,33 @@
 # Network Debugger
 
+<p align="center">
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/network_debugger.yml">
+    <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/network_debugger.yml/badge.svg?branch=main" alt="network_debugger CI" />
+  </a>
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml">
+    <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml/badge.svg?branch=main" alt="dio_debugger CI" />
+  </a>
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/web_socket_debugger.yml">
+    <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/web_socket_debugger.yml/badge.svg?branch=main" alt="web_socket_debugger CI" />
+  </a>
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/web_socket_channel_debugger.yml">
+    <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/web_socket_channel_debugger.yml/badge.svg?branch=main" alt="web_socket_channel_debugger CI" />
+  </a>
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/socket_io_debugger.yml">
+    <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/socket_io_debugger.yml/badge.svg?branch=main" alt="socket_io_debugger CI" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/cherrypick-agency/flutter_network_debugger" alt="License" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://pub.dev/packages/network_debugger"><img src="https://img.shields.io/pub/v/network_debugger.svg" alt="network_debugger on pub.dev" /></a>
+  <a href="https://pub.dev/packages/dio_debugger"><img src="https://img.shields.io/pub/v/dio_debugger.svg" alt="dio_debugger on pub.dev" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/web_socket_debugger-pending-lightgrey" alt="web_socket_debugger" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/web_socket_channel_debugger-pending-lightgrey" alt="web_socket_channel_debugger" /></a>
+</p>
+
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
 Free tool for debugging HTTP and WebSocket which is MUCH BETTER than the built-in Flutter Netwrok Devtools. 

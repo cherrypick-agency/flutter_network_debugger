@@ -1,5 +1,10 @@
 # web_socket_channel_debugger
 
+<p align="left">
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/web_socket_channel_debugger.yml"><img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/web_socket_channel_debugger.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
+</p>
+
 Инструмент для быстрого подключения прокси network-debugger к `package:web_socket_channel` (reverse/forward режимы) для локальной отладки и перехвата трафика.
 
 ## Установка

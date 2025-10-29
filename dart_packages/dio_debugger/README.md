@@ -1,5 +1,13 @@
 # dio_debugger
 
+<p align="left">
+  <a href="https://pub.dev/packages/dio_debugger"><img src="https://img.shields.io/pub/v/dio_debugger.svg" alt="pub version" /></a>
+  <a href="https://pub.dev/packages/dio_debugger/score"><img src="https://img.shields.io/pub/likes/dio_debugger" alt="likes" /></a>
+  <a href="https://pub.dev/packages/dio_debugger/score"><img src="https://img.shields.io/pub/points/dio_debugger" alt="pub points" /></a>
+  <a href="https://pub.dev/packages/dio_debugger/score"><img src="https://img.shields.io/pub/popularity/dio_debugger" alt="popularity" /></a>
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml"><img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml/badge.svg?branch=main" alt="CI" /></a>
+</p>
+
 > Part of the [network_debugger](https://pub.dev/packages/network_debugger) ecosystem
 
 Lightweight utility that patches the provided `Dio` and attaches a reverse/forward proxy interceptor. Useful for local debugging, traffic interception, and bypassing CORS/certificates via your local proxy.
