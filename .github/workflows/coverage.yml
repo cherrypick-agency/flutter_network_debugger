@@ -18,6 +18,11 @@ jobs:
         with:
           go-version: '1.19'
 
+      - name: Create placeholder _web directories
+        run: |
+          mkdir -p cmd/network-debugger-web/_web cmd/wsapp/_web
+          touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
+
       - name: Run tests with coverage
         run: |
           go version
