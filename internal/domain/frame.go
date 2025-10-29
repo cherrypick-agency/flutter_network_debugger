@@ -9,4 +9,5 @@ type Frame struct {
 	Opcode    Opcode    `json:"opcode"`
 	Size      int       `json:"size"`
 	Preview   string    `json:"preview"`
+    BodyFile  string    `json:"bodyFile,omitempty"`
 }

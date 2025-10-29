@@ -76,6 +76,15 @@ func (s *SessionService) AddHTTPTransaction(ctx context.Context, tx domain.HTTPT
 	return s.httpTxs.AppendHTTPTransaction(ctx, tx)
 }
 
+// AddSpoolFile tracks spool file path for a session if underlying repo supports it.
+func (s *SessionService) AddSpoolFile(ctx context.Context, sessionID string, path string) {
+    if repo := s.SessionsRepoUnsafe(); repo != nil {
+        if ms, ok := repo.(interface{ AddSpoolFile(context.Context, string, string) }); ok {
+            ms.AddSpoolFile(ctx, sessionID, path)
+        }
+    }
+}
+
 func (s *SessionService) ListHTTPTransactions(ctx context.Context, sessionID string, from string, limit int) ([]domain.HTTPTransaction, string, error) {
 	if s.httpTxs == nil {
 		return nil, "", nil

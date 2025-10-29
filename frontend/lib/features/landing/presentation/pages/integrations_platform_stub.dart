@@ -1,7 +1,5 @@
-bool macNativeAvailable() => false;
-Future<void> autoIntegrateMacOS(String baseUrl) async {
-  // no-op for non-io targets
-}
-
-Future<void> rollbackMacOS(String baseUrl) async {}
+bool nativeAutomationAvailable() => false;
+Future<bool> isSystemProxyEnabled() async => false;
+Future<bool> autoIntegrate(String baseUrl) async => false;
+Future<void> rollback(String baseUrl) async {}
 Future<void> deleteDevCA() async {}
