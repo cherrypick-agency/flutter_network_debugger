@@ -1121,12 +1121,17 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 				for time.Now().Before(deadline) && reads < 2 {
 					_ = c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 					_, _, err := c.ReadMessage()
-					if err == nil {
-						reads++
-					} else if !isTimeoutError(err) {
-						// Non-timeout error means connection is broken
-						break
+					if err != nil {
+						// Any error (timeout or fatal) - stop reading
+						if !isTimeoutError(err) {
+							// Fatal error - close and return early
+							_ = c.Close()
+							return
+						}
+						// Timeout - continue to next iteration
+						continue
 					}
+					reads++
 				}
 				_ = c.Close()
 			}
