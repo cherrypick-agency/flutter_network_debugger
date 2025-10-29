@@ -1,6 +1,10 @@
 package socketio
 
-import "testing"
+import (
+    "os"
+    "strings"
+    "testing"
+)
 
 func TestParseEvent_Ack43Variants(t *testing.T) {
     t.Parallel()
@@ -62,6 +66,51 @@ func Test_isDigits(t *testing.T) {
     }
     if isDigits("12a") {
         t.Fatalf("letters should fail")
+    }
+}
+
+func TestParseEvent_MoreVariants(t *testing.T) {
+    t.Parallel()
+    cases := []struct{
+        name string
+        in   string
+        ns   string
+        ev   string
+        ok   bool
+    }{
+        {"event-basic", "42[\"login\",{\"u\":\"john\"}]", "", "login", true},
+        {"event-with-ackid", "42,17[\"ev\"]", "", "ev", true},
+        {"event-with-nsp", "42/chat,3[\"ev\"]", "/chat", "ev", true},
+        {"ack-basic", "43[\"ok\"]", "", "ack", true},
+        {"ack-with-nsp-ackid", "43/x,5[\"ok\"]", "/x", "ack", true},
+        {"binary-event", "451-/room,2[\"msg\",{\"_placeholder\":true,\"num\":0}]", "/room", "msg", true},
+        {"binary-ack", "461-/x,7[\"ignored\"]", "/x", "ack", true},
+        {"invalid-short", "4", "", "", false},
+        {"invalid-badjson", "42[not-json]", "", "", false},
+        {"invalid-binary-no-dash", "451/room[\"x\"]", "", "", false},
+    }
+    for _, tc := range cases {
+        tc := tc
+        t.Run(tc.name, func(t *testing.T) {
+            t.Parallel()
+            ns, ev, _, ok := ParseEvent(tc.in)
+            if ok != tc.ok || ns != tc.ns || ev != tc.ev {
+                t.Fatalf("got ns=%q ev=%q ok=%v", ns, ev, ok)
+            }
+        })
+    }
+}
+
+func TestParseEvent_LargeInputsFromTestdata(t *testing.T) {
+    t.Parallel()
+    files := []string{"testdata/large_event.txt", "testdata/binary_ack.txt"}
+    for _, f := range files {
+        data, err := os.ReadFile(f)
+        if err != nil { t.Fatalf("read %s: %v", f, err) }
+        in := strings.TrimSpace(string(data))
+        if _, _, _, ok := ParseEvent(in); !ok {
+            t.Fatalf("ParseEvent failed for %s", f)
+        }
     }
 }
 

@@ -237,14 +237,6 @@ func Test_rewriteOutboundCookieHeaderForUpstream_nonIsolate_noChange(t *testing.
     }
 }
 
-package httpapi
-
-import (
-    "net/http"
-    "net/url"
-    "strings"
-    "testing"
-)
 
 type headerAdapter http.Header
 
