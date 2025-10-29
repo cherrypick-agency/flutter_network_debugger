@@ -35,4 +35,6 @@ jobs:
           file: ./coverage.out
           flags: unittests
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # Token is optional but recommended for private repos or protected branches
 
