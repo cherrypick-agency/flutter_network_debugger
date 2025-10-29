@@ -187,40 +187,57 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     runSpacing: 12,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Chip(label: Text('Detected OS: ' + osLabel)),
-                      Chip(
-                        label: Text(
-                          _enabled ? 'MITM enabled' : 'MITM disabled',
-                        ),
-                        backgroundColor:
-                            _enabled
-                                ? context.appColors.success.withOpacity(0.25)
-                                : cs.surfaceVariant,
+                      Tooltip(
+                        message: 'Detected operating system',
+                        child: Chip(label: Text('Detected OS: ' + osLabel)),
                       ),
-                      Chip(
-                        label: Text(
-                          _hasCA ? 'Dev CA (proxy)' : 'CA missing (proxy)',
+                      Tooltip(
+                        message: 'MITM endpoint enabled on the proxy server',
+                        child: Chip(
+                          label: Text(
+                            _enabled ? 'MITM enabled' : 'MITM disabled',
+                          ),
+                          backgroundColor:
+                              _enabled
+                                  ? context.appColors.success.withOpacity(0.25)
+                                  : cs.surfaceVariant,
                         ),
-                        backgroundColor:
-                            _hasCA
-                                ? context.appColors.success.withOpacity(0.25)
-                                : cs.surfaceVariant,
                       ),
-                      Chip(
-                        label: Text(
-                          _osCAInstalled ? 'OS trust: ON' : 'OS trust: OFF',
+                      Tooltip(
+                        message:
+                            'Dev CA exists in proxy runtime (not about OS trust)',
+                        child: Chip(
+                          label: Text(
+                            _hasCA ? 'Dev CA (proxy)' : 'CA missing (proxy)',
+                          ),
+                          backgroundColor:
+                              _hasCA
+                                  ? context.appColors.success.withOpacity(0.25)
+                                  : cs.surfaceVariant,
                         ),
-                        backgroundColor:
-                            _osCAInstalled
-                                ? context.appColors.success.withOpacity(0.25)
-                                : cs.surfaceVariant,
                       ),
-                      Chip(
-                        label: Text(_sysProxy ? 'Proxy: ON' : 'Proxy: OFF'),
-                        backgroundColor:
-                            _sysProxy
-                                ? context.appColors.success.withOpacity(0.25)
-                                : cs.surfaceVariant,
+                      Tooltip(
+                        message:
+                            'System trust store (macOS System keychain / Windows Root) contains dev CA',
+                        child: Chip(
+                          label: Text(
+                            _osCAInstalled ? 'OS trust: ON' : 'OS trust: OFF',
+                          ),
+                          backgroundColor:
+                              _osCAInstalled
+                                  ? context.appColors.success.withOpacity(0.25)
+                                  : cs.surfaceVariant,
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'System HTTP/HTTPS proxy status',
+                        child: Chip(
+                          label: Text(_sysProxy ? 'Proxy: ON' : 'Proxy: OFF'),
+                          backgroundColor:
+                              _sysProxy
+                                  ? context.appColors.success.withOpacity(0.25)
+                                  : cs.surfaceVariant,
+                        ),
                       ),
                       Tooltip(
                         message: 'Копировать адрес прокси',

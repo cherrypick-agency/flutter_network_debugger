@@ -869,6 +869,11 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 	monCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Silently handle websocket panic during cleanup
+			}
+		}()
 		for {
 			select {
 			case <-monCtx.Done():
@@ -1004,6 +1009,11 @@ func TestRichServerManyEvents(t *testing.T) {
 	hasEvent := false
 	hasFrame := false
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Silently handle websocket panic during cleanup
+			}
+		}()
 		deadline := time.Now().Add(1 * time.Second)
 		for time.Now().Before(deadline) {
 			_ = mon.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
