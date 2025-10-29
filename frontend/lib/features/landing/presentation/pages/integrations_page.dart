@@ -548,6 +548,20 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                             const _Bullet(
                               text: 'Save and restart applications/browsers',
                             ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed:
+                                      _loading ? null : openSystemProxySettings,
+                                  icon: const Icon(Icons.open_in_new),
+                                  label: const Text(
+                                    'Open system proxy settings',
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),

@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"network-debugger/internal/domain"
-	uc "network-debugger/internal/usecase"
+	"sync"
 	"testing"
 	"time"
+
+	"network-debugger/internal/domain"
+	uc "network-debugger/internal/usecase"
 )
 
 // stub repos to feed initial SSE snapshot
@@ -48,12 +50,24 @@ func (sseStubEvents) ListEvents(context.Context, string, string, int) ([]domain.
 }
 
 // fake ResponseWriter+Flusher to capture SSE output
-type sseRec struct{ bytes.Buffer }
+type sseRec struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
 
-func (r *sseRec) Header() http.Header         { return http.Header{} }
-func (r *sseRec) Write(b []byte) (int, error) { return r.Buffer.Write(b) }
-func (r *sseRec) WriteHeader(int)             {}
-func (r *sseRec) Flush()                      {}
+func (r *sseRec) Header() http.Header { return http.Header{} }
+func (r *sseRec) Write(b []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.buf.Write(b)
+}
+func (r *sseRec) WriteHeader(int) {}
+func (r *sseRec) Flush()          {}
+func (r *sseRec) String() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.buf.String()
+}
 
 func TestHandleSessionStream_InitialSnapshotAndCancel(t *testing.T) {
 	svc := uc.NewSessionService(sseStubSessions{}, sseStubFrames{}, sseStubEvents{})

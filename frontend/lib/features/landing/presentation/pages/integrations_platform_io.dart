@@ -244,3 +244,26 @@ Future<String> proxyDiagnostics() async {
   }
   return 'N/A';
 }
+
+Future<void> openSystemProxySettings() async {
+  try {
+    if (Platform.isMacOS) {
+      // Works on Ventura/Sonoma
+      await Process.run('open', [
+        'x-apple.systempreferences:com.apple.Network-Settings.extension',
+      ]);
+      return;
+    }
+    if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', 'ms-settings:network-proxy']);
+      return;
+    }
+    if (Platform.isLinux) {
+      // Best-effort: GNOME or KDE
+      await Process.run('bash', [
+        '-lc',
+        'gnome-control-center network 2>/dev/null || systemsettings5 2>/dev/null || true',
+      ]);
+    }
+  } catch (_) {}
+}
