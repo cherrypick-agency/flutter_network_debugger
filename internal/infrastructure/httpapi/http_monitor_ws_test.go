@@ -1,0 +1,29 @@
+package httpapi
+
+import (
+    "net/http"
+    "net/http/httptest"
+    "strings"
+    "testing"
+    "time"
+    "github.com/gorilla/websocket"
+)
+
+func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
+    hub := NewMonitorHub()
+    srv := httptest.NewServer(http.HandlerFunc(hub.HandleWS))
+    defer srv.Close()
+    wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+    c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+    if err != nil { t.Fatalf("dial ws: %v", err) }
+    // после подключения пошлём событие и убедимся, что оно доезжает
+    hub.Broadcast(MonitorEvent{Type: "test", ID: "1"})
+    _ = c.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+    _, msg, err := c.ReadMessage()
+    if err != nil || len(msg) == 0 { t.Fatalf("expected message from hub, err=%v", err) }
+    _ = c.Close()
+    // дать серверу время обработать закрытие и убрать клиента
+    time.Sleep(50 * time.Millisecond)
+}
+
+
