@@ -2,32 +2,33 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../../../core/di/di.dart';
-import 'package:app_http_client/application/app_http_client.dart' as http_client;
+import 'package:app_http_client/application/app_http_client.dart'
+    as http_client;
 
-bool nativeAutomationAvailable() => Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+bool nativeAutomationAvailable() =>
+    Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
 Future<bool> isSystemProxyEnabled() async {
   try {
     if (Platform.isMacOS) {
-      final servicesRes = await Process.run('bash', [
+      // Try per-service first
+      final services = await Process.run('bash', [
         '-lc',
-        'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"'
+        'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
       ]);
-      if (servicesRes.exitCode != 0) return false;
-      final services = (servicesRes.stdout as String)
+      final list = (services.stdout ?? '')
+          .toString()
           .split('\n')
           .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      for (final svc in services) {
-        final w = await Process.run('networksetup', ['-getwebproxy', svc]);
-        final s = await Process.run('networksetup', ['-getsecurewebproxy', svc]);
-        final ws = (w.stdout ?? '').toString().toLowerCase();
-        final ss = (s.stdout ?? '').toString().toLowerCase();
-        bool on(String out) => out.contains('enabled: yes');
-        if (on(ws) || on(ss)) return true;
+          .where((e) => e.isNotEmpty);
+      for (final s in list) {
+        final w = await Process.run('networksetup', ['-getwebproxy', s]);
+        final h = await Process.run('networksetup', ['-getsecurewebproxy', s]);
+        bool on(String t) =>
+            t.toString().toLowerCase().contains('enabled: yes');
+        if (on(w.stdout ?? '') || on(h.stdout ?? '')) return true;
       }
-      // Fallback: read effective system proxy
+      // Fallback to scutil effective proxy
       final sc = await Process.run('scutil', ['--proxy']);
       if (sc.exitCode == 0) {
         final out = (sc.stdout ?? '').toString().toLowerCase();
@@ -37,113 +38,29 @@ Future<bool> isSystemProxyEnabled() async {
       }
       return false;
     }
-    if (Platform.isWindows) {
-      final res = await Process.run(
-        'reg',
-        [
-          'query',
-          'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-          '/v',
-          'ProxyEnable'
-        ],
-      );
-      if (res.exitCode == 0) {
-        final out = (res.stdout ?? '').toString().toLowerCase();
-        if (out.contains('0x1')) return true;
-      }
-      // Also check WinHTTP proxy
-      final nh = await Process.run('netsh', ['winhttp', 'show', 'proxy']);
-      if (nh.exitCode == 0) {
-        final s = (nh.stdout ?? '').toString().toLowerCase();
-        // When no proxy: "Direct access (no proxy server)"
-        if (!s.contains('direct access')) return true;
-      }
-      return false;
-    }
-    if (Platform.isLinux) {
-      // Try GNOME proxy mode
-      final g = await Process.run('bash', [
-        '-lc',
-        'gsettings get org.gnome.system.proxy mode 2>/dev/null || echo none'
-      ]);
-      final mode = (g.stdout ?? '').toString().trim();
-      if (mode.contains('manual')) return true;
-      // Fallback: env var
-      final e = await Process.run('bash', ['-lc', r'echo $http_proxy$https_proxy']);
-      return ((e.stdout ?? '') as String).trim().isNotEmpty;
-    }
+    // For non-mac platforms here we return false; separate IO files can add support.
+    return false;
   } catch (_) {
     return false;
+  }
+}
+
+Future<bool> autoIntegrate(String baseUrl) async {
+  if (Platform.isMacOS) {
+    await autoIntegrateMacOS(baseUrl);
+    return await isSystemProxyEnabled();
   }
   return false;
 }
 
-<<<<<<< HEAD
-Future<String> proxyDiagnostics() async {
-  try {
-    if (Platform.isMacOS) {
-      final buf = StringBuffer();
-      final services = await Process.run('bash', [
-        '-lc',
-        'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
-      ]);
-      buf.writeln('Services:\n' + (services.stdout ?? '').toString());
-      final list = (services.stdout ?? '').toString().split('\n').where((e) => e.trim().isNotEmpty);
-      for (final s in list) {
-        final w = await Process.run('networksetup', ['-getwebproxy', s.trim()]);
-        final h = await Process.run('networksetup', ['-getsecurewebproxy', s.trim()]);
-        buf.writeln('\n[' + s + ']');
-        buf.writeln((w.stdout ?? '').toString());
-        buf.writeln((h.stdout ?? '').toString());
-      }
-      final sc = await Process.run('scutil', ['--proxy']);
-      buf.writeln('\nscutil --proxy:\n' + (sc.stdout ?? '').toString());
-      final order = await Process.run('networksetup', ['-listnetworkserviceorder']);
-      buf.writeln('\nservice order:\n' + (order.stdout ?? '').toString());
-      return buf.toString();
-    }
-    if (Platform.isWindows) {
-      final regE = await Process.run('reg', [
-        'query',
-        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-        '/v',
-        'ProxyEnable'
-      ]);
-      final regS = await Process.run('reg', [
-        'query',
-        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-        '/v',
-        'ProxyServer'
-      ]);
-      final nh = await Process.run('netsh', ['winhttp', 'show', 'proxy']);
-      return 'ProxyEnable:\n' +
-          (regE.stdout ?? '').toString() +
-          '\nProxyServer:\n' +
-          (regS.stdout ?? '').toString() +
-          '\nWinHTTP:\n' +
-          (nh.stdout ?? '').toString();
-    }
-    if (Platform.isLinux) {
-      final gMode = await Process.run('bash', ['-lc', 'gsettings get org.gnome.system.proxy mode 2>/dev/null || echo none']);
-      final gHttp = await Process.run('bash', ['-lc', 'gsettings get org.gnome.system.proxy.http host 2>/dev/null; gsettings get org.gnome.system.proxy.http port 2>/dev/null']);
-      final env = await Process.run('bash', ['-lc', r'echo $http_proxy $https_proxy']);
-      return 'gsettings mode: ' +
-          (gMode.stdout ?? '').toString() +
-          '\nhttp host/port: ' +
-          (gHttp.stdout ?? '').toString() +
-          '\nenv: ' +
-          (env.stdout ?? '').toString();
-    }
-  } catch (e) {
-    return 'diag error: ' + e.toString();
+Future<void> rollback(String baseUrl) async {
+  if (Platform.isMacOS) {
+    await rollbackMacOS(baseUrl);
   }
-  return 'N/A';
 }
 
-=======
->>>>>>> 2025-10-29-j6fe-lXNxs
-Future<bool> autoIntegrate(String baseUrl) async {
-  if (Platform.isMacOS) {
+Future<void> autoIntegrateMacOS(String baseUrl) async {
+  if (!Platform.isMacOS) return;
   // 1) Ensure CA exists
   try {
     final api = sl<http_client.AppHttpClient>();
@@ -218,229 +135,25 @@ Future<bool> autoIntegrate(String baseUrl) async {
         '" with administrator privileges';
     await Process.run('osascript', ['-e', fbScript]);
   }
-<<<<<<< HEAD
-  // Additionally target the active service (by interface)
-  try {
-    final defIf = await Process.run('bash', [
-      '-lc',
-      "route get default 2>/dev/null | awk '/interface:/{print $2}'",
-    ]);
-    final iface = (defIf.stdout ?? '').toString().trim();
-    if (iface.isNotEmpty) {
-      final findSvc = await Process.run('bash', [
-        '-lc',
-        'networksetup -listnetworkserviceorder | awk -v ifc="' +
-            iface +
-            '" ' +
-            "'BEGIN{RS=\n\n}/Device: " +
-            iface +
-            "/{match($0,/Hardware Port: ([^,]+)/,m); if(m[1] != \"\"){print m[1]}}'",
-      ]);
-      final svc = (findSvc.stdout ?? '').toString().trim();
-      if (svc.isNotEmpty) {
-        await Process.run('networksetup', ['-setwebproxy', svc, '127.0.0.1', port.toString()]);
-        await Process.run('networksetup', ['-setsecurewebproxy', svc, '127.0.0.1', port.toString()]);
-        await Process.run('networksetup', ['-setwebproxystate', svc, 'on']);
-        await Process.run('networksetup', ['-setsecurewebproxystate', svc, 'on']);
-      }
-    }
-  } catch (_) {}
-=======
->>>>>>> 2025-10-29-j6fe-lXNxs
-    // Verify
-    return await isSystemProxyEnabled();
-  }
-
-  if (Platform.isWindows) {
-    try {
-      // Ensure CA exists
-      final api = sl<http_client.AppHttpClient>();
-      await api.post(
-        path: '/_api/v1/mitm/ca/generate',
-        body: {"cn": "network-debugger dev CA"},
-      );
-    } catch (_) {}
-    // Download CA to temp
-    final tmpPath = Directory.systemTemp.path +
-        Platform.pathSeparator +
-        'network-debugger-dev-ca.crt';
-    try {
-      final api = sl<http_client.AppHttpClient>();
-      final resp = await api.get(path: '/_api/v1/mitm/ca');
-      final pem =
-          (resp.data is String)
-              ? resp.data as String
-              : utf8.decode((resp.data as List).cast<int>());
-      await File(tmpPath).writeAsString(pem);
-    } catch (_) {}
-    // Import into CurrentUser Root store (no admin required)
-    await Process.run('certutil', ['-user', '-addstore', 'Root', tmpPath]);
-    // Enable user proxy settings
-    final port = _tryParsePort(baseUrl) ?? 9091;
-    await Process.run('reg', [
-      'add',
-      'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-      '/v',
-      'ProxyEnable',
-      '/t',
-      'REG_DWORD',
-      '/d',
-      '1',
-      '/f'
-    ]);
-    await Process.run('reg', [
-      'add',
-      'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-      '/v',
-      'ProxyServer',
-      '/t',
-      'REG_SZ',
-      '/d',
-      '127.0.0.1:' + port.toString(),
-      '/f'
-    ]);
-    await Process.run('reg', [
-      'add',
-      'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-      '/v',
-      'ProxyOverride',
-      '/t',
-      'REG_SZ',
-      '/d',
-      '<local>',
-      '/f'
-    ]);
-    // Set WinHTTP proxy (requires elevation). Try direct, then elevate via PowerShell if needed.
-    final setWinHttp = await Process.run(
-      'netsh',
-      ['winhttp', 'set', 'proxy', '127.0.0.1:' + port.toString(), 'bypass-list=localhost'],
-    );
-    if (setWinHttp.exitCode != 0) {
-      final ps = 'Start-Process -Verb RunAs cmd -ArgumentList "/c netsh winhttp set proxy 127.0.0.1:' +
-          port.toString() +
-          ' bypass-list=localhost"';
-      await Process.run('powershell', ['-NoProfile', '-Command', ps]);
-    }
-    return await isSystemProxyEnabled();
-  }
-
-  if (Platform.isLinux) {
-    // 1) Ensure CA exists and save PEM to temp
-    final tmpPath = Directory.systemTemp.path +
-        Platform.pathSeparator +
-        'network-debugger-dev-ca.crt';
-    try {
-      final api = sl<http_client.AppHttpClient>();
-      await api.post(
-        path: '/_api/v1/mitm/ca/generate',
-        body: {"cn": "network-debugger dev CA"},
-      );
-      final resp = await api.get(path: '/_api/v1/mitm/ca');
-      final pem =
-          (resp.data is String)
-              ? resp.data as String
-              : utf8.decode((resp.data as List).cast<int>());
-      await File(tmpPath).writeAsString(pem);
-    } catch (_) {}
-
-    // 2) Install to system trust store (Debian/Ubuntu or RHEL family)
-    final debPath = '/usr/local/share/ca-certificates/network-debugger-dev-ca.crt';
-    final rhelPath = '/etc/pki/ca-trust/source/anchors/network-debugger-dev-ca.crt';
-    // Try Debian/Ubuntu path first; otherwise RHEL/Fedora
-    final installDeb = 'cp "' + tmpPath + '" "' + debPath + '" && update-ca-certificates';
-    final installRhel = 'cp "' + tmpPath + '" "' + rhelPath + '" && update-ca-trust extract';
-    // Use pkexec to elevate; ignore errors if pkexec is missing
-    await Process.run('bash', [
-      '-lc',
-      'command -v pkexec >/dev/null 2>&1 && pkexec bash -lc "' + installDeb.replaceAll('"', '\\"') + '" || sudo -n bash -lc "' + installDeb.replaceAll('"', '\\"') + '" || true'
-    ]);
-    await Process.run('bash', [
-      '-lc',
-      'test -f "' + debPath + '" || (command -v pkexec >/dev/null 2>&1 && pkexec bash -lc "' + installRhel.replaceAll('"', '\\"') + '" || sudo -n bash -lc "' + installRhel.replaceAll('"', '\\"') + '") || true'
-    ]);
-
-    // 3) Enable proxy: prefer GNOME gsettings; otherwise drop env file
-    final port = _tryParsePort(baseUrl) ?? 9091;
-    final setGnome =
-        'gsettings set org.gnome.system.proxy mode manual && ' +
-        'gsettings set org.gnome.system.proxy.http host 127.0.0.1 && ' +
-        'gsettings set org.gnome.system.proxy.http port ' + port.toString() + ' && ' +
-        'gsettings set org.gnome.system.proxy.https host 127.0.0.1 && ' +
-        'gsettings set org.gnome.system.proxy.https port ' + port.toString();
-    final gRes = await Process.run('bash', ['-lc', setGnome]);
-    if (gRes.exitCode != 0) {
-      final home = Platform.environment['HOME'] ?? '';
-      if (home.isNotEmpty) {
-        final envDir = Directory(home + '/.config/environment.d');
-        try {
-          if (!envDir.existsSync()) envDir.createSync(recursive: true);
-          final file = File(envDir.path + '/90-network-debugger-proxy.conf');
-          await file.writeAsString(
-            'http_proxy=http://127.0.0.1:' + port.toString() + '\n' +
-            'https_proxy=http://127.0.0.1:' + port.toString() + '\n',
-          );
-        } catch (_) {}
-      }
-    }
-    return await isSystemProxyEnabled();
-  }
-  return false;
 }
 
-Future<void> rollback(String baseUrl) async {
-  if (Platform.isMacOS) {
-    final dollar = String.fromCharCode(36);
-    final shell =
-        "networksetup -listallnetworkservices | tail -n +2 | sed \"s/^\\* \\?//\" | while IFS= read -r svc; do " +
-        "networksetup -setwebproxystate \"" +
-        dollar +
-        "svc\" off; " +
-        "networksetup -setsecurewebproxystate \"" +
-        dollar +
-        "svc\" off; " +
-        "done";
-    final script =
-        'do shell script "' +
-        shell.replaceAll('"', '\\"') +
-        '" with administrator privileges';
-    await Process.run('osascript', ['-e', script]);
-    return;
-  }
-  if (Platform.isWindows) {
-    await Process.run('reg', [
-      'add',
-      'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
-      '/v',
-      'ProxyEnable',
-      '/t',
-      'REG_DWORD',
-      '/d',
-      '0',
-      '/f'
-    ]);
-    // Reset WinHTTP proxy (requires elevation)
-    final reset = await Process.run('netsh', ['winhttp', 'reset', 'proxy']);
-    if (reset.exitCode != 0) {
-      final ps =
-          'Start-Process -Verb RunAs cmd -ArgumentList "/c netsh winhttp reset proxy"';
-      await Process.run('powershell', ['-NoProfile', '-Command', ps]);
-    }
-  }
-  if (Platform.isLinux) {
-    // Disable GNOME proxy if available
-    await Process.run('bash', [
-      '-lc',
-      'gsettings set org.gnome.system.proxy mode none 2>/dev/null || true'
-    ]);
-    // Remove env file fallback
-    final home = Platform.environment['HOME'] ?? '';
-    if (home.isNotEmpty) {
-      final f = File(home + '/.config/environment.d/90-network-debugger-proxy.conf');
-      try {
-        if (f.existsSync()) f.deleteSync();
-      } catch (_) {}
-    }
-  }
+Future<void> rollbackMacOS(String baseUrl) async {
+  if (!Platform.isMacOS) return;
+  final dollar = String.fromCharCode(36);
+  final shell =
+      "networksetup -listallnetworkservices | tail -n +2 | sed \"s/^\\* \\?//\" | while IFS= read -r svc; do " +
+      "networksetup -setwebproxystate \"" +
+      dollar +
+      "svc\" off; " +
+      "networksetup -setsecurewebproxystate \"" +
+      dollar +
+      "svc\" off; " +
+      "done";
+  final script =
+      'do shell script "' +
+      shell.replaceAll('"', '\\"') +
+      '" with administrator privileges';
+  await Process.run('osascript', ['-e', script]);
 }
 
 Future<void> deleteDevCA() async {
@@ -490,11 +203,11 @@ Future<void> deleteDevCA() async {
     // Remove installed CA file and refresh trust store (Debian/Ubuntu or RHEL)
     await Process.run('bash', [
       '-lc',
-      'command -v pkexec >/dev/null 2>&1 && pkexec bash -lc "rm -f /usr/local/share/ca-certificates/network-debugger-dev-ca.crt && update-ca-certificates" || sudo -n bash -lc "rm -f /usr/local/share/ca-certificates/network-debugger-dev-ca.crt && update-ca-certificates" || true'
+      'command -v pkexec >/dev/null 2>&1 && pkexec bash -lc "rm -f /usr/local/share/ca-certificates/network-debugger-dev-ca.crt && update-ca-certificates" || sudo -n bash -lc "rm -f /usr/local/share/ca-certificates/network-debugger-dev-ca.crt && update-ca-certificates" || true',
     ]);
     await Process.run('bash', [
       '-lc',
-      'command -v pkexec >/dev/null 2>&1 && pkexec bash -lc "rm -f /etc/pki/ca-trust/source/anchors/network-debugger-dev-ca.crt && update-ca-trust extract" || sudo -n bash -lc "rm -f /etc/pki/ca-trust/source/anchors/network-debugger-dev-ca.crt && update-ca-trust extract" || true'
+      'command -v pkexec >/dev/null 2>&1 && pkexec bash -lc "rm -f /etc/pki/ca-trust/source/anchors/network-debugger-dev-ca.crt && update-ca-trust extract" || sudo -n bash -lc "rm -f /etc/pki/ca-trust/source/anchors/network-debugger-dev-ca.crt && update-ca-trust extract" || true',
     ]);
   }
 }
@@ -506,4 +219,35 @@ int? _tryParsePort(String baseUrl) {
   } catch (_) {
     return null;
   }
+}
+
+Future<String> proxyDiagnostics() async {
+  try {
+    if (Platform.isMacOS) {
+      final buf = StringBuffer();
+      final services = await Process.run('bash', [
+        '-lc',
+        'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
+      ]);
+      buf.writeln('services:\n' + (services.stdout ?? '').toString());
+      final list = (services.stdout ?? '')
+          .toString()
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty);
+      for (final s in list) {
+        final w = await Process.run('networksetup', ['-getwebproxy', s]);
+        final h = await Process.run('networksetup', ['-getsecurewebproxy', s]);
+        buf.writeln('\n[' + s + ']');
+        buf.writeln((w.stdout ?? '').toString());
+        buf.writeln((h.stdout ?? '').toString());
+      }
+      final sc = await Process.run('scutil', ['--proxy']);
+      buf.writeln('\nscutil --proxy:\n' + (sc.stdout ?? '').toString());
+      return buf.toString();
+    }
+  } catch (e) {
+    return 'diag error: ' + e.toString();
+  }
+  return 'N/A';
 }
