@@ -78,6 +78,67 @@ Future<bool> isSystemProxyEnabled() async {
   return false;
 }
 
+Future<String> proxyDiagnostics() async {
+  try {
+    if (Platform.isMacOS) {
+      final buf = StringBuffer();
+      final services = await Process.run('bash', [
+        '-lc',
+        'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
+      ]);
+      buf.writeln('Services:\n' + (services.stdout ?? '').toString());
+      final list = (services.stdout ?? '').toString().split('\n').where((e) => e.trim().isNotEmpty);
+      for (final s in list) {
+        final w = await Process.run('networksetup', ['-getwebproxy', s.trim()]);
+        final h = await Process.run('networksetup', ['-getsecurewebproxy', s.trim()]);
+        buf.writeln('\n[' + s + ']');
+        buf.writeln((w.stdout ?? '').toString());
+        buf.writeln((h.stdout ?? '').toString());
+      }
+      final sc = await Process.run('scutil', ['--proxy']);
+      buf.writeln('\nscutil --proxy:\n' + (sc.stdout ?? '').toString());
+      final order = await Process.run('networksetup', ['-listnetworkserviceorder']);
+      buf.writeln('\nservice order:\n' + (order.stdout ?? '').toString());
+      return buf.toString();
+    }
+    if (Platform.isWindows) {
+      final regE = await Process.run('reg', [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        '/v',
+        'ProxyEnable'
+      ]);
+      final regS = await Process.run('reg', [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        '/v',
+        'ProxyServer'
+      ]);
+      final nh = await Process.run('netsh', ['winhttp', 'show', 'proxy']);
+      return 'ProxyEnable:\n' +
+          (regE.stdout ?? '').toString() +
+          '\nProxyServer:\n' +
+          (regS.stdout ?? '').toString() +
+          '\nWinHTTP:\n' +
+          (nh.stdout ?? '').toString();
+    }
+    if (Platform.isLinux) {
+      final gMode = await Process.run('bash', ['-lc', 'gsettings get org.gnome.system.proxy mode 2>/dev/null || echo none']);
+      final gHttp = await Process.run('bash', ['-lc', 'gsettings get org.gnome.system.proxy.http host 2>/dev/null; gsettings get org.gnome.system.proxy.http port 2>/dev/null']);
+      final env = await Process.run('bash', ['-lc', r'echo $http_proxy $https_proxy']);
+      return 'gsettings mode: ' +
+          (gMode.stdout ?? '').toString() +
+          '\nhttp host/port: ' +
+          (gHttp.stdout ?? '').toString() +
+          '\nenv: ' +
+          (env.stdout ?? '').toString();
+    }
+  } catch (e) {
+    return 'diag error: ' + e.toString();
+  }
+  return 'N/A';
+}
+
 Future<bool> autoIntegrate(String baseUrl) async {
   if (Platform.isMacOS) {
   // 1) Ensure CA exists
@@ -154,6 +215,32 @@ Future<bool> autoIntegrate(String baseUrl) async {
         '" with administrator privileges';
     await Process.run('osascript', ['-e', fbScript]);
   }
+  // Additionally target the active service (by interface)
+  try {
+    final defIf = await Process.run('bash', [
+      '-lc',
+      "route get default 2>/dev/null | awk '/interface:/{print $2}'",
+    ]);
+    final iface = (defIf.stdout ?? '').toString().trim();
+    if (iface.isNotEmpty) {
+      final findSvc = await Process.run('bash', [
+        '-lc',
+        'networksetup -listnetworkserviceorder | awk -v ifc="' +
+            iface +
+            '" ' +
+            "'BEGIN{RS=\n\n}/Device: " +
+            iface +
+            "/{match($0,/Hardware Port: ([^,]+)/,m); if(m[1] != \"\"){print m[1]}}'",
+      ]);
+      final svc = (findSvc.stdout ?? '').toString().trim();
+      if (svc.isNotEmpty) {
+        await Process.run('networksetup', ['-setwebproxy', svc, '127.0.0.1', port.toString()]);
+        await Process.run('networksetup', ['-setsecurewebproxy', svc, '127.0.0.1', port.toString()]);
+        await Process.run('networksetup', ['-setwebproxystate', svc, 'on']);
+        await Process.run('networksetup', ['-setsecurewebproxystate', svc, 'on']);
+      }
+    }
+  } catch (_) {}
     // Verify
     return await isSystemProxyEnabled();
   }

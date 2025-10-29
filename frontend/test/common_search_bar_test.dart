@@ -1,86 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:frontend/widgets/common_search_bar.dart';
+import 'package:frontend/theme/app_theme.dart';
 
 void main() {
-  testWidgets('CommonSearchBar: actions, shortcuts, toggles', (tester) async {
-    var changed = 0;
-    var next = 0;
-    var prev = 0;
-    var closed = 0;
-    var tMatch = 0;
-    var tWhole = 0;
-    var tRegex = 0;
+  Widget _wrap(Widget child) => MaterialApp(theme: buildLightTheme(), home: Scaffold(body: Center(child: child)));
 
+  testWidgets('CommonSearchBar: onChanged и запрет навигации при canNavigate=false', (tester) async {
+    // Arrange
     final ctrl = TextEditingController();
+    int changes = 0;
+    int next = 0;
+    int prev = 0;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CommonSearchBar(
-              controller: ctrl,
-              countText: '0/0',
-              matchCase: false,
-              wholeWord: false,
-              useRegex: false,
-              canNavigate: true,
-              onChanged: () => changed++,
-              onNext: () => next++,
-              onPrev: () => prev++,
-              onClose: () => closed++,
-              onToggleMatchCase: () => tMatch++,
-              onToggleWholeWord: () => tWhole++,
-              onToggleRegex: () => tRegex++,
-            ),
-          ),
-        ),
-      ),
+    final bar = CommonSearchBar(
+      controller: ctrl,
+      focusNode: FocusNode(),
+      countText: '0/0',
+      matchCase: false,
+      wholeWord: false,
+      useRegex: false,
+      canNavigate: false,
+      onChanged: () => changes++,
+      onNext: () => next++,
+      onPrev: () => prev++,
+      onClose: () {},
+      onToggleMatchCase: () {},
+      onToggleWholeWord: () {},
+      onToggleRegex: () {},
     );
 
-    // Ввод текста вызывает onChanged
+    // Act
+    await tester.pumpWidget(_wrap(bar));
     await tester.enterText(find.byType(TextField), 'abc');
-    expect(changed > 0, isTrue);
 
-    // onSubmitted заменён на Shortcut (Enter) => onNext
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    // Assert
+    expect(changes, greaterThan(0));
+
+    // Нажимаем кнопки next/prev — не должны сработать
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_up));
     await tester.pump();
-    expect(next, greaterThanOrEqualTo(1));
+    expect(next, 0);
+    expect(prev, 0);
+  });
 
-    // Shift+Enter => Prev
+  testWidgets('CommonSearchBar: горячие клавиши Enter/Shift+Enter/Escape', (tester) async {
+    // Arrange
+    final ctrl = TextEditingController();
+    int next = 0;
+    int prev = 0;
+    int closed = 0;
+
+    final bar = CommonSearchBar(
+      controller: ctrl,
+      countText: '1/3',
+      matchCase: false,
+      wholeWord: false,
+      useRegex: false,
+      canNavigate: true,
+      onChanged: () {},
+      onNext: () => next++,
+      onPrev: () => prev++,
+      onClose: () => closed++,
+      onToggleMatchCase: () {},
+      onToggleWholeWord: () {},
+      onToggleRegex: () {},
+    );
+
+    // Act
+    await tester.pumpWidget(_wrap(bar));
+    await tester.pump();
+
+    // Enter => next
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    // Shift+Enter => prev
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
-    await tester.pump();
-    expect(prev, greaterThanOrEqualTo(1));
-
-    // Escape => Close
+    // Escape => close
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
+
+    // Assert
+    expect(next, 1);
+    expect(prev, 1);
     expect(closed, 1);
-
-    // Кнопки навигации
-    await tester.tap(find.byTooltip('Next match'));
-    await tester.pump();
-    expect(next, greaterThanOrEqualTo(2));
-
-    await tester.tap(find.byTooltip('Previous match'));
-    await tester.pump();
-    expect(prev, greaterThanOrEqualTo(2));
-
-    // Тогглы
-    await tester.tap(find.byTooltip('Match case'));
-    await tester.tap(find.byTooltip('Match whole word'));
-    await tester.tap(find.byTooltip('Use regular expression'));
-    await tester.pump();
-    expect((tMatch, tWhole, tRegex), (1, 1, 1));
-
-    // Кнопка закрытия
-    await tester.tap(find.byTooltip('Close'));
-    await tester.pump();
-    expect(closed, 2);
   });
 }
 

@@ -216,6 +216,39 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                         tooltip: 'Refresh status',
                         icon: const Icon(Icons.refresh),
                       ),
+                      IconButton(
+                        onPressed:
+                            _loading
+                                ? null
+                                : () async {
+                                  final txt = await proxyDiagnostics();
+                                  if (!mounted) return;
+                                  showDialog(
+                                    context: context,
+                                    builder:
+                                        (_) => AlertDialog(
+                                          title: const Text(
+                                            'Proxy diagnostics',
+                                          ),
+                                          content: SizedBox(
+                                            width: 700,
+                                            child: SingleChildScrollView(
+                                              child: SelectableText(txt),
+                                            ),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed:
+                                                  () => Navigator.pop(context),
+                                              child: const Text('Close'),
+                                            ),
+                                          ],
+                                        ),
+                                  );
+                                },
+                        tooltip: 'Diagnostics',
+                        icon: const Icon(Icons.terminal),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),

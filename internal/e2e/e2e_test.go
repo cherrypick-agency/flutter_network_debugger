@@ -1041,6 +1041,106 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	}
 }
 
+// Высоконагрузочный тест: 150 параллельных клиентов (HTTP+WS), проверка отсутствия паник/зависаний
+func TestE2E_Load_ParallelClients_150(t *testing.T) {
+    t.Parallel()
+    // upstreams: WS echo и HTTP simple
+    echoSrv, echoURL := startEchoWS(t)
+    defer echoSrv.Shutdown(context.Background())
+    httpMux := http.NewServeMux()
+    httpMux.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+        _ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+    })
+    httpMux.HandleFunc("/post", func(w http.ResponseWriter, r *http.Request) {
+        n, _ := io.Copy(io.Discard, r.Body)
+        _ = r.Body.Close()
+        _ = json.NewEncoder(w).Encode(map[string]any{"n": n})
+    })
+    httpUp := httptest.NewServer(httpMux)
+    defer httpUp.Close()
+
+    // start binary
+    bin := buildWsproxyBinary(t)
+    ln, _ := net.Listen("tcp", "127.0.0.1:0")
+    addr := ln.Addr().String()
+    _ = ln.Close()
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
+    if err := cmd.Start(); err != nil {
+        t.Fatalf("start: %v", err)
+    }
+    defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
+    baseURL := "http://" + addr
+    waitReady(t, baseURL, 4*time.Second)
+
+    // run 150 clients
+    total := 150
+    var wg sync.WaitGroup
+    wg.Add(total)
+    ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+    defer cancel()
+
+    for i := 0; i < total; i++ {
+        i := i
+        go func() {
+            defer wg.Done()
+            select {
+            case <-ctx.Done():
+                return
+            default:
+            }
+            if i%3 == 0 {
+                // HTTP path: GET and POST via reverse proxy
+                _, _ = http.Get(baseURL + "/httpproxy/get?_target=" + url.QueryEscape(httpUp.URL))
+                pr, pw := io.Pipe()
+                go func() {
+                    defer pw.Close()
+                    buf := make([]byte, 64*1024)
+                    for j := 0; j < 4; j++ { // ~256KB
+                        _, _ = pw.Write(buf)
+                    }
+                }()
+                req, _ := http.NewRequest(http.MethodPost, baseURL+"/httpproxy/post?_target="+url.QueryEscape(httpUp.URL), pr)
+                req.Header.Set("Content-Type", "application/octet-stream")
+                _, _ = http.DefaultClient.Do(req)
+            } else {
+                // WS path: short session with few messages
+                ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(echoURL)
+                c, _, err := websocket.DefaultDialer.Dial(ws, nil)
+                if err != nil {
+                    return
+                }
+                for k := 0; k < 5; k++ {
+                    _ = c.WriteMessage(websocket.TextMessage, []byte("x"))
+                }
+                // read a couple
+                reads := 0
+                deadline := time.Now().Add(1 * time.Second)
+                for time.Now().Before(deadline) && reads < 2 {
+                    _ = c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+                    if _, _, err := c.ReadMessage(); err == nil {
+                        reads++
+                    }
+                }
+                _ = c.Close()
+            }
+        }()
+    }
+    wg.Wait()
+
+    // sanity: получить список сессий (хотя бы несколько должны появиться)
+    resp, err := http.Get(baseURL + "/api/sessions?limit=1000")
+    if err != nil {
+        t.Fatalf("sessions: %v", err)
+    }
+    defer resp.Body.Close()
+    var list struct { Items []struct{ ID string } `json:"items"` }
+    _ = json.NewDecoder(resp.Body).Decode(&list)
+    if len(list.Items) == 0 {
+        t.Fatalf("no sessions after parallel load")
+    }
+}
+
 func urlQueryEscape(s string) string {
 	// small local escape to avoid importing net/url setters here
 	// NOTE: allowed as test helper

@@ -1,23 +1,33 @@
 package integration
 
 import (
-	"bufio"
-	"encoding/json"
-	"io"
-	"net"
-	"net/http"
-	"net/http/cookiejar"
-	"net/http/httptest"
-	"net/url"
-	"strings"
-	"testing"
-	"time"
+    "context"
+    "bufio"
+    "compress/flate"
+    "compress/gzip"
+    "crypto/rand"
+    "crypto/rsa"
+    "crypto/tls"
+    "crypto/x509"
+    "crypto/x509/pkix"
+    "encoding/json"
+    "io"
+    "math/big"
+    "net"
+    "net/http"
+    "net/http/cookiejar"
+    "net/http/httptest"
+    "fmt"
+    "net/url"
+    "strings"
+    "testing"
+    "time"
 
-	"network-debugger/internal/adapters/storage/memory"
-	"network-debugger/internal/infrastructure/config"
-	httpapi "network-debugger/internal/infrastructure/httpapi"
-	obs "network-debugger/internal/infrastructure/observability"
-	"network-debugger/internal/usecase"
+    "network-debugger/internal/adapters/storage/memory"
+    "network-debugger/internal/infrastructure/config"
+    httpapi "network-debugger/internal/infrastructure/httpapi"
+    obs "network-debugger/internal/infrastructure/observability"
+    "network-debugger/internal/usecase"
 )
 
 // startUpstreamHTTP spins up a small HTTP server that echoes request info
@@ -394,6 +404,315 @@ func TestHTTPReverseProxy_RedactionAndFrames(t *testing.T) {
 	_ = deps
 }
 
+func TestHTTPReverseProxy_Redirects_SingleAndChain(t *testing.T) {
+    t.Parallel()
+    // upstream with redirect chain: /r1 -> 302 /r2, /r2 -> 301 /final
+    mux := http.NewServeMux()
+    mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+        _, _ = w.Write([]byte("ok"))
+    })
+    mux.HandleFunc("/r2", func(w http.ResponseWriter, r *http.Request) {
+        http.Redirect(w, r, "/final", http.StatusMovedPermanently)
+    })
+    mux.HandleFunc("/r1", func(w http.ResponseWriter, r *http.Request) {
+        http.Redirect(w, r, "/r2", http.StatusFound)
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    app, _ := startHTTPApp(t)
+    defer app.Close()
+
+    u := app.URL + "/httpproxy/r1?_target=" + url.QueryEscape(upstream.URL)
+    resp, err := app.Client().Get(u)
+    if err != nil {
+        t.Fatalf("redirect chain: %v", err)
+    }
+    defer resp.Body.Close()
+    b, _ := io.ReadAll(resp.Body)
+    if string(b) != "ok" {
+        t.Fatalf("final body mismatch: %q", string(b))
+    }
+}
+
+func TestHTTPReverseProxy_Chunked_FlushEcho(t *testing.T) {
+    t.Parallel()
+    // upstream that streams chunks with flush
+    mux := http.NewServeMux()
+    mux.HandleFunc("/chunk", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "text/plain")
+        f, _ := w.(http.Flusher)
+        for i := 0; i < 5; i++ {
+            _, _ = w.Write([]byte("part"))
+            if f != nil {
+                f.Flush()
+            }
+            time.Sleep(10 * time.Millisecond)
+        }
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    app, _ := startHTTPApp(t)
+    defer app.Close()
+
+    resp, err := app.Client().Get(app.URL + "/httpproxy/chunk?_target=" + url.QueryEscape(upstream.URL))
+    if err != nil { t.Fatalf("chunked get: %v", err) }
+    defer resp.Body.Close()
+    b, _ := io.ReadAll(resp.Body)
+    if string(b) != strings.Repeat("part", 5) {
+        t.Fatalf("chunked echo mismatch: %q", string(b))
+    }
+}
+
+func TestHTTPReverseProxy_Compression_GzipDeflate_PreviewToggle(t *testing.T) {
+    t.Parallel()
+    // upstream that returns gzip and deflate depending on path
+    mux := http.NewServeMux()
+    payload := strings.Repeat("A", 4096)
+    mux.HandleFunc("/gz", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "text/plain")
+        w.Header().Set("Content-Encoding", "gzip")
+        gz := gzip.NewWriter(w)
+        _, _ = gz.Write([]byte(payload))
+        _ = gz.Close()
+    })
+    mux.HandleFunc("/df", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "text/plain")
+        w.Header().Set("Content-Encoding", "deflate")
+        df, _ := flate.NewWriter(w, flate.DefaultCompression)
+        _, _ = df.Write([]byte(payload))
+        _ = df.Close()
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    // App with PreviewDecompress on (default)
+    app1, deps1 := startHTTPApp(t)
+    defer app1.Close()
+    deps1.Cfg.PreviewDecompress = true
+    // Should succeed
+    r1, err := app1.Client().Get(app1.URL + "/httpproxy/gz?_target=" + url.QueryEscape(upstream.URL))
+    if err != nil { t.Fatalf("gzip on: %v", err) }
+    _ = r1.Body.Close()
+
+    // App with PreviewDecompress off
+    app2, deps2 := startHTTPApp(t)
+    defer app2.Close()
+    deps2.Cfg.PreviewDecompress = false
+    r2, err := app2.Client().Get(app2.URL + "/httpproxy/df?_target=" + url.QueryEscape(upstream.URL))
+    if err != nil { t.Fatalf("deflate off: %v", err) }
+    _ = r2.Body.Close()
+}
+
+func TestHTTPReverseProxy_LargeBodies_32MB_UploadDownload(t *testing.T) {
+    // Not parallel to reduce memory spikes on CI
+    // upstream large download and upload counters
+    mux := http.NewServeMux()
+    // 32MB payload for download
+    const size = 32 * 1024 * 1024
+    mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/octet-stream")
+        // stream without buffering
+        buf := make([]byte, 1024*32)
+        written := 0
+        for written < size {
+            n := size - written
+            if n > len(buf) { n = len(buf) }
+            _, _ = w.Write(buf[:n])
+            written += n
+        }
+    })
+    mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+        n, _ := io.Copy(io.Discard, r.Body)
+        _ = r.Body.Close()
+        _ = json.NewEncoder(w).Encode(map[string]any{"n": n})
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    app, _ := startHTTPApp(t)
+    defer app.Close()
+
+    // download
+    rd, err := app.Client().Get(app.URL + "/httpproxy/download?_target=" + url.QueryEscape(upstream.URL))
+    if err != nil { t.Fatalf("download: %v", err) }
+    dn, _ := io.Copy(io.Discard, rd.Body)
+    _ = rd.Body.Close()
+    if dn != size {
+        t.Fatalf("download bytes: %d", dn)
+    }
+
+    // upload 32MB using io.LimitedReader backed by random reader (avoid zero-run compression)
+    pr, pw := io.Pipe()
+    go func() {
+        defer pw.Close()
+        // stream random bytes
+        left := int64(size)
+        buf := make([]byte, 64*1024)
+        for left > 0 {
+            n := int64(len(buf))
+            if n > left { n = left }
+            _, _ = rand.Read(buf[:n])
+            if _, err := pw.Write(buf[:n]); err != nil { return }
+            left -= n
+        }
+    }()
+    req, _ := http.NewRequest(http.MethodPost, app.URL+"/httpproxy/upload?_target="+url.QueryEscape(upstream.URL), pr)
+    req.Header.Set("Content-Type", "application/octet-stream")
+    ru, err := app.Client().Do(req)
+    if err != nil { t.Fatalf("upload: %v", err) }
+    defer ru.Body.Close()
+    var got struct{ N int64 `json:"n"` }
+    _ = json.NewDecoder(ru.Body).Decode(&got)
+    if got.N != int64(size) {
+        t.Fatalf("upload bytes mismatch: %d", got.N)
+    }
+}
+
+func TestHTTPReverseProxy_KeepAlive_ConnectionReuse(t *testing.T) {
+    t.Parallel()
+    var newConns int64
+    handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+    srv := httptest.NewUnstartedServer(handler)
+    srv.Config.ConnState = func(c net.Conn, s http.ConnState) {
+        if s == http.StateNew { newConns++ }
+    }
+    srv.Start()
+    defer srv.Close()
+    upstreamURL := srv.URL
+
+    app, _ := startHTTPApp(t)
+    defer app.Close()
+    client := app.Client()
+    for i := 0; i < 5; i++ {
+        r, err := client.Get(app.URL + "/httpproxy/?_target=" + url.QueryEscape(upstreamURL))
+        if err != nil { t.Fatalf("keepalive req %d: %v", i, err) }
+        _ = r.Body.Close()
+    }
+    if newConns > 5 {
+        t.Fatalf("too many upstream connections: %d", newConns)
+    }
+}
+
+func TestHTTPReverseProxy_ExpectContinue(t *testing.T) {
+    t.Parallel()
+    // upstream that explicitly sends 100-continue then reads body
+    mux := http.NewServeMux()
+    mux.HandleFunc("/ec", func(w http.ResponseWriter, r *http.Request) {
+        if r.Header.Get("Expect") != "100-continue" {
+            // still read to finish
+            _, _ = io.Copy(io.Discard, r.Body)
+            _ = json.NewEncoder(w).Encode(map[string]int{"len": 0})
+            return
+        }
+        if cn, ok := w.(http.CloseNotifier); ok {
+            _ = cn // avoid unused on old go
+        }
+        w.WriteHeader(http.StatusContinue)
+        n, _ := io.Copy(io.Discard, r.Body)
+        _ = json.NewEncoder(w).Encode(map[string]int64{"len": n})
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    app, _ := startHTTPApp(t)
+    defer app.Close()
+
+    body := io.NopCloser(io.LimitReader(rand.Reader, 256<<10))
+    req, _ := http.NewRequest(http.MethodPost, app.URL+"/httpproxy/ec?_target="+url.QueryEscape(upstream.URL), body)
+    req.Header.Set("Expect", "100-continue")
+    req.Header.Set("Content-Type", "application/octet-stream")
+    resp, err := app.Client().Do(req)
+    if err != nil { t.Fatalf("expect-continue: %v", err) }
+    defer resp.Body.Close()
+    var got map[string]any
+    _ = json.NewDecoder(resp.Body).Decode(&got)
+    if got["len"].(float64) <= 0 {
+        t.Fatalf("body was not forwarded after 100-continue")
+    }
+}
+
+func TestHTTPReverseProxy_Timeout_CancelContext(t *testing.T) {
+    t.Parallel()
+    // upstream that reads slowly
+    mux := http.NewServeMux()
+    mux.HandleFunc("/slowread", func(w http.ResponseWriter, r *http.Request) {
+        buf := make([]byte, 1024)
+        for {
+            _, err := r.Body.Read(buf)
+            if err != nil { break }
+            time.Sleep(20 * time.Millisecond)
+        }
+        w.WriteHeader(http.StatusRequestTimeout)
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    app, _ := startHTTPApp(t)
+    defer app.Close()
+
+    pr, pw := io.Pipe()
+    go func() {
+        defer pw.Close()
+        for i := 0; i < 1024; i++ { // ~1MB
+            _, _ = pw.Write(make([]byte, 1024))
+            time.Sleep(5 * time.Millisecond)
+        }
+    }()
+    ctx, cancel := time.WithTimeout(context.Background(), 50*time.Millisecond)
+    defer cancel()
+    req, _ := http.NewRequestWithContext(ctx, http.MethodPost, app.URL+"/httpproxy/slowread?_target="+url.QueryEscape(upstream.URL), pr)
+    req.Header.Set("Content-Type", "application/octet-stream")
+    _, _ = app.Client().Do(req)
+    // Expect context to cancel before completion without hanging
+}
+
+func TestHTTPReverseProxy_IPv6_Upstream(t *testing.T) {
+    t.Parallel()
+    mux := http.NewServeMux()
+    mux.HandleFunc("/v6", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+    ln, err := net.Listen("tcp6", "[::1]:0")
+    if err != nil { t.Skip("no ipv6 on host") }
+    srv := &http.Server{Handler: mux}
+    go srv.Serve(ln)
+    defer srv.Close()
+    if ta, ok := ln.Addr().(*net.TCPAddr); ok {
+        upstreamURL := fmt.Sprintf("http://[%s]:%d/v6", ta.IP.String(), ta.Port)
+
+        app, _ := startHTTPApp(t)
+        defer app.Close()
+        r, err := app.Client().Get(app.URL + "/httpproxy/?_target=" + url.QueryEscape(upstreamURL))
+        if err != nil { t.Fatalf("ipv6: %v", err) }
+        _ = r.Body.Close()
+    } else {
+        t.Skip("unexpected addr type")
+    }
+}
+
+func TestHTTPReverseProxy_TLS_Upstream_SelfSigned(t *testing.T) {
+    t.Parallel()
+    // self-signed TLS upstream
+    priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+    tmpl := x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "127.0.0.1"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24*time.Hour), DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, KeyUsage: x509.KeyUsageKeyEncipherment|x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+    der, _ := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
+    cert := tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}
+    mux := http.NewServeMux()
+    mux.HandleFunc("/tls", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+    ln, _ := net.Listen("tcp", "127.0.0.1:0")
+    srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}}}
+    go srv.ServeTLS(ln, "", "")
+    defer srv.Close()
+    upstream := "https://" + ln.Addr().String() + "/tls"
+
+    app, deps := startHTTPApp(t)
+    defer app.Close()
+    deps.Cfg.InsecureTLS = true
+    r, err := app.Client().Get(app.URL + "/httpproxy/?_target=" + url.QueryEscape(upstream))
+    if err != nil { t.Fatalf("tls upstream: %v", err) }
+    _ = r.Body.Close()
+}
+
 func TestHTTPReverseProxy_Cookies_Isolation(t *testing.T) {
 	t.Parallel()
 	// Upstream A
@@ -603,4 +922,79 @@ func TestHTTPReverseProxy_Cookies_ModeOff_PassThrough(t *testing.T) {
 	if strings.Contains(sc, "/httpproxy") {
 		t.Fatalf("path must not be rewritten under mode=off: %s", sc)
 	}
+}
+
+func TestHTTPReverseProxy_Cookies_HostPrefixes_ProxyHostStrategy(t *testing.T) {
+    t.Parallel()
+    // Upstream sets __Host_ and __Secure_ cookies
+    mux := http.NewServeMux()
+    mux.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Add("Set-Cookie", "__Host_sid=aaa; Path=/; SameSite=None")
+        w.Header().Add("Set-Cookie", "__Secure_token=bbb; Path=/; SameSite=Lax")
+        w.Header().Set("Content-Type", "text/plain")
+        _, _ = w.Write([]byte("ok"))
+    })
+    upstream := httptest.NewServer(mux)
+    defer upstream.Close()
+
+    app, deps := startHTTPApp(t)
+    defer app.Close()
+    // Ensure proxyHost and root path to satisfy __Host_ constraints (Path=/, no Domain)
+    deps.Cfg.Cookies.DomainStrategy = "proxyHost"
+    deps.Cfg.Cookies.PathStrategy = "root"
+
+    resp, err := app.Client().Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(upstream.URL))
+    if err != nil {
+        t.Fatalf("request: %v", err)
+    }
+    defer resp.Body.Close()
+    // combined Set-Cookie
+    sc := strings.Join(resp.Header.Values("Set-Cookie"), "; ")
+    // __Host_: must have Path=/ and MUST NOT include Domain
+    if !strings.Contains(sc, "__Host_sid=") || !strings.Contains(sc, "Path=/") || strings.Contains(strings.ToLower(sc), "domain=") {
+        t.Fatalf("__Host_ cookie invalid under proxyHost/root: %s", sc)
+    }
+    // __Secure_: should pass with Secure when connection is HTTPS on client; here app is HTTP, so we don't assert Secure
+    if !strings.Contains(sc, "__Secure_token=") {
+        t.Fatalf("__Secure_ cookie not present: %s", sc)
+    }
+}
+
+func TestHTTPReverseProxy_Cookies_SameSiteNone_HTTPS(t *testing.T) {
+    t.Parallel()
+    // Upstream TLS returns SameSite=None without Secure; we only verify proxy forwards header through HTTPS endpoint
+    priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+    tmpl := x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24*time.Hour), DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, KeyUsage: x509.KeyUsageKeyEncipherment|x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+    der, _ := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
+    cert := tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}
+    mux := http.NewServeMux()
+    mux.HandleFunc("/cookie", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Add("Set-Cookie", "ssid=1; Path=/; SameSite=None")
+        _, _ = w.Write([]byte("ok"))
+    })
+    ln, _ := net.Listen("tcp", "127.0.0.1:0")
+    ups := &http.Server{Handler: mux, TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}}}
+    go ups.ServeTLS(ln, "", "")
+    defer ups.Close()
+    upstream := "https://" + ln.Addr().String() + "/cookie"
+
+    // HTTPS proxy app
+    logger := obs.NewLogger("error")
+    metrics := obs.NewMetrics()
+    store := memory.NewStore(500, 10000, 2*time.Hour)
+    svc := usecase.NewSessionService(store, store, store)
+    deps := &httpapi.Deps{Cfg: config.Config{CORSAllowOrigin: "*", TLSAddr: ":0", InsecureTLS: true}, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
+    app := httptest.NewTLSServer(httpapi.NewRouterWithDeps(deps))
+    defer app.Close()
+
+    // client trusts TLSServer
+    resp, err := app.Client().Get(app.URL + "/httpproxy/?_target=" + url.QueryEscape(upstream))
+    if err != nil {
+        t.Fatalf("https proxy request: %v", err)
+    }
+    defer resp.Body.Close()
+    sc := strings.Join(resp.Header.Values("Set-Cookie"), "; ")
+    if !strings.Contains(strings.ToLower(sc), "samesite=none") {
+        t.Fatalf("SameSite=None not forwarded via HTTPS proxy: %s", sc)
+    }
 }
