@@ -1112,6 +1112,7 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 				if err != nil {
 					return
 				}
+				defer c.Close()
 				for k := 0; k < 5; k++ {
 					_ = c.WriteMessage(websocket.TextMessage, []byte("x"))
 				}
@@ -1124,8 +1125,7 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 					if err != nil {
 						// Any error (timeout or fatal) - stop reading
 						if !isTimeoutError(err) {
-							// Fatal error - close and return early
-							_ = c.Close()
+							// Fatal error - return early, defer will close
 							return
 						}
 						// Timeout - continue to next iteration
@@ -1133,7 +1133,6 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 					}
 					reads++
 				}
-				_ = c.Close()
 			}
 		}()
 	}
