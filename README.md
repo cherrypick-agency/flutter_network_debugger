@@ -19,6 +19,9 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/cherrypick-agency/flutter_network_debugger" alt="License" />
   </a>
+  <a href="https://codecov.io/gh/cherrypick-agency/flutter_network_debugger">
+    <img src="https://codecov.io/gh/cherrypick-agency/flutter_network_debugger/branch/main/graph/badge.svg" alt="codecov" />
+  </a>
 </p>
 
 <p align="center">
@@ -79,10 +82,32 @@ Where UI opens
 Main settings (ENV)
 - `ADDR` — server address (default :9091)
 - `DEV_MODE` — development mode (1/true)
+- `NO_BROWSER` — disable automatic browser opening (1/true)
 - `DEFAULT_TARGET` — default target upstream
 - `CAPTURE_BODIES` — save request/response bodies (1/true)
 - `RESPONSE_DELAY_MS` — fixed or range, e.g. `1000` or `1000-3000`
 - `INSECURE_TLS` — trust self-signed certificates (1/true)
+
+Cookies and stealth (reverse proxy /httpproxy)
+- `STEALTH_HEADERS` — hide proxy headers (Via, X-Forwarded-*) on /httpproxy (default 1)
+- `COOKIES_MODE` — `isolate` | `auto` | `off` (default `isolate`)
+- `COOKIES_DOMAIN_STRATEGY` — `hostOnly` | `proxyHost` (default `hostOnly`)
+- `COOKIES_PATH_STRATEGY` — `prefix` | `root` (default `prefix`)
+
+Per-request overrides (query params)
+- `_cookie_mode=isolate|auto|off`
+- `_stealth=1|0`
+
+Notes
+- For `SameSite=None` and `__Secure-`/`__Host-` cookies to be accepted by the browser, client→proxy must be HTTPS.
+- In `isolate` mode cookie names are namespaced in the browser storage and unwrapped towards upstream, so different `_target` do not collide.
+
+WebSocket preview settings
+- `PREVIEW_MAX_BYTES` — preview limit for text payloads (default 50000)
+- `WS_PREVIEW_MAX_BYTES` — WS preview limit (fallback to PREVIEW_MAX_BYTES)
+- `WS_DEFLATE_PREVIEW` — try to decompress permessage-deflate for preview (default 1)
+- `WS_CAPTURE_BODIES` — save WS message bodies to spool (default 0)
+- `WS_BODY_MAX_BYTES` — spool size limit for WS message body (default 1 MiB)
 
 Local development (without GitHub)
 - Ready binary/archive in `./dist`:

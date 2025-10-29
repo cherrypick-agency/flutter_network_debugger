@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+    "os"
 	"network-debugger/internal/domain"
 	"network-debugger/internal/usecase"
 	"strings"
@@ -15,6 +16,7 @@ type sessionEntry struct {
 	events    []domain.Event
 	httpTxs   []domain.HTTPTransaction
 	createdAt time.Time
+    spoolFiles []string
 }
 
 type Store struct {
@@ -25,11 +27,13 @@ type Store struct {
 
 	maxSessions         int
 	maxFramesPerSession int
+    maxEventsPerSession int
 	ttl                 time.Duration
 
 	// capture state (MVP, process-local)
-	currentCapture int
-	recording      bool
+    currentCapture      int
+    recording           bool
+    droppedEventsTotal  int
 }
 
 func NewStore(maxSessions, maxFrames int, ttl time.Duration) *Store {
@@ -37,7 +41,8 @@ func NewStore(maxSessions, maxFrames int, ttl time.Duration) *Store {
 		order:               make([]string, 0, maxSessions),
 		items:               make(map[string]*sessionEntry, maxSessions),
 		maxSessions:         maxSessions,
-		maxFramesPerSession: maxFrames,
+        maxFramesPerSession: maxFrames,
+        maxEventsPerSession: maxFrames,
 		ttl:                 ttl,
 		currentCapture:      0,
 		recording:           true,
@@ -101,7 +106,24 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.items[id]; ok {
-		delete(s.items, id)
+        // cleanup spool files
+        if e := s.items[id]; e != nil {
+            for _, p := range e.spoolFiles {
+                _ = os.Remove(p)
+            }
+            // also cleanup frame body files
+            for _, f := range e.frames {
+                if f.BodyFile != "" {
+                    _ = os.Remove(f.BodyFile)
+                }
+            }
+            // http tx body files
+            for _, tx := range e.httpTxs {
+                if tx.ReqBodyFile != "" { _ = os.Remove(tx.ReqBodyFile) }
+                if tx.RespBodyFile != "" { _ = os.Remove(tx.RespBodyFile) }
+            }
+        }
+        delete(s.items, id)
 		// remove from order
 		for i, sid := range s.order {
 			if sid == id {
@@ -117,8 +139,18 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 func (s *Store) ClearAllSessions(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// reinitialize map; maps do not support cap(), so we can optionally hint with current len
-	s.items = make(map[string]*sessionEntry, len(s.items))
+    // cleanup spool files for all sessions
+    for _, e := range s.items {
+        if e == nil { continue }
+        for _, p := range e.spoolFiles { _ = os.Remove(p) }
+        for _, f := range e.frames { if f.BodyFile != "" { _ = os.Remove(f.BodyFile) } }
+        for _, tx := range e.httpTxs {
+            if tx.ReqBodyFile != "" { _ = os.Remove(tx.ReqBodyFile) }
+            if tx.RespBodyFile != "" { _ = os.Remove(tx.RespBodyFile) }
+        }
+    }
+    // reinitialize map; maps do not support cap(), so we can optionally hint with current len
+    s.items = make(map[string]*sessionEntry, len(s.items))
 	s.order = s.order[:0]
 	// keep capture state as-is; not resetting currentCapture to preserve history
 	return nil
@@ -201,6 +233,15 @@ func (s *Store) SetClosed(ctx context.Context, id string, ts time.Time, errMsg *
 	if e, ok := s.items[id]; ok {
 		e.session.ClosedAt = &ts
 		e.session.Error = errMsg
+        // cleanup tracked spool files when session closes
+        for _, p := range e.spoolFiles { _ = os.Remove(p) }
+        e.spoolFiles = nil
+        // also cleanup per-frame and http tx body files
+        for _, f := range e.frames { if f.BodyFile != "" { _ = os.Remove(f.BodyFile) } }
+        for _, tx := range e.httpTxs {
+            if tx.ReqBodyFile != "" { _ = os.Remove(tx.ReqBodyFile) }
+            if tx.RespBodyFile != "" { _ = os.Remove(tx.RespBodyFile) }
+        }
 	}
 	return nil
 }
@@ -254,11 +295,28 @@ func (s *Store) AppendEvent(ctx context.Context, sessionID string, ev domain.Eve
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e, ok := s.items[sessionID]; ok {
+        if s.maxEventsPerSession > 0 && len(e.events) >= s.maxEventsPerSession {
+            // drop-from-head policy for events
+            e.events = e.events[1:]
+            s.droppedEventsTotal++
+        }
 		e.events = append(e.events, ev)
-		e.session.Events.Total++
-		e.session.Events.SIO++
+        // не учитываем системные события в пользовательской статистике
+        if ev.Namespace != "/_sys" {
+            e.session.Events.Total++
+            e.session.Events.SIO++
+        }
 	}
 	return nil
+}
+
+// AddSpoolFile tracks a temporary spool file to be removed when the session closes.
+func (s *Store) AddSpoolFile(ctx context.Context, sessionID string, path string) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    if e, ok := s.items[sessionID]; ok {
+        e.spoolFiles = append(e.spoolFiles, path)
+    }
 }
 
 func (s *Store) ListEvents(ctx context.Context, sessionID string, from string, limit int) ([]domain.Event, string, error) {

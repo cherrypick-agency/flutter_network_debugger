@@ -1,0 +1,17 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 0%
+        threshold: 1%
+    patch:
+      default:
+        target: 70%
+        threshold: 2%
+ignore:
+  - "cmd/**"
+  - "interfaces/**"
+  - "internal/e2e/**"
+  - "dist/**"
+  - "deploy/**"
+
