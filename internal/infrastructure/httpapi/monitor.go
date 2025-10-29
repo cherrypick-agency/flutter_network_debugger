@@ -25,9 +25,8 @@ type ErrorDetails struct {
 
 type MonitorHub struct {
 	mu       sync.RWMutex
-	clients  map[*websocket.Conn]struct{}
+    clients  map[*websocket.Conn]chan []byte
 	upgrader websocket.Upgrader
-	wmu      sync.Mutex
 	// listeners are in-process subscribers (e.g., SSE forwarders)
 	lmu       sync.RWMutex
 	listeners map[chan MonitorEvent]struct{}
@@ -35,7 +34,7 @@ type MonitorHub struct {
 
 func NewMonitorHub() *MonitorHub {
 	return &MonitorHub{
-		clients:   make(map[*websocket.Conn]struct{}),
+        clients:   make(map[*websocket.Conn]chan []byte),
 		upgrader:  websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
 		listeners: make(map[chan MonitorEvent]struct{}),
 	}
@@ -46,9 +45,20 @@ func (h *MonitorHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	h.mu.Lock()
-	h.clients[c] = struct{}{}
-	h.mu.Unlock()
+    ch := make(chan []byte, 256)
+    h.mu.Lock()
+    h.clients[c] = ch
+    h.mu.Unlock()
+    // writer goroutine
+    go func(conn *websocket.Conn, out <-chan []byte) {
+        for msg := range out {
+            _ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+            if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+                break
+            }
+        }
+        _ = conn.Close()
+    }(c, ch)
 	_ = c.SetReadDeadline(time.Time{})
 	for {
 		// keepalive reads to detect client close
@@ -57,18 +67,20 @@ func (h *MonitorHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.mu.Lock()
-	delete(h.clients, c)
+    if ch, ok := h.clients[c]; ok {
+        delete(h.clients, c)
+        close(ch)
+    }
 	h.mu.Unlock()
-	_ = c.Close()
 }
 
 func (h *MonitorHub) Broadcast(ev MonitorEvent) {
 	data, _ := json.Marshal(ev)
 	// snapshot clients to avoid holding read lock during writes
 	h.mu.RLock()
-	clients := make([]*websocket.Conn, 0, len(h.clients))
-	for c := range h.clients {
-		clients = append(clients, c)
+    outs := make([]chan []byte, 0, len(h.clients))
+    for _, ch := range h.clients {
+        outs = append(outs, ch)
 	}
 	h.mu.RUnlock()
 	// snapshot listeners
@@ -78,13 +90,10 @@ func (h *MonitorHub) Broadcast(ev MonitorEvent) {
 		subs = append(subs, ch)
 	}
 	h.lmu.RUnlock()
-	// serialize writes to prevent concurrent writes to same conn
-	h.wmu.Lock()
-	for _, c := range clients {
-		_ = c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		_ = c.WriteMessage(websocket.TextMessage, data)
-	}
-	h.wmu.Unlock()
+    // non-blocking fan-out
+    for _, ch := range outs {
+        select { case ch <- data: default: /* drop if slow */ }
+    }
 	// non-blocking notify listeners
 	for _, ch := range subs {
 		select {

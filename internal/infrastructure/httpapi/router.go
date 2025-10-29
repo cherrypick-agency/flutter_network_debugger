@@ -33,7 +33,9 @@ func NewRouter(cfg config.Config, logger *zerolog.Logger, metrics *obs.Metrics) 
 func NewRouterWithDeps(d *Deps) http.Handler {
 	mux := buildBaseMux(d)
 	// Wrap with forward-proxy OUTERMOST; then apply CORS to all non-CONNECT flows.
-	return withForwardProxy(d, withCORS(d.Cfg, mux))
+    // Start background GC for spool files (best-effort)
+    go startSpoolGC(d)
+    return withForwardProxy(d, withCORS(d.Cfg, mux))
 }
 
 // NewRouterWithoutForwardProxy returns the same routes but without the forward-proxy wrapper.

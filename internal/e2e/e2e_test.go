@@ -304,8 +304,8 @@ func TestE2E_BinaryProcess_RealTCP(t *testing.T) {
 	_ = ln.Close()
 
 	var out bytes.Buffer
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	if err := cmd.Start(); err != nil {
@@ -527,8 +527,8 @@ func TestE2E_TLS_WSS_Subprotocols(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	_ = ln.Close()
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr, "INSECURE_TLS=1")
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "INSECURE_TLS=1", "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
@@ -565,8 +565,8 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	_ = ln.Close()
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
@@ -692,8 +692,8 @@ func TestE2E_HeadersForwardingAndNegative(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	_ = ln.Close()
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
@@ -750,8 +750,8 @@ func TestE2E_LargeFramesAndPreview(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	_ = ln.Close()
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
@@ -821,8 +821,8 @@ func TestE2E_ServerClientCloses(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	_ = ln.Close()
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
@@ -876,8 +876,8 @@ func TestE2E_BackpressureSlowEcho(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	_ = ln.Close()
-	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+    cmd := exec.Command(bin)
+    cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
