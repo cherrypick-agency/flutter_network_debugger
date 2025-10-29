@@ -27,5 +27,3 @@ func FuzzParseSetCookie(f *testing.F) {
 		_, _ = parseSetCookieLine(out)
 	})
 }
-
-

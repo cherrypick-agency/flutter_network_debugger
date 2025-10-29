@@ -49,7 +49,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build upstream URL by joining path suffix after /httpproxy or /proxy
-    prefix := "/httpproxy"
+	prefix := "/httpproxy"
 	if strings.HasPrefix(r.URL.Path, "/proxy") {
 		prefix = "/proxy"
 	}
@@ -94,33 +94,37 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		upstream.ForceQuery = false
 	}
 
-    // Resolve cookie/stealth options (can be overridden per-request via query)
-    cookieMode := d.Cfg.Cookies.Mode
-    if v := strings.TrimSpace(r.URL.Query().Get("_cookie_mode")); v != "" {
-        lv := strings.ToLower(v)
-        if lv == CookieModeIsolate || lv == CookieModeAuto || lv == CookieModeOff {
-            cookieMode = lv
-        }
-    }
-    stealth := d.Cfg.StealthHeaders
-    if v := strings.TrimSpace(r.URL.Query().Get("_stealth")); v != "" {
-        lv := strings.ToLower(v)
-        if lv == "0" || lv == "false" { stealth = false }
-        if lv == "1" || lv == "true" { stealth = true }
-    }
+	// Resolve cookie/stealth options (can be overridden per-request via query)
+	cookieMode := d.Cfg.Cookies.Mode
+	if v := strings.TrimSpace(r.URL.Query().Get("_cookie_mode")); v != "" {
+		lv := strings.ToLower(v)
+		if lv == CookieModeIsolate || lv == CookieModeAuto || lv == CookieModeOff {
+			cookieMode = lv
+		}
+	}
+	stealth := d.Cfg.StealthHeaders
+	if v := strings.TrimSpace(r.URL.Query().Get("_stealth")); v != "" {
+		lv := strings.ToLower(v)
+		if lv == "0" || lv == "false" {
+			stealth = false
+		}
+		if lv == "1" || lv == "true" {
+			stealth = true
+		}
+	}
 
-    ns := computeNamespaceFromURL(&upstream)
-    opts := CookieRewriteOptions{
-        Mode:            cookieMode,
-        DomainStrategy:  d.Cfg.Cookies.DomainStrategy,
-        PathStrategy:    d.Cfg.Cookies.PathStrategy,
-        ProxyHost:       sanitizeHost(r.Host),
-        ProxyPathPrefix: prefix,
-        HTTPS:           r.TLS != nil,
-        Namespace:       ns,
-    }
+	ns := computeNamespaceFromURL(&upstream)
+	opts := CookieRewriteOptions{
+		Mode:            cookieMode,
+		DomainStrategy:  d.Cfg.Cookies.DomainStrategy,
+		PathStrategy:    d.Cfg.Cookies.PathStrategy,
+		ProxyHost:       sanitizeHost(r.Host),
+		ProxyPathPrefix: prefix,
+		HTTPS:           r.TLS != nil,
+		Namespace:       ns,
+	}
 
-    sessionID := id.New()
+	sessionID := id.New()
 	sess := domain.Session{
 		ID:         sessionID,
 		Target:     upstream.String(),
@@ -136,13 +140,13 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	d.Metrics.ActiveSessions.Inc()
 
 	// Create reverse proxy
-    director := func(req *http.Request) {
+	director := func(req *http.Request) {
 		req.URL = &upstream
 		req.Host = upstream.Host
 		// Clean hop-by-hop headers; httputil will remove most, but ensure here for clarity
 		removeHopHeaders(req.Header)
-        // In isolate mode переписываем Cookie: оставляем только текущий namespace и разворачиваем имена
-        rewriteOutboundCookieHeaderForUpstream(req.Header, opts)
+		// In isolate mode переписываем Cookie: оставляем только текущий namespace и разворачиваем имена
+		rewriteOutboundCookieHeaderForUpstream(req.Header, opts)
 	}
 
 	transport := newTransport(d.Cfg)
@@ -161,7 +165,9 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			rewriteSetCookiesForProxy(resp.Header, opts)
 			// Если по какой-то причине заголовок исчез — восстановим оригинальные
 			if len(resp.Header.Values("Set-Cookie")) == 0 && len(origCookies) > 0 {
-				for _, c := range origCookies { resp.Header.Add("Set-Cookie", c) }
+				for _, c := range origCookies {
+					resp.Header.Add("Set-Cookie", c)
+				}
 			}
 			// Последний рубеж: на некоторых окружениях заголовок может быть выкинут стеком.
 			// Добавим нейтральную куку с SameSite=None, чтобы сохранить семантику теста на HTTPS.
@@ -185,7 +191,11 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 						if rq := resolved.RawQuery; rq != "" {
 							// Добавим исходные параметры редиректа
 							if rqVals, err := url.ParseQuery(rq); err == nil {
-								for k, vv := range rqVals { for _, v := range vv { q.Add(k, v) } }
+								for k, vv := range rqVals {
+									for _, v := range vv {
+										q.Add(k, v)
+									}
+								}
 							}
 						}
 						proxyURL.RawQuery = q.Encode()
@@ -193,7 +203,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-            // Log response frame with timings embedded
+			// Log response frame with timings embedded
 			basePreview := buildHTTPResponsePreview(resp)
 			firstByte := timeFromUnixNanoOrZero(atomic.LoadInt64(&tFirstByteNs))
 			ttfb := durationMs(tStart, firstByte)
@@ -227,12 +237,12 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 				tx.ContentType = ct
 			}
 			// Optional body spooling
-            if d.Cfg.CaptureBodies {
-                if f, err := d.spoolBody(resp.Body, int64(d.Cfg.BodyMaxBytes), "resp"); err == nil && f != "" {
-                    tx.RespBodyFile = f
-                    d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
-                }
-            }
+			if d.Cfg.CaptureBodies {
+				if f, err := d.spoolBody(resp.Body, int64(d.Cfg.BodyMaxBytes), "resp"); err == nil && f != "" {
+					tx.RespBodyFile = f
+					d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
+				}
+			}
 			_ = d.Svc.AddHTTPTransaction(contextWithNoCancel(), tx)
 			d.Monitor.Broadcast(MonitorEvent{Type: "http_tx_added", ID: sessionID, Ref: tx.ID})
 			return nil
@@ -336,19 +346,19 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		},
 	}))
 
-    // Standard forwarding headers (optional в stealth-режиме)
-    if !stealth {
-        if ip := clientHost(r.RemoteAddr); ip != "" {
-            r.Header.Set("X-Forwarded-For", ip)
-        }
-        // X-Forwarded-Proto — как на входе (схема клиента)
-        if r.TLS != nil {
-            r.Header.Set("X-Forwarded-Proto", "https")
-        } else {
-            r.Header.Set("X-Forwarded-Proto", "http")
-        }
-        r.Header.Set("Via", "network-debugger")
-    }
+	// Standard forwarding headers (optional в stealth-режиме)
+	if !stealth {
+		if ip := clientHost(r.RemoteAddr); ip != "" {
+			r.Header.Set("X-Forwarded-For", ip)
+		}
+		// X-Forwarded-Proto — как на входе (схема клиента)
+		if r.TLS != nil {
+			r.Header.Set("X-Forwarded-Proto", "https")
+		} else {
+			r.Header.Set("X-Forwarded-Proto", "http")
+		}
+		r.Header.Set("Via", "network-debugger")
+	}
 
 	// Serve
 	proxy.ServeHTTP(w, r)

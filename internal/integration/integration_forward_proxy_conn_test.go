@@ -30,12 +30,12 @@ func TestForwardProxy_AbsoluteURI_StealthOff_AndHopByHopStripped(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hdr", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"xff": r.Header.Get("X-Forwarded-For"),
-			"xfp": r.Header.Get("X-Forwarded-Proto"),
-			"via": r.Header.Get("Via"),
+			"xff":  r.Header.Get("X-Forwarded-For"),
+			"xfp":  r.Header.Get("X-Forwarded-Proto"),
+			"via":  r.Header.Get("Via"),
 			"conn": r.Header.Get("Connection"),
-			"pc": r.Header.Get("Proxy-Connection"),
-			"te": r.Header.Get("Te"),
+			"pc":   r.Header.Get("Proxy-Connection"),
+			"te":   r.Header.Get("Te"),
 		})
 	})
 	up := httptest.NewServer(mux)
@@ -181,5 +181,3 @@ func TestForwardProxy_CONNECT_Tunnel_HTTPGet(t *testing.T) {
 		t.Fatalf("tunnel read: %v (%q)", err, line)
 	}
 }
-
-

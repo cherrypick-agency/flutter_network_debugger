@@ -212,26 +212,26 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 			d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Str("opcode", string(opcode)).Int("size", len(data)).Msg("network-debugger: first frame proxied")
 			loggedFirst = true
 		}
-        if opcode == domain.OpcodeText {
-            // Parse from raw text (not from preview), to preserve SIO prefixes 42/43
-            raw := strings.TrimSpace(string(data))
-            if direction == domain.DirectionUpstreamToClient && !loggedFirstUpstreamText {
-                // emit lightweight probe (no payload exposure)
-                // payload: {dir:"upstream", prefix:"<first 6>", len:n}
-                pref := raw
-                if len(pref) > 6 {
-                    pref = pref[:6]
-                }
-                _ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{
-                    ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "sio_probe", AckID: nil,
-                    ArgsPreview: "{\"dir\":\"upstream\",\"prefix\":\"" + pref + "\",\"len\":" + strconv.Itoa(len(raw)) + "}",
-                    FrameIDs:    []string{fr.ID},
-                })
-                d.Monitor.Broadcast(MonitorEvent{Type: "sio_probe", ID: sessionID, Ref: pref})
-                loggedFirstUpstreamText = true
-            }
-            _ = d.recordSIOIfAny(sessionID, raw, fr.ID)
-        }
+		if opcode == domain.OpcodeText {
+			// Parse from raw text (not from preview), to preserve SIO prefixes 42/43
+			raw := strings.TrimSpace(string(data))
+			if direction == domain.DirectionUpstreamToClient && !loggedFirstUpstreamText {
+				// emit lightweight probe (no payload exposure)
+				// payload: {dir:"upstream", prefix:"<first 6>", len:n}
+				pref := raw
+				if len(pref) > 6 {
+					pref = pref[:6]
+				}
+				_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{
+					ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "sio_probe", AckID: nil,
+					ArgsPreview: "{\"dir\":\"upstream\",\"prefix\":\"" + pref + "\",\"len\":" + strconv.Itoa(len(raw)) + "}",
+					FrameIDs:    []string{fr.ID},
+				})
+				d.Monitor.Broadcast(MonitorEvent{Type: "sio_probe", ID: sessionID, Ref: pref})
+				loggedFirstUpstreamText = true
+			}
+			_ = d.recordSIOIfAny(sessionID, raw, fr.ID)
+		}
 	}
 }
 

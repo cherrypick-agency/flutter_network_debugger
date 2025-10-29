@@ -40,5 +40,3 @@ func (h *headerFake) Del(key string) {
 	k := h.key(key)
 	delete(h.m, k)
 }
-
-

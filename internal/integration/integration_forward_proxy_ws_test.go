@@ -43,5 +43,3 @@ func TestForwardProxy_WS_UpgradeAndEcho(t *testing.T) {
 		t.Fatalf("unexpected echo: %q", string(data))
 	}
 }
-
-

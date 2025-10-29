@@ -7,15 +7,15 @@ import (
 )
 
 type Config struct {
-	Addr                   string
-	LogLevel               string
-	DevMode                bool
-	InsecureTLS            bool
-	CORSAllowOrigin        string
-	DefaultTarget          string
-	PreviewMaxBytes        int
-    // Disable opening browser automatically in binaries
-    NoBrowser              bool
+	Addr            string
+	LogLevel        string
+	DevMode         bool
+	InsecureTLS     bool
+	CORSAllowOrigin string
+	DefaultTarget   string
+	PreviewMaxBytes int
+	// Disable opening browser automatically in binaries
+	NoBrowser              bool
 	SSEPollIntervalMs      int
 	ExposeSensitiveHeaders bool
 	// Reverse-proxy cookie handling and stealth
@@ -30,11 +30,11 @@ type Config struct {
 	BodyMaxBytes      int
 	BodySpoolDir      string
 	PreviewDecompress bool
-    // WS preview/capture settings (forward proxy)
-    WSPreviewMaxBytes int
-    WSCaptureBodies   bool
-    WSBodyMaxBytes    int
-    WSDeflatePreview  bool
+	// WS preview/capture settings (forward proxy)
+	WSPreviewMaxBytes int
+	WSCaptureBodies   bool
+	WSBodyMaxBytes    int
+	WSDeflatePreview  bool
 	// Artificial response delay for proxy responses (ms)
 	ResponseDelayMs int
 	// Optional range support: if set, each response delay will be random in [min,max]
@@ -54,12 +54,12 @@ type Config struct {
 
 // CookiesConfig controls reverse-proxy cookie rewriting behavior
 type CookiesConfig struct {
-    // Mode: "isolate" (default), "auto", or "off"
-    Mode string
-    // DomainStrategy: "hostOnly" (default) or "proxyHost"
-    DomainStrategy string
-    // PathStrategy: "prefix" (default) or "root"
-    PathStrategy string
+	// Mode: "isolate" (default), "auto", or "off"
+	Mode string
+	// DomainStrategy: "hostOnly" (default) or "proxyHost"
+	DomainStrategy string
+	// PathStrategy: "prefix" (default) or "root"
+	PathStrategy string
 }
 
 func FromEnv() Config {
@@ -72,8 +72,8 @@ func FromEnv() Config {
 		cfg.DevMode = true
 	}
 	cfg.DefaultTarget = getEnv("DEFAULT_TARGET", "")
-    // Default preview size; can be overridden via PREVIEW_MAX_BYTES
-    cfg.PreviewMaxBytes = getEnvInt("PREVIEW_MAX_BYTES", 50000)
+	// Default preview size; can be overridden via PREVIEW_MAX_BYTES
+	cfg.PreviewMaxBytes = getEnvInt("PREVIEW_MAX_BYTES", 50000)
 	cfg.SSEPollIntervalMs = getEnvInt("SSE_POLL_INTERVAL_MS", 777)
 	// TLS settings (optional). If cert+key provided, a TLS server will start on TLS_ADDR (default :9443)
 	cfg.TLSAddr = getEnv("TLS_ADDR", "")
@@ -90,21 +90,21 @@ func FromEnv() Config {
 	} else {
 		cfg.PreviewDecompress = true
 	}
-    // WS preview defaults align with HTTP preview unless overridden
-    cfg.WSPreviewMaxBytes = getEnvInt("WS_PREVIEW_MAX_BYTES", cfg.PreviewMaxBytes)
-    if cfg.WSPreviewMaxBytes <= 0 {
-        cfg.WSPreviewMaxBytes = 4096
-    }
-    if os.Getenv("WS_CAPTURE_BODIES") == "1" || os.Getenv("WS_CAPTURE_BODIES") == "true" {
-        cfg.WSCaptureBodies = true
-    }
-    cfg.WSBodyMaxBytes = getEnvInt("WS_BODY_MAX_BYTES", 1<<20) // 1MB
-    // enable deflate preview by default
-    if os.Getenv("WS_DEFLATE_PREVIEW") == "0" || os.Getenv("WS_DEFLATE_PREVIEW") == "false" {
-        cfg.WSDeflatePreview = false
-    } else {
-        cfg.WSDeflatePreview = true
-    }
+	// WS preview defaults align with HTTP preview unless overridden
+	cfg.WSPreviewMaxBytes = getEnvInt("WS_PREVIEW_MAX_BYTES", cfg.PreviewMaxBytes)
+	if cfg.WSPreviewMaxBytes <= 0 {
+		cfg.WSPreviewMaxBytes = 4096
+	}
+	if os.Getenv("WS_CAPTURE_BODIES") == "1" || os.Getenv("WS_CAPTURE_BODIES") == "true" {
+		cfg.WSCaptureBodies = true
+	}
+	cfg.WSBodyMaxBytes = getEnvInt("WS_BODY_MAX_BYTES", 1<<20) // 1MB
+	// enable deflate preview by default
+	if os.Getenv("WS_DEFLATE_PREVIEW") == "0" || os.Getenv("WS_DEFLATE_PREVIEW") == "false" {
+		cfg.WSDeflatePreview = false
+	} else {
+		cfg.WSDeflatePreview = true
+	}
 	cfg.ResponseDelayMs = getEnvInt("RESPONSE_DELAY_MS", 0)
 	if raw := os.Getenv("RESPONSE_DELAY_MS"); raw != "" && strings.Contains(raw, "-") {
 		parts := strings.SplitN(raw, "-", 2)
@@ -125,10 +125,10 @@ func FromEnv() Config {
 	if os.Getenv("INSECURE_TLS") == "1" || os.Getenv("INSECURE_TLS") == "true" {
 		cfg.InsecureTLS = true
 	}
-    // Browser auto-open control
-    if os.Getenv("NO_BROWSER") == "1" || os.Getenv("NO_BROWSER") == "true" {
-        cfg.NoBrowser = true
-    }
+	// Browser auto-open control
+	if os.Getenv("NO_BROWSER") == "1" || os.Getenv("NO_BROWSER") == "true" {
+		cfg.NoBrowser = true
+	}
 	// default: expose sensitive headers unless explicitly disabled
 	if os.Getenv("EXPOSE_SENSITIVE_HEADERS") == "0" || os.Getenv("EXPOSE_SENSITIVE_HEADERS") == "false" {
 		cfg.ExposeSensitiveHeaders = false

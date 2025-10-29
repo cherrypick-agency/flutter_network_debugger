@@ -876,15 +876,23 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 			default:
 			}
 			_ = mon.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-			if _, data, err := mon.ReadMessage(); err == nil {
-				var ev monitorEvent
-				_ = json.Unmarshal(data, &ev)
-				if ev.Type == "frame_added" {
-					atomic.AddInt32(&monFrames, 1)
+			_, data, err := mon.ReadMessage()
+			if err != nil {
+				// If it's not a timeout error, the connection is broken - stop reading
+				if !isTimeoutError(err) {
+					return
 				}
-				if ev.Type == "event_added" {
-					atomic.AddInt32(&monEvents, 1)
-				}
+				// Otherwise it's just a timeout, continue to next iteration
+				continue
+			}
+			// Process the message
+			var ev monitorEvent
+			_ = json.Unmarshal(data, &ev)
+			if ev.Type == "frame_added" {
+				atomic.AddInt32(&monFrames, 1)
+			}
+			if ev.Type == "event_added" {
+				atomic.AddInt32(&monEvents, 1)
 			}
 		}
 	}()
@@ -1267,4 +1275,18 @@ func TestListFiltersAndRedaction(t *testing.T) {
 	if !redacted {
 		t.Fatalf("sensitive fields not redacted in preview")
 	}
+}
+
+// isTimeoutError checks if the error is a timeout error
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	type timeoutError interface {
+		Timeout() bool
+	}
+	if te, ok := err.(timeoutError); ok {
+		return te.Timeout()
+	}
+	return false
 }

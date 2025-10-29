@@ -51,5 +51,3 @@ func TestRewriteOutboundCookieHeaderForUpstream_Isolate_EmptyAfterFilter(t *test
 		t.Fatalf("если после фильтра пусто — Cookie не должен быть установлен: %v", vals)
 	}
 }
-
-

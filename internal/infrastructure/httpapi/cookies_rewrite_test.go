@@ -81,11 +81,11 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "x=1")
 		rewriteSetCookiesForProxy(h, CookieRewriteOptions{
-			Mode:           CookieModeIsolate,
-			DomainStrategy: "hostOnly",
-			PathStrategy:   "prefix",
+			Mode:            CookieModeIsolate,
+			DomainStrategy:  "hostOnly",
+			PathStrategy:    "prefix",
 			ProxyPathPrefix: "/proxy",
-			Namespace:      "n",
+			Namespace:       "n",
 		})
 		out := h.Values("Set-Cookie")[0]
 		if !strings.Contains(out, "; Path=/proxy") {
@@ -98,13 +98,13 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "__Host-sid=1; Domain=example.com; Path=/x")
 		rewriteSetCookiesForProxy(h, CookieRewriteOptions{
-			Mode:           CookieModeIsolate,
-			DomainStrategy: "proxyHost",
-			ProxyHost:      "proxy.example",
-			PathStrategy:   "prefix",
+			Mode:            CookieModeIsolate,
+			DomainStrategy:  "proxyHost",
+			ProxyHost:       "proxy.example",
+			PathStrategy:    "prefix",
 			ProxyPathPrefix: "/p",
-			Namespace:      "n",
-			HTTPS:          true,
+			Namespace:       "n",
+			HTTPS:           true,
 		})
 		out := h.Values("Set-Cookie")[0]
 		if strings.Contains(out, "Domain=") {
@@ -155,5 +155,3 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		}
 	}
 }
-
-

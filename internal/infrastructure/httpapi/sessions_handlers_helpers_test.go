@@ -1,168 +1,166 @@
 package httpapi
 
 import (
-    "encoding/json"
-    "net/http"
-    "reflect"
-    "testing"
+	"encoding/json"
+	"net/http"
+	"reflect"
+	"testing"
 )
 
 func Test_mapToStringMap_and_toString(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    in := map[string]any{
-        "A": "str",
-        "B": 123,
-        "C": map[string]any{"x": 1},
-    }
-    out := mapToStringMap(in)
-    if out["A"] != "str" {
-        t.Fatalf("A mismatch: %q", out["A"])
-    }
-    if out["B"] != "123" {
-        t.Fatalf("B mismatch: %q", out["B"])
-    }
-    // для объектов — json строка
-    var m map[string]int
-    if err := json.Unmarshal([]byte(out["C"]), &m); err != nil || m["x"] != 1 {
-        t.Fatalf("C not json: %q err=%v", out["C"], err)
-    }
+	in := map[string]any{
+		"A": "str",
+		"B": 123,
+		"C": map[string]any{"x": 1},
+	}
+	out := mapToStringMap(in)
+	if out["A"] != "str" {
+		t.Fatalf("A mismatch: %q", out["A"])
+	}
+	if out["B"] != "123" {
+		t.Fatalf("B mismatch: %q", out["B"])
+	}
+	// для объектов — json строка
+	var m map[string]int
+	if err := json.Unmarshal([]byte(out["C"]), &m); err != nil || m["x"] != 1 {
+		t.Fatalf("C not json: %q err=%v", out["C"], err)
+	}
 }
 
 func Test_parseCacheControl(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    cc := "max-age=60, no-cache, stale-while-revalidate=30, private, quoted=\"abc\""
-    got := parseCacheControl(cc)
-    want := map[string]string{
-        "max-age":                 "60",
-        "no-cache":                "true",
-        "stale-while-revalidate":  "30",
-        "private":                 "true",
-        "quoted":                  "abc",
-    }
-    if !reflect.DeepEqual(got, want) {
-        t.Fatalf("cache-control parse mismatch:\nwant=%v\n got=%v", want, got)
-    }
+	cc := "max-age=60, no-cache, stale-while-revalidate=30, private, quoted=\"abc\""
+	got := parseCacheControl(cc)
+	want := map[string]string{
+		"max-age":                "60",
+		"no-cache":               "true",
+		"stale-while-revalidate": "30",
+		"private":                "true",
+		"quoted":                 "abc",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("cache-control parse mismatch:\nwant=%v\n got=%v", want, got)
+	}
 }
 
 func Test_computeCacheMeta(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    meta := computeCacheMeta(http.StatusOK, map[string]string{"Cache-Control": "max-age=1", "Age": "10", "ETag": "W/\"123\""})
-    if meta.Status != "HIT" || meta.ETag != "W/\"123\"" || meta.Age != 10 {
-        t.Fatalf("unexpected meta: %+v", meta)
-    }
-    if meta.Directives["max-age"] != "1" {
-        t.Fatalf("directives not parsed: %+v", meta.Directives)
-    }
+	meta := computeCacheMeta(http.StatusOK, map[string]string{"Cache-Control": "max-age=1", "Age": "10", "ETag": "W/\"123\""})
+	if meta.Status != "HIT" || meta.ETag != "W/\"123\"" || meta.Age != 10 {
+		t.Fatalf("unexpected meta: %+v", meta)
+	}
+	if meta.Directives["max-age"] != "1" {
+		t.Fatalf("directives not parsed: %+v", meta.Directives)
+	}
 
-    meta = computeCacheMeta(http.StatusNotModified, map[string]string{"Cache-Control": "no-cache"})
-    if meta.Status != "REVALIDATED" {
-        t.Fatalf("not modified -> REVALIDATED, got: %s", meta.Status)
-    }
+	meta = computeCacheMeta(http.StatusNotModified, map[string]string{"Cache-Control": "no-cache"})
+	if meta.Status != "REVALIDATED" {
+		t.Fatalf("not modified -> REVALIDATED, got: %s", meta.Status)
+	}
 
-    meta = computeCacheMeta(http.StatusOK, nil)
-    if meta.Status != "UNKNOWN" {
-        t.Fatalf("nil headers -> UNKNOWN, got: %s", meta.Status)
-    }
+	meta = computeCacheMeta(http.StatusOK, nil)
+	if meta.Status != "UNKNOWN" {
+		t.Fatalf("nil headers -> UNKNOWN, got: %s", meta.Status)
+	}
 }
 
 func Test_computeCORSMeta_preflight_and_simple(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    req := map[string]string{
-        "Origin":                         "https://a.test",
-        "Access-Control-Request-Method":  "POST",
-        "Access-Control-Request-Headers": "X-Auth, X-Id",
-    }
-    resp := map[string]string{
-        "Access-Control-Allow-Origin":  "https://a.test",
-        "Access-Control-Allow-Methods": "GET, POST",
-        "Access-Control-Allow-Headers": "X-Auth, x-id",
-        "Vary":                         "Origin",
-    }
+	req := map[string]string{
+		"Origin":                         "https://a.test",
+		"Access-Control-Request-Method":  "POST",
+		"Access-Control-Request-Headers": "X-Auth, X-Id",
+	}
+	resp := map[string]string{
+		"Access-Control-Allow-Origin":  "https://a.test",
+		"Access-Control-Allow-Methods": "GET, POST",
+		"Access-Control-Allow-Headers": "X-Auth, x-id",
+		"Vary":                         "Origin",
+	}
 
-    cors := computeCORSMeta("OPTIONS", req, resp, true)
-    if !cors.Ok || cors.Reason != "" {
-        t.Fatalf("preflight should be ok: %+v", cors)
-    }
+	cors := computeCORSMeta("OPTIONS", req, resp, true)
+	if !cors.Ok || cors.Reason != "" {
+		t.Fatalf("preflight should be ok: %+v", cors)
+	}
 
-    // simple request path
-    cors = computeCORSMeta("POST", map[string]string{"Origin": "https://a.test"}, resp, false)
-    if !cors.Ok {
-        t.Fatalf("simple should be ok: %+v", cors)
-    }
+	// simple request path
+	cors = computeCORSMeta("POST", map[string]string{"Origin": "https://a.test"}, resp, false)
+	if !cors.Ok {
+		t.Fatalf("simple should be ok: %+v", cors)
+	}
 
-    // origin mismatch
-    cors = computeCORSMeta("POST", map[string]string{"Origin": "https://b.test"}, resp, false)
-    if cors.Ok || cors.Reason != "origin" {
-        t.Fatalf("origin mismatch should fail: %+v", cors)
-    }
+	// origin mismatch
+	cors = computeCORSMeta("POST", map[string]string{"Origin": "https://b.test"}, resp, false)
+	if cors.Ok || cors.Reason != "origin" {
+		t.Fatalf("origin mismatch should fail: %+v", cors)
+	}
 }
 
 func Test_classifyNetError(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    cases := map[string]string{
-        "context deadline exceeded": "TIMEOUT",
-        "timeout":                   "TIMEOUT",
-        "no such host":              "DNS",
-        "server misbehaving":        "DNS",
-        "x509: cert":                "TLS",
-        "certificate":               "TLS",
-        "tls":                       "TLS",
-        "connection refused":        "CONNECT",
-        "cannot assign":             "CONNECT",
-        "reset by peer":             "RST",
-        "unexpected EOF":            "EOF",
-        "before full header":        "EOF",
-        "early eof":                 "EOF",
-        "request canceled":          "CANCEL",
-        "client canceled":           "CANCEL",
-        "something else":            "ERROR",
-    }
-    for msg, want := range cases {
-        if got := classifyNetError(msg); got != want {
-            t.Errorf("%q -> want %s got %s", msg, want, got)
-        }
-    }
+	cases := map[string]string{
+		"context deadline exceeded": "TIMEOUT",
+		"timeout":                   "TIMEOUT",
+		"no such host":              "DNS",
+		"server misbehaving":        "DNS",
+		"x509: cert":                "TLS",
+		"certificate":               "TLS",
+		"tls":                       "TLS",
+		"connection refused":        "CONNECT",
+		"cannot assign":             "CONNECT",
+		"reset by peer":             "RST",
+		"unexpected EOF":            "EOF",
+		"before full header":        "EOF",
+		"early eof":                 "EOF",
+		"request canceled":          "CANCEL",
+		"client canceled":           "CANCEL",
+		"something else":            "ERROR",
+	}
+	for msg, want := range cases {
+		if got := classifyNetError(msg); got != want {
+			t.Errorf("%q -> want %s got %s", msg, want, got)
+		}
+	}
 }
 
 func Test_fold_utils(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    h := map[string]string{"Content-Type": "text/plain", "x-id": "42"}
-    if v := getFold(h, "content-type"); v != "text/plain" {
-        t.Fatalf("getFold failed: %q", v)
-    }
-    if !hasHeaderFold(h, "X-ID") {
-        t.Fatalf("hasHeaderFold failed")
-    }
-    if hasHeaderFold(nil, "x") {
-        t.Fatalf("nil map should be false")
-    }
+	h := map[string]string{"Content-Type": "text/plain", "x-id": "42"}
+	if v := getFold(h, "content-type"); v != "text/plain" {
+		t.Fatalf("getFold failed: %q", v)
+	}
+	if !hasHeaderFold(h, "X-ID") {
+		t.Fatalf("hasHeaderFold failed")
+	}
+	if hasHeaderFold(nil, "x") {
+		t.Fatalf("nil map should be false")
+	}
 
-    if !containsFoldSlice([]string{"A", "b"}, "a") {
-        t.Fatalf("containsFoldSlice should be true")
-    }
-    if containsFoldSlice([]string{"A", "b"}, "c") {
-        t.Fatalf("containsFoldSlice should be false")
-    }
+	if !containsFoldSlice([]string{"A", "b"}, "a") {
+		t.Fatalf("containsFoldSlice should be true")
+	}
+	if containsFoldSlice([]string{"A", "b"}, "c") {
+		t.Fatalf("containsFoldSlice should be false")
+	}
 
-    if !allAllowedFold([]string{"X-Auth", "X-Id"}, []string{"x-auth"}) {
-        t.Fatalf("allAllowedFold single should be true")
-    }
-    if allAllowedFold([]string{"X-Auth"}, []string{"x-auth", "x-id"}) {
-        t.Fatalf("allAllowedFold should be false when missing header")
-    }
+	if !allAllowedFold([]string{"X-Auth", "X-Id"}, []string{"x-auth"}) {
+		t.Fatalf("allAllowedFold single should be true")
+	}
+	if allAllowedFold([]string{"X-Auth"}, []string{"x-auth", "x-id"}) {
+		t.Fatalf("allAllowedFold should be false when missing header")
+	}
 
-    if got := csvToSlice("A, b , ,C"); len(got) != 3 || got[1] != "b" {
-        t.Fatalf("csvToSlice unexpected: %+v", got)
-    }
-    if csvToSlice("") != nil {
-        t.Fatalf("csvToSlice empty -> nil expected")
-    }
+	if got := csvToSlice("A, b , ,C"); len(got) != 3 || got[1] != "b" {
+		t.Fatalf("csvToSlice unexpected: %+v", got)
+	}
+	if csvToSlice("") != nil {
+		t.Fatalf("csvToSlice empty -> nil expected")
+	}
 }
-
-

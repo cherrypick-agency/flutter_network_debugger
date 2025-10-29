@@ -25,7 +25,7 @@ type ErrorDetails struct {
 
 type MonitorHub struct {
 	mu       sync.RWMutex
-    clients  map[*websocket.Conn]chan []byte
+	clients  map[*websocket.Conn]chan []byte
 	upgrader websocket.Upgrader
 	// listeners are in-process subscribers (e.g., SSE forwarders)
 	lmu       sync.RWMutex
@@ -34,7 +34,7 @@ type MonitorHub struct {
 
 func NewMonitorHub() *MonitorHub {
 	return &MonitorHub{
-        clients:   make(map[*websocket.Conn]chan []byte),
+		clients:   make(map[*websocket.Conn]chan []byte),
 		upgrader:  websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
 		listeners: make(map[chan MonitorEvent]struct{}),
 	}
@@ -45,20 +45,20 @@ func (h *MonitorHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-    ch := make(chan []byte, 256)
-    h.mu.Lock()
-    h.clients[c] = ch
-    h.mu.Unlock()
-    // writer goroutine
-    go func(conn *websocket.Conn, out <-chan []byte) {
-        for msg := range out {
-            _ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-            if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-                break
-            }
-        }
-        _ = conn.Close()
-    }(c, ch)
+	ch := make(chan []byte, 256)
+	h.mu.Lock()
+	h.clients[c] = ch
+	h.mu.Unlock()
+	// writer goroutine
+	go func(conn *websocket.Conn, out <-chan []byte) {
+		for msg := range out {
+			_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				break
+			}
+		}
+		_ = conn.Close()
+	}(c, ch)
 	_ = c.SetReadDeadline(time.Time{})
 	for {
 		// keepalive reads to detect client close
@@ -67,10 +67,10 @@ func (h *MonitorHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.mu.Lock()
-    if ch, ok := h.clients[c]; ok {
-        delete(h.clients, c)
-        close(ch)
-    }
+	if ch, ok := h.clients[c]; ok {
+		delete(h.clients, c)
+		close(ch)
+	}
 	h.mu.Unlock()
 }
 
@@ -78,9 +78,9 @@ func (h *MonitorHub) Broadcast(ev MonitorEvent) {
 	data, _ := json.Marshal(ev)
 	// snapshot clients to avoid holding read lock during writes
 	h.mu.RLock()
-    outs := make([]chan []byte, 0, len(h.clients))
-    for _, ch := range h.clients {
-        outs = append(outs, ch)
+	outs := make([]chan []byte, 0, len(h.clients))
+	for _, ch := range h.clients {
+		outs = append(outs, ch)
 	}
 	h.mu.RUnlock()
 	// snapshot listeners
@@ -90,10 +90,13 @@ func (h *MonitorHub) Broadcast(ev MonitorEvent) {
 		subs = append(subs, ch)
 	}
 	h.lmu.RUnlock()
-    // non-blocking fan-out
-    for _, ch := range outs {
-        select { case ch <- data: default: /* drop if slow */ }
-    }
+	// non-blocking fan-out
+	for _, ch := range outs {
+		select {
+		case ch <- data:
+		default: /* drop if slow */
+		}
+	}
 	// non-blocking notify listeners
 	for _, ch := range subs {
 		select {

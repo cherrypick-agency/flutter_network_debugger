@@ -83,10 +83,10 @@ func main() {
 		}
 	}()
 
-    // Launch browser to downloads page on start (best-effort)
+	// Launch browser to downloads page on start (best-effort)
 	go func() {
 		time.Sleep(300 * time.Millisecond)
-        if cfg.DevMode || cfg.NoBrowser {
+		if cfg.DevMode || cfg.NoBrowser {
 			return
 		}
 		addr := cfg.Addr
