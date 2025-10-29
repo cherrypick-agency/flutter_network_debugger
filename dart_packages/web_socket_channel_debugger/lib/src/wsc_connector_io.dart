@@ -5,5 +5,3 @@ import 'package:web_socket_channel/io.dart' as io;
 wsc.WebSocketChannel connectWS(Uri uri, {Map<String, dynamic>? headers}) {
   return io.IOWebSocketChannel.connect(uri, headers: headers);
 }
-
-
