@@ -128,6 +128,29 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
       ]);
     }
   }
+
+  // 5) Fallback: напрямую проставим флаги в динамическом сторе через scutil
+  try {
+    final sc =
+        "printf 'open\\nget State:/Network/Global/Proxies\\n'"
+            "+ 'd.add HTTPEnable 1\\n'"
+            "+ 'd.add HTTPProxy 127.0.0.1\\n'"
+            "+ 'd.add HTTPPort " +
+        port.toString() +
+        "\\n'"
+            "+ 'd.add HTTPSEnable 1\\n'"
+            "+ 'd.add HTTPSProxy 127.0.0.1\\n'"
+            "+ 'd.add HTTPSPort " +
+        port.toString() +
+        "\\n'"
+            "+ 'set State:/Network/Global/Proxies\\nquit\\n' | scutil";
+    await Process.run('osascript', [
+      '-e',
+      'do shell script "' +
+          sc.replaceAll('"', '\\"') +
+          '" with administrator privileges',
+    ]);
+  } catch (_) {}
 }
 
 Future<void> rollbackMacOS(String baseUrl) async {
@@ -274,4 +297,33 @@ Future<void> openSystemProxySettings() async {
       ]);
     }
   } catch (_) {}
+}
+
+Future<bool> isDevCAInstalledSystem() async {
+  try {
+    if (Platform.isMacOS) {
+      final res = await Process.run('security', [
+        'find-certificate',
+        '-a',
+        '-c',
+        'network-debugger dev CA',
+        '/Library/Keychains/System.keychain',
+      ]);
+      final out = (res.stdout ?? '').toString();
+      return res.exitCode == 0 && out.trim().isNotEmpty;
+    }
+    if (Platform.isWindows) {
+      final res = await Process.run('certutil', [
+        '-user',
+        '-store',
+        'Root',
+        'network-debugger dev CA',
+      ]);
+      final out = (res.stdout ?? '').toString().toLowerCase();
+      return res.exitCode == 0 &&
+          out.contains('certificate') &&
+          !out.contains('not found');
+    }
+  } catch (_) {}
+  return false;
 }

@@ -25,6 +25,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   bool _enabled = false;
   String _baseUrl = '';
   bool _sysProxy = false;
+  bool _osCAInstalled = false;
 
   // Адрес прокси для подсказок/копирования
   String get _proxyAddr {
@@ -55,6 +56,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       _enabled = data['enabled'] == true;
       _hasCA = data['hasCA'] == true;
       _sysProxy = await isSystemProxyEnabled();
+      _osCAInstalled = await isDevCAInstalledSystem();
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -78,6 +80,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       _enabled = data['enabled'] == true;
       _hasCA = data['hasCA'] == true;
       _sysProxy = await isSystemProxyEnabled();
+      _osCAInstalled = await isDevCAInstalledSystem();
     } catch (_) {
       // ignore errors — show default values
     } finally {
@@ -196,10 +199,19 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                       ),
                       Chip(
                         label: Text(
-                          _hasCA ? 'CA installed (runtime)' : 'CA missing',
+                          _hasCA ? 'Dev CA (proxy)' : 'CA missing (proxy)',
                         ),
                         backgroundColor:
                             _hasCA
+                                ? context.appColors.success.withOpacity(0.25)
+                                : cs.surfaceVariant,
+                      ),
+                      Chip(
+                        label: Text(
+                          _osCAInstalled ? 'OS trust: ON' : 'OS trust: OFF',
+                        ),
+                        backgroundColor:
+                            _osCAInstalled
                                 ? context.appColors.success.withOpacity(0.25)
                                 : cs.surfaceVariant,
                       ),

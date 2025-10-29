@@ -5,3 +5,4 @@ Future<void> rollback(String baseUrl) async {}
 Future<void> deleteDevCA() async {}
 Future<String> proxyDiagnostics() async => 'N/A';
 Future<void> openSystemProxySettings() async {}
+Future<bool> isDevCAInstalledSystem() async => false;

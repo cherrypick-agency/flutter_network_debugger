@@ -307,7 +307,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
         final isClosed = s.closedAt != null;
         final hasError = (s.error ?? '').toString().isNotEmpty;
         final corsOk =
-            hasResponse ? ((meta['cors']?['ok'] ?? false) == true) : true;
+            hasResponse ? ((meta['cors']?['ok'] ?? true) == true) : true;
         final isWs = (s.kind == 'ws') || (method.isEmpty && (s.kind == null));
 
         final idStr = (s.id as String);
