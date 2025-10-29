@@ -248,9 +248,17 @@ Future<String> proxyDiagnostics() async {
 Future<void> openSystemProxySettings() async {
   try {
     if (Platform.isMacOS) {
-      // Works on Ventura/Sonoma
+      // Try to open exact Network pane (pre-Ventura style anchor)
+      await Process.run('open', [
+        'x-apple.systempreferences:com.apple.preference.network?Wi-Fi',
+      ]);
+      // Also try the new System Settings extension (Ventura/Sonoma)
       await Process.run('open', [
         'x-apple.systempreferences:com.apple.Network-Settings.extension',
+      ]);
+      // Open generic Network pane as fallback
+      await Process.run('open', [
+        'x-apple.systempreferences:com.apple.preference.network',
       ]);
       return;
     }

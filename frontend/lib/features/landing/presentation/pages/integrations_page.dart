@@ -44,6 +44,28 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     _loadStatus();
   }
 
+  Future<void> _refreshStatusSilent() async {
+    try {
+      final api = sl<http_client.AppHttpClient>();
+      final resp = await api.get(path: '/_api/v1/mitm/status');
+      final data =
+          (resp.data is Map)
+              ? (resp.data as Map).cast<String, dynamic>()
+              : jsonDecode(resp.data as String) as Map<String, dynamic>;
+      _enabled = data['enabled'] == true;
+      _hasCA = data['hasCA'] == true;
+      _sysProxy = await isSystemProxyEnabled();
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  Future<void> _pollStatus({int attempts = 8}) async {
+    for (int i = 0; i < attempts; i++) {
+      await Future.delayed(const Duration(seconds: 1));
+      await _refreshStatusSilent();
+    }
+  }
+
   Future<void> _loadStatus() async {
     setState(() => _loading = true);
     try {
@@ -112,6 +134,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
         );
       }
       await _loadStatus();
+      // Автопулинг статуса после действия
+      // Fire-and-forget обновление статуса
+      _pollStatus();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -559,6 +584,26 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                   label: const Text(
                                     'Open system proxy settings',
                                   ),
+                                ),
+                                TextButton.icon(
+                                  onPressed:
+                                      _loading
+                                          ? null
+                                          : () {
+                                            // Начать наблюдение за статусом, чтобы не нажимать Refresh
+                                            _pollStatus();
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Watching for status changes…',
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                  icon: const Icon(Icons.visibility),
+                                  label: const Text('Auto‑refresh status'),
                                 ),
                               ],
                             ),

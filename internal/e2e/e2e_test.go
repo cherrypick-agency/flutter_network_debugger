@@ -1120,8 +1120,12 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 				deadline := time.Now().Add(1 * time.Second)
 				for time.Now().Before(deadline) && reads < 2 {
 					_ = c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-					if _, _, err := c.ReadMessage(); err == nil {
+					_, _, err := c.ReadMessage()
+					if err == nil {
 						reads++
+					} else if !isTimeoutError(err) {
+						// Non-timeout error means connection is broken
+						break
 					}
 				}
 				_ = c.Close()
@@ -1165,4 +1169,18 @@ func (u *urlEscaper) escape(s string) string {
 		}
 	}
 	return string(u.b)
+}
+
+// isTimeoutError checks if the error is a timeout error
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	type timeoutError interface {
+		Timeout() bool
+	}
+	if te, ok := err.(timeoutError); ok {
+		return te.Timeout()
+	}
+	return false
 }
