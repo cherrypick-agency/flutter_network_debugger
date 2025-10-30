@@ -1004,7 +1004,7 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "ADDR="+addr)
+	cmd.Env = append(os.Environ(), "ADDR="+addr, "DEV_MODE=1", "NO_BROWSER=1")
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr

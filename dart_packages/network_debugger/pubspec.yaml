@@ -8,8 +8,8 @@ topics:
   - network
   - debug
   - proxy
-  - debugger
-  - launcher
+  - inspector
+  - socket
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

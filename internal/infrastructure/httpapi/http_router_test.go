@@ -15,3 +15,18 @@ func TestBuildBaseMux_AppliesPreviewFlags(t *testing.T) {
 		t.Fatalf("flags not applied: %d %v %v", previewMaxBytes, exposeSensitiveHeaders, previewDecompress)
 	}
 }
+
+func TestNewRouter_ReturnsHandler(t *testing.T) {
+	cfg := cfgpkg.Config{
+		PreviewMaxBytes:        1024,
+		ExposeSensitiveHeaders: false,
+		PreviewDecompress:      false,
+	}
+	metrics := obs.NewMetrics()
+
+	handler := NewRouter(cfg, nil, metrics)
+
+	if handler == nil {
+		t.Fatal("NewRouter returned nil handler")
+	}
+}

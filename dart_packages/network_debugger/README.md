@@ -8,13 +8,22 @@ Suitable for local development and test environments. Has web interface (opens i
 
 ## Features
 
-- Automatic binary download from GitHub releases
-- Smart caching with version management
-- Platform detection (Windows, macOS, Linux with various architectures)
-- Download progress tracking
-- Simple process management
-- Automatic browser opening to web UI
-- **CLI tool for instant launch**
+What it can do
+- Intercept and view HTTP and WebSocket traffic
+- Waterfall timeline of requests
+- grouping by domain/route
+- Filters: method, status, MIME, minimum duration, by headers
+- Convenient search with highlighting
+- HTTP details: headers (with sensitive data masking), body (pretty/JSON tree), TTFB/Total
+- CORS/Cache hints, cookies and TLS summary
+- WebSocket details: events/frames, pings/pongs, payload preview
+- HAR export
+- Artificial response delay (useful for simulating "slow networks")
+- Record/stop and records management
+- HTML preview
+- Form Data (show files) For example Flutter devtools don't show at all
+- You can proxy only app requests or all OS requests (forward proxy)
+- Crossplatform
 
 ## Quick Start (CLI)
 
@@ -55,7 +64,24 @@ network_debugger --help
 
 Press `Ctrl+C` to stop the debugger.
 
-## Quick Start (Dart API)
+## How It Works
+
+1. Detects your platform (OS + architecture)
+2. Checks local cache (`~/.cache/network_debugger/` or platform-specific)
+3. Downloads from GitHub releases if not cached
+4. Extracts and caches the binary
+5. Launches the process
+6. Returns a `DebuggerInstance` for process management
+
+## Cache Location
+
+- **macOS/Linux**: `~/.cache/network_debugger/`
+- **Windows**: `%LOCALAPPDATA%\network_debugger\Cache\`
+
+Each version is stored separately for easy version switching.
+
+
+## Programmatic usage (Dart API)
 
 You can also use the package programmatically in your Dart code:
 
@@ -122,21 +148,6 @@ await NetworkDebugger.clearCache();
 await NetworkDebugger.clearCache(version: 'v1.0.0');
 ```
 
-## How It Works
-
-1. Detects your platform (OS + architecture)
-2. Checks local cache (`~/.cache/network_debugger/` or platform-specific)
-3. Downloads from GitHub releases if not cached
-4. Extracts and caches the binary
-5. Launches the process
-6. Returns a `DebuggerInstance` for process management
-
-## Cache Location
-
-- **macOS/Linux**: `~/.cache/network_debugger/`
-- **Windows**: `%LOCALAPPDATA%\network_debugger\Cache\`
-
-Each version is stored separately for easy version switching.
 
 ## License
 

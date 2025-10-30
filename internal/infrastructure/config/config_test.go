@@ -165,6 +165,140 @@ func TestFromEnv_MITMDomainLists(t *testing.T) {
 	}
 }
 
+func TestGetEnv_WithValue(t *testing.T) {
+	t.Setenv("TEST_VAR", "test_value")
+
+	result := getEnv("TEST_VAR", "default")
+
+	if result != "test_value" {
+		t.Errorf("getEnv() = %s, want test_value", result)
+	}
+}
+
+func TestGetEnv_WithDefault(t *testing.T) {
+	// Make sure env var doesn't exist
+	os.Unsetenv("NON_EXISTENT_VAR")
+
+	result := getEnv("NON_EXISTENT_VAR", "default_value")
+
+	if result != "default_value" {
+		t.Errorf("getEnv() = %s, want default_value", result)
+	}
+}
+
+func TestGetEnv_EmptyString(t *testing.T) {
+	t.Setenv("EMPTY_VAR", "")
+
+	result := getEnv("EMPTY_VAR", "default")
+
+	// Empty string should return default
+	if result != "default" {
+		t.Errorf("getEnv() with empty string = %s, want default", result)
+	}
+}
+
+func TestGetEnvInt_WithValidInt(t *testing.T) {
+	t.Setenv("TEST_INT", "42")
+
+	result := getEnvInt("TEST_INT", 0)
+
+	if result != 42 {
+		t.Errorf("getEnvInt() = %d, want 42", result)
+	}
+}
+
+func TestGetEnvInt_WithInvalidInt(t *testing.T) {
+	t.Setenv("INVALID_INT", "not_a_number")
+
+	result := getEnvInt("INVALID_INT", 99)
+
+	// Invalid int should return default
+	if result != 99 {
+		t.Errorf("getEnvInt() with invalid int = %d, want 99", result)
+	}
+}
+
+func TestGetEnvInt_WithDefault(t *testing.T) {
+	os.Unsetenv("MISSING_INT")
+
+	result := getEnvInt("MISSING_INT", 123)
+
+	if result != 123 {
+		t.Errorf("getEnvInt() = %d, want 123", result)
+	}
+}
+
+func TestGetEnvInt_EmptyString(t *testing.T) {
+	t.Setenv("EMPTY_INT", "")
+
+	result := getEnvInt("EMPTY_INT", 77)
+
+	// Empty string should return default
+	if result != 77 {
+		t.Errorf("getEnvInt() with empty string = %d, want 77", result)
+	}
+}
+
+func TestSplitCSV_Simple(t *testing.T) {
+	result := splitCSV("a,b,c")
+
+	if len(result) != 3 {
+		t.Errorf("len = %d, want 3", len(result))
+	}
+	if result[0] != "a" || result[1] != "b" || result[2] != "c" {
+		t.Errorf("result = %v", result)
+	}
+}
+
+func TestSplitCSV_WithSpaces(t *testing.T) {
+	result := splitCSV(" a , b , c ")
+
+	if len(result) != 3 {
+		t.Errorf("len = %d, want 3", len(result))
+	}
+	if result[0] != "a" || result[1] != "b" || result[2] != "c" {
+		t.Errorf("result = %v", result)
+	}
+}
+
+func TestSplitCSV_EmptyStrings(t *testing.T) {
+	result := splitCSV("a,,b,  ,c")
+
+	if len(result) != 3 {
+		t.Errorf("len = %d, want 3 (empty strings should be skipped)", len(result))
+	}
+	if result[0] != "a" || result[1] != "b" || result[2] != "c" {
+		t.Errorf("result = %v", result)
+	}
+}
+
+func TestSplitCSV_EmptyInput(t *testing.T) {
+	result := splitCSV("")
+
+	if len(result) != 0 {
+		t.Errorf("len = %d, want 0", len(result))
+	}
+}
+
+func TestSplitCSV_OnlySpaces(t *testing.T) {
+	result := splitCSV("  ,  ,  ")
+
+	if len(result) != 0 {
+		t.Errorf("len = %d, want 0 (only spaces should result in empty list)", len(result))
+	}
+}
+
+func TestSplitCSV_Single(t *testing.T) {
+	result := splitCSV("single")
+
+	if len(result) != 1 {
+		t.Errorf("len = %d, want 1", len(result))
+	}
+	if result[0] != "single" {
+		t.Errorf("result[0] = %s, want single", result[0])
+	}
+}
+
 // helper to clear relevant env vars
 func clearEnv(t *testing.T) {
 	t.Helper()

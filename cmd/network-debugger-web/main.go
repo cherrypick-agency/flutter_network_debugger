@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -27,6 +28,7 @@ import (
 var webDist embed.FS
 
 func main() {
+	loadDotEnv()
 	cfg := cfgpkg.FromEnv()
 
 	logger := obs.NewLogger(cfg.LogLevel)
@@ -37,12 +39,34 @@ func main() {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: cfg, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
-	if cfg.MITMEnabled && cfg.MITMCACertFile != "" && cfg.MITMCAKeyFile != "" {
-		if ca, err := httpapi.LoadCertAuthority(cfg.MITMCACertFile, cfg.MITMCAKeyFile); err != nil {
-			logger.Error().Err(err).Msg("mitm init failed")
-		} else {
-			deps.MITM = &httpapi.MITM{CA: ca, AllowSuffix: cfg.MITMDomainsAllow, DenySuffix: cfg.MITMDomainsDeny}
-			logger.Info().Msg("MITM enabled for forward proxy")
+	if cfg.MITMEnabled {
+		if cfg.MITMCACertFile == "" || cfg.MITMCAKeyFile == "" {
+			base := "data"
+			_ = os.MkdirAll(base, 0o755)
+			if cfg.MITMCACertFile == "" {
+				cfg.MITMCACertFile = filepath.Join(base, "mitm_dev_ca.crt")
+			}
+			if cfg.MITMCAKeyFile == "" {
+				cfg.MITMCAKeyFile = filepath.Join(base, "mitm_dev_ca.key")
+			}
+			if _, err := os.Stat(cfg.MITMCACertFile); os.IsNotExist(err) {
+				certPEM, keyPEM, gerr := httpapi.GenerateDevCA("network-debugger dev CA", 5)
+				if gerr != nil {
+					logger.Error().Err(gerr).Msg("failed to generate default dev CA")
+				} else {
+					_ = os.WriteFile(cfg.MITMCACertFile, certPEM, 0o644)
+					_ = os.WriteFile(cfg.MITMCAKeyFile, keyPEM, 0o600)
+					logger.Info().Str("cert", cfg.MITMCACertFile).Str("key", cfg.MITMCAKeyFile).Msg("generated default dev CA")
+				}
+			}
+		}
+		if cfg.MITMCACertFile != "" && cfg.MITMCAKeyFile != "" {
+			if ca, err := httpapi.LoadCertAuthority(cfg.MITMCACertFile, cfg.MITMCAKeyFile); err != nil {
+				logger.Error().Err(err).Msg("mitm init failed")
+			} else {
+				deps.MITM = &httpapi.MITM{CA: ca, AllowSuffix: cfg.MITMDomainsAllow, DenySuffix: cfg.MITMDomainsDeny}
+				logger.Info().Msg("MITM enabled for forward proxy")
+			}
 		}
 	}
 
@@ -165,4 +189,33 @@ func openBrowser(url string) error {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Start()
+}
+
+// loadDotEnv loads key=value pairs from a local .env file if present.
+// Only sets variables that are not already defined in the environment.
+func loadDotEnv() {
+	data, err := os.ReadFile(".env")
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if i := strings.Index(line, "#"); i >= 0 { // strip trailing comments
+			line = strings.TrimSpace(line[:i])
+		}
+		i := strings.Index(line, "=")
+		if i <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:i])
+		v := strings.TrimSpace(line[i+1:])
+		v = strings.Trim(v, "\"'")
+		if os.Getenv(k) == "" {
+			_ = os.Setenv(k, v)
+		}
+	}
 }

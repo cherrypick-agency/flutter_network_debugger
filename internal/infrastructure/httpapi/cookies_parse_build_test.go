@@ -82,3 +82,85 @@ func containsAll(ss []string, need []string) bool {
 	}
 	return true
 }
+
+func TestParseSetCookieLine_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	// Empty string
+	if _, ok := parseSetCookieLine(""); ok {
+		t.Error("empty string should return ok=false")
+	}
+
+	// Only "="
+	if _, ok := parseSetCookieLine("="); ok {
+		t.Error("only '=' should return ok=false")
+	}
+
+	// "=value" without name
+	if _, ok := parseSetCookieLine("=value"); ok {
+		t.Error("'=value' without name should return ok=false")
+	}
+
+	// "name=" without value (should be ok)
+	p, ok := parseSetCookieLine("name=")
+	if !ok {
+		t.Error("'name=' should be valid")
+	}
+	if p.name != "name" || p.value != "" {
+		t.Errorf("'name=': got name=%q value=%q", p.name, p.value)
+	}
+
+	// Cookie with spaces
+	p, ok = parseSetCookieLine("  id  =  123  ")
+	if !ok {
+		t.Error("cookie with spaces should be valid")
+	}
+	if p.name != "id" || p.value != "123" {
+		t.Errorf("spaces: got name=%q value=%q", p.name, p.value)
+	}
+
+	// Multiple empty tokens
+	p, ok = parseSetCookieLine("a=1; ; ; Secure")
+	if !ok {
+		t.Error("empty tokens should be skipped")
+	}
+	if !p.flags["secure"] {
+		t.Error("secure flag should be set")
+	}
+
+	// Attribute without '=' is extraToken
+	p, ok = parseSetCookieLine("n=v; RandomFlag")
+	if !ok {
+		t.Error("should parse with random flag")
+	}
+	if len(p.extraTokens) == 0 || p.extraTokens[0] != "RandomFlag" {
+		t.Errorf("RandomFlag should be in extraTokens, got %v", p.extraTokens)
+	}
+
+	// Unknown attribute with '=' goes to extraTokens
+	p, ok = parseSetCookieLine("n=v; Custom=Value")
+	if !ok {
+		t.Error("should parse with custom attribute")
+	}
+	if len(p.extraTokens) == 0 || p.extraTokens[0] != "Custom=Value" {
+		t.Errorf("Custom=Value should be in extraTokens, got %v", p.extraTokens)
+	}
+
+	// expires attribute
+	p, ok = parseSetCookieLine("n=v; Expires=Wed, 21 Oct 2015 07:28:00 GMT")
+	if !ok {
+		t.Error("should parse with expires")
+	}
+	if p.attrs["expires"] != "Wed, 21 Oct 2015 07:28:00 GMT" {
+		t.Errorf("expires: got %q", p.attrs["expires"])
+	}
+
+	// max-age attribute
+	p, ok = parseSetCookieLine("n=v; Max-Age=3600")
+	if !ok {
+		t.Error("should parse with max-age")
+	}
+	if p.attrs["max-age"] != "3600" {
+		t.Errorf("max-age: got %q", p.attrs["max-age"])
+	}
+}

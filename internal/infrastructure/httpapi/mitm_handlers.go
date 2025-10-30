@@ -1,9 +1,13 @@
 package httpapi
 
 import (
+	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 // handleV1MITMStatus: GET returns current MITM config/status
@@ -13,12 +17,24 @@ func (d *Deps) handleV1MITMStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type resp struct {
-		Enabled bool     `json:"enabled"`
-		HasCA   bool     `json:"hasCA"`
-		Allow   []string `json:"allow,omitempty"`
-		Deny    []string `json:"deny,omitempty"`
+		Enabled       bool     `json:"enabled"`
+		HasCA         bool     `json:"hasCA"`
+		Allow         []string `json:"allow,omitempty"`
+		Deny          []string `json:"deny,omitempty"`
+		CASubject     string   `json:"caSubject,omitempty"`
+		CASerial      string   `json:"caSerial,omitempty"`
+		CAFingerprint string   `json:"caFingerprint,omitempty"`
+		CACertPath    string   `json:"caCertPath,omitempty"`
 	}
-	out := resp{Enabled: d.Cfg.MITMEnabled, HasCA: d.MITM != nil && d.MITM.CA != nil, Allow: d.Cfg.MITMDomainsAllow, Deny: d.Cfg.MITMDomainsDeny}
+	out := resp{Enabled: d.Cfg.MITMEnabled, HasCA: d.MITM != nil && d.MITM.CA != nil, Allow: d.Cfg.MITMDomainsAllow, Deny: d.Cfg.MITMDomainsDeny, CACertPath: d.Cfg.MITMCACertFile}
+	if d.MITM != nil && d.MITM.CA != nil && d.MITM.CA.caCert != nil {
+		out.CASubject = d.MITM.CA.caCert.Subject.String()
+		if d.MITM.CA.caCert.SerialNumber != nil {
+			out.CASerial = d.MITM.CA.caCert.SerialNumber.Text(16)
+		}
+		sum := sha1.Sum(d.MITM.CA.caCert.Raw)
+		out.CAFingerprint = hex.EncodeToString(sum[:])
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
 }
@@ -73,6 +89,59 @@ func (d *Deps) handleV1MITMGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"certPEM": string(certPEM), "keyPEM": string(keyPEM)})
+}
+
+// handleV1MITMRegeneratePersist: POST generates a new dev CA, persists to files
+// (using configured paths or ./data defaults) and swaps runtime CA.
+func (d *Deps) handleV1MITMRegeneratePersist(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "use POST", nil)
+		return
+	}
+	base := "data"
+	_ = os.MkdirAll(base, 0o755)
+	certPath := d.Cfg.MITMCACertFile
+	keyPath := d.Cfg.MITMCAKeyFile
+	if certPath == "" {
+		certPath = filepath.Join(base, "mitm_dev_ca.crt")
+	}
+	if keyPath == "" {
+		keyPath = filepath.Join(base, "mitm_dev_ca.key")
+	}
+	certPEM, keyPEM, err := GenerateDevCA("network-debugger dev CA", 5)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "CA_GENERATE_FAILED", err.Error(), nil)
+		return
+	}
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		writeError(w, http.StatusInternalServerError, "CA_WRITE_FAILED", err.Error(), nil)
+		return
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		writeError(w, http.StatusInternalServerError, "CA_WRITE_FAILED", err.Error(), nil)
+		return
+	}
+	ca, err := LoadCertAuthorityFromPEM(certPEM, keyPEM)
+	if err == nil {
+		if d.MITM == nil {
+			d.MITM = &MITM{}
+		}
+		d.MITM.CA = ca
+	}
+	// update cfg paths so status shows them
+	d.Cfg.MITMCACertFile = certPath
+	d.Cfg.MITMCAKeyFile = keyPath
+	fp := ""
+	if d.MITM != nil && d.MITM.CA != nil && d.MITM.CA.caCert != nil {
+		sum := sha1.Sum(d.MITM.CA.caCert.Raw)
+		fp = hex.EncodeToString(sum[:])
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"certPath":    certPath,
+		"keyPath":     keyPath,
+		"fingerprint": fp,
+	})
 }
 
 // helper: write DER to PEM

@@ -756,7 +756,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                             .selectedSessionId
                                             .value !=
                                         null;
-                                    if (!has) return const SizedBox.shrink();
+                                    if (!has) {
+                                      return const Expanded(
+                                        child: _SessionPlaceholder(
+                                          key: ValueKey('session_placeholder'),
+                                        ),
+                                      );
+                                    }
                                     return Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -975,5 +981,38 @@ class _MyHomePageState extends State<MyHomePage> {
         sl<HomeUiStore>().httpMeta[s.id] = Map<String, dynamic>.from(meta);
       }
     }
+  }
+}
+
+class _SessionPlaceholder extends StatelessWidget {
+  const _SessionPlaceholder({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(Icons.find_in_page, size: 72, color: cs.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              'No session selected',
+              style: tt.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Pick a session on the left to see its details here.',
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

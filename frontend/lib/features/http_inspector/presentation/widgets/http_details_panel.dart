@@ -8,6 +8,8 @@ import '../../../../core/di/di.dart';
 import '../../../../widgets/html_preview.dart';
 import 'form_data_view.dart';
 
+enum CurlExportMode { compact, multiline, withOptions }
+
 class HttpDetailsPanel extends StatefulWidget {
   const HttpDetailsPanel({
     super.key,
@@ -82,7 +84,12 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
   }
 
   Widget _buildRequest(BuildContext context, Map<String, dynamic>? req) {
-    if (req == null) return Text('Нет данных', style: context.appText.body);
+    if (req == null) {
+      final method =
+          (widget.httpMeta?['method'] ?? '').toString().toUpperCase();
+      if (method == 'CONNECT') return _connectPlaceholder(context);
+      return Text('No data', style: context.appText.body);
+    }
     final headers =
         (req['headers'] as Map?)?.map(
           (k, v) => MapEntry(k.toString(), v.toString()),
@@ -157,13 +164,51 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               icon: const Icon(Icons.link, size: 16),
               label: const Text('Copy URL'),
             ),
-            TextButton.icon(
-              onPressed: () {
-                final curl = _buildCurl(req);
-                Clipboard.setData(ClipboardData(text: curl));
+            MenuAnchor(
+              builder: (context, controller, child) {
+                return TextButton.icon(
+                  onPressed: () {
+                    // Default: copy compact version
+                    final curl = _buildCurl(req, CurlExportMode.compact);
+                    Clipboard.setData(ClipboardData(text: curl));
+                  },
+                  onLongPress: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  icon: const Icon(Icons.content_paste, size: 16),
+                  label: const Text('Copy as cURL'),
+                );
               },
-              icon: const Icon(Icons.content_paste, size: 16),
-              label: const Text('Copy as cURL'),
+              menuChildren: [
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.remove, size: 16),
+                  child: const Text('Compact'),
+                  onPressed: () {
+                    final curl = _buildCurl(req, CurlExportMode.compact);
+                    Clipboard.setData(ClipboardData(text: curl));
+                  },
+                ),
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.wrap_text, size: 16),
+                  child: const Text('Multiline'),
+                  onPressed: () {
+                    final curl = _buildCurl(req, CurlExportMode.multiline);
+                    Clipboard.setData(ClipboardData(text: curl));
+                  },
+                ),
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.settings, size: 16),
+                  child: const Text('With options'),
+                  onPressed: () {
+                    final curl = _buildCurl(req, CurlExportMode.withOptions);
+                    Clipboard.setData(ClipboardData(text: curl));
+                  },
+                ),
+              ],
             ),
           ],
         ),
@@ -270,7 +315,12 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
   }
 
   Widget _buildResponse(BuildContext context, Map<String, dynamic>? resp) {
-    if (resp == null) return Text('Нет данных', style: context.appText.body);
+    if (resp == null) {
+      final method =
+          (widget.httpMeta?['method'] ?? '').toString().toUpperCase();
+      if (method == 'CONNECT') return _connectPlaceholder(context);
+      return Text('No data', style: context.appText.body);
+    }
     final headers =
         (resp['headers'] as Map?)?.map(
           (k, v) => MapEntry(k.toString(), v.toString()),
@@ -517,6 +567,28 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _connectPlaceholder(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('CONNECT tunnel', style: context.appText.subtitle),
+          const SizedBox(height: 6),
+          SelectableText(
+            'This is an HTTPS tunnel. To see Request/Response you need MITM enabled and the dev CA trusted by the OS.',
+            style: context.appText.body,
+          ),
+          const SizedBox(height: 6),
+          SelectableText(
+            'Check: 1) Proxy: ON, 2) OS trust: ON, 3) MITM enabled, 4) QUIC disabled in browser, 5) domain not in deny list.',
+            style: context.appText.monospace,
+          ),
+        ],
+      ),
     );
   }
 
@@ -914,7 +986,10 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     );
   }
 
-  String _buildCurl(Map<String, dynamic> req) {
+  String _buildCurl(
+    Map<String, dynamic> req, [
+    CurlExportMode mode = CurlExportMode.compact,
+  ]) {
     final method = (req['method'] ?? 'GET').toString().toUpperCase();
     final url = (req['url'] ?? '').toString();
     final headers =
@@ -923,20 +998,87 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ) ??
         <String, String>{};
     final body = (req['body'] ?? '').toString();
-    final b = StringBuffer();
-    b.write("curl -X $method '");
-    b.write(url.replaceAll("'", "'\\''"));
-    b.write("'");
+    final form =
+        (req['form'] is Map)
+            ? (req['form'] as Map).cast<String, dynamic>()
+            : null;
+
+    // Extract cookies from headers
+    String? cookieValue;
+    final headersToInclude = <String, String>{};
     headers.forEach((k, v) {
-      final vv = v.replaceAll("'", "'\\''");
-      b.write(" -H '$k: $vv'");
+      if (k.toLowerCase() == 'cookie') {
+        cookieValue = v;
+      } else {
+        headersToInclude[k] = v;
+      }
     });
-    if (body.isNotEmpty) {
-      final bb = body.replaceAll("'", "'\\''");
-      b.write(" --data '$bb'");
+
+    // Determine if we should use form-data format
+    final contentType =
+        headers['Content-Type'] ?? headers['content-type'] ?? '';
+    final useFormData =
+        form != null &&
+        (contentType.contains('multipart/form-data') ||
+            contentType.contains('application/x-www-form-urlencoded'));
+
+    final b = StringBuffer();
+    final isMultiline =
+        mode == CurlExportMode.multiline || mode == CurlExportMode.withOptions;
+    final newline = isMultiline ? ' \\\n  ' : ' ';
+
+    // Start command
+    b.write("curl -X $method$newline'");
+    b.write(_escapeShellArg(url));
+    b.write("'");
+
+    // Add headers
+    headersToInclude.forEach((k, v) {
+      // Skip Content-Type and Content-Length for form-data (curl adds them automatically)
+      if (useFormData &&
+          (k.toLowerCase() == 'content-type' ||
+              k.toLowerCase() == 'content-length')) {
+        return;
+      }
+      b.write("$newline-H '$k: ${_escapeShellArg(v)}'");
+    });
+
+    // Add cookie
+    if (cookieValue?.isNotEmpty == true) {
+      b.write("$newline--cookie '${_escapeShellArg(cookieValue!)}'");
     }
-    b.write(' --compressed');
+
+    // Add body or form data
+    if (useFormData && form != null) {
+      // Use -F for form data
+      form.forEach((k, v) {
+        if (v is Map && v.containsKey('filename')) {
+          // File upload
+          final filename = v['filename'] ?? 'file';
+          b.write("$newline-F '$k=@$filename'");
+        } else {
+          // Regular field
+          b.write("$newline-F '$k=${_escapeShellArg(v.toString())}'");
+        }
+      });
+    } else if (body.isNotEmpty) {
+      // Use --data for regular body
+      b.write("$newline--data '${_escapeShellArg(body)}'");
+    }
+
+    // Add additional options for withOptions mode
+    if (mode == CurlExportMode.withOptions) {
+      b.write("$newline--location");
+      b.write("$newline--insecure");
+    }
+
+    b.write("$newline--compressed");
+
     return b.toString();
+  }
+
+  String _escapeShellArg(String arg) {
+    return arg.replaceAll("'", "'\\''");
   }
 }
 

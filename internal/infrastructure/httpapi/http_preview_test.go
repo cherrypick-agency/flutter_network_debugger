@@ -602,6 +602,19 @@ func TestTryDecompress_Invalid(t *testing.T) {
 	}
 }
 
+func TestTryDecompress_UnsupportedEncoding(t *testing.T) {
+	// Test default case with unsupported encoding
+	if _, ok := tryDecompress([]byte("test"), "brotli"); ok {
+		t.Fatal("unsupported encoding should return false")
+	}
+	if _, ok := tryDecompress([]byte("test"), ""); ok {
+		t.Fatal("empty encoding should return false")
+	}
+	if _, ok := tryDecompress([]byte("test"), "unknown"); ok {
+		t.Fatal("unknown encoding should return false")
+	}
+}
+
 func TestIsWebSocketRequest(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodGet, "/", nil)
 	if isWebSocketRequest(r) {
@@ -616,4 +629,73 @@ func TestIsWebSocketRequest(t *testing.T) {
 	if !isWebSocketRequest(r2) {
 		t.Fatalf("upgrade -> true")
 	}
+}
+
+func TestFormatBinaryPreview_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	// Empty data
+	s := formatBinaryPreview([]byte{}, 10)
+	if s != "" {
+		t.Errorf("empty data should return empty string, got %q", s)
+	}
+
+	// Single byte
+	s = formatBinaryPreview([]byte{0xAB}, 10)
+	if s != "AB" {
+		t.Errorf("single byte: got %q, want AB", s)
+	}
+
+	// Two bytes (tests space between bytes)
+	s = formatBinaryPreview([]byte{0x01, 0x02}, 10)
+	if s != "01 02" {
+		t.Errorf("two bytes: got %q, want \"01 02\"", s)
+	}
+
+	// max = 0 should use len(b)
+	data := []byte{0xDE, 0xAD, 0xBE}
+	s = formatBinaryPreview(data, 0)
+	if s != "DE AD BE" {
+		t.Errorf("max=0: got %q, want \"DE AD BE\"", s)
+	}
+
+	// max < 0 should use len(b)
+	s = formatBinaryPreview(data, -1)
+	if s != "DE AD BE" {
+		t.Errorf("max=-1: got %q, want \"DE AD BE\"", s)
+	}
+
+	// max > len(b) should use len(b)
+	s = formatBinaryPreview([]byte{0xFF}, 100)
+	if s != "FF" {
+		t.Errorf("max>len: got %q, want FF", s)
+	}
+
+	// max < len but < 256
+	data = bytes.Repeat([]byte{0x11}, 100)
+	s = formatBinaryPreview(data, 10)
+	parts := splitOnSpace(s)
+	if len(parts) != 10 {
+		t.Errorf("max=10 on 100 bytes: got %d parts, want 10", len(parts))
+	}
+}
+
+func splitOnSpace(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' {
+			if i > start {
+				parts = append(parts, s[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		parts = append(parts, s[start:])
+	}
+	return parts
 }

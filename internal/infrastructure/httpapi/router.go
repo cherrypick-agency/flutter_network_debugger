@@ -133,6 +133,8 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	mux.HandleFunc("/_api/v1/mitm/status", d.handleV1MITMStatus)
 	mux.HandleFunc("/_api/v1/mitm/ca", d.handleV1MITMGetCA)
 	mux.HandleFunc("/_api/v1/mitm/ca/generate", d.handleV1MITMGenerate)
+	// generate new dev CA, persist to files and swap runtime CA
+	mux.HandleFunc("/_api/v1/mitm/ca/regenerate", d.handleV1MITMRegeneratePersist)
 
 	return mux
 }

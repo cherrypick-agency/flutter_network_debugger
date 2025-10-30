@@ -327,3 +327,74 @@ Future<bool> isDevCAInstalledSystem() async {
   } catch (_) {}
   return false;
 }
+
+Future<String?> systemDevCAFingerprint() async {
+  try {
+    const cn = 'network-debugger dev CA';
+    if (Platform.isMacOS) {
+      final res = await Process.run('security', [
+        'find-certificate',
+        '-a',
+        '-c',
+        cn,
+        '-Z',
+        '/Library/Keychains/System.keychain',
+      ]);
+      if (res.exitCode != 0) return null;
+      final out = (res.stdout ?? '').toString().split('\n');
+      for (final raw in out) {
+        final line = raw.trim();
+        final lower = line.toLowerCase();
+        if (lower.startsWith('sha-1')) {
+          final parts = line.split(':');
+          if (parts.length > 1) {
+            final rest = parts[1].trim();
+            final hex = rest.replaceAll(':', '').replaceAll(' ', '');
+            if (hex.isNotEmpty) return hex.toLowerCase();
+          }
+        }
+      }
+      return null;
+    }
+    if (Platform.isWindows) {
+      final res = await Process.run('certutil', [
+        '-user',
+        '-store',
+        'Root',
+        cn,
+      ]);
+      final out = (res.stdout ?? '').toString();
+      final lines = out.split('\n');
+      for (final line in lines) {
+        final l = line.trim();
+        if (l.toLowerCase().startsWith('cert hash(sha1):')) {
+          final hex = l.split(':').last.trim().replaceAll(' ', '');
+          if (hex.isNotEmpty) return hex.toLowerCase();
+        }
+      }
+      return null;
+    }
+    if (Platform.isLinux) {
+      // Try common locations with openssl if available
+      final paths = [
+        '/usr/local/share/ca-certificates/network-debugger-dev-ca.crt',
+        '/etc/pki/ca-trust/source/anchors/network-debugger-dev-ca.crt',
+      ];
+      for (final p in paths) {
+        if (!File(p).existsSync()) continue;
+        final res = await Process.run('bash', [
+          '-lc',
+          'command -v openssl >/dev/null 2>&1 && openssl x509 -noout -fingerprint -sha1 -in ' +
+              p.replaceAll('"', '\\"'),
+        ]);
+        final out = (res.stdout ?? '').toString();
+        final i = out.indexOf('=');
+        if (i > 0) {
+          final fp = out.substring(i + 1).trim().replaceAll(':', '');
+          if (fp.isNotEmpty) return fp.toLowerCase();
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}

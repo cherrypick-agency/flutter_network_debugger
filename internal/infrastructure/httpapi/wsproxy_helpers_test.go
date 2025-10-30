@@ -44,6 +44,12 @@ func Test_tryExtractAckID(t *testing.T) {
 		"4":                     -1,
 		"42/chat,abc[1]":        -1,
 		"42/chat,17x[1]":        -1,
+		"42":                    -1, // exactly 2 chars
+		"":                      -1, // empty string
+		"1":                     -1, // single char
+		"42/chat":               -1, // namespace without ack
+		"43,":                   -1, // comma but no ack
+		"42/chat,":              -1, // namespace with comma but no ack
 	}
 	for s, want := range cases {
 		if got := tryExtractAckID(s); got != want {
