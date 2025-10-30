@@ -602,32 +602,34 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                     'Fedora/RHEL: place in /etc/pki/ca-trust/source/anchors/ and run update-ca-trust extract (root)',
                               ),
                             ],
-                            const SizedBox(height: 12),
-                            const SelectableText('Option B (CLI):'),
-                            const SizedBox(height: 8),
-                            if (Platform.isMacOS)
-                              TerminalCommand(
-                                command:
-                                    'sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ' +
-                                    _quoteForShell(_suggestedCAPath()),
-                              )
-                            else if (Platform.isWindows)
-                              TerminalCommand(
-                                command:
-                                    'certutil -user -addstore Root ' +
-                                    _quoteForShell(_suggestedCAPath()),
-                              )
-                            else if (Platform.isLinux) ...[
-                              TerminalCommand(
-                                command:
-                                    'sudo cp ' +
-                                    _quoteForShell(_suggestedCAPath()) +
-                                    ' /usr/local/share/ca-certificates/',
-                              ),
-                              const SizedBox(height: 4),
-                              const TerminalCommand(
-                                command: 'sudo update-ca-certificates',
-                              ),
+                            if (_lastCAPath != null) ...[
+                              const SizedBox(height: 12),
+                              const SelectableText('Option B (CLI):'),
+                              const SizedBox(height: 8),
+                              if (Platform.isMacOS)
+                                TerminalCommand(
+                                  command:
+                                      'sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ' +
+                                      _quoteForShell(_suggestedCAPath()),
+                                )
+                              else if (Platform.isWindows)
+                                TerminalCommand(
+                                  command:
+                                      'certutil -user -addstore Root ' +
+                                      _quoteForShell(_suggestedCAPath()),
+                                )
+                              else if (Platform.isLinux) ...[
+                                TerminalCommand(
+                                  command:
+                                      'sudo cp ' +
+                                      _quoteForShell(_suggestedCAPath()) +
+                                      ' /usr/local/share/ca-certificates/',
+                                ),
+                                const SizedBox(height: 4),
+                                const TerminalCommand(
+                                  command: 'sudo update-ca-certificates',
+                                ),
+                              ],
                             ],
                           ],
                         ),
@@ -705,31 +707,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                       ),
                     ),
                   const SizedBox(height: 16),
-                  if (!(_sysProxy && _hasCA))
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            SelectableText(
-                              'Step 4. Verification',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            SizedBox(height: 8),
-                            _Bullet(
-                              text:
-                                  'Open any HTTPS website/client — requests will appear in the inspector',
-                            ),
-                            _Bullet(
-                              text:
-                                  'Apps with certificate pinning will not allow MITM — use dev builds without pinning',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
 
                   if (nativeAutomationAvailable() &&
                       _sysProxy &&
@@ -763,6 +740,39 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                         ),
                       ),
                     ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SelectableText(
+                                  'Verification',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                SizedBox(height: 8),
+                                _Bullet(
+                                  text:
+                                      'Open any HTTPS website/client — requests will appear in the inspector',
+                                ),
+                                _Bullet(
+                                  text:
+                                      'Apps with certificate pinning will not allow MITM — use dev builds without pinning',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
