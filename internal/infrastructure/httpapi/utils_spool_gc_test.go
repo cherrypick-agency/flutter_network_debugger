@@ -202,13 +202,19 @@ func TestCleanupSpoolDir_AllPatterns(t *testing.T) {
 func TestCleanupSpoolDir_ZeroDuration(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Create a file
+	// Create a file with old timestamp
 	file := filepath.Join(tempDir, "gpx-req-test.bin")
 	if err := os.WriteFile(file, []byte("test"), 0o600); err != nil {
 		t.Fatalf("failed to create file: %v", err)
 	}
 
-	// Clean up with zero duration (everything is old)
+	// Set file modification time to past to ensure it's "old"
+	oldTime := time.Now().Add(-1 * time.Second)
+	if err := os.Chtimes(file, oldTime, oldTime); err != nil {
+		t.Fatalf("failed to set file time: %v", err)
+	}
+
+	// Clean up with zero duration (everything older than "now" is deleted)
 	cleanupSpoolDir(tempDir, 0)
 
 	// File should be deleted
