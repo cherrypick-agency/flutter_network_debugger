@@ -1,5 +1,14 @@
 # http_debugger
 
+<p align="left">
+  <a href="https://pub.dev/packages/http_debugger"><img src="https://img.shields.io/pub/v/http_debugger.svg" alt="pub version" /></a>
+  <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/likes/http_debugger" alt="likes" /></a>
+  <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/points/http_debugger" alt="pub points" /></a>
+  <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/popularity/http_debugger" alt="popularity" /></a>
+</p>
+
+> Part of the [network_debugger](https://pub.dev/packages/network_debugger) ecosystem
+
 Small utility that globally enables forward or reverse HTTP proxying via
 `HttpOverrides`, so all `dart:io` HTTP traffic in your app can be routed
 through a local proxy (e.g. `network-debugger` on `http://localhost:9091`).
@@ -10,6 +19,22 @@ through a local proxy (e.g. `network-debugger` on `http://localhost:9091`).
 dependencies:
   http_debugger: ^0.1.0
 ```
+
+## Starting the Proxy
+
+Before using `http_debugger`, you need to start the network debugger proxy server. Install and run it with:
+
+```bash
+# Install the CLI globally
+dart pub global activate network_debugger
+
+# Start the proxy (default port 9091)
+network_debugger
+```
+
+The proxy will start on `http://localhost:9091` and automatically open the web UI where you can inspect all intercepted traffic.
+
+For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
 
 ## Quick start 
 
