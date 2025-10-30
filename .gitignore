@@ -33,6 +33,7 @@ Thumbs.db
 /bin/
 /server.log
 /coverage.out
+/coverage.json
 *.test
 *.pprof
 *.prof

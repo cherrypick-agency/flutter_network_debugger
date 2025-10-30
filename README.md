@@ -19,8 +19,8 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/cherrypick-agency/flutter_network_debugger" alt="License" />
   </a>
-  <a href="https://codecov.io/gh/cherrypick-agency/flutter_network_debugger">
-    <img src="https://codecov.io/gh/cherrypick-agency/flutter_network_debugger/branch/main/graph/badge.svg" alt="codecov" />
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/coverage.yml">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cherrypick-agency/flutter_network_debugger/gh-pages/coverage.json" alt="coverage" />
   </a>
 </p>
 

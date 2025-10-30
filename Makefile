@@ -50,6 +50,9 @@ install-hooks:
 test:
 	go test ./...
 
+coverage:
+	@bash scripts/coverage.sh
+
 itest:
 	go test -v ./internal/integration
 
