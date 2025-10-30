@@ -24,14 +24,16 @@
   </a>
 </p>
 
-<p align="center">
-  <a href="https://pub.dev/packages/network_debugger"><img src="https://img.shields.io/pub/v/network_debugger.svg" alt="network_debugger on pub.dev" /></a>
-  <a href="https://pub.dev/packages/dio_debugger"><img src="https://img.shields.io/pub/v/dio_debugger.svg" alt="dio_debugger on pub.dev" /></a>
-  <a href="https://pub.dev/packages/http_debugger"><img src="https://img.shields.io/pub/v/http_debugger.svg" alt="http_debugger on pub.dev" /></a>
-  <a href="https://pub.dev/packages/web_socket_debugger"><img src="https://img.shields.io/pub/v/web_socket_debugger.svg" alt="web_socket_debugger on pub.dev" /></a>
-  <a href="https://pub.dev/packages/web_socket_channel_debugger"><img src="https://img.shields.io/pub/v/web_socket_channel_debugger.svg" alt="web_socket_channel_debugger on pub.dev" /></a>
-  <a href="https://pub.dev/packages/socket_io_debugger"><img src="https://img.shields.io/pub/v/socket_io_debugger.svg" alt="socket_io_debugger on pub.dev" /></a>
-</p>
+### Dart Packages
+
+| Package | Version | Description |
+|---------|---------|-------------|
+| [network_debugger](https://pub.dev/packages/network_debugger) | [![pub](https://img.shields.io/pub/v/network_debugger.svg)](https://pub.dev/packages/network_debugger) | Core CLI tool for starting the proxy |
+| [dio_debugger](https://pub.dev/packages/dio_debugger) | [![pub](https://img.shields.io/pub/v/dio_debugger.svg)](https://pub.dev/packages/dio_debugger) | Interceptor for Dio HTTP client |
+| [http_debugger](https://pub.dev/packages/http_debugger) | [![pub](https://img.shields.io/pub/v/http_debugger.svg)](https://pub.dev/packages/http_debugger) | Wrapper for package:http client |
+| [web_socket_debugger](https://pub.dev/packages/web_socket_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_debugger.svg)](https://pub.dev/packages/web_socket_debugger) | Wrapper for dart:io WebSocket |
+| [web_socket_channel_debugger](https://pub.dev/packages/web_socket_channel_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_channel_debugger.svg)](https://pub.dev/packages/web_socket_channel_debugger) | Wrapper for package:web_socket_channel |
+| [socket_io_debugger](https://pub.dev/packages/socket_io_debugger) | [![pub](https://img.shields.io/pub/v/socket_io_debugger.svg)](https://pub.dev/packages/socket_io_debugger) | Wrapper for socket.io client |
 
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
