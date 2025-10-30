@@ -16,17 +16,17 @@ class ReverseProxyHttpClient implements HttpClient {
     List<Pattern>? allowHosts,
     List<String>? allowMethods,
     SecurityContext? context,
-  }) : _inner = HttpClient(context: context),
-       _upstreamBaseUrl = upstreamBaseUrl,
-       _proxyBaseUrl = _ensureHttpScheme(proxyBaseUrl),
-       _proxyHttpPath =
-           proxyHttpPath.startsWith('/') ? proxyHttpPath : '/$proxyHttpPath',
-       _skipPaths = skipPaths,
-       _skipHosts = skipHosts,
-       _skipMethods = _upper(skipMethods),
-       _allowPaths = allowPaths,
-       _allowHosts = allowHosts,
-       _allowMethods = _upper(allowMethods) {
+  })  : _inner = HttpClient(context: context),
+        _upstreamBaseUrl = upstreamBaseUrl,
+        _proxyBaseUrl = _ensureHttpScheme(proxyBaseUrl),
+        _proxyHttpPath =
+            proxyHttpPath.startsWith('/') ? proxyHttpPath : '/$proxyHttpPath',
+        _skipPaths = skipPaths,
+        _skipHosts = skipHosts,
+        _skipMethods = _upper(skipMethods),
+        _allowPaths = allowPaths,
+        _allowHosts = allowHosts,
+        _allowMethods = _upper(allowMethods) {
     if (allowBadCertificates) {
       _inner.badCertificateCallback = (cert, host, port) => true;
     }
@@ -133,7 +133,8 @@ class ReverseProxyHttpClient implements HttpClient {
     Uri url,
     String realm,
     HttpClientCredentials credentials,
-  ) => _inner.addCredentials(url, realm, credentials);
+  ) =>
+      _inner.addCredentials(url, realm, credentials);
 
   @override
   set connectionFactory(
@@ -141,8 +142,7 @@ class ReverseProxyHttpClient implements HttpClient {
       Uri url,
       String? proxyHost,
       int? proxyPort,
-    )?
-    f,
+    )? f,
   ) {
     _inner.connectionFactory = f;
   }
@@ -155,7 +155,7 @@ class ReverseProxyHttpClient implements HttpClient {
   @override
   set authenticateProxy(
     Future<bool> Function(String host, int port, String scheme, String? realm)?
-    f,
+        f,
   ) {
     _inner.authenticateProxy = f;
   }
@@ -166,7 +166,8 @@ class ReverseProxyHttpClient implements HttpClient {
     int port,
     String realm,
     HttpClientCredentials credentials,
-  ) => _inner.addProxyCredentials(host, port, realm, credentials);
+  ) =>
+      _inner.addProxyCredentials(host, port, realm, credentials);
 
   @override
   set badCertificateCallback(
@@ -213,8 +214,7 @@ class ReverseProxyHttpClient implements HttpClient {
     final host = url.host;
     final path = url.path;
 
-    final hasAllow =
-        (_allowPaths?.isNotEmpty ?? false) ||
+    final hasAllow = (_allowPaths?.isNotEmpty ?? false) ||
         (_allowHosts?.isNotEmpty ?? false) ||
         (_allowMethods?.isNotEmpty ?? false);
 

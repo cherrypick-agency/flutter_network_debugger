@@ -1,10 +1,9 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File, Directory, Process;
 
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/di.dart';
-import '../../../../features/landing/utils/open_url.dart';
 import 'integrations_platform.dart';
 import 'package:app_http_client/application/app_http_client.dart'
     as http_client;
@@ -26,6 +25,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   String _baseUrl = '';
   bool _sysProxy = false;
   bool _osCAInstalled = false;
+  String? _lastCAPath;
 
   // Адрес прокси для подсказок/копирования
   String get _proxyAddr {
@@ -88,27 +88,55 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     }
   }
 
-  Future<void> _generateCA() async {
+  // deprecated: replaced by _generateAndDownloadCA
+
+  Future<void> _generateAndDownloadCA() async {
     setState(() => _loading = true);
     try {
       final api = sl<http_client.AppHttpClient>();
+      // 1) Ensure CA exists
       await api.post(
         path: '/_api/v1/mitm/ca/generate',
         body: {"cn": "network-debugger dev CA"},
       );
-      _hasCA = true;
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Dev CA generated.')));
+      // 2) Download
+      final resp = await api.get(path: '/_api/v1/mitm/ca');
+      final pem =
+          (resp.data is String)
+              ? resp.data as String
+              : utf8.decode((resp.data as List).cast<int>());
+      // 3) Save to Downloads (ensure dir exists); fallback to temp on failure
+      String path = _resolveDownloadsPath('network-debugger-dev-ca.crt');
+      try {
+        final file = File(path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(pem);
+      } catch (_) {
+        final tmpBase = Directory.systemTemp.path;
+        path =
+            tmpBase +
+            (Platform.isWindows ? '\\' : '/') +
+            'network-debugger-dev-ca.crt';
+        await File(path).writeAsString(pem);
       }
-      // Обновим статус, чтобы подтянуть enabled/hasCA из бэка
-      await _loadStatus();
+      _hasCA = true;
+      _lastCAPath = path;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dev CA saved to: ' + path),
+            action: SnackBarAction(
+              label: 'Show',
+              onPressed: () => _revealFile(path),
+            ),
+          ),
+        );
+      }
+      await _refreshStatusSilent();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate CA: ${e.toString()}')),
+          SnackBar(content: Text('Failed to download CA: ' + e.toString())),
         );
       }
     } finally {
@@ -116,9 +144,40 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     }
   }
 
-  void _downloadCA() {
-    final url = _baseUrl + '/_api/v1/mitm/ca';
-    openUrl(url);
+  String _resolveDownloadsPath(String fileName) {
+    final home =
+        Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '.';
+    if (Platform.isWindows) {
+      final base = Platform.environment['USERPROFILE'] ?? home;
+      return base + '\\Downloads\\' + fileName;
+    }
+    return home + '/Downloads/' + fileName;
+  }
+
+  String _suggestedCAPath() {
+    return _lastCAPath ?? _resolveDownloadsPath('network-debugger-dev-ca.crt');
+  }
+
+  String _quoteForShell(String path) {
+    if (Platform.isWindows) {
+      return '"' + path.replaceAll('/', '\\') + '"';
+    }
+    // macOS/Linux: single quotes with escaping
+    return "'" + path.replaceAll("'", "'\\''") + "'";
+  }
+
+  Future<void> _revealFile(String path) async {
+    try {
+      if (Platform.isMacOS) {
+        await Process.run('open', ['-R', path]);
+      } else if (Platform.isWindows) {
+        await Process.run('explorer', ['/select,', path.replaceAll('/', '\\')]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [File(path).parent.path]);
+      }
+    } catch (_) {}
   }
 
   Future<void> _autoIntegrate() async {
@@ -476,15 +535,16 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                               spacing: 8,
                               runSpacing: 8,
                               children: [
-                                ElevatedButton.icon(
-                                  onPressed: _loading ? null : _generateCA,
-                                  icon: const Icon(Icons.auto_fix_high),
-                                  label: const Text('Generate dev CA'),
-                                ),
-                                OutlinedButton.icon(
-                                  onPressed: _hasCA ? _downloadCA : null,
+                                FilledButton.icon(
+                                  onPressed:
+                                      _loading ? null : _generateAndDownloadCA,
                                   icon: const Icon(Icons.download),
                                   label: const Text('Download CA (.crt)'),
+                                ),
+                                IconButton(
+                                  onPressed: _loading ? null : _loadStatus,
+                                  tooltip: 'Refresh status',
+                                  icon: const Icon(Icons.refresh),
                                 ),
                               ],
                             ),
@@ -548,17 +608,21 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                             if (Platform.isMacOS)
                               TerminalCommand(
                                 command:
-                                    'sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/Downloads/network-debugger-dev-ca.crt',
+                                    'sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ' +
+                                    _quoteForShell(_suggestedCAPath()),
                               )
                             else if (Platform.isWindows)
                               TerminalCommand(
                                 command:
-                                    'certutil -user -addstore Root %USERPROFILE%\\Downloads\\network-debugger-dev-ca.crt',
+                                    'certutil -user -addstore Root ' +
+                                    _quoteForShell(_suggestedCAPath()),
                               )
                             else if (Platform.isLinux) ...[
-                              const TerminalCommand(
+                              TerminalCommand(
                                 command:
-                                    'sudo cp ~/Downloads/network-debugger-dev-ca.crt /usr/local/share/ca-certificates/',
+                                    'sudo cp ' +
+                                    _quoteForShell(_suggestedCAPath()) +
+                                    ' /usr/local/share/ca-certificates/',
                               ),
                               const SizedBox(height: 4),
                               const TerminalCommand(

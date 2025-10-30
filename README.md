@@ -27,8 +27,8 @@
 <p align="center">
   <a href="https://pub.dev/packages/network_debugger"><img src="https://img.shields.io/pub/v/network_debugger.svg" alt="network_debugger on pub.dev" /></a>
   <a href="https://pub.dev/packages/dio_debugger"><img src="https://img.shields.io/pub/v/dio_debugger.svg" alt="dio_debugger on pub.dev" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/web_socket_debugger-pending-lightgrey" alt="web_socket_debugger" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/web_socket_channel_debugger-pending-lightgrey" alt="web_socket_channel_debugger" /></a>
+  <a href="https://pub.dev/packages/web_socket_debugger"><img src="https://img.shields.io/pub/v/web_socket_debugger.svg" alt="web_socket_debugger on pub.dev" /></a>
+  <a href="https://pub.dev/packages/web_socket_channel_debugger"><img src="https://img.shields.io/pub/v/web_socket_channel_debugger.svg" alt="web_socket_channel_debugger on pub.dev" /></a>
 </p>
 
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
@@ -51,6 +51,8 @@ What it can do
 - Record/stop and records management
 - HTML preview
 - Form Data (show files) For example Flutter devtools don't show at all
+- You can proxy only app requests or all OS requests (forward proxy)
+- Crossplatform
 
 ...
 

@@ -80,6 +80,12 @@
       "languageVersion": "3.3"
     },
     {
+      "name": "http",
+      "rootUri": "file:///Users/belief/.pub-cache/hosted/pub.dev/http-1.5.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "http_multi_server",
       "rootUri": "file:///Users/belief/.pub-cache/hosted/pub.dev/http_multi_server-3.2.2",
       "packageUri": "lib/",
@@ -102,6 +108,12 @@
       "rootUri": "file:///Users/belief/.pub-cache/hosted/pub.dev/js-0.7.2",
       "packageUri": "lib/",
       "languageVersion": "3.7"
+    },
+    {
+      "name": "lints",
+      "rootUri": "file:///Users/belief/.pub-cache/hosted/pub.dev/lints-3.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "logging",
@@ -290,13 +302,13 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "web_socket_debugger",
+      "name": "http_debugger",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     }
   ],
-  "generated": "2025-10-30T00:14:38.501251Z",
+  "generated": "2025-10-30T00:16:27.854389Z",
   "generator": "pub",
   "generatorVersion": "3.7.2",
   "flutterRoot": "file:///Users/belief/dev/flutter",

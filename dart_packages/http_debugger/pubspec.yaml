@@ -1,5 +1,5 @@
 name: http_debugger
-description: "Глобальный перехватчик HTTP через HttpOverrides для проксирования всего трафика через локальный network debugger."
+description: "Global HTTP interceptor via HttpOverrides to proxy all traffic through local network debugger."
 version: 0.1.0
 repository: https://github.com/cherrypick-agency/flutter_network_debugger
 homepage: https://github.com/cherrypick-agency/flutter_network_debugger

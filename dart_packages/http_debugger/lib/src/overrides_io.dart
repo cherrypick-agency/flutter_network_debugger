@@ -97,10 +97,9 @@ class HttpDebugger {
     final m = mode.trim().toLowerCase();
     final defaultProxy =
         Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091';
-    final proxy =
-        (proxyBaseUrl == null || proxyBaseUrl.trim().isEmpty)
-            ? defaultProxy
-            : proxyBaseUrl;
+    final proxy = (proxyBaseUrl == null || proxyBaseUrl.trim().isEmpty)
+        ? defaultProxy
+        : proxyBaseUrl;
 
     if (m == 'forward') {
       final hostPort = _normalizeProxyHostPort(proxy);
@@ -194,8 +193,7 @@ class HttpDebugger {
 
     final mode = _computeMode();
     if (mode == 'forward') {
-      final proxy =
-          _firstNonEmpty([
+      final proxy = _firstNonEmpty([
             const String.fromEnvironment('HTTP_PROXY'),
             const String.fromEnvironment('PROXY_BASE_URL'),
             _readEnvVar('HTTP_PROXY'),
@@ -216,16 +214,14 @@ class HttpDebugger {
     }
 
     if (mode == 'reverse') {
-      final upstream =
-          _firstNonEmpty([
+      final upstream = _firstNonEmpty([
             const String.fromEnvironment('UPSTREAM_BASE_URL'),
             const String.fromEnvironment('API_HOST'),
             _readEnvVar('UPSTREAM_BASE_URL'),
             _readEnvVar('API_HOST'),
           ]) ??
           '';
-      var proxyBase =
-          _firstNonEmpty([
+      var proxyBase = _firstNonEmpty([
             const String.fromEnvironment('PROXY_BASE_URL'),
             const String.fromEnvironment('HTTP_PROXY'),
             _readEnvVar('PROXY_BASE_URL'),
@@ -234,8 +230,7 @@ class HttpDebugger {
           (Platform.isAndroid
               ? 'http://10.0.2.2:9091'
               : 'http://localhost:9091');
-      final proxyPath =
-          _firstNonEmpty([
+      final proxyPath = _firstNonEmpty([
             const String.fromEnvironment('PROXY_HTTP_PATH'),
             const String.fromEnvironment('HTTP_PROXY_PATH'),
             _readEnvVar('PROXY_HTTP_PATH'),
@@ -353,23 +348,21 @@ bool _computeEnabledFromEnv() {
 }
 
 String _computeMode() {
-  final v =
-      _firstNonEmpty([
-        const String.fromEnvironment('HTTP_PROXY_MODE'),
-        const String.fromEnvironment('PROXY_MODE'),
-        _readEnvVar('HTTP_PROXY_MODE'),
-        _readEnvVar('PROXY_MODE'),
-      ])?.trim().toLowerCase();
+  final v = _firstNonEmpty([
+    const String.fromEnvironment('HTTP_PROXY_MODE'),
+    const String.fromEnvironment('PROXY_MODE'),
+    _readEnvVar('HTTP_PROXY_MODE'),
+    _readEnvVar('PROXY_MODE'),
+  ])?.trim().toLowerCase();
   if (v == 'forward' || v == 'reverse' || v == 'none') return v!;
   return 'reverse';
 }
 
 bool _computeAllowBadCerts() {
-  final v =
-      _firstNonEmpty([
-        const String.fromEnvironment('HTTP_PROXY_ALLOW_BAD_CERTS'),
-        _readEnvVar('HTTP_PROXY_ALLOW_BAD_CERTS'),
-      ])?.trim().toLowerCase();
+  final v = _firstNonEmpty([
+    const String.fromEnvironment('HTTP_PROXY_ALLOW_BAD_CERTS'),
+    _readEnvVar('HTTP_PROXY_ALLOW_BAD_CERTS'),
+  ])?.trim().toLowerCase();
   if (v == null) return false;
   return v == '1' || v == 'true' || v == 'yes' || v == 'on';
 }

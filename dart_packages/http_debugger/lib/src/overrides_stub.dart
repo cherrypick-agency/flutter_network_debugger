@@ -61,12 +61,14 @@ class HttpDebugger {
   static T runZonedWithForwardProxy<T>(
     HttpDebuggerConfig _,
     T Function() action,
-  ) => action();
+  ) =>
+      action();
 
   static T runZonedWithReverseProxy<T>(
     HttpReverseProxyConfig _,
     T Function() action,
-  ) => action();
+  ) =>
+      action();
 
   static void enableAuto() {}
 }

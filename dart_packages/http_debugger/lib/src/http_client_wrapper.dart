@@ -16,24 +16,22 @@ class HttpReverseProxyClient extends http.BaseClient {
     List<Pattern>? allowPaths,
     List<Pattern>? allowHosts,
     List<String>? allowMethods,
-  }) : _inner = inner,
-       _proxyBase = _ensureHttpScheme(proxyBaseUrl),
-       _proxyHttpPath =
-           proxyHttpPath.startsWith('/') ? proxyHttpPath : '/$proxyHttpPath',
-       _upstreamBase =
-           (upstreamBaseUrl == null || upstreamBaseUrl.trim().isEmpty)
-               ? null
-               : Uri.parse(upstreamBaseUrl),
-       _skipPaths = skipPaths,
-       _skipHosts = skipHosts,
-       _skipMethods = skipMethods
-           ?.map((m) => m.toUpperCase())
-           .toList(growable: false),
-       _allowPaths = allowPaths,
-       _allowHosts = allowHosts,
-       _allowMethods = allowMethods
-           ?.map((m) => m.toUpperCase())
-           .toList(growable: false);
+  })  : _inner = inner,
+        _proxyBase = _ensureHttpScheme(proxyBaseUrl),
+        _proxyHttpPath =
+            proxyHttpPath.startsWith('/') ? proxyHttpPath : '/$proxyHttpPath',
+        _upstreamBase =
+            (upstreamBaseUrl == null || upstreamBaseUrl.trim().isEmpty)
+                ? null
+                : Uri.parse(upstreamBaseUrl),
+        _skipPaths = skipPaths,
+        _skipHosts = skipHosts,
+        _skipMethods =
+            skipMethods?.map((m) => m.toUpperCase()).toList(growable: false),
+        _allowPaths = allowPaths,
+        _allowHosts = allowHosts,
+        _allowMethods =
+            allowMethods?.map((m) => m.toUpperCase()).toList(growable: false);
 
   final http.Client _inner;
   final String _proxyBase;
@@ -65,13 +63,12 @@ class HttpReverseProxyClient extends http.BaseClient {
 
     // Базовый случай: сконструируем новый Request, скопируем тело и заголовки
     final bodyBytes = await request.finalize().toBytes();
-    final rq =
-        http.Request(method, proxy)
-          ..headers.addAll(request.headers)
-          ..followRedirects = request.followRedirects
-          ..maxRedirects = request.maxRedirects
-          ..persistentConnection = request.persistentConnection
-          ..bodyBytes = bodyBytes;
+    final rq = http.Request(method, proxy)
+      ..headers.addAll(request.headers)
+      ..followRedirects = request.followRedirects
+      ..maxRedirects = request.maxRedirects
+      ..persistentConnection = request.persistentConnection
+      ..bodyBytes = bodyBytes;
     return _inner.send(rq);
   }
 
@@ -79,8 +76,7 @@ class HttpReverseProxyClient extends http.BaseClient {
     final host = url.host;
     final path = url.path;
 
-    final hasAllow =
-        (_allowPaths?.isNotEmpty ?? false) ||
+    final hasAllow = (_allowPaths?.isNotEmpty ?? false) ||
         (_allowHosts?.isNotEmpty ?? false) ||
         (_allowMethods?.isNotEmpty ?? false);
     if (hasAllow) {
@@ -110,10 +106,11 @@ class HttpReverseProxyClient extends http.BaseClient {
 
   Uri? _buildTarget(Uri original) {
     if (_isHttp(original)) return original;
-    if (_upstreamBase == null) return null;
-    if (original.path.isEmpty && original.query.isEmpty) return _upstreamBase;
-    final mergedPath = _concatPaths(_upstreamBase.path, original.path);
-    return _upstreamBase.replace(path: mergedPath, query: original.query);
+    final base = _upstreamBase;
+    if (base == null) return null;
+    if (original.path.isEmpty && original.query.isEmpty) return base;
+    final mergedPath = _concatPaths(base.path, original.path);
+    return base.replace(path: mergedPath, query: original.query);
   }
 
   Uri _buildProxyUri(Uri target) {
