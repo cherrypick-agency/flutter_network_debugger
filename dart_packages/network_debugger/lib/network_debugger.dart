@@ -26,7 +26,7 @@ class NetworkDebugger {
   /// Launches the network debugger.
   ///
   /// - [version]: Specific version to use (e.g., 'v1.0.0'). If null, uses latest release.
-  /// - [port]: Port to run the debugger on (default: 9091).
+  /// - [port]: Port to run the UI/REST on (default: 9092). Forward proxy runs on 9091.
   /// - [autoOpenBrowser]: Whether to automatically open browser (default: true).
   /// - [onProgress]: Optional callback for download progress.
   /// - [onRetry]: Optional callback for retry attempts.
@@ -46,7 +46,7 @@ class NetworkDebugger {
   /// - [ProcessException] if starting the process fails.
   static Future<DebuggerInstance> launch({
     String? version,
-    int port = 9091,
+    int port = 9092,
     bool autoOpenBrowser = true,
     ProgressCallback? onProgress,
     RetryCallback? onRetry,

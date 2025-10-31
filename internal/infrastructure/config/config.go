@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -41,6 +42,25 @@ type Config struct {
 	ResponseDelayMinMs int
 	ResponseDelayMaxMs int
 
+	// Network throttling (bandwidth/packet loss/offline)
+	// If Enabled, proxy will limit transfer speed and optionally drop data to
+	// simulate unreliable networks. Units are kilobits per second (kbit/s).
+	ThrottleEnabled    bool
+	ThrottleDownKbps   int // downstream (upstream->client)
+	ThrottleUpKbps     int // upstream (client->upstream)
+	ThrottlePacketLoss int // 0..100 percent of reads/writes dropped (best-effort)
+	ThrottleOffline    bool
+
+	// Latency injection (RTT/ping simulation)
+	// Adds artificial delay to network operations to simulate high-latency networks.
+	// Unlike response delay (which only delays the response), latency injection affects:
+	// - Connection establishment (TCP/TLS handshakes)
+	// - Request sending
+	// - Response receiving
+	// This simulates geographic distance, satellite links, or congested networks.
+	ThrottleLatencyMs     int // Base latency in milliseconds (e.g., 100 = 100ms RTT)
+	ThrottleLatencyJitter int // Random jitter ± ms (e.g., 20 = varies 80-120ms)
+
 	// Forward proxy MITM (HTTPS inspection)
 	// If enabled and CA is provided, CONNECT requests will be intercepted and
 	// decrypted using dynamically issued certificates for requested hosts.
@@ -50,6 +70,25 @@ type Config struct {
 	// Comma-separated domain suffix allow/deny lists (e.g. ".example.com,api.test")
 	MITMDomainsAllow []string
 	MITMDomainsDeny  []string
+
+	// Interception / Breakpoints (MVP)
+	InterceptEnabled      bool
+	InterceptRequests     bool
+	InterceptResponses    bool
+	InterceptTimeoutMs    int
+	InterceptQueueMax     int
+	InterceptBodyMaxBytes int
+	InterceptReencode     bool
+	InterceptOverflow     string
+	AdminToken            string
+	InterceptMethods      []string
+	InterceptURLContains  []string
+	InterceptContentTypes []string
+
+	// Compose/Request Builder storage and limits
+	ComposeLibraryPath string
+	ComposeHistoryPath string
+	ComposeMaxUploadMB int
 }
 
 // CookiesConfig controls reverse-proxy cookie rewriting behavior
@@ -64,7 +103,7 @@ type CookiesConfig struct {
 
 func FromEnv() Config {
 	cfg := Config{
-		Addr:            getEnv("ADDR", ":9091"),
+		Addr:            getEnv("ADDR", ":9092"),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 		CORSAllowOrigin: getEnv("CORS_ALLOW_ORIGIN", "*"),
 	}
@@ -153,6 +192,19 @@ func FromEnv() Config {
 	if os.Getenv("MITM_ENABLE") == "1" || os.Getenv("MITM_ENABLE") == "true" {
 		cfg.MITMEnabled = true
 	}
+
+	// Throttling settings (runtime can override via API)
+	if os.Getenv("THROTTLE_ENABLE") == "1" || os.Getenv("THROTTLE_ENABLE") == "true" {
+		cfg.ThrottleEnabled = true
+	}
+	cfg.ThrottleDownKbps = getEnvInt("THROTTLE_DOWN_KBPS", 0)
+	cfg.ThrottleUpKbps = getEnvInt("THROTTLE_UP_KBPS", 0)
+	cfg.ThrottlePacketLoss = getEnvInt("THROTTLE_PACKET_LOSS", 0)
+	cfg.ThrottleLatencyMs = getEnvInt("THROTTLE_LATENCY_MS", 0)
+	cfg.ThrottleLatencyJitter = getEnvInt("THROTTLE_LATENCY_JITTER", 0)
+	if os.Getenv("THROTTLE_OFFLINE") == "1" || os.Getenv("THROTTLE_OFFLINE") == "true" {
+		cfg.ThrottleOffline = true
+	}
 	cfg.MITMCACertFile = getEnv("MITM_CA_CERT_FILE", "")
 	cfg.MITMCAKeyFile = getEnv("MITM_CA_KEY_FILE", "")
 	if v := strings.TrimSpace(os.Getenv("MITM_DOMAINS_ALLOW")); v != "" {
@@ -161,6 +213,45 @@ func FromEnv() Config {
 	if v := strings.TrimSpace(os.Getenv("MITM_DOMAINS_DENY")); v != "" {
 		cfg.MITMDomainsDeny = splitCSV(v)
 	}
+
+	// Interception (breakpoints)
+	if os.Getenv("INTERCEPT_ENABLE") == "1" || os.Getenv("INTERCEPT_ENABLE") == "true" {
+		cfg.InterceptEnabled = true
+	}
+	if os.Getenv("INTERCEPT_REQUESTS") == "0" || os.Getenv("INTERCEPT_REQUESTS") == "false" {
+		cfg.InterceptRequests = false
+	} else {
+		cfg.InterceptRequests = true
+	}
+	if os.Getenv("INTERCEPT_RESPONSES") == "0" || os.Getenv("INTERCEPT_RESPONSES") == "false" {
+		cfg.InterceptResponses = false
+	} else {
+		cfg.InterceptResponses = true
+	}
+	cfg.InterceptTimeoutMs = getEnvInt("INTERCEPT_TIMEOUT_MS", 60000)
+	cfg.InterceptQueueMax = getEnvInt("INTERCEPT_QUEUE_MAX", 200)
+	cfg.InterceptBodyMaxBytes = getEnvInt("INTERCEPT_BODY_MAX_BYTES", 1<<20)
+	if os.Getenv("INTERCEPT_REENCODE") == "0" || os.Getenv("INTERCEPT_REENCODE") == "false" {
+		cfg.InterceptReencode = false
+	} else {
+		cfg.InterceptReencode = true
+	}
+	cfg.InterceptOverflow = getEnv("INTERCEPT_OVERFLOW", "auto-continue-oldest")
+	cfg.AdminToken = getEnv("ADMIN_TOKEN", "")
+	if v := strings.TrimSpace(os.Getenv("INTERCEPT_METHODS")); v != "" {
+		cfg.InterceptMethods = splitCSV(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("INTERCEPT_URL_CONTAINS")); v != "" {
+		cfg.InterceptURLContains = splitCSV(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("INTERCEPT_CONTENT_TYPES")); v != "" {
+		cfg.InterceptContentTypes = splitCSV(v)
+	}
+
+	// Compose defaults
+	cfg.ComposeLibraryPath = getEnv("COMPOSE_LIBRARY_PATH", filepathJoinSafe("data", "compose_library.json"))
+	cfg.ComposeHistoryPath = getEnv("COMPOSE_HISTORY_PATH", filepathJoinSafe("data", "compose_history.json"))
+	cfg.ComposeMaxUploadMB = getEnvInt("COMPOSE_MAX_UPLOAD_MB", 10)
 	return cfg
 }
 
@@ -191,4 +282,9 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// filepathJoinSafe joins path elements with OS-specific separator.
+func filepathJoinSafe(elem ...string) string {
+	return filepath.Join(elem...)
 }

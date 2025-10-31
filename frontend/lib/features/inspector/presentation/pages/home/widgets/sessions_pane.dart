@@ -40,6 +40,8 @@ class SessionsPane extends StatelessWidget {
           httpMeta: ui.httpMeta,
           since: ui.since.value,
           ignoredIds: const {},
+          quickTypes: ui.quickTypes,
+          quickStatusGroups: ui.quickStatusGroups,
         );
         return SessionsColumn(
           showSearch: ui.showSearch.value,

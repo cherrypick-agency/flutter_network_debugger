@@ -40,11 +40,11 @@ Before using `dio_debugger`, you need to start the network debugger proxy server
 # Install the CLI globally
 dart pub global activate network_debugger
 
-# Start the proxy (default port 9091)
+# Start the proxy (proxy port 9091, UI opens on 9092)
 network_debugger
 ```
 
-The proxy will start on `http://localhost:9091` and automatically open the web UI where you can inspect all intercepted traffic.
+Proxy base will be `http://localhost:9091`. The web UI opens on `http://localhost:9092`.
 
 For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
 

@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	mem "network-debugger/internal/adapters/storage/memory"
 	"network-debugger/internal/domain"
 	"network-debugger/internal/usecase"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -261,6 +263,20 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query().Get("q")
 	target := r.URL.Query().Get("_target")
+	rawTypes := r.URL.Query().Get("types")
+	rawStatus := r.URL.Query().Get("status")
+	types := splitCSV(rawTypes)
+	statusGroups := splitCSV(rawStatus)
+	// включение глубокой проверки GraphQL по телу только если явно запрошено
+	rawScan := r.URL.Query().Get("scan")
+	scan := splitCSV(rawScan)
+	scanGraphQL := false
+	for _, s := range scan {
+		if s == "graphql" {
+			scanGraphQL = true
+			break
+		}
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 1000 {
 		limit = 100
@@ -291,7 +307,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "SESSIONS_LIST_FAILED", err.Error(), nil)
 		return
 	}
-	// Enrich with httpMeta/sizes best-effort
+	// Enrich with httpMeta/sizes best-effort и применяем быстрые фильтры
 	views := make([]sessionV1, 0, len(items))
 	for _, s := range items {
 		view := sessionV1{Session: s}
@@ -305,6 +321,34 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		if sz != nil {
 			view.Sizes = sz
+		}
+		// Быстрые фильтры по типам (с опциональным deep-scan для GraphQL)
+		if len(types) > 0 {
+			tags := getBaseTags(view)
+			// Если запрошен graphql, но его нет в базовых тегах — по запросу клиента делаем глубокую проверку по телу
+			needsGraphQL := false
+			for _, t := range types {
+				if t == "graphql" {
+					needsGraphQL = true
+					break
+				}
+			}
+			if needsGraphQL && scanGraphQL {
+				if _, ok := tags["graphql"]; !ok {
+					if ok2 := detectGraphQLByBody(r.Context(), d, s.ID); ok2 {
+						tags["graphql"] = struct{}{}
+					}
+				}
+			}
+			if !hasAnyTag(types, tags) {
+				continue
+			}
+		}
+		// Быстрые фильтры по статусным группам
+		if len(statusGroups) > 0 {
+			if !matchesAnyStatusGroup(statusGroups, view.HttpMeta) {
+				continue
+			}
 		}
 		views = append(views, view)
 	}
@@ -391,6 +435,234 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
 	}
+}
+
+// ===== helpers for quick filters =====
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(strings.ToLower(p))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func hasAnyTag(want []string, tags map[string]struct{}) bool {
+	if len(want) == 0 {
+		return true
+	}
+	for _, w := range want {
+		if _, ok := tags[w]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// tagsForSession builds a compact set of tags based on scheme/kind and mime
+// --- base tags cache (без глубокого анализа тела)
+var baseTagsCache sync.Map // map[string]baseTagsEntry
+
+type baseTagsEntry struct {
+	tags   map[string]struct{}
+	kind   string
+	target string
+	mime   string
+}
+
+func getBaseTags(v sessionV1) map[string]struct{} {
+	mime := ""
+	if v.HttpMeta != nil {
+		mime = strings.ToLower(v.HttpMeta.Mime)
+	}
+	key := v.ID
+	sigKind := strings.ToLower(v.Kind)
+	sigTarget := v.Target
+	if val, ok := baseTagsCache.Load(key); ok {
+		e := val.(baseTagsEntry)
+		if e.kind == sigKind && e.target == sigTarget && e.mime == mime {
+			return e.tags
+		}
+	}
+	tags := computeBaseTags(v)
+	baseTagsCache.Store(key, baseTagsEntry{tags: tags, kind: sigKind, target: sigTarget, mime: mime})
+	return tags
+}
+
+func computeBaseTags(v sessionV1) map[string]struct{} {
+	tags := map[string]struct{}{}
+	// scheme/kind
+	if u, err := (&urlParser{}).parse(v.Target); err == nil {
+		scheme := strings.ToLower(u.Scheme)
+		switch scheme {
+		case "https":
+			tags["https"] = struct{}{}
+		case "http":
+			tags["http"] = struct{}{}
+		case "ws", "wss":
+			tags["ws"] = struct{}{}
+		}
+		// эвристика GraphQL по URL-пути
+		p := strings.ToLower(u.Path)
+		if strings.Contains(p, "graphql") {
+			tags["graphql"] = struct{}{}
+		}
+	}
+	if strings.ToLower(v.Kind) == "ws" {
+		tags["ws"] = struct{}{}
+	}
+	// mime categories
+	if v.HttpMeta != nil {
+		mime := strings.ToLower(v.HttpMeta.Mime)
+		if mime != "" {
+			if strings.Contains(mime, "json") {
+				tags["json"] = struct{}{}
+			}
+			if strings.Contains(mime, "x-www-form-urlencoded") || strings.Contains(mime, "multipart/form-data") {
+				tags["form"] = struct{}{}
+			}
+			if strings.Contains(mime, "xml") {
+				tags["xml"] = struct{}{}
+			}
+			if strings.Contains(mime, "javascript") || strings.HasSuffix(mime, "/js") {
+				tags["js"] = struct{}{}
+			}
+			if strings.Contains(mime, "css") {
+				tags["css"] = struct{}{}
+			}
+			if strings.Contains(mime, "graphql") {
+				tags["graphql"] = struct{}{}
+			}
+			if strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/") || strings.HasPrefix(mime, "font/") {
+				tags["media"] = struct{}{}
+			}
+			if strings.Contains(mime, "html") || strings.Contains(mime, "pdf") || strings.Contains(mime, "rtf") || strings.HasPrefix(mime, "text/plain") {
+				tags["document"] = struct{}{}
+			}
+		}
+	}
+	if len(tags) == 0 {
+		tags["other"] = struct{}{}
+	}
+	return tags
+}
+
+func matchesAnyStatusGroup(groups []string, meta *httpMetaV1) bool {
+	if len(groups) == 0 {
+		return true
+	}
+	if meta == nil {
+		return false
+	}
+	st := meta.Status
+	for _, g := range groups {
+		switch g {
+		case "1xx":
+			if st >= 100 && st <= 199 {
+				return true
+			}
+		case "2xx":
+			if st >= 200 && st <= 299 {
+				return true
+			}
+		case "3xx":
+			if st >= 300 && st <= 399 {
+				return true
+			}
+		case "4xx":
+			if st >= 400 && st <= 499 {
+				return true
+			}
+		case "5xx":
+			if st >= 500 && st <= 599 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Minimal URL parser wrapper to keep import surface small
+type urlParser struct{}
+
+func (*urlParser) parse(raw string) (*urlURL, error) {
+	// we reuse net/url without exporting to file header to avoid changing imports here
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	return (*urlURL)(u), nil
+}
+
+type urlURL url.URL
+
+// --- GraphQL deep detection cache (привязка к числу кадров)
+var gqlBodyCache sync.Map // map[string]gqlBodyEntry
+
+type gqlBodyEntry struct {
+	has        bool
+	framesSeen int
+}
+
+func detectGraphQLByBody(ctx context.Context, d *Deps, sessionID string) bool {
+	if frames, _, err := d.Svc.ListFrames(ctx, sessionID, "", 1000); err == nil {
+		// cache check by frames count
+		if v, ok := gqlBodyCache.Load(sessionID); ok {
+			e := v.(gqlBodyEntry)
+			if e.framesSeen == len(frames) {
+				return e.has
+			}
+		}
+		// scan from the end to find latest http_request
+		has := false
+		for i := len(frames) - 1; i >= 0; i-- {
+			var prev map[string]any
+			if err := json.Unmarshal([]byte(frames[i].Preview), &prev); err != nil {
+				continue
+			}
+			if t, _ := prev["type"].(string); t != "http_request" {
+				continue
+			}
+			// quick header check
+			if h, ok := prev["headers"].(map[string]any); ok {
+				for k, v := range h {
+					lk := strings.ToLower(k)
+					if lk == "content-type" {
+						if strings.Contains(strings.ToLower(v.(string)), "graphql") {
+							has = true
+							break
+						}
+					}
+				}
+			}
+			if has {
+				break
+			}
+			// inspect body (compacted JSON string if recognized)
+			body, _ := prev["body"].(string)
+			if body != "" {
+				var obj map[string]any
+				if json.Unmarshal([]byte(body), &obj) == nil {
+					if _, ok := obj["query"]; ok {
+						has = true
+					} else if _, ok := obj["operationName"]; ok {
+						has = true
+					}
+				}
+			}
+			break // only latest request
+		}
+		gqlBodyCache.Store(sessionID, gqlBodyEntry{has: has, framesSeen: len(frames)})
+		return has
+	}
+	return false
 }
 
 // handleV1SessionsAggregate implements GET /_api/v1/sessions/aggregate

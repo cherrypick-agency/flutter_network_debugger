@@ -25,7 +25,12 @@ abstract class _SessionsStore with Store {
   }
 
   @action
-  Future<void> load({String? q, String? target}) async {
+  Future<void> load({
+    String? q,
+    String? target,
+    Set<String>? types,
+    Set<String>? statusGroups,
+  }) async {
     if (loading) return;
     loading = true;
     try {

@@ -1,6 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app_http_client/application/app_http_client.dart';
+import 'package:highlight_selectable/highlight_selectable.dart';
+import 'package:highlight_selectable/theme_map.dart';
+import '../../../inspector/presentation/utils/graphql_detect.dart';
+import '../../../inspector/presentation/utils/graphql_formatter.dart';
+import '../../../inspector/presentation/utils/body_view_mode.dart';
+import '../../../inspector/presentation/utils/body_content_analyzer.dart';
+import '../../../inspector/presentation/widgets/jwt_viewer.dart';
 import '../../../../core/network/error_utils.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../widgets/json_viewer.dart';
@@ -26,18 +34,89 @@ class HttpDetailsPanel extends StatefulWidget {
 }
 
 class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
-  bool _prettyReq = true;
-  bool _prettyResp = true;
-  bool _treeReq = false;
-  bool _treeResp = false;
+  // View controllers for request and response bodies
+  final _reqViewController = BodyViewController();
+  final _respViewController = BodyViewController();
+  final _contentAnalyzer = BodyContentAnalyzer();
+
   bool _loadingFetch = false;
   int? _respTtfbMs;
   int? _respTotalMs;
   String? _bodyOverride;
-  bool _htmlResp = true;
+  String? _highlightThemeKey;
+
+  void _ensureHighlightThemeInitialized(BuildContext context) {
+    if (_highlightThemeKey != null) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final def = isDark ? 'a11y-dark' : 'a11y-light';
+    _fetchHighlightThemeFromBackend().then((saved) {
+      if (!mounted) return;
+      setState(() {
+        _highlightThemeKey =
+            (saved != null && themeMap.containsKey(saved)) ? saved : def;
+      });
+    });
+    _highlightThemeKey = def;
+  }
+
+  Future<String?> _fetchHighlightThemeFromBackend() async {
+    try {
+      final api = sl<AppHttpClient>();
+      final res = await api.get(path: '/_api/v1/settings');
+      final data = (res.data as Map).cast<String, dynamic>();
+      final ht = (data['highlightTheme'] ?? '').toString();
+      return ht.isEmpty ? null : ht;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, TextStyle> _currentHlTheme() {
+    final key = _highlightThemeKey;
+    return themeMap[key] ?? themeMap['a11y-dark']!;
+  }
+
+  String _detectLanguage(String text, String? contentType) {
+    final ct = (contentType ?? '').toLowerCase();
+    if (ct.contains('html') || _looksLikeHtml(text)) return 'html';
+    if (ct.contains('xml') || text.trimLeft().startsWith('<?xml')) return 'xml';
+    if (ct.contains('javascript') || ct.contains('ecmascript'))
+      return 'javascript';
+    if (ct.contains('typescript')) return 'typescript';
+    if (ct.contains('css')) return 'css';
+    if (GraphqlLanguageDetector.isLikelyGraphql(text)) return 'graphql';
+    return 'plaintext';
+  }
+
+  Widget _highlightBlock(String body, {String? contentType}) {
+    if (body.isEmpty) return const SizedBox.shrink();
+    final lang = _detectLanguage(body, contentType);
+    final theme = _currentHlTheme();
+    final bgColor = theme['root']?.backgroundColor;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        color: bgColor,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: HighlightSelectable(
+          body,
+          language: lang,
+          theme: theme,
+          selectable: true,
+          showCopyButton: true,
+          showEditButton: false,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    _ensureHighlightThemeInitialized(context);
     final req = _findByType(widget.frames, 'http_request');
     final resp = _findByType(widget.frames, 'http_response');
     final reqTs = _tsOf(widget.frames, 'http_request');
@@ -251,50 +330,45 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           rawBody: body,
         ),
         const SizedBox(height: 6),
-        if (body.isNotEmpty && !hideRawBody)
-          Row(
-            children: [
-              Text('Body', style: context.appText.subtitle),
-              const SizedBox(width: 12),
-              FilterChip(
-                label: const Text('Pretty'),
-                selected: _prettyReq && !_treeReq,
-                onSelected: (v) {
-                  setState(() {
-                    _treeReq = false;
-                    _prettyReq = true;
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              if (_isJson(body))
-                FilterChip(
-                  label: const Text('Tree'),
-                  selected: _treeReq,
-                  onSelected: (v) {
-                    setState(() {
-                      _treeReq = v;
-                      _prettyReq = !v;
-                    });
-                  },
-                ),
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: body));
-                },
-                icon: const Icon(Icons.copy, size: 16),
-                label: const Text('Copy'),
-              ),
-            ],
+        if (body.isNotEmpty && !hideRawBody) ...[
+          // Analyze content and initialize view controller
+          Builder(
+            builder: (ctx) {
+              final analysis = _contentAnalyzer.analyze(
+                body,
+                contentType: ctHeader,
+              );
+              _reqViewController.setAvailableModes(analysis.availableModes);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text('Body', style: context.appText.subtitle),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildBodyViewChips(
+                          body: body,
+                          controller: _reqViewController,
+                          analysis: analysis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _renderBodyContent(
+                    body: body,
+                    controller: _reqViewController,
+                    analysis: analysis,
+                    contentType: ctHeader,
+                  ),
+                ],
+              );
+            },
           ),
-        if (body.isNotEmpty && !hideRawBody) const SizedBox(height: 6),
-        if (body.isNotEmpty && !hideRawBody)
-          (_isJson(body) && _treeReq)
-              ? JsonViewer(jsonString: body, forceTree: true)
-              : (_isJson(body) && _prettyReq)
-              ? JsonViewer(jsonString: body, forceTree: false)
-              : SelectableText(body, style: context.appText.monospace),
+        ],
         const SizedBox(height: 8),
         Text('Headers', style: context.appText.subtitle),
         const SizedBox(height: 4),
@@ -341,7 +415,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
             .value
             .toLowerCase();
     final isJsonCt = ctHeader.contains('json') || ctHeader.contains('+json');
-    final isHtmlCt = ctHeader.contains('html');
     final body = _normalizeMaybeQuotedJson(
       (_bodyOverride ?? rawBody).toString(),
     );
@@ -417,85 +490,81 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
             ),
           ),
         const SizedBox(height: 8),
-        if (body.isNotEmpty)
-          Row(
-            children: [
-              Text('Body', style: context.appText.subtitle),
-              const SizedBox(width: 12),
-              FilterChip(
-                label: const Text('Pretty'),
-                selected: _prettyResp && !_treeResp,
-                onSelected: (v) {
-                  setState(() {
-                    _treeResp = false;
-                    _prettyResp = true;
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              if (_isJson(body))
-                FilterChip(
-                  label: const Text('JSON Viewer'),
-                  selected: _treeResp,
-                  onSelected: (v) {
-                    setState(() {
-                      _treeResp = v;
-                      _prettyResp = !v;
-                    });
-                  },
-                ),
-              const SizedBox(width: 8),
-              if (isHtmlCt || _looksLikeHtml(body))
-                FilterChip(
-                  label: const Text('HTML'),
-                  selected: _htmlResp,
-                  onSelected: (v) {
-                    setState(() {
-                      _htmlResp = v;
-                      if (v) {
-                        _treeResp = false;
-                        _prettyResp = false;
-                      }
-                    });
-                  },
-                ),
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: body));
-                },
-                icon: const Icon(Icons.copy, size: 16),
-                label: const Text('Copy'),
-              ),
-              const SizedBox(width: 8),
-              if (url.isNotEmpty)
-                _loadingFetch
-                    ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                    : IconButton(
-                      onPressed: () => _refetch(context, url),
-                      icon: const Icon(Icons.refresh, size: 16),
-                    ),
-            ],
+        if (body.isNotEmpty) ...[
+          // Analyze content and initialize view controller
+          Builder(
+            builder: (ctx) {
+              final analysis = _contentAnalyzer.analyze(
+                body,
+                contentType: ctHeader,
+              );
+              _respViewController.setAvailableModes(analysis.availableModes);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text('Body', style: context.appText.subtitle),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ...analysis.availableModes.map((mode) {
+                              return FilterChip(
+                                label: Text(BodyViewController.getLabel(mode)),
+                                selected: _respViewController.isActive(mode),
+                                onSelected: (_) {
+                                  setState(() {
+                                    _respViewController.switchTo(mode);
+                                  });
+                                },
+                              );
+                            }),
+                            const SizedBox(width: 4),
+                            TextButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: body));
+                              },
+                              icon: const Icon(Icons.copy, size: 16),
+                              label: const Text('Copy'),
+                            ),
+                            if (url.isNotEmpty)
+                              _loadingFetch
+                                  ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                  : IconButton(
+                                    onPressed: () => _refetch(context, url),
+                                    icon: const Icon(Icons.refresh, size: 16),
+                                    tooltip: 'Refetch full body',
+                                  ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _renderBodyContent(
+                    body: body,
+                    controller: _respViewController,
+                    analysis: analysis,
+                    contentType: ctHeader,
+                    baseUrl: url.isNotEmpty ? url : null,
+                  ),
+                ],
+              );
+            },
           ),
-        if (body.isNotEmpty) const SizedBox(height: 6),
-        if (body.isNotEmpty)
-          _htmlResp && (isHtmlCt || _looksLikeHtml(body))
-              ? SizedBox(
-                height: 480,
-                child: HtmlPreview(
-                  html: body,
-                  baseUrl: url.isNotEmpty ? url : null,
-                ),
-              )
-              : (_isJson(body) && _treeResp)
-              ? JsonViewer(jsonString: body, forceTree: true)
-              : (_isJson(body) && _prettyResp)
-              ? JsonViewer(jsonString: body, forceTree: false)
-              : SelectableText(body, style: context.appText.monospace),
+        ],
         const SizedBox(height: 8),
         Text('Headers', style: context.appText.subtitle),
         const SizedBox(height: 4),
@@ -992,6 +1061,12 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
   ]) {
     final method = (req['method'] ?? 'GET').toString().toUpperCase();
     final url = (req['url'] ?? '').toString();
+
+    // Validate URL
+    if (url.isEmpty) {
+      return '# Error: URL is empty';
+    }
+
     final headers =
         (req['headers'] as Map?)?.map(
           (k, v) => MapEntry(k.toString(), v.toString()),
@@ -999,8 +1074,8 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         <String, String>{};
     final body = (req['body'] ?? '').toString();
     final form =
-        (req['form'] is Map)
-            ? (req['form'] as Map).cast<String, dynamic>()
+        req['form'] is Map
+            ? Map<String, dynamic>.from(req['form'] as Map)
             : null;
 
     // Extract cookies from headers
@@ -1044,23 +1119,42 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     });
 
     // Add cookie
-    if (cookieValue?.isNotEmpty == true) {
+    if ((cookieValue ?? '').isNotEmpty) {
       b.write("$newline--cookie '${_escapeShellArg(cookieValue!)}'");
     }
 
     // Add body or form data
-    if (useFormData && form != null) {
+    if (useFormData) {
       // Use -F for form data
-      form.forEach((k, v) {
-        if (v is Map && v.containsKey('filename')) {
-          // File upload
-          final filename = v['filename'] ?? 'file';
-          b.write("$newline-F '$k=@$filename'");
-        } else {
-          // Regular field
-          b.write("$newline-F '$k=${_escapeShellArg(v.toString())}'");
+      // Form structure: {type: "multipart", fields: [...], files: [...]}
+      final fields =
+          (form['fields'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final files =
+          (form['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+      // Add regular fields
+      for (final field in fields) {
+        final name = field['name']?.toString() ?? '';
+        final value =
+            field['valuePreview']?.toString() ??
+            field['value']?.toString() ??
+            '';
+        if (name.isNotEmpty) {
+          b.write("$newline-F '$name=${_escapeShellArg(value)}'");
         }
-      });
+      }
+
+      // Add file uploads (Note: file paths need to be manually adjusted)
+      if (files.isNotEmpty) {
+        b.write("$newline# Note: Replace file paths with actual local paths");
+      }
+      for (final file in files) {
+        final name = file['name']?.toString() ?? '';
+        final filename = file['filename']?.toString() ?? 'file';
+        if (name.isNotEmpty) {
+          b.write("$newline-F '$name=@$filename'");
+        }
+      }
     } else if (body.isNotEmpty) {
       // Use --data for regular body
       b.write("$newline--data '${_escapeShellArg(body)}'");
@@ -1079,6 +1173,87 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
 
   String _escapeShellArg(String arg) {
     return arg.replaceAll("'", "'\\''");
+  }
+
+  /// Build body view mode chips (DRY - reusable for request and response)
+  Widget _buildBodyViewChips({
+    required String body,
+    required BodyViewController controller,
+    required ContentAnalysisResult analysis,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        ...analysis.availableModes.map((mode) {
+          return FilterChip(
+            label: Text(BodyViewController.getLabel(mode)),
+            selected: controller.isActive(mode),
+            onSelected: (_) {
+              setState(() {
+                controller.switchTo(mode);
+              });
+            },
+          );
+        }),
+        const SizedBox(width: 4),
+        TextButton.icon(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: body));
+          },
+          icon: const Icon(Icons.copy, size: 16),
+          label: const Text('Copy'),
+        ),
+      ],
+    );
+  }
+
+  /// Render body content based on current view mode (DRY - reusable)
+  Widget _renderBodyContent({
+    required String body,
+    required BodyViewController controller,
+    required ContentAnalysisResult analysis,
+    required String? contentType,
+    String? baseUrl,
+  }) {
+    final mode = controller.current;
+
+    switch (mode) {
+      case BodyViewMode.jwtDecoded:
+        return JwtViewer(token: body, jwtData: analysis.jwtData);
+
+      case BodyViewMode.base64Decoded:
+        final decoded = analysis.base64Data?.decoded ?? body;
+        final isJson = analysis.base64Data?.isJson ?? false;
+        if (isJson) {
+          return JsonViewer(jsonString: decoded, forceTree: false);
+        }
+        return SelectableText(decoded, style: context.appText.monospace);
+
+      case BodyViewMode.jsonTree:
+        return JsonViewer(jsonString: body, forceTree: true);
+
+      case BodyViewMode.pretty:
+        if (analysis.isJson) {
+          return JsonViewer(jsonString: body, forceTree: false);
+        }
+        // Auto-format GraphQL queries in Pretty mode
+        if (GraphqlLanguageDetector.isLikelyGraphql(body)) {
+          final formatted = GraphQLFormatter.format(body);
+          return _highlightBlock(formatted, contentType: contentType);
+        }
+        return _highlightBlock(body, contentType: contentType);
+
+      case BodyViewMode.htmlPreview:
+        return SizedBox(
+          height: 480,
+          child: HtmlPreview(html: body, baseUrl: baseUrl),
+        );
+
+      case BodyViewMode.raw:
+        return SelectableText(body, style: context.appText.monospace);
+    }
   }
 }
 

@@ -16,7 +16,7 @@ func TestFromEnv_Defaults(t *testing.T) {
 	cfg := FromEnv()
 
 	// Assert
-	if cfg.Addr != ":9091" {
+	if cfg.Addr != ":9092" {
 		t.Fatalf("Addr default: %q", cfg.Addr)
 	}
 	if cfg.LogLevel != "info" {

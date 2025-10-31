@@ -34,11 +34,11 @@ Before using `socket_io_debugger`, you need to start the network debugger proxy 
 # Install the CLI globally
 dart pub global activate network_debugger
 
-# Start the proxy (default port 9091)
+# Start the proxy (proxy port 9091, UI opens on 9092)
 network_debugger
 ```
 
-The proxy will start on `http://localhost:9091` and automatically open the web UI where you can inspect all intercepted WebSocket traffic.
+Proxy base will be `http://localhost:9091`. The web UI opens on `http://localhost:9092`.
 
 For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
 
@@ -85,7 +85,7 @@ Reverse proxy mode routes traffic through the proxy's HTTP endpoint:
 final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
   socketPath: '/socket.io',
-  proxyBaseUrl: 'http://localhost:9091',
+  proxyBaseUrl: 'http://localhost:9092',
   proxyPath: '/wsproxy',  // WebSocket proxy endpoint
   mode: ProxyMode.reverse,
 );
@@ -114,8 +114,8 @@ final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
   socketPath: '/socket.io',
   proxyBaseUrl: Platform.isAndroid
-    ? 'http://10.0.2.2:9091'
-    : 'http://localhost:9091',
+    ? 'http://10.0.2.2:9092'
+    : 'http://localhost:9092',
 );
 ```
 
@@ -125,7 +125,7 @@ final cfg = SocketIoDebugger.attach(
 
 ```bash
 --dart-define=HTTP_PROXY_MODE=reverse \
---dart-define=SOCKET_PROXY=http://localhost:9091 \
+--dart-define=SOCKET_PROXY=http://localhost:9092 \
 --dart-define=SOCKET_PROXY_PATH=/wsproxy \
 --dart-define=HTTP_PROXY_ENABLED=true
 ```
@@ -134,7 +134,7 @@ final cfg = SocketIoDebugger.attach(
 
 ```bash
 HTTP_PROXY_MODE=reverse
-SOCKET_PROXY=http://localhost:9091
+SOCKET_PROXY=http://localhost:9092
 SOCKET_PROXY_PATH=/wsproxy
 HTTP_PROXY_ENABLED=true
 HTTP_PROXY_ALLOW_BAD_CERTS=true

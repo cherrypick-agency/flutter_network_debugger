@@ -102,7 +102,7 @@ import 'package:network_debugger/network_debugger.dart';
 void main() async {
   // Launch debugger (downloads if needed, uses cache otherwise)
   final debugger = await NetworkDebugger.launch(
-    port: 9091,
+    port: 9092,
     onProgress: (received, total) {
       print('Download progress: ${(received / total * 100).toStringAsFixed(1)}%');
     },

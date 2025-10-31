@@ -32,6 +32,11 @@ import (
 // handleHTTPProxy implements a simple reverse proxy that forwards requests to the `_target` upstream.
 // Path after /httpproxy is appended to target path. Query parameters (except `_target`) are passed through.
 func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
+	// Offline mode simulation
+	if d.Cfg.ThrottleOffline {
+		writeError(w, http.StatusServiceUnavailable, "OFFLINE", "proxy offline (simulated)", nil)
+		return
+	}
 	tgt := r.URL.Query().Get("_target")
 	if tgt == "" {
 		// fallback to default target from config
@@ -158,6 +163,11 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		Director:  director,
 		Transport: transport,
 		ModifyResponse: func(resp *http.Response) error {
+			// Bandwidth throttling (download): wrap upstream body
+			if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleDownKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && resp.Body != nil {
+				bps := kbpsToBytesPerSec(d.Cfg.ThrottleDownKbps)
+				resp.Body = io.NopCloser(wrapReaderThrottleLoss(resp.Body, bps, d.Cfg.ThrottlePacketLoss))
+			}
 			// Artificial response delay (to visualize timeline)
 			sleepResponseDelay(d.Cfg)
 			// Переписываем Set-Cookie под домен/путь прокси (и изолируем имена при необходимости)
@@ -203,6 +213,55 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
+			// Interception: response (MVP)
+			if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptResponses {
+				var capBuf []byte
+				if resp.Body != nil {
+					lim := d.Cfg.InterceptBodyMaxBytes
+					if lim <= 0 {
+						lim = 1 << 20
+					}
+					buf := make([]byte, lim)
+					if n, _ := io.ReadFull(resp.Body, buf); n > 0 {
+						capBuf = append(capBuf[:0], buf[:n]...)
+						resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
+					}
+				}
+				// Декомпрессия для превью/редактирования
+				origEnc := strings.ToLower(resp.Header.Get("Content-Encoding"))
+				decCap, _ := decodeForIntercept(capBuf, origEnc, d.Cfg.InterceptBodyMaxBytes)
+				ct := strings.ToLower(resp.Header.Get("Content-Type"))
+				if dec, _ := d.Interceptor.InterceptResponse(r.Context(), sessionID, resp, string(decCap), decCap, ct); dec != nil {
+					if dec.Status > 0 {
+						resp.StatusCode = dec.Status
+						if txt := http.StatusText(dec.Status); txt != "" {
+							resp.Status = strconv.Itoa(dec.Status) + " " + txt
+						} else {
+							resp.Status = strconv.Itoa(dec.Status)
+						}
+					}
+					if dec.Headers != nil {
+						resp.Header = cloneHeader(dec.Headers)
+					}
+					if dec.Body != nil {
+						bodyToWrite := dec.Body
+						if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
+							if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+								bodyToWrite = encBody
+								resp.Header.Set("Content-Encoding", origEnc)
+							} else {
+								resp.Header.Del("Content-Encoding")
+							}
+						} else {
+							resp.Header.Del("Content-Encoding")
+						}
+						resp.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+						resp.ContentLength = int64(len(bodyToWrite))
+						resp.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
+					}
+				}
+			}
+
 			// Log response frame with timings embedded
 			basePreview := buildHTTPResponsePreview(resp)
 			firstByte := timeFromUnixNanoOrZero(atomic.LoadInt64(&tFirstByteNs))
@@ -329,6 +388,55 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	// Also broadcast a lightweight event for frontend session_started consistency in HTTP flows
 	// (ws flow already broadcasts in network-debugger)
 	// d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID}) // already sent above
+
+	// Interception: request (MVP) — после предпросмотра, до отправки
+	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
+		capBody := reqBodyBuf
+		if max := d.Cfg.InterceptBodyMaxBytes; max > 0 && len(capBody) > max {
+			capBody = capBody[:max]
+		}
+		origEnc := strings.ToLower(r.Header.Get("Content-Encoding"))
+		decCap, _ := decodeForIntercept(capBody, origEnc, d.Cfg.InterceptBodyMaxBytes)
+		ct := strings.ToLower(r.Header.Get("Content-Type"))
+		if dec, _ := d.Interceptor.InterceptRequest(r.Context(), sessionID, r, string(decCap), decCap, ct); dec != nil {
+			if strings.ToLower(dec.Action) == "drop" {
+				writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
+				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
+				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
+				return
+			}
+			if dec.Method != "" {
+				r.Method = dec.Method
+			}
+			if dec.Headers != nil {
+				r.Header = cloneHeader(dec.Headers)
+			}
+			if dec.Body != nil {
+				bodyToWrite := dec.Body
+				if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
+					if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+						bodyToWrite = encBody
+						r.Header.Set("Content-Encoding", origEnc)
+					} else {
+						r.Header.Del("Content-Encoding")
+					}
+				} else {
+					r.Header.Del("Content-Encoding")
+				}
+				r.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+				r.ContentLength = int64(len(bodyToWrite))
+				r.Header.Del("Transfer-Encoding")
+				r.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
+			}
+		}
+	}
+
+	// Apply upload throttling to client->upstream if enabled
+	if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleUpKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && r.Body != nil {
+		bps := kbpsToBytesPerSec(d.Cfg.ThrottleUpKbps)
+		r.Body = io.NopCloser(wrapReaderThrottleLoss(r.Body, bps, d.Cfg.ThrottlePacketLoss))
+	}
 
 	// Attach httptrace to catch milestones (write times atomically; parallel dial may trigger concurrently)
 	r = r.WithContext(httptrace.WithClientTrace(r.Context(), &httptrace.ClientTrace{

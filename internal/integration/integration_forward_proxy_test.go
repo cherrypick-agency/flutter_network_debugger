@@ -1,74 +1,43 @@
 package integration
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-// Helper: write a raw absolute-URI GET via proxy connection and return status line and body
+// Helper: perform GET via http.Client with proxy and return status and body
 func rawProxyGET(t *testing.T, proxyHost string, absoluteURL string, extraHeaders []string) (string, string) {
 	t.Helper()
-	conn, err := net.DialTimeout("tcp", proxyHost, 3*time.Second)
+	proxyURL, _ := url.Parse("http://" + proxyHost)
+	tr := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+	cli := &http.Client{Transport: tr, Timeout: 3 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, absoluteURL, nil)
 	if err != nil {
-		t.Fatalf("dial proxy: %v", err)
+		t.Fatalf("new request: %v", err)
 	}
-	defer conn.Close()
-	var b strings.Builder
-	b.WriteString("GET ")
-	b.WriteString(absoluteURL)
-	b.WriteString(" HTTP/1.1\r\n")
-	b.WriteString("Host: ")
-	b.WriteString(proxyHost)
-	b.WriteString("\r\n")
 	for _, h := range extraHeaders {
-		b.WriteString(h)
-		if !strings.HasSuffix(h, "\r\n") {
-			b.WriteString("\r\n")
+		if h == "" {
+			continue
+		}
+		if i := strings.Index(h, ":"); i > 0 {
+			k := strings.TrimSpace(h[:i])
+			v := strings.TrimSpace(h[i+1:])
+			req.Header.Set(k, v)
 		}
 	}
-	b.WriteString("\r\n")
-	if _, err := conn.Write([]byte(b.String())); err != nil {
-		t.Fatalf("write: %v", err)
+	resp, err := cli.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
 	}
-	br := bufio.NewReader(conn)
-	status, _ := br.ReadString('\n')
-	// Read and parse headers to determine body length
-	headers := map[string]string{}
-	for {
-		line, _ := br.ReadString('\n')
-		if line == "\r\n" || line == "\n" || line == "" {
-			break
-		}
-		if i := strings.IndexByte(line, ':'); i > 0 {
-			k := strings.TrimSpace(line[:i])
-			v := strings.TrimSpace(strings.TrimRight(line[i+1:], "\r\n"))
-			headers[strings.ToLower(k)] = v
-		}
-	}
-	// Prefer Content-Length if present, otherwise read until close
-	var body []byte
-	if cl, ok := headers["content-length"]; ok {
-		if n, err := strconv.Atoi(cl); err == nil && n >= 0 {
-			buf := make([]byte, n)
-			_, _ = io.ReadFull(br, buf)
-			body = buf
-		} else {
-			// fallback
-			body, _ = io.ReadAll(br)
-		}
-	} else {
-		body, _ = io.ReadAll(br)
-	}
-	return status, string(body)
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.Status, string(b)
 }
 
 func TestForwardProxy_AbsoluteURI_SetsForwardHeaders(t *testing.T) {
@@ -85,12 +54,12 @@ func TestForwardProxy_AbsoluteURI_SetsForwardHeaders(t *testing.T) {
 	upstream := httptest.NewServer(mux)
 	defer upstream.Close()
 
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-	pURL, _ := url.Parse(app.URL)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
 
-	status, body := rawProxyGET(t, pURL.Host, upstream.URL+"/hdr", nil)
-	if !strings.HasPrefix(status, "HTTP/1.1 200") {
+	status, body := rawProxyGET(t, proxyHost, upstream.URL+"/hdr", nil)
+	if !strings.HasPrefix(status, "HTTP/1.1 200") && !strings.HasPrefix(status, "200 ") {
 		t.Fatalf("status: %s", status)
 	}
 	var got map[string]string
@@ -114,17 +83,17 @@ func TestForwardProxy_HopByHopStripped(t *testing.T) {
 	})
 	upstream := httptest.NewServer(mux)
 	defer upstream.Close()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-	pURL, _ := url.Parse(app.URL)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
 
 	headers := []string{
 		"Connection: keep-alive",
 		"Proxy-Connection: keep-alive",
 		"Te: trailers",
 	}
-	status, body := rawProxyGET(t, pURL.Host, upstream.URL+"/hop", headers)
-	if !strings.HasPrefix(status, "HTTP/1.1 200") {
+	status, body := rawProxyGET(t, proxyHost, upstream.URL+"/hop", headers)
+	if !strings.HasPrefix(status, "HTTP/1.1 200") && !strings.HasPrefix(status, "200 ") {
 		t.Fatalf("status: %s", status)
 	}
 	var got map[string]string
@@ -136,22 +105,22 @@ func TestForwardProxy_HopByHopStripped(t *testing.T) {
 
 func TestForwardProxy_DNSError_Returns502(t *testing.T) {
 	t.Parallel()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-	pURL, _ := url.Parse(app.URL)
-	status, _ := rawProxyGET(t, pURL.Host, "http://nonexistent.invalid/", nil)
-	if !strings.HasPrefix(status, "HTTP/1.1 502") {
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	status, _ := rawProxyGET(t, proxyHost, "http://nonexistent.invalid/", nil)
+	if !strings.HasPrefix(status, "HTTP/1.1 502") && !strings.HasPrefix(status, "502 ") {
 		t.Fatalf("expected 502 on DNS error, got %s", status)
 	}
 }
 
 func TestForwardProxy_ConnectionRefused_Returns502(t *testing.T) {
 	t.Parallel()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-	pURL, _ := url.Parse(app.URL)
-	status, _ := rawProxyGET(t, pURL.Host, "http://127.0.0.1:1/", nil)
-	if !strings.HasPrefix(status, "HTTP/1.1 502") {
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	status, _ := rawProxyGET(t, proxyHost, "http://127.0.0.1:1/", nil)
+	if !strings.HasPrefix(status, "HTTP/1.1 502") && !strings.HasPrefix(status, "502 ") {
 		t.Fatalf("expected 502 on refused, got %s", status)
 	}
 }

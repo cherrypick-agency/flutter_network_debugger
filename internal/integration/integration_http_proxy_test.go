@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bufio"
+	"bytes"
 	"compress/flate"
 	"compress/gzip"
 	"context"
@@ -19,12 +20,15 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"network-debugger/internal/adapters/storage/memory"
+	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	"network-debugger/internal/infrastructure/config"
+	dbpkg "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
@@ -72,8 +76,34 @@ func startHTTPApp(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: config.Config{CORSAllowOrigin: "*"}, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
+	// Инициализируем SQLite для включения ProxySvc/ProxyRt
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "test.db")
+	if gdb, err := dbpkg.NewSQLite(dbPath); err == nil {
+		_ = gdb.AutoMigrate(&proxyp.ProxyConfigModel{})
+		deps.DB = gdb
+	}
 	srv := httptest.NewServer(httpapi.NewRouterWithDeps(deps))
 	return srv, deps
+}
+
+// ensureForwardProxyAddr включает forward‑proxy на динамическом порту и возвращает host:port
+func ensureForwardProxyAddr(t *testing.T, app *httptest.Server, deps *httpapi.Deps) string {
+	t.Helper()
+	// Включаем forward proxy на 127.0.0.1:0 через API
+	body := []byte(`{"forward":{"enabled":true,"addr":"127.0.0.1:0"}}`)
+	resp, err := app.Client().Post(app.URL+"/_api/v1/proxy/config", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("enable forward proxy: %v", err)
+	}
+	_ = resp.Body.Close()
+	// Подождём применения и получим фактический адрес из рантайма
+	time.Sleep(50 * time.Millisecond)
+	addr := deps.ProxyRt.ForwardAddr()
+	if addr == "" {
+		t.Fatalf("no forward proxy address after enable")
+	}
+	return addr
 }
 
 func TestHTTPReverseProxy_BasicGetAndPost(t *testing.T) {
@@ -153,20 +183,15 @@ func TestForwardProxy_HTTP_AbsoluteURI(t *testing.T) {
 	t.Parallel()
 	upstream, upstreamURL := startUpstreamHTTP(t)
 	defer upstream.Close()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-
-	// Build a client that targets proxy root and sends absolute-URI
-	proxyURL, _ := url.Parse(app.URL)
-	// extract host:port
-	hostPort := proxyURL.Host
+	// Включаем forward‑proxy и берём фактический адрес
+	hostPort := ensureForwardProxyAddr(t, app, deps)
 
 	// manual request with absolute-URI to proxy
 	req, _ := http.NewRequest(http.MethodGet, upstreamURL+"/get?q=1", nil)
-	// override URL to proxy
-	pURL := *proxyURL
-	pURL.Path = "/"
-	req.URL = &pURL
+	// override URL/Host if понадобится (для полноты форм)
+	req.URL = &url.URL{Scheme: "http", Host: hostPort, Path: "/"}
 	req.Host = hostPort
 	// Raw absolute-URI in RequestURI — httptest.Client doesn't expose directly. Use net.Dial and write raw HTTP.
 	conn, err := net.DialTimeout("tcp", hostPort, 3*time.Second)
@@ -192,11 +217,11 @@ func TestForwardProxy_HTTP_HopByHopHeadersStripped(t *testing.T) {
 	t.Parallel()
 	upstream, upstreamURL := startUpstreamHTTP(t)
 	defer upstream.Close()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
 
-	proxyURL, _ := url.Parse(app.URL)
-	conn, err := net.DialTimeout("tcp", proxyURL.Host, 3*time.Second)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	conn, err := net.DialTimeout("tcp", proxyHost, 3*time.Second)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
 	}
@@ -204,7 +229,7 @@ func TestForwardProxy_HTTP_HopByHopHeadersStripped(t *testing.T) {
 
 	// upstream /hop echoes Connection,Proxy-Connection,Te
 	raw := "GET " + upstreamURL + "/hop HTTP/1.1\r\n" +
-		"Host: " + proxyURL.Host + "\r\n" +
+		"Host: " + proxyHost + "\r\n" +
 		"Connection: keep-alive\r\n" +
 		"Proxy-Connection: keep-alive\r\n" +
 		"Te: trailers\r\n\r\n"
@@ -235,17 +260,17 @@ func TestForwardProxy_HTTP_HopByHopHeadersStripped(t *testing.T) {
 
 func TestForwardProxy_HTTP_DNSErrorReturns502(t *testing.T) {
 	t.Parallel()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-	proxyURL, _ := url.Parse(app.URL)
-	conn, err := net.DialTimeout("tcp", proxyURL.Host, 3*time.Second)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	conn, err := net.DialTimeout("tcp", proxyHost, 3*time.Second)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
 	}
 	defer conn.Close()
 
 	// non-existent domain
-	raw := "GET http://nonexistent.invalid/ HTTP/1.1\r\nHost: " + proxyURL.Host + "\r\n\r\n"
+	raw := "GET http://nonexistent.invalid/ HTTP/1.1\r\nHost: " + proxyHost + "\r\n\r\n"
 	if _, err := conn.Write([]byte(raw)); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -260,7 +285,7 @@ func TestForwardProxy_CONNECT_TunnelToHTTP(t *testing.T) {
 	t.Parallel()
 	upstream, upstreamURL := startUpstreamHTTP(t)
 	defer upstream.Close()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
 
 	// parse upstream host:port
@@ -268,8 +293,8 @@ func TestForwardProxy_CONNECT_TunnelToHTTP(t *testing.T) {
 	target := u.Host
 
 	// CONNECT to proxy
-	proxyURL, _ := url.Parse(app.URL)
-	conn, err := net.DialTimeout("tcp", proxyURL.Host, 3*time.Second)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	conn, err := net.DialTimeout("tcp", proxyHost, 3*time.Second)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
 	}

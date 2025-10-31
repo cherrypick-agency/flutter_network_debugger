@@ -3,8 +3,394 @@ info:
   title: network-debugger API
   version: 0.1.0-mvp
 servers:
-  - url: http://localhost:9091
+  - url: http://localhost:9092
 paths:
+  /_api/v1/compose/send:
+    post:
+      summary: Send a composed HTTP request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                template:
+                  $ref: '#/components/schemas/ComposeRequestTemplate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId: { type: string }
+                  transaction: { $ref: '#/components/schemas/HTTPTransaction' }
+                  respPreview: { type: string }
+                  respBody: { type: string, description: Base64 of response preview body }
+  /_api/v1/compose/library:
+    get:
+      summary: Get compose library
+      responses:
+        '200':
+          description: OK
+  /_api/v1/compose/library/requests:
+    post:
+      summary: Upsert request template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComposeRequestTemplate'
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Upsert request template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComposeRequestTemplate'
+      responses:
+        '200': { description: OK }
+  /_api/v1/compose/library/requests/{id}:
+    delete:
+      summary: Delete request template
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /_api/v1/compose/library/collections:
+    post:
+      summary: Upsert collection
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Upsert collection
+      responses:
+        '200': { description: OK }
+  /_api/v1/compose/library/collections/{id}:
+    delete:
+      summary: Delete collection
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /_api/v1/compose/library/requests_move/{id}:
+    post:
+      summary: Move request into folder
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /_api/v1/intercept/config:
+    get:
+      summary: Get interception config
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterceptConfig'
+    post:
+      summary: Update interception config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InterceptConfig' }
+      responses:
+        '204': { description: No Content }
+
+  /_api/v1/intercept/rules:
+    get:
+      summary: List intercept rules
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InterceptRule' }
+    post:
+      summary: Replace intercept rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/InterceptRule' }
+      responses:
+        '204': { description: No Content }
+
+  /_api/v1/intercept/pending:
+    get:
+      summary: List pending intercept items
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InterceptItem' }
+
+  /_api/v1/intercept/items/{id}:
+    get:
+      summary: Get pending intercept item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InterceptItem' }
+        '404': { description: Not Found }
+
+  /_api/v1/intercept/items/{id}/continue:
+    post:
+      summary: Continue intercepted item with changes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/InterceptRequestDecision'
+                - $ref: '#/components/schemas/InterceptResponseDecision'
+      responses:
+        '204': { description: No Content }
+        '409': { description: Conflict }
+
+  /_api/v1/intercept/items/{id}/cancel:
+    post:
+      summary: Cancel intercepted item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+
+components:
+  schemas:
+    InterceptConfig:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        requests: { type: boolean }
+        responses: { type: boolean }
+        timeoutMs: { type: integer }
+        queueMax: { type: integer }
+        bodyMaxBytes: { type: integer }
+        reencode: { type: boolean }
+        overflow: { type: string, enum: [auto-continue-oldest, drop-new] }
+    InterceptRule:
+      type: object
+      properties:
+        id: { type: string }
+        enabled: { type: boolean }
+        priority: { type: integer }
+        action: { type: string, enum: [request, response, both] }
+        once: { type: boolean }
+        stopProcessing: { type: boolean }
+        when: { $ref: '#/components/schemas/InterceptWhen' }
+    InterceptWhen:
+      type: object
+      properties:
+        method:
+          type: array
+          items: { type: string }
+        scheme:
+          type: array
+          items: { type: string }
+        host: { $ref: '#/components/schemas/RuleStringMatch' }
+        port: { $ref: '#/components/schemas/RuleStringMatch' }
+        path: { $ref: '#/components/schemas/RuleStringMatch' }
+        contentType: { $ref: '#/components/schemas/RuleStringMatch' }
+        responseStatus: { $ref: '#/components/schemas/RuleStatusMatch' }
+        header: { $ref: '#/components/schemas/RuleHeaderMatch' }
+        bodyContains: { type: string }
+    RuleStringMatch:
+      type: object
+      properties:
+        equals: { type: string }
+        prefix: { type: string }
+        suffix: { type: string }
+        contains: { type: string }
+        anyOf:
+          type: array
+          items: { type: string }
+        regex: { type: string }
+    RuleHeaderMatch:
+      type: object
+      properties:
+        name: { $ref: '#/components/schemas/RuleStringMatch' }
+        value: { $ref: '#/components/schemas/RuleStringMatch' }
+    RuleStatusMatch:
+      type: object
+      properties:
+        equals:
+          type: array
+          items: { type: integer }
+        from: { type: integer }
+        to: { type: integer }
+        is4xx: { type: boolean }
+        is5xx: { type: boolean }
+    InterceptItem:
+      type: object
+      properties:
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        deadline: { type: string, format: date-time }
+        direction: { type: string, enum: [request, response] }
+        sessionId: { type: string }
+        ruleId: { type: string }
+        state: { type: string, enum: [PENDING, APPLIED, CANCELED, TIMED_OUT] }
+        req: { $ref: '#/components/schemas/HTTPRequestSnapshot' }
+        res: { $ref: '#/components/schemas/HTTPResponseSnapshot' }
+    HTTPRequestSnapshot:
+      type: object
+      properties:
+        method: { type: string }
+        url: { type: string }
+        headers:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        bodyBase64: { type: string }
+        bodyTruncated: { type: boolean }
+        contentType: { type: string }
+    HTTPResponseSnapshot:
+      type: object
+      properties:
+        status: { type: integer }
+        headers:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        bodyBase64: { type: string }
+        bodyTruncated: { type: boolean }
+        contentType: { type: string }
+    InterceptRequestDecision:
+      type: object
+      properties:
+        action: { type: string, enum: [continue, drop] }
+        method: { type: string }
+        url: { type: string }
+        headers:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        bodyBase64: { type: string }
+    InterceptResponseDecision:
+      type: object
+      properties:
+        action: { type: string, enum: [continue] }
+        status: { type: integer }
+        headers:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        bodyBase64: { type: string }
+    ComposeHeader:
+      type: object
+      properties: { key: {type: string}, value: {type: string} }
+    ComposeQuery:
+      type: object
+      properties: { key: {type: string}, value: {type: string} }
+    ComposeFormField:
+      type: object
+      properties: { key: {type: string}, value: {type: string} }
+    ComposePart:
+      type: object
+      properties:
+        name: { type: string }
+        isFile: { type: boolean }
+        fileName: { type: string }
+        contentType: { type: string }
+        base64: { type: string }
+        value: { type: string }
+    ComposeAuth:
+      type: object
+      properties:
+        type: { type: string, enum: [none, basic, bearer, apiKey] }
+        username: { type: string }
+        password: { type: string }
+        bearerToken: { type: string }
+        apiKey: { type: string }
+        apiKeyHeader: { type: string }
+    ComposeBody:
+      type: object
+      properties:
+        mode: { type: string, enum: [raw, json, form, multipart] }
+        raw: { type: string }
+        json: { type: string }
+        form:
+          type: array
+          items: { $ref: '#/components/schemas/ComposeFormField' }
+        multipart:
+          type: array
+          items: { $ref: '#/components/schemas/ComposePart' }
+    ComposeRequestTemplate:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        method: { type: string }
+        url: { type: string }
+        headers:
+          type: array
+          items: { $ref: '#/components/schemas/ComposeHeader' }
+        query:
+          type: array
+          items: { $ref: '#/components/schemas/ComposeQuery' }
+        body: { $ref: '#/components/schemas/ComposeBody' }
+        auth: { $ref: '#/components/schemas/ComposeAuth' }
+    HTTPTransaction:
+      type: object
+      properties:
+        id: { type: string }
+        sessionId: { type: string }
+        method: { type: string }
+        url: { type: string }
+        status: { type: integer }
+        reqSize: { type: integer }
+        respSize: { type: integer }
   /api/sessions:
     get:
       summary: List sessions

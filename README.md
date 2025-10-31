@@ -1,6 +1,18 @@
 # Network Debugger
 
 <p align="center">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/cherrypick-agency/flutter_network_debugger" alt="License" />
+  </a>
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/coverage.yml">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cherrypick-agency/flutter_network_debugger/gh-pages/coverage.json" alt="coverage" />
+  </a>
+  <a href="https://goreportcard.com/report/github.com/cherrypick-agency/flutter_network_debugger">
+    <img src="https://goreportcard.com/badge/github.com/cherrypick-agency/flutter_network_debugger" alt="Go Report Card" />
+  </a>
+
+  <br>
+
   <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/network_debugger.yml">
     <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/network_debugger.yml/badge.svg?branch=main" alt="network_debugger CI" />
   </a>
@@ -16,24 +28,7 @@
   <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/socket_io_debugger.yml">
     <img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/socket_io_debugger.yml/badge.svg?branch=main" alt="socket_io_debugger CI" />
   </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/cherrypick-agency/flutter_network_debugger" alt="License" />
-  </a>
-  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/coverage.yml">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cherrypick-agency/flutter_network_debugger/gh-pages/coverage.json" alt="coverage" />
-  </a>
 </p>
-
-### Dart Packages
-
-| Package | Version | Description |
-|---------|---------|-------------|
-| [network_debugger](https://pub.dev/packages/network_debugger) | [![pub](https://img.shields.io/pub/v/network_debugger.svg)](https://pub.dev/packages/network_debugger) | Core CLI tool for starting the proxy |
-| [dio_debugger](https://pub.dev/packages/dio_debugger) | [![pub](https://img.shields.io/pub/v/dio_debugger.svg)](https://pub.dev/packages/dio_debugger) | Interceptor for Dio HTTP client |
-| [http_debugger](https://pub.dev/packages/http_debugger) | [![pub](https://img.shields.io/pub/v/http_debugger.svg)](https://pub.dev/packages/http_debugger) | Wrapper for package:http client |
-| [web_socket_debugger](https://pub.dev/packages/web_socket_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_debugger.svg)](https://pub.dev/packages/web_socket_debugger) | Wrapper for dart:io WebSocket |
-| [web_socket_channel_debugger](https://pub.dev/packages/web_socket_channel_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_channel_debugger.svg)](https://pub.dev/packages/web_socket_channel_debugger) | Wrapper for package:web_socket_channel |
-| [socket_io_debugger](https://pub.dev/packages/socket_io_debugger) | [![pub](https://img.shields.io/pub/v/socket_io_debugger.svg)](https://pub.dev/packages/socket_io_debugger) | Wrapper for socket.io client |
 
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
@@ -41,26 +36,35 @@ Free tool for debugging HTTP and WebSocket which is MUCH BETTER than the built-i
 
 Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
 
-What it can do
-- Intercept and view HTTP and WebSocket traffic
+### Compose / Request Builder
+- Build HTTP requests (raw/JSON, x-www-form-urlencoded, multipart with files)
+- Auth helpers (Basic, Bearer, API Key)
+- Save requests in collections/folders (JSON backend storage by default)
+- Send via backend with timings; response Pretty/Raw view
+- API: see `docs/openapi.yaml`
+
+### What it can do
+- Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
 - Waterfall timeline of requests
 - grouping by domain/route
 - Filters: method, status, MIME, minimum duration, by headers
 - Convenient search with highlighting
 - HTTP details: headers (with sensitive data masking), body (pretty/JSON tree), TTFB/Total
 - CORS/Cache hints, cookies and TLS summary
-- WebSocket details: events/frames, pings/pongs, payload preview
-- HAR export
+- WebSocket details: events/frames, pings/pongs, payload preview, json highligh
+- HAR/Curl export
 - Artificial response delay (useful for simulating "slow networks")
 - Record/stop and records management
 - HTML preview
 - Form Data (show files) For example Flutter devtools don't show at all
 - You can proxy only app requests or all OS requests (forward proxy)
-- Crossplatform
+- Crossplatform (WEB, Desktop, CLI)
+- The fastest GO backend for processing requests compared to competitors
+- An independent GO backend that can be run anywhere
 
 ...
 
-Quick start
+### Quick start
 - Via CLI (automatically downloads binary and opens UI):
   ```bash
   dart pub global activate network_debugger
@@ -82,17 +86,62 @@ Quick start
   ```
 
 Where UI opens
-- By default server listens on :9091, UI is available at:
-  - http://localhost:9091/_ui (or root if auto-redirect is enabled)
+- By default server listens on :9092 (UI), proxy (forward) is on :9091:
+  - UI: http://localhost:9092/
+  - Proxy base (HTTP/WebSocket forward): http://localhost:9091
+
+
+### Dart Packages
+
+| Package                                                                             | Version                                                                                                                      | Pub Points                                                                                                                                 | Popularity                                                                                                                                     | Description                            |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| [network_debugger](https://pub.dev/packages/network_debugger)                       | [![pub](https://img.shields.io/pub/v/network_debugger.svg)](https://pub.dev/packages/network_debugger)                       | [![pub points](https://img.shields.io/pub/points/network_debugger)](https://pub.dev/packages/network_debugger/score)                       | [![popularity](https://img.shields.io/pub/popularity/network_debugger)](https://pub.dev/packages/network_debugger/score)                       | Core CLI tool for starting the proxy   |
+| [dio_debugger](https://pub.dev/packages/dio_debugger)                               | [![pub](https://img.shields.io/pub/v/dio_debugger.svg)](https://pub.dev/packages/dio_debugger)                               | [![pub points](https://img.shields.io/pub/points/dio_debugger)](https://pub.dev/packages/dio_debugger/score)                               | [![popularity](https://img.shields.io/pub/popularity/dio_debugger)](https://pub.dev/packages/dio_debugger/score)                               | Interceptor for Dio HTTP client        |
+| [http_debugger](https://pub.dev/packages/http_debugger)                             | [![pub](https://img.shields.io/pub/v/http_debugger.svg)](https://pub.dev/packages/http_debugger)                             | [![pub points](https://img.shields.io/pub/points/http_debugger)](https://pub.dev/packages/http_debugger/score)                             | [![popularity](https://img.shields.io/pub/popularity/http_debugger)](https://pub.dev/packages/http_debugger/score)                             | Wrapper for package:http client        |
+| [web_socket_debugger](https://pub.dev/packages/web_socket_debugger)                 | [![pub](https://img.shields.io/pub/v/web_socket_debugger.svg)](https://pub.dev/packages/web_socket_debugger)                 | [![pub points](https://img.shields.io/pub/points/web_socket_debugger)](https://pub.dev/packages/web_socket_debugger/score)                 | [![popularity](https://img.shields.io/pub/popularity/web_socket_debugger)](https://pub.dev/packages/web_socket_debugger/score)                 | Wrapper for dart:io WebSocket          |
+| [web_socket_channel_debugger](https://pub.dev/packages/web_socket_channel_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_channel_debugger.svg)](https://pub.dev/packages/web_socket_channel_debugger) | [![pub points](https://img.shields.io/pub/points/web_socket_channel_debugger)](https://pub.dev/packages/web_socket_channel_debugger/score) | [![popularity](https://img.shields.io/pub/popularity/web_socket_channel_debugger)](https://pub.dev/packages/web_socket_channel_debugger/score) | Wrapper for package:web_socket_channel |
+| [socket_io_debugger](https://pub.dev/packages/socket_io_debugger)                   | [![pub](https://img.shields.io/pub/v/socket_io_debugger.svg)](https://pub.dev/packages/socket_io_debugger)                   | [![pub points](https://img.shields.io/pub/points/socket_io_debugger)](https://pub.dev/packages/socket_io_debugger/score)                   | [![popularity](https://img.shields.io/pub/popularity/socket_io_debugger)](https://pub.dev/packages/socket_io_debugger/score)                   | Wrapper for socket.io client           |
+
+
+### Settings
 
 Main settings (ENV)
-- `ADDR` — server address (default :9091)
+- `ADDR` — server address (default :9092)
 - `DEV_MODE` — development mode (1/true)
 - `NO_BROWSER` — disable automatic browser opening (1/true)
 - `DEFAULT_TARGET` — default target upstream
 - `CAPTURE_BODIES` — save request/response bodies (1/true)
 - `RESPONSE_DELAY_MS` — fixed or range, e.g. `1000` or `1000-3000`
 - `INSECURE_TLS` — trust self-signed certificates (1/true)
+
+Network throttling (bandwidth/reliability/latency)
+- `THROTTLE_ENABLE` — enable throttling globally (1/true)
+- `THROTTLE_DOWN_KBPS` — downstream speed in kbit/s (server→client)
+- `THROTTLE_UP_KBPS` — upstream speed in kbit/s (client→server)
+- `THROTTLE_PACKET_LOSS` — packet loss percent (0..100), best‑effort
+- `THROTTLE_LATENCY_MS` — base latency in ms (RTT/ping simulation)
+- `THROTTLE_LATENCY_JITTER` — random jitter ± ms (e.g., 20 = varies ±20ms)
+- `THROTTLE_OFFLINE` — simulate offline (reject new requests)
+
+Runtime API
+- `GET /_api/v1/throttle` — current values and preset hints
+- `POST /_api/v1/throttle` — set values
+  ```json
+  {"enabled":true,"downKbps":3000,"upKbps":3000,"packetLossPct":0,"latencyMs":100,"latencyJitter":20,"offline":false}
+  ```
+
+SOCKS/HTTP Proxy Runtime (ports)
+- Управляется из UI: Settings → Proxy
+- API:
+  - `GET /_api/v1/proxy/config`
+  - `POST /_api/v1/proxy/config`
+    ```json
+    {
+      "forward": {"enabled": true, "port": 8888},
+      "socks": {"enabled": true, "port": 8889, "authMode": "none"}
+    }
+    ```
+  - Изменения применяются на лету без рестарта процесса (graceful shutdown/start).
 
 Cookies and stealth (reverse proxy /httpproxy)
 - `STEALTH_HEADERS` — hide proxy headers (Via, X-Forwarded-*) on /httpproxy (default 1)
@@ -109,13 +158,26 @@ Notes
 - In `isolate` mode cookie names are namespaced in the browser storage and unwrapped towards upstream, so different `_target` do not collide.
 
 WebSocket preview settings
+Database migrations
+- Local/dev: AutoMigrate is enabled only when `DEV_MODE=1`.
+- Prod/Test: apply SQL migrations from `./migrations` using goose or golang-migrate in CI/CD.
+  Example (goose):
+  ```bash
+  # install once: go install github.com/pressly/goose/v3/cmd/goose@latest
+  goose -dir ./migrations sqlite3 ./data/network_debugger.db up
+  ```
+  Example (golang-migrate):
+  ```bash
+  # install once: brew install golang-migrate
+  migrate -path ./migrations -database sqlite3://./data/network_debugger.db up
+  ```
 - `PREVIEW_MAX_BYTES` — preview limit for text payloads (default 50000)
 - `WS_PREVIEW_MAX_BYTES` — WS preview limit (fallback to PREVIEW_MAX_BYTES)
 - `WS_DEFLATE_PREVIEW` — try to decompress permessage-deflate for preview (default 1)
 - `WS_CAPTURE_BODIES` — save WS message bodies to spool (default 0)
 - `WS_BODY_MAX_BYTES` — spool size limit for WS message body (default 1 MiB)
 
-Local development (without GitHub)
+### Local development (without GitHub)
 - Ready binary/archive in `./dist`:
   ```bash
   network-debugger --local-dir ./dist --no-remote
@@ -126,6 +188,6 @@ Local development (without GitHub)
   network-debugger --base-url http://127.0.0.1:8099 --no-remote
   ```
 
-Useful to know
+### Useful to know
 - Binary cache: macOS/Linux `~/.cache/network_debugger/`, Windows `%LOCALAPPDATA%\network_debugger\Cache\`
 - Binary name: `network-debugger-web` (Windows — `network-debugger-web.exe`)

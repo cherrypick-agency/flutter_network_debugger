@@ -16,13 +16,14 @@ func TestForwardProxy_WSSIOEvents(t *testing.T) {
 	echoSrv, echoWS := startEchoWSServer(t)
 	defer echoSrv.Close()
 
-	appSrv, _ := startAppServer(t)
+	appSrv, deps := startAppServer(t)
 	defer appSrv.Close()
 
 	// monitor not strictly required here; будем проверять через REST
 
 	// forward via http proxy
-	proxyURL, _ := url.Parse(appSrv.URL)
+	proxyHost := ensureForwardProxyAddr(t, appSrv, deps)
+	proxyURL := &url.URL{Scheme: "http", Host: proxyHost}
 	d := *websocket.DefaultDialer
 	d.Proxy = http.ProxyURL(proxyURL)
 

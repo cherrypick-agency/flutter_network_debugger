@@ -12,7 +12,12 @@ class InspectorRepositoryImpl implements InspectorRepository {
   final AppHttpClient _api;
 
   @override
-  Future<List<Session>> listSessions({String? q, String? target}) async {
+  Future<List<Session>> listSessions({
+    String? q,
+    String? target,
+    Set<String>? types,
+    Set<String>? statusGroups,
+  }) async {
     try {
       // Build capture scope params via HomeUiStore
       String scope = '';
@@ -22,6 +27,15 @@ class InspectorRepositoryImpl implements InspectorRepository {
         scope = ui.captureScope.value;
         includePaused = ui.includePaused.value;
       } catch (_) {}
+      // Собираем быстрые фильтры напрямую из UI-стора, чтобы не плодить параметры
+      Set<String> uiTypes = const {};
+      Set<String> uiStatusGroups = const {};
+      try {
+        final ui = sl<HomeUiStore>();
+        uiTypes = ui.quickTypes.toSet();
+        uiStatusGroups = ui.quickStatusGroups.toSet();
+      } catch (_) {}
+
       final res = await _api.get(
         host: null,
         path: '/_api/v1/sessions',
@@ -32,6 +46,13 @@ class InspectorRepositoryImpl implements InspectorRepository {
           if (scope == 'all') 'captures': 'all',
           if (scope != 'all') 'captureId': 'current',
           if (includePaused) 'includeUnassigned': 'true',
+          if ((types != null && types.isNotEmpty) || uiTypes.isNotEmpty)
+            'types': (types ?? uiTypes).join(','),
+          if ((statusGroups != null && statusGroups.isNotEmpty) ||
+              uiStatusGroups.isNotEmpty)
+            'status': (statusGroups ?? uiStatusGroups).join(','),
+          // Включаем глубокую проверку GraphQL только при явном выборе
+          if (((types ?? uiTypes).contains('graphql'))) 'scan': 'graphql',
         },
       );
       final data =

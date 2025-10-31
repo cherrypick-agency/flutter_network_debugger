@@ -404,12 +404,17 @@ func TestE2E_BinaryProcess_RealTCP(t *testing.T) {
 
 	// fetch frames/events of the latest session and assert redaction + SIO parsing
 	sid := list.Items[0].ID
-	fr, _ := http.Get(baseURL + "/api/sessions/" + sid + "/frames?limit=1000")
+	fr, err := http.Get(baseURL + "/api/sessions/" + sid + "/frames?limit=1000")
+	if err != nil {
+		t.Fatalf("frames get: %v", err)
+	}
 	defer fr.Body.Close()
 	var frames struct {
 		Items []struct{ Preview string } `json:"items"`
 	}
-	_ = json.NewDecoder(fr.Body).Decode(&frames)
+	if err := json.NewDecoder(fr.Body).Decode(&frames); err != nil {
+		t.Fatalf("decode frames: %v", err)
+	}
 	sawBinary := false
 	sawRedacted := false
 	for _, f := range frames.Items {
@@ -425,7 +430,10 @@ func TestE2E_BinaryProcess_RealTCP(t *testing.T) {
 		// Binary/redacted frame checks are flaky in CI, log as warning instead of fatal
 	}
 
-	ev, _ := http.Get(baseURL + "/api/sessions/" + sid + "/events?limit=1000")
+	ev, err := http.Get(baseURL + "/api/sessions/" + sid + "/events?limit=1000")
+	if err != nil {
+		t.Fatalf("events get: %v", err)
+	}
 	defer ev.Body.Close()
 	var events struct {
 		Items []struct {
@@ -434,7 +442,9 @@ func TestE2E_BinaryProcess_RealTCP(t *testing.T) {
 			AckID     *int64 `json:"ackId"`
 		} `json:"items"`
 	}
-	_ = json.NewDecoder(ev.Body).Decode(&events)
+	if err := json.NewDecoder(ev.Body).Decode(&events); err != nil {
+		t.Fatalf("decode events: %v", err)
+	}
 	haveHello := false
 	haveCmd := false
 	for _, e := range events.Items {
@@ -652,7 +662,10 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 	}
 
 	// Verify events stored again quickly
-	resp3, _ := http.Get(baseURL + "/api/sessions?limit=100")
+	resp3, err := http.Get(baseURL + "/api/sessions?limit=100")
+	if err != nil {
+		t.Fatalf("sessions get (resp3): %v", err)
+	}
 	defer resp3.Body.Close()
 	var list2 struct {
 		Items []struct{ ID string } `json:"items"`
@@ -662,7 +675,10 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 		t.Fatalf("no sessions")
 	}
 	sid2 := list2.Items[len(list2.Items)-1].ID
-	ev2, _ := http.Get(baseURL + "/api/sessions/" + sid2 + "/events?limit=1000")
+	ev2, err := http.Get(baseURL + "/api/sessions/" + sid2 + "/events?limit=1000")
+	if err != nil {
+		t.Fatalf("events get (ev2): %v", err)
+	}
 	defer ev2.Body.Close()
 	var events2 struct {
 		Items []struct {
@@ -779,14 +795,20 @@ func TestE2E_LargeFramesAndPreview(t *testing.T) {
 
 	// allow small delay
 	time.Sleep(200 * time.Millisecond)
-	resp, _ := http.Get(baseURL + "/api/sessions?limit=100")
+	resp, err := http.Get(baseURL + "/api/sessions?limit=100")
+	if err != nil {
+		t.Fatalf("sessions get: %v", err)
+	}
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&list)
 	sid := list.Items[0].ID
-	fr, _ := http.Get(baseURL + "/api/sessions/" + sid + "/frames?limit=100")
+	fr, err := http.Get(baseURL + "/api/sessions/" + sid + "/frames?limit=100")
+	if err != nil {
+		t.Fatalf("frames get (L790): %v", err)
+	}
 	defer fr.Body.Close()
 	var frames struct {
 		Items []struct {
@@ -843,14 +865,20 @@ func TestE2E_ServerClientCloses(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	_ = c.Close()
 	// session should have frames recorded (ClosedAt may be nil for graceful close)
-	resp, _ := http.Get(baseURL + "/api/sessions?limit=100")
+	resp, err := http.Get(baseURL + "/api/sessions?limit=100")
+	if err != nil {
+		t.Fatalf("sessions get (L847): %v", err)
+	}
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&list)
 	sid := list.Items[len(list.Items)-1].ID
-	r, _ := http.Get(baseURL + "/api/sessions/" + sid + "/frames?limit=100")
+	r, err := http.Get(baseURL + "/api/sessions/" + sid + "/frames?limit=100")
+	if err != nil {
+		t.Fatalf("frames get (L854): %v", err)
+	}
 	defer r.Body.Close()
 	var frames2 struct {
 		Items []struct{} `json:"items"`
@@ -947,7 +975,10 @@ func TestE2E_SocketIOAdvanced(t *testing.T) {
 	_ = c.Close()
 
 	// poll REST for events
-	resp2, _ := http.Get(baseURL + "/api/sessions?limit=100&_target=" + url.QueryEscape(sioURL))
+	resp2, err := http.Get(baseURL + "/api/sessions?limit=100&_target=" + url.QueryEscape(sioURL))
+	if err != nil {
+		t.Fatalf("sessions get (resp2): %v", err)
+	}
 	defer resp2.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`
@@ -1032,7 +1063,10 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	_ = c2.Close()
 
 	// ensure at least two sessions exist in history
-	resp, _ := http.Get(baseURL + "/api/sessions?limit=10")
+	resp, err := http.Get(baseURL + "/api/sessions?limit=10")
+	if err != nil {
+		t.Fatalf("sessions get (reconnect): %v", err)
+	}
 	defer resp.Body.Close()
 	var list struct {
 		Items []struct{ ID string } `json:"items"`

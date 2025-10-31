@@ -35,10 +35,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   String get _proxyAddr {
     try {
       final u = Uri.parse(_baseUrl);
-      final p = u.hasPort ? u.port : 9091;
+      final p = u.hasPort ? u.port : 9092;
       return '127.0.0.1:' + p.toString();
     } catch (_) {
-      return '127.0.0.1:9091';
+      return '127.0.0.1:9092';
     }
   }
 

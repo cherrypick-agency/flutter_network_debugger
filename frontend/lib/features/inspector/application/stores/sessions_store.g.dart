@@ -48,8 +48,20 @@ mixin _$SessionsStore on _SessionsStore, Store {
   );
 
   @override
-  Future<void> load({String? q, String? target}) {
-    return _$loadAsyncAction.run(() => super.load(q: q, target: target));
+  Future<void> load({
+    String? q,
+    String? target,
+    Set<String>? types,
+    Set<String>? statusGroups,
+  }) {
+    return _$loadAsyncAction.run(
+      () => super.load(
+        q: q,
+        target: target,
+        types: types,
+        statusGroups: statusGroups,
+      ),
+    );
   }
 
   @override

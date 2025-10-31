@@ -18,7 +18,11 @@ import (
 	"time"
 
 	"network-debugger/internal/adapters/storage/memory"
+	compp "network-debugger/internal/features/compose/infrastructure/persistence"
+	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
+	setp "network-debugger/internal/features/settings/infrastructure/persistence"
 	cfgpkg "network-debugger/internal/infrastructure/config"
+	dbinfra "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
@@ -39,6 +43,22 @@ func main() {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: cfg, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
+	// Init SQLite (GORM)
+	if dbPath := dbinfra.PathFromEnv(); dbPath != "" {
+		if gdb, err := dbinfra.NewSQLite(dbPath); err != nil {
+			logger.Error().Err(err).Str("path", dbPath).Msg("db init failed")
+		} else {
+			deps.DB = gdb
+			if cfg.DevMode {
+				if err := gdb.AutoMigrate(&setp.RuntimeSettingsModel{}, &setp.ThrottleProfileModel{}, &compp.ComposeLibraryModel{}, &compp.ComposeHistoryEntryModel{}, &proxyp.ProxyConfigModel{}); err != nil {
+					logger.Error().Err(err).Msg("db automigrate failed")
+				}
+			} else {
+				logger.Info().Msg("auto-migrate disabled (non-dev). Apply SQL migrations via goose/migrate in CI/CD")
+			}
+			logger.Info().Str("db", dbPath).Msg("db connected (sqlite)")
+		}
+	}
 	if cfg.MITMEnabled {
 		if cfg.MITMCACertFile == "" || cfg.MITMCAKeyFile == "" {
 			base := "data"

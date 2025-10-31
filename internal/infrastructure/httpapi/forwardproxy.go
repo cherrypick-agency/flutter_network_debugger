@@ -19,7 +19,17 @@ import (
 // handleForwardOrNotFound routes absolute-URI and CONNECT requests as a standard forward proxy.
 // Non-proxy requests fall back to 404 so that REST/WS routes are handled by other handlers.
 func (d *Deps) handleForwardOrNotFound(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodConnect || (r.URL != nil && r.URL.Scheme != "" && r.URL.Host != "") {
+	// Для серверных запросов в net/http абсолютный URI может прийти в RequestURI,
+	// при этом r.URL.Scheme/Host могут быть пустыми. Учтём оба случая.
+	if r.Method == http.MethodConnect ||
+		(r.URL != nil && r.URL.Scheme != "" && r.URL.Host != "") ||
+		isAbsoluteURL(r.RequestURI) {
+		// Если URL ещё не разобран, но RequestURI — абсолютный, восстановим r.URL
+		if r.Method != http.MethodConnect && (r.URL == nil || r.URL.Scheme == "" || r.URL.Host == "") && isAbsoluteURL(r.RequestURI) {
+			if u, err := url.Parse(r.RequestURI); err == nil {
+				r.URL = u
+			}
+		}
 		d.handleForwardProxy(w, r)
 		return
 	}
@@ -27,6 +37,11 @@ func (d *Deps) handleForwardOrNotFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
+	// Offline simulation
+	if d.Cfg.ThrottleOffline {
+		writeError(w, http.StatusServiceUnavailable, "OFFLINE", "proxy offline (simulated)", nil)
+		return
+	}
 	if r.Method == http.MethodConnect {
 		// Если MITM включен и домен подходит — перехватываем TLS
 		if d.MITM != nil && d.MITM.CA != nil && d.MITM.shouldIntercept(r.Host) {
@@ -302,7 +317,12 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		clientBR := bufio.NewReader(tlsSrv)
+		// Upload throttling in MITM tunnel (client -> upstream)
+		var srcConn net.Conn = tlsSrv
+		if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleUpKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) {
+			srcConn = wrapConnForThrottle(&d.Cfg, srcConn, "up")
+		}
+		clientBR := bufio.NewReader(srcConn)
 		serverBR := bufio.NewReader(tlsCli)
 		for {
 			// Читаем запрос от клиента
@@ -345,6 +365,45 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
+			// Interception: request inside MITM tunnel
+			if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
+				capBody := reqBodyBuf
+				if max := d.Cfg.InterceptBodyMaxBytes; max > 0 && len(capBody) > max {
+					capBody = capBody[:max]
+				}
+				origEnc := strings.ToLower(req.Header.Get("Content-Encoding"))
+				decCap, _ := decodeForIntercept(capBody, origEnc, d.Cfg.InterceptBodyMaxBytes)
+				ct := strings.ToLower(req.Header.Get("Content-Type"))
+				if dec, _ := d.Interceptor.InterceptRequest(contextWithNoCancel(), sessionID, req, string(decCap), decCap, ct); dec != nil {
+					if strings.ToLower(dec.Action) == "drop" {
+						return
+					}
+					if dec.Method != "" {
+						req.Method = dec.Method
+					}
+					if dec.Headers != nil {
+						req.Header = cloneHeader(dec.Headers)
+					}
+					if dec.Body != nil {
+						bodyToWrite := dec.Body
+						if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
+							if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+								bodyToWrite = encBody
+								req.Header.Set("Content-Encoding", origEnc)
+							} else {
+								req.Header.Del("Content-Encoding")
+							}
+						} else {
+							req.Header.Del("Content-Encoding")
+						}
+						req.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+						req.ContentLength = int64(len(bodyToWrite))
+						req.Header.Del("Transfer-Encoding")
+						req.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
+					}
+				}
+			}
+
 			// Отправляем запрос к апстриму
 			if err := req.Write(tlsCli); err != nil {
 				return
@@ -361,9 +420,50 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
+			// Ограничим скорость выгрузки апстрима клиенту
+			if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleDownKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && resp.Body != nil {
+				bps := kbpsToBytesPerSec(d.Cfg.ThrottleDownKbps)
+				resp.Body = io.NopCloser(wrapReaderThrottleLoss(resp.Body, bps, d.Cfg.ThrottlePacketLoss))
+			}
 			// Отдаём ответ клиенту
 			if err := resp.Write(tlsSrv); err != nil {
 				return
+			}
+
+			// Interception: response inside MITM tunnel (before possible WS upgrade handling below)
+			if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptResponses {
+				var capBuf []byte
+				if resp.Body != nil {
+					lim := d.Cfg.InterceptBodyMaxBytes
+					if lim <= 0 {
+						lim = 1 << 20
+					}
+					buf := make([]byte, lim)
+					if n, _ := io.ReadFull(resp.Body, buf); n > 0 {
+						capBuf = append(capBuf[:0], buf[:n]...)
+						resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
+					}
+				}
+				ct := strings.ToLower(resp.Header.Get("Content-Type"))
+				if dec, _ := d.Interceptor.InterceptResponse(contextWithNoCancel(), sessionID, resp, string(capBuf), capBuf, ct); dec != nil {
+					if dec.Status > 0 {
+						resp.StatusCode = dec.Status
+						if txt := http.StatusText(dec.Status); txt != "" {
+							resp.Status = strconv.Itoa(dec.Status) + " " + txt
+						} else {
+							resp.Status = strconv.Itoa(dec.Status)
+						}
+					}
+					if dec.Headers != nil {
+						resp.Header = cloneHeader(dec.Headers)
+					}
+					if dec.Body != nil {
+						resp.Header.Del("Content-Encoding")
+						resp.Body = io.NopCloser(bytes.NewReader(dec.Body))
+						resp.ContentLength = int64(len(dec.Body))
+						resp.Header.Set("Content-Length", strconv.Itoa(len(dec.Body)))
+					}
+				}
 			}
 
 			if resp.StatusCode == http.StatusSwitchingProtocols {
@@ -430,6 +530,69 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
+	// Interception: request (forward)
+	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
+		capBody := reqBodyBuf
+		if max := d.Cfg.InterceptBodyMaxBytes; max > 0 && len(capBody) > max {
+			capBody = capBody[:max]
+		}
+		origEnc := strings.ToLower(outReq.Header.Get("Content-Encoding"))
+		decCap, _ := decodeForIntercept(capBody, origEnc, d.Cfg.InterceptBodyMaxBytes)
+		ct := strings.ToLower(outReq.Header.Get("Content-Type"))
+		if dec, _ := d.Interceptor.InterceptRequest(r.Context(), sessionID, outReq, string(decCap), decCap, ct); dec != nil {
+			if strings.ToLower(dec.Action) == "drop" {
+				writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
+				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
+				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
+				return
+			}
+			if dec.Method != "" {
+				outReq.Method = dec.Method
+			}
+			if dec.URL != "" {
+				if u, err := url.Parse(dec.URL); err == nil {
+					if u.Scheme != "" && u.Host != "" {
+						outReq.URL = u
+						outReq.Host = u.Host
+					} else {
+						// относительный путь
+						newURL := *outReq.URL
+						newURL.Path = u.Path
+						newURL.RawQuery = u.RawQuery
+						outReq.URL = &newURL
+					}
+				}
+			}
+			if dec.Headers != nil {
+				outReq.Header = cloneHeader(dec.Headers)
+			}
+			if dec.Body != nil {
+				bodyToWrite := dec.Body
+				if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
+					if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+						bodyToWrite = encBody
+						outReq.Header.Set("Content-Encoding", origEnc)
+					} else {
+						outReq.Header.Del("Content-Encoding")
+					}
+				} else {
+					outReq.Header.Del("Content-Encoding")
+				}
+				outReq.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+				outReq.ContentLength = int64(len(bodyToWrite))
+				outReq.Header.Del("Transfer-Encoding")
+				outReq.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
+			}
+		}
+	}
+
+	// Apply upload throttling for forward proxy
+	if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleUpKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && outReq.Body != nil {
+		bps := kbpsToBytesPerSec(d.Cfg.ThrottleUpKbps)
+		outReq.Body = io.NopCloser(wrapReaderThrottleLoss(outReq.Body, bps, d.Cfg.ThrottlePacketLoss))
+	}
+
 	// Send using unified transport
 	tr := newTransport(d.Cfg)
 	resp, err := tr.RoundTrip(outReq)
@@ -442,12 +605,66 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	}
 	defer resp.Body.Close()
 
+	// Download throttling for forward proxy
+	if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleDownKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && resp.Body != nil {
+		bps := kbpsToBytesPerSec(d.Cfg.ThrottleDownKbps)
+		resp.Body = io.NopCloser(wrapReaderThrottleLoss(resp.Body, bps, d.Cfg.ThrottlePacketLoss))
+	}
+
 	// Build response preview and keep body intact for client
 	preview := buildHTTPResponsePreview(resp)
 	fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
 	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
 	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
 	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+
+	// Interception: response (forward)
+	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptResponses {
+		var capBuf []byte
+		if resp.Body != nil {
+			lim := d.Cfg.InterceptBodyMaxBytes
+			if lim <= 0 {
+				lim = 1 << 20
+			}
+			buf := make([]byte, lim)
+			if n, _ := io.ReadFull(resp.Body, buf); n > 0 {
+				capBuf = append(capBuf[:0], buf[:n]...)
+				resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
+			}
+		}
+		origEnc := strings.ToLower(resp.Header.Get("Content-Encoding"))
+		decCap, _ := decodeForIntercept(capBuf, origEnc, d.Cfg.InterceptBodyMaxBytes)
+		ct := strings.ToLower(resp.Header.Get("Content-Type"))
+		if dec, _ := d.Interceptor.InterceptResponse(r.Context(), sessionID, resp, string(decCap), decCap, ct); dec != nil {
+			if dec.Status > 0 {
+				resp.StatusCode = dec.Status
+				if txt := http.StatusText(dec.Status); txt != "" {
+					resp.Status = strconv.Itoa(dec.Status) + " " + txt
+				} else {
+					resp.Status = strconv.Itoa(dec.Status)
+				}
+			}
+			if dec.Headers != nil {
+				resp.Header = cloneHeader(dec.Headers)
+			}
+			if dec.Body != nil {
+				bodyToWrite := dec.Body
+				if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
+					if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+						bodyToWrite = encBody
+						resp.Header.Set("Content-Encoding", origEnc)
+					} else {
+						resp.Header.Del("Content-Encoding")
+					}
+				} else {
+					resp.Header.Del("Content-Encoding")
+				}
+				resp.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+				resp.ContentLength = int64(len(bodyToWrite))
+				resp.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
+			}
+		}
+	}
 
 	// Optional artificial response delay
 	sleepResponseDelay(d.Cfg)

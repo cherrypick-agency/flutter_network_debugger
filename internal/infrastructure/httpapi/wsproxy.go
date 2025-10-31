@@ -19,6 +19,10 @@ import (
 )
 
 func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
+	if d.Cfg.ThrottleOffline {
+		writeError(w, http.StatusServiceUnavailable, "OFFLINE", "proxy offline (simulated)", nil)
+		return
+	}
 	tgt := r.URL.Query().Get("_target")
 	if tgt == "" {
 		if d.Cfg.DefaultTarget != "" {
@@ -192,6 +196,15 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 		if err != nil {
 			lastErr = err
 			return
+		}
+		// Троттлинг WS на уровне сообщений
+		d.throttleSleepWS(direction, len(data))
+		// Симуляция потерь: по вероятности пропускаем запись
+		if d.Cfg.ThrottleEnabled && d.Cfg.ThrottlePacketLoss > 0 {
+			if randInt := time.Now().UnixNano() % 100; int(randInt) < d.Cfg.ThrottlePacketLoss { // лёгкий детерминизм без глобального rand
+				// пропустим запись — как будто кадр потерян
+				continue
+			}
 		}
 		_ = dst.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		if err := dst.WriteMessage(mt, data); err != nil {

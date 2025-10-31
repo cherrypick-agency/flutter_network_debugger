@@ -24,6 +24,9 @@ class HomeUiStore {
     includePaused = mobx.Observable<bool>(false);
     recentWindowEnabled = mobx.Observable<bool>(false);
     recentWindowMinutes = mobx.Observable<int>(5);
+    // Быстрые фильтры под таймлайном
+    quickTypes = mobx.ObservableSet.of(<String>{});
+    quickStatusGroups = mobx.ObservableSet.of(<String>{});
   }
 
   late final mobx.Observable<String?> selectedSessionId;
@@ -46,6 +49,10 @@ class HomeUiStore {
   late final mobx.Observable<bool> includePaused;
   late final mobx.Observable<bool> recentWindowEnabled;
   late final mobx.Observable<int> recentWindowMinutes;
+  // Быстрые фильтры: типы контента/протокола и группы статусов
+  late final mobx.ObservableSet<String>
+  quickTypes; // http, https, ws, json, form, ...
+  late final mobx.ObservableSet<String> quickStatusGroups; // 1xx..5xx
 
   void setSelectedSessionId(String? v) =>
       mobx.runInAction(() => selectedSessionId.value = v);
@@ -90,4 +97,26 @@ class HomeUiStore {
       mobx.runInAction(() => recentWindowEnabled.value = v);
   void setRecentWindowMinutes(int v) =>
       mobx.runInAction(() => recentWindowMinutes.value = v);
+
+  // Быстрые фильтры
+  void toggleQuickType(String key) => mobx.runInAction(() {
+    if (quickTypes.contains(key)) {
+      quickTypes.remove(key);
+    } else {
+      quickTypes.add(key);
+    }
+  });
+
+  void toggleQuickStatusGroup(String key) => mobx.runInAction(() {
+    if (quickStatusGroups.contains(key)) {
+      quickStatusGroups.remove(key);
+    } else {
+      quickStatusGroups.add(key);
+    }
+  });
+
+  void clearQuickFilters() => mobx.runInAction(() {
+    quickTypes.clear();
+    quickStatusGroups.clear();
+  });
 }

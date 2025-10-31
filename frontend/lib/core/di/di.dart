@@ -20,6 +20,14 @@ import '../../features/inspector/application/services/monitor_service.dart';
 import '../../features/inspector/application/services/http_meta_service.dart';
 import '../../features/inspector/application/services/sessions_polling_service.dart';
 import '../../features/inspector/application/services/recent_window_service.dart';
+import '../../features/compose/data/compose_repository.dart';
+import '../../features/compose/application/compose_store.dart';
+import '../../features/breakpoints/data/breakpoints_api.dart';
+import '../../features/breakpoints/data/breakpoints_repository_impl.dart';
+import '../../features/breakpoints/domain/repositories/breakpoints_repository.dart';
+import '../../features/breakpoints/application/stores/breakpoints_store.dart';
+import '../../features/breakpoints/application/stores/intercept_queue_store.dart';
+import '../../features/breakpoints/application/stores/intercept_editor_store.dart';
 
 final sl = GetIt.instance;
 
@@ -70,6 +78,13 @@ Future<void> setupDI({required String baseUrl}) async {
     () => SessionsPollingService(),
   );
   sl.registerLazySingleton<RecentWindowService>(() => RecentWindowService());
+  // Compose repository
+  sl.registerLazySingleton<ComposeRepository>(
+    () => ComposeRepository(sl<AppHttpClient>()),
+  );
+  sl.registerLazySingleton<ComposeStore>(
+    () => ComposeStore(sl<ComposeRepository>()),
+  );
   // Filters store
   sl.registerLazySingleton<SessionsFiltersStore>(() => SessionsFiltersStore());
   // Notifications
@@ -86,4 +101,21 @@ Future<void> setupDI({required String baseUrl}) async {
   // Recent window init
   // ignore: unawaited_futures
   sl<RecentWindowService>().initFromPrefs();
+
+  // Breakpoints feature
+  sl.registerLazySingleton<BreakpointsApi>(
+    () => BreakpointsApi(sl<AppHttpClient>()),
+  );
+  sl.registerLazySingleton<BreakpointsRepository>(
+    () => BreakpointsRepositoryImpl(sl<BreakpointsApi>()),
+  );
+  sl.registerLazySingleton<BreakpointsStore>(
+    () => BreakpointsStore(sl<BreakpointsRepository>()),
+  );
+  sl.registerLazySingleton<InterceptQueueStore>(
+    () => InterceptQueueStore(sl<BreakpointsRepository>()),
+  );
+  sl.registerLazySingleton<InterceptEditorStore>(
+    () => InterceptEditorStore(sl<BreakpointsRepository>()),
+  );
 }

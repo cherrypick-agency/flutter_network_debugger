@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class PrefsService {
   static const _keyBaseUrl = 'base_url';
@@ -24,6 +25,9 @@ class PrefsService {
   static const _keyIsRecording = 'is_recording';
   static const _keyRecentWindowEnabled = 'recent_window_enabled';
   static const _keyRecentWindowMinutes = 'recent_window_minutes';
+  static const _keyAdminToken = 'admin_token';
+  static const _keyFontScale = 'font_scale';
+  static const _keyHighlightTheme = 'highlight_theme';
 
   Future<void> save({
     required String baseUrl,
@@ -68,7 +72,7 @@ class PrefsService {
   Future<Map<String, String>> load() async {
     final p = await SharedPreferences.getInstance();
     return {
-      'baseUrl': p.getString(_keyBaseUrl) ?? 'http://localhost:9091',
+      'baseUrl': p.getString(_keyBaseUrl) ?? 'http://localhost:9092',
       'targetWs': p.getString(_keyTarget) ?? 'ws://echo.websocket.events',
       'q': p.getString(_keyQ) ?? '',
       'targetFilter': p.getString(_keyTargetFilter) ?? '',
@@ -89,6 +93,8 @@ class PrefsService {
           (p.getBool(_keyRecentWindowEnabled) ?? false).toString(),
       'recentWindowMinutes':
           (p.getInt(_keyRecentWindowMinutes) ?? 5).toString(),
+      'adminToken': p.getString(_keyAdminToken) ?? '',
+      'fontScale': (p.getDouble(_keyFontScale) ?? 1.0).toString(),
     };
   }
 
@@ -139,6 +145,30 @@ extension PrefsServiceTheme on PrefsService {
   }
 }
 
+extension PrefsServiceFont on PrefsService {
+  Future<void> saveFontScale(double v) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble(PrefsService._keyFontScale, v);
+  }
+
+  Future<double> loadFontScale() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getDouble(PrefsService._keyFontScale) ?? 1.0;
+  }
+}
+
+extension PrefsServiceHighlightTheme on PrefsService {
+  Future<void> saveHighlightTheme(String themeKey) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(PrefsService._keyHighlightTheme, themeKey);
+  }
+
+  Future<String?> loadHighlightTheme() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(PrefsService._keyHighlightTheme);
+  }
+}
+
 extension PrefsServiceRecording on PrefsService {
   Future<void> saveIsRecording(bool isRecording) async {
     final p = await SharedPreferences.getInstance();
@@ -172,5 +202,80 @@ extension PrefsServiceRecentWindow on PrefsService {
   Future<int> loadRecentWindowMinutes() async {
     final p = await SharedPreferences.getInstance();
     return p.getInt(PrefsService._keyRecentWindowMinutes) ?? 5;
+  }
+}
+
+// Compose drafts persistence
+extension PrefsServiceCompose on PrefsService {
+  static const _composeDraftKey = 'compose_draft_json';
+  static String _composeDraftKeyFor(String id) => 'compose_draft_json_$id';
+
+  Future<void> saveComposeDraft(Map<String, dynamic> draft) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_composeDraftKey, jsonEncode(draft));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> loadComposeDraft() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_composeDraftKey);
+      if (raw == null || raw.isEmpty) return null;
+      final m = jsonDecode(raw);
+      if (m is Map<String, dynamic>) return m;
+      return Map<String, dynamic>.from(m as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearComposeDraft() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.remove(_composeDraftKey);
+    } catch (_) {}
+  }
+
+  Future<void> saveComposeDraftFor(
+    String id,
+    Map<String, dynamic> draft,
+  ) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_composeDraftKeyFor(id), jsonEncode(draft));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> loadComposeDraftFor(String id) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_composeDraftKeyFor(id));
+      if (raw == null || raw.isEmpty) return null;
+      final m = jsonDecode(raw);
+      if (m is Map<String, dynamic>) return m;
+      return Map<String, dynamic>.from(m as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearComposeDraftFor(String id) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.remove(_composeDraftKeyFor(id));
+    } catch (_) {}
+  }
+}
+
+extension PrefsServiceAdmin on PrefsService {
+  Future<void> saveAdminToken(String token) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(PrefsService._keyAdminToken, token.trim());
+  }
+
+  Future<String> loadAdminToken() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(PrefsService._keyAdminToken) ?? '';
   }
 }

@@ -13,7 +13,7 @@ void main(List<String> arguments) async {
     ..addOption(
       'port',
       abbr: 'p',
-      defaultsTo: '9091',
+      defaultsTo: '9092',
       help: 'Port to run the debugger on',
     )
     ..addOption(
@@ -179,7 +179,7 @@ void _printUsage(ArgParser parser) {
   print(parser.usage);
   print('\nExamples:');
   print(
-    '  network_debugger                          # Default: port 9091, auto-open browser',
+    '  network_debugger                          # Default: port 9092 (UI), proxy on 9091, auto-open browser',
   );
   print('  network_debugger --port 8080              # Custom port');
   print(

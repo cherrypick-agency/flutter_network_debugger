@@ -22,6 +22,8 @@ class HeaderActions extends StatelessWidget {
     required this.themeMode,
     this.timelineVisible = true,
     required this.onToggleTimeline,
+    this.onOpenCompose,
+    this.onOpenBreakpoints,
   });
 
   final bool showFilters;
@@ -35,6 +37,8 @@ class HeaderActions extends StatelessWidget {
   final ThemeMode themeMode;
   final bool timelineVisible;
   final VoidCallback onToggleTimeline;
+  final VoidCallback? onOpenCompose;
+  final VoidCallback? onOpenBreakpoints;
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +154,18 @@ class HeaderActions extends StatelessWidget {
           tooltip: 'Settings',
           icon: const Icon(Icons.settings),
         ),
+        if (onOpenCompose != null)
+          IconButton(
+            onPressed: onOpenCompose,
+            tooltip: 'Compose',
+            icon: const Icon(Icons.playlist_add),
+          ),
+        if (onOpenBreakpoints != null)
+          IconButton(
+            onPressed: onOpenBreakpoints,
+            tooltip: 'Breakpoints',
+            icon: const Icon(Icons.bug_report),
+          ),
         if (onOpenIntegrations != null)
           IconButton(
             onPressed: onOpenIntegrations,

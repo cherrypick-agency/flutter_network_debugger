@@ -18,7 +18,9 @@ import (
 	"github.com/rs/zerolog"
 
 	"network-debugger/internal/adapters/storage/memory"
+	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	"network-debugger/internal/infrastructure/config"
+	dbpkg "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
@@ -107,6 +109,13 @@ func startAppServer(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: config.Config{CORSAllowOrigin: "*"}, Logger: &logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
+	// Поднимем временную SQLite, чтобы была доступна ProxySvc/ProxyRt
+	tmp := t.TempDir()
+	dbPath := tmp + "/test.db"
+	if gdb, err := dbpkg.NewSQLite(dbPath); err == nil {
+		_ = gdb.AutoMigrate(&proxyp.ProxyConfigModel{})
+		deps.DB = gdb
+	}
 	srv := httptest.NewServer(httpapi.NewRouterWithDeps(deps))
 	return srv, deps
 }

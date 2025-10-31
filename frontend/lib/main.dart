@@ -13,6 +13,7 @@ import 'features/inspector/application/stores/aggregate_store.dart';
 import 'features/inspector/application/stores/home_ui_store.dart';
 import 'features/inspector/presentation/widgets/details/details_tabs.dart';
 import 'features/inspector/presentation/widgets/timeline/timeline_block.dart';
+import 'features/inspector/presentation/widgets/quick_filters_bar.dart';
 import 'features/inspector/presentation/widgets/home/header_actions.dart';
 import 'features/filters/presentation/widgets/sessions_filters.dart';
 import 'features/filters/application/stores/sessions_filters_store.dart';
@@ -30,18 +31,21 @@ import 'features/hotkeys/presentation/hotkeys_settings_page.dart';
 import 'features/landing/presentation/pages/download_page.dart';
 import 'features/settings/presentation/settings_page.dart';
 import 'features/landing/presentation/pages/integrations_page.dart';
+import 'features/compose/presentation/pages/compose_page.dart';
 import 'core/hotkeys/hotkeys_service.dart';
 import 'core/utils/debouncer.dart';
 import 'features/common/notifications/notifications_overlay.dart';
+import 'features/breakpoints/presentation/widgets/breakpoints_dialog.dart';
 
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
+import 'theme/font_scale.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     setUrlStrategy(const HashUrlStrategy());
   }
-  await setupDI(baseUrl: 'http://localhost:9091');
+  await setupDI(baseUrl: 'http://localhost:9092');
   runApp(const MyApp());
 }
 
@@ -54,11 +58,19 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   ThemeMode _mode = ThemeMode.system;
   bool _themeToggled = false;
+  double _fontScale = 1.0;
 
   @override
   void initState() {
     super.initState();
     _loadTheme();
+    _loadFontScale();
+    FontScale.value.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _fontScale = FontScale.value.value;
+      });
+    });
   }
 
   Future<void> _loadTheme() async {
@@ -123,17 +135,37 @@ class _MyAppState extends State<MyApp> {
             theme: buildLightTheme(),
             darkTheme: buildDarkTheme(),
             themeMode: _mode,
+            builder: (context, child) {
+              final mq = MediaQuery.of(context);
+              // Применяем глобальный масштаб текста
+              return MediaQuery(
+                data: mq.copyWith(textScaler: TextScaler.linear(_fontScale)),
+                child: child!,
+              );
+            },
             routes: {
               '/hotkeys': (_) => const HotkeysSettingsPage(),
               '/settings': (_) => const SettingsPage(),
               '/download': (_) => const DownloadPage(),
               '/integrations': (_) => const IntegrationsPage(),
+              '/compose': (_) => const ComposePage(),
             },
             home: MyHomePage(onToggleTheme: _toggleTheme),
           );
         },
       ),
     );
+  }
+
+  Future<void> _loadFontScale() async {
+    try {
+      final s = await PrefsService().load();
+      final v = double.tryParse((s['fontScale'] ?? '1.0').toString()) ?? 1.0;
+      setState(() {
+        _fontScale = v;
+      });
+      FontScale.value.value = v;
+    } catch (_) {}
   }
 }
 
@@ -626,6 +658,19 @@ class _MyHomePageState extends State<MyHomePage> {
                                       context,
                                     ).pushNamed('/integrations');
                                   },
+                                  onOpenCompose: () {
+                                    Navigator.of(context).pushNamed('/compose');
+                                  },
+                                  onOpenBreakpoints: () async {
+                                    await showGeneralDialog(
+                                      context: context,
+                                      barrierDismissible: true,
+                                      barrierLabel: 'Breakpoints',
+                                      pageBuilder: (ctx, _, __) {
+                                        return const BreakpointsDialog();
+                                      },
+                                    );
+                                  },
                                   isRecording: ui.isRecording.value,
                                   onToggleRecording: () async {
                                     // Toggle on backend via capture API
@@ -694,6 +739,9 @@ class _MyHomePageState extends State<MyHomePage> {
                               );
                             },
                           ),
+                          const SizedBox(height: 6),
+                          // Быстрая панель фильтров по типам/статусам
+                          const QuickFiltersBar(),
                           const SizedBox(height: 8),
                           Observer(
                             builder: (_) {

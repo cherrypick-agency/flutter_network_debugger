@@ -46,13 +46,13 @@ func TestForwardProxy_AbsoluteURI_StealthOff_AndHopByHopStripped(t *testing.T) {
 	// Явно выключаем stealth, чтобы проверять, что заголовки выставляются
 	deps.Cfg.StealthHeaders = false
 
-	pURL, _ := url.Parse(app.URL)
-	conn := dialProxy(t, pURL.Host, 2*time.Second, 2*time.Second)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	conn := dialProxy(t, proxyHost, 2*time.Second, 2*time.Second)
 	defer conn.Close()
 
 	raw := strings.Join([]string{
 		"GET " + up.URL + "/hdr HTTP/1.1",
-		"Host: " + pURL.Host,
+		"Host: " + proxyHost,
 		"Connection: keep-alive",
 		"Proxy-Connection: keep-alive",
 		"Te: trailers",
@@ -88,13 +88,13 @@ func TestForwardProxy_AbsoluteURI_StealthOff_AndHopByHopStripped(t *testing.T) {
 }
 
 func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
-	pURL, _ := url.Parse(app.URL)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
 
 	// DNS error -> 502
-	conn1 := dialProxy(t, pURL.Host, 1*time.Second, 1*time.Second)
-	_, _ = conn1.Write([]byte("GET http://nonexistent.invalid/ HTTP/1.1\r\nHost: " + pURL.Host + "\r\n\r\n"))
+	conn1 := dialProxy(t, proxyHost, 1*time.Second, 1*time.Second)
+	_, _ = conn1.Write([]byte("GET http://nonexistent.invalid/ HTTP/1.1\r\nHost: " + proxyHost + "\r\n\r\n"))
 	br1 := bufio.NewReader(conn1)
 	line1, _ := br1.ReadString('\n')
 	_ = conn1.Close()
@@ -103,8 +103,8 @@ func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
 	}
 
 	// Connection refused -> 502
-	conn2 := dialProxy(t, pURL.Host, 1*time.Second, 1*time.Second)
-	_, _ = conn2.Write([]byte("GET http://127.0.0.1:1/ HTTP/1.1\r\nHost: " + pURL.Host + "\r\n\r\n"))
+	conn2 := dialProxy(t, proxyHost, 1*time.Second, 1*time.Second)
+	_, _ = conn2.Write([]byte("GET http://127.0.0.1:1/ HTTP/1.1\r\nHost: " + proxyHost + "\r\n\r\n"))
 	br2 := bufio.NewReader(conn2)
 	line2, _ := br2.ReadString('\n')
 	_ = conn2.Close()
@@ -126,8 +126,8 @@ func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
 			time.Sleep(2 * time.Second)
 		}
 	}()
-	conn3 := dialProxy(t, pURL.Host, 300*time.Millisecond, 1*time.Second)
-	_, _ = conn3.Write([]byte("GET http://" + ln.Addr().String() + "/ HTTP/1.1\r\nHost: " + pURL.Host + "\r\n\r\n"))
+	conn3 := dialProxy(t, proxyHost, 300*time.Millisecond, 1*time.Second)
+	_, _ = conn3.Write([]byte("GET http://" + ln.Addr().String() + "/ HTTP/1.1\r\nHost: " + proxyHost + "\r\n\r\n"))
 	br3 := bufio.NewReader(conn3)
 	_ = conn3.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 	if _, err := br3.ReadString('\n'); err == nil {
@@ -142,14 +142,13 @@ func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
 func TestForwardProxy_CONNECT_Tunnel_HTTPGet(t *testing.T) {
 	up, upURL := startUpstreamHTTP(t)
 	defer up.Close()
-	app, _ := startHTTPApp(t)
+	app, deps := startHTTPApp(t)
 	defer app.Close()
 
 	u, _ := url.Parse(upURL)
 	target := u.Host
-	pURL, _ := url.Parse(app.URL)
-
-	conn := dialProxy(t, pURL.Host, 2*time.Second, 2*time.Second)
+	proxyHost := ensureForwardProxyAddr(t, app, deps)
+	conn := dialProxy(t, proxyHost, 2*time.Second, 2*time.Second)
 	defer conn.Close()
 
 	// CONNECT

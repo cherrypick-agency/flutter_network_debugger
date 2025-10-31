@@ -318,8 +318,8 @@ The specified port is already occupied by another process.
 Try:
   • Use a different port: network_debugger --port 8080
   • Find and stop the process using the port
-  • On Unix: lsof -i :9091
-  • On Windows: netstat -ano | findstr :9091
+  • On Unix: lsof -i :9092
+  • On Windows: netstat -ano | findstr :9092
 
 Technical details: $error
 ''';

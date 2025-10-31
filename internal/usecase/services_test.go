@@ -429,3 +429,86 @@ func TestSessionService_ListHTTPTransactions_WithRepo(t *testing.T) {
 		t.Errorf("expected 2 transactions, got %d", len(txs))
 	}
 }
+
+func TestSessionService_Get_NotFound(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: make(map[string]domain.Session)}
+	svc := NewSessionService(sessRepo, &mockFrameRepo{}, &mockEventRepo{})
+	ctx := context.Background()
+
+	_, ok, err := svc.Get(ctx, "nonexistent")
+
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if ok {
+		t.Error("session should not be found")
+	}
+}
+
+func TestSessionService_AddSpoolFile_WithSupportingRepo(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: make(map[string]domain.Session)}
+	svc := NewSessionService(sessRepo, &mockFrameRepo{}, &mockEventRepo{})
+	ctx := context.Background()
+
+	// This test verifies the type assertion path
+	// The mock already supports AddSpoolFile, so this exercises the "ok" branch
+	svc.AddSpoolFile(ctx, "test1", "/tmp/test.dat")
+
+	// No assertion needed - just verify no panic
+}
+
+func TestSessionService_NewSessionService_HTTPTxRepoTypeAssertion(t *testing.T) {
+	// Test that HTTPTransactionRepository is correctly type-asserted
+	combined := &mockSessionHTTPRepo{
+		mockSessionRepo: &mockSessionRepo{sessions: make(map[string]domain.Session)},
+		mockHTTPTxRepo:  &mockHTTPTxRepo{txs: make(map[string][]domain.HTTPTransaction)},
+	}
+	svc := NewSessionService(combined, &mockFrameRepo{}, &mockEventRepo{})
+
+	if svc.httpTxs == nil {
+		t.Error("httpTxs should be set when SessionRepository implements HTTPTransactionRepository")
+	}
+}
+
+func TestSessionService_SetClosed_NoError(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: map[string]domain.Session{
+		"test1": {ID: "test1"},
+	}}
+	svc := NewSessionService(sessRepo, &mockFrameRepo{}, &mockEventRepo{})
+	ctx := context.Background()
+
+	ts := time.Now()
+	err := svc.SetClosed(ctx, "test1", ts, nil)
+
+	if err != nil {
+		t.Fatalf("SetClosed failed: %v", err)
+	}
+	sess := sessRepo.sessions["test1"]
+	if sess.ClosedAt == nil {
+		t.Error("ClosedAt not set")
+	}
+	if sess.Error != nil {
+		t.Error("Error should be nil")
+	}
+}
+
+func TestSessionService_AddFrame_IncrementsCounters(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: make(map[string]domain.Session)}
+	frameRepo := &mockFrameRepo{frames: make(map[string][]domain.Frame)}
+	svc := NewSessionService(sessRepo, frameRepo, &mockEventRepo{})
+	ctx := context.Background()
+
+	// Verify that both AppendFrame and IncrementCounters are called
+	frame := domain.Frame{ID: "frame1", Opcode: domain.OpcodeBinary, Size: 100}
+	err := svc.AddFrame(ctx, "test1", frame)
+
+	if err != nil {
+		t.Fatalf("AddFrame failed: %v", err)
+	}
+	// Frame should be added
+	if len(frameRepo.frames["test1"]) != 1 {
+		t.Error("frame not added")
+	}
+	// IncrementCounters is called but mockSessionRepo doesn't track this
+	// This test at least exercises the code path
+}

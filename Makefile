@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-ADDR ?= :9091
+ADDR ?= :9092
 
 # Build metadata
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)

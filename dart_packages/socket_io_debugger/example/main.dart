@@ -8,7 +8,7 @@ Future<void> main() async {
   final cfg = SocketIoDebugger.attach(
     baseUrl: 'https://chat.example.com',
     socketPath: '/socket.io',
-    proxyBaseUrl: 'http://localhost:9091',
+    proxyBaseUrl: 'http://localhost:9092',
     proxyHttpPath: '/wsproxy',
   );
 

@@ -65,8 +65,10 @@ func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, dire
 	}()
 
 	br := bufio.NewReader(src)
+	// Оборачиваем writer, чтобы равномерно замедлять запись
+	pacedDst := &wsPacedWriter{d: d, w: dst, dir: direction}
 	for {
-		opMain, msgSize, preview, rawText, bodyFile, err := d.forwardOneWSMessage(br, dst)
+		opMain, msgSize, preview, rawText, bodyFile, err := d.forwardOneWSMessage(br, pacedDst)
 		if err != nil {
 			if err != io.EOF {
 				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
@@ -571,4 +573,20 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// wsPacedWriter добавляет задержку записи пропорционально размеру, чтобы симулировать
+// ограничение пропускной способности для WS при ручной прокачке кадров.
+type wsPacedWriter struct {
+	d   *Deps
+	w   io.Writer
+	dir domain.Direction
+}
+
+func (p *wsPacedWriter) Write(b []byte) (int, error) {
+	// Пауза до записи, чтобы не перегонять лишнего за тик
+	if p != nil && p.d != nil && p.d.Cfg.ThrottleEnabled {
+		p.d.throttleSleepWS(p.dir, len(b))
+	}
+	return p.w.Write(b)
 }

@@ -26,7 +26,7 @@ Future<void> main() async {
 
   // Launch the debugger
   final debugger = await NetworkDebugger.launch(
-    port: 9091,
+    port: 9092,
     autoOpenBrowser: true,
     onProgress: (received, total) {
       final percent = ((received / total) * 100).toStringAsFixed(1);

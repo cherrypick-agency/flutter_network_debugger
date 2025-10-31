@@ -13,7 +13,9 @@ type responseDelayDTO struct {
 }
 
 type settingsDTO struct {
-	ResponseDelay responseDelayDTO `json:"responseDelay"`
+	ResponseDelay  responseDelayDTO `json:"responseDelay"`
+	FontScale      float64          `json:"fontScale,omitempty"`
+	HighlightTheme string           `json:"highlightTheme,omitempty"`
 }
 
 // handleV1Settings — простой рантайм-эндпоинт для чтения/записи настроек прокси.
@@ -22,18 +24,34 @@ func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rd := responseDelayDTO{}
-		if d.Cfg.ResponseDelayMinMs > 0 && d.Cfg.ResponseDelayMaxMs > 0 {
+		curMin := d.Cfg.ResponseDelayMinMs
+		curMax := d.Cfg.ResponseDelayMaxMs
+		curVal := d.Cfg.ResponseDelayMs
+		fs := 1.0
+		ht := ""
+		if d.Settings != nil {
+			if rs, err := d.Settings.Load(contextWithNoCancel()); err == nil {
+				curMin, curMax, curVal = rs.ResponseDelayMinMs, rs.ResponseDelayMaxMs, rs.ResponseDelayMs
+				if rs.FontScale > 0 {
+					fs = rs.FontScale
+				}
+				if rs.HighlightTheme != "" {
+					ht = rs.HighlightTheme
+				}
+			}
+		}
+		if curMin > 0 && curMax > 0 {
 			rd.Enabled = true
-			rd.Value = strconv.Itoa(d.Cfg.ResponseDelayMinMs) + "-" + strconv.Itoa(d.Cfg.ResponseDelayMaxMs)
-		} else if d.Cfg.ResponseDelayMs > 0 {
+			rd.Value = strconv.Itoa(curMin) + "-" + strconv.Itoa(curMax)
+		} else if curVal > 0 {
 			rd.Enabled = true
-			rd.Value = strconv.Itoa(d.Cfg.ResponseDelayMs)
+			rd.Value = strconv.Itoa(curVal)
 		} else {
 			rd.Enabled = false
 			rd.Value = ""
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(settingsDTO{ResponseDelay: rd})
+		_ = json.NewEncoder(w).Encode(settingsDTO{ResponseDelay: rd, FontScale: fs, HighlightTheme: ht})
 		return
 	case http.MethodPost:
 		var in settingsDTO
@@ -77,6 +95,26 @@ func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Persist to DB if available; сохраним fontScale и highlightTheme, если переданы
+		if d.Settings != nil {
+			cur, _ := d.Settings.Load(contextWithNoCancel())
+			cur.ResponseDelayMs = d.Cfg.ResponseDelayMs
+			cur.ResponseDelayMinMs = d.Cfg.ResponseDelayMinMs
+			cur.ResponseDelayMaxMs = d.Cfg.ResponseDelayMaxMs
+			if in.FontScale > 0 {
+				cur.FontScale = in.FontScale
+			}
+			if strings.TrimSpace(in.HighlightTheme) != "" {
+				cur.HighlightTheme = strings.TrimSpace(in.HighlightTheme)
+			}
+			cur.ThrottleEnabled = d.Cfg.ThrottleEnabled
+			cur.ThrottleDownKbps = d.Cfg.ThrottleDownKbps
+			cur.ThrottleUpKbps = d.Cfg.ThrottleUpKbps
+			cur.ThrottlePacketLoss = d.Cfg.ThrottlePacketLoss
+			cur.ThrottleOffline = d.Cfg.ThrottleOffline
+			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), cur)
+		}
+
 		// Вернём актуальные значения аналогично GET
 		w.Header().Set("Content-Type", "application/json")
 		cur := settingsDTO{}
@@ -89,6 +127,16 @@ func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 		} else {
 			cur.ResponseDelay.Enabled = false
 			cur.ResponseDelay.Value = ""
+		}
+		if d.Settings != nil {
+			if rs, err := d.Settings.Load(contextWithNoCancel()); err == nil {
+				if rs.FontScale > 0 {
+					cur.FontScale = rs.FontScale
+				}
+				if rs.HighlightTheme != "" {
+					cur.HighlightTheme = rs.HighlightTheme
+				}
+			}
 		}
 		_ = json.NewEncoder(w).Encode(cur)
 		return

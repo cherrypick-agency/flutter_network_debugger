@@ -85,6 +85,35 @@ class HotkeysService {
       ),
     );
 
+    // Breakpoints editor
+    _register(
+      HotkeyBinding(
+        id: 'breakpoints.applyContinue',
+        label: 'Breakpoints: Apply and Continue',
+        defaultShortcut: const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          meta: true,
+        ),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'breakpoints.applyContinue.ctrl',
+        label: 'Breakpoints: Apply and Continue (Ctrl for non-macOS)',
+        defaultShortcut: const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          control: true,
+        ),
+      ),
+    );
+    _register(
+      HotkeyBinding(
+        id: 'breakpoints.cancel',
+        label: 'Breakpoints: Cancel',
+        defaultShortcut: const SingleActivator(LogicalKeyboardKey.escape),
+      ),
+    );
+
     await _loadFromPrefs();
   }
 

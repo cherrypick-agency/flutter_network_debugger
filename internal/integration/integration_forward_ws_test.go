@@ -24,8 +24,8 @@ func TestForwardProxy_WSPlain(t *testing.T) {
 	_ = deps
 
 	// Dial через HTTP forward‑proxy
-	proxyURL, _ := url.Parse(appSrv.URL)
-	// httptest.Server URL: http://127.0.0.1:xxxxx
+	proxyHost := ensureForwardProxyAddr(t, appSrv, deps)
+	proxyURL := &url.URL{Scheme: "http", Host: proxyHost}
 	// gorilla/websocket Dialer.Proxy поддерживает http‑прокси
 	d := *websocket.DefaultDialer
 	d.Proxy = http.ProxyURL(proxyURL)
@@ -55,10 +55,11 @@ func TestForwardProxy_WSLargeAndBackpressure(t *testing.T) {
 	echoSrv, echoWS := startEchoWSServer(t)
 	defer echoSrv.Close()
 
-	appSrv, _ := startAppServer(t)
+	appSrv, deps := startAppServer(t)
 	defer appSrv.Close()
 
-	proxyURL, _ := url.Parse(appSrv.URL)
+	proxyHost := ensureForwardProxyAddr(t, appSrv, deps)
+	proxyURL := &url.URL{Scheme: "http", Host: proxyHost}
 	d := *websocket.DefaultDialer
 	d.Proxy = http.ProxyURL(proxyURL)
 
@@ -107,10 +108,11 @@ func TestForwardProxy_WSPingPongAndClose(t *testing.T) {
 	echoSrv, echoWS := startEchoWSServer(t)
 	defer echoSrv.Close()
 
-	appSrv, _ := startAppServer(t)
+	appSrv, deps := startAppServer(t)
 	defer appSrv.Close()
 
-	proxyURL, _ := url.Parse(appSrv.URL)
+	proxyHost := ensureForwardProxyAddr(t, appSrv, deps)
+	proxyURL := &url.URL{Scheme: "http", Host: proxyHost}
 	d := *websocket.DefaultDialer
 	d.Proxy = http.ProxyURL(proxyURL)
 

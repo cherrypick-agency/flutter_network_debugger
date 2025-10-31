@@ -96,7 +96,7 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
   ]);
 
   // 4) Enable HTTP/HTTPS proxy for every service (call networksetup per service)
-  final port = _tryParsePort(baseUrl) ?? 9091;
+  final port = _tryParsePort(baseUrl) ?? 9092;
   final servicesRes = await Process.run('bash', [
     '-lc',
     'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',

@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.8.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.2.2
-  web_socket_channel: ^2.4.5
+  web_socket_channel: ^3.0.3
   shared_preferences: ^2.3.2
   # Networking & DI & State
   dio: ^5.7.0
@@ -51,6 +51,13 @@ dependencies:
     path: modules/modules_basis
   json_tree_viewer: ^0.0.2
   webview_flutter: ^4.13.0
+  file_picker: ^10.0.0
+  desktop_drop: ^0.7.0
+  flutter_dropzone: 4.2.1
+  flutter_code_editor: ^0.3.5
+  highlight: ^0.7.0
+  highlight_selectable: ^0.1.3
+  archive: ^3.6.1
 
 dependency_overrides:
   flexible_tree_view:

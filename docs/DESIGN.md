@@ -50,4 +50,4 @@ Risks/Workarounds:
 
 Build/Run:
 - Web frontend embedded in binary (go:embed). Single binary runs API and SPA.
-- Default port: `ADDR=:9091`. Static and API routed (API before static).
+- Default UI port: `ADDR=:9092`. Static and API routed (API before static). Forward‑proxy runs on `:9091` by default.

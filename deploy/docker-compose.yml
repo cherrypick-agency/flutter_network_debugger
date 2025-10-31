@@ -5,7 +5,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     ports:
-      - "9091:9091"
+      - "9092:9092"  # UI
+      - "9091:9091"  # Forward proxy
     environment:
       - ADDR=:8080
       - LOG_LEVEL=info

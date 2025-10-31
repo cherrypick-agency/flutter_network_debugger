@@ -13,7 +13,7 @@ dart run example/main.dart
 This will:
 1. Display platform and cache information
 2. Download the debugger binary (if not cached)
-3. Launch the debugger on port 9091
+3. Launch the debugger on port 9092 (UI); proxy is on 9091
 4. Keep it running for 30 seconds
 5. Stop the debugger gracefully
 

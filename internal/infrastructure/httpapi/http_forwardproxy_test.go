@@ -18,7 +18,7 @@ func TestWithForwardProxy_AbsoluteURI_GET(t *testing.T) {
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
 	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 512, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
-	h := NewRouterWithDeps(d)
+	h := withForwardProxy(d, NewRouterWithoutForwardProxy(d))
 	rr := httptest.NewRecorder()
 	// absolute-URI request triggers forward proxy
 	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/echo", nil)
