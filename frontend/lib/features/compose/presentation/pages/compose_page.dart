@@ -50,7 +50,6 @@ class _ComposePageState extends State<ComposePage> {
   ComposeTemplateDTO? _lastSentTpl;
   bool _sending = false;
   bool _dirty = false;
-  bool _autoSetHeaders = true;
   final TextEditingController _libSearchCtrl = TextEditingController();
   final Debouncer _autosave = Debouncer(const Duration(milliseconds: 900));
   int? _maxUploadMB;
@@ -307,295 +306,366 @@ class _ComposePageState extends State<ComposePage> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
-          appBar: AppBar(title: Text('Compose Request${_dirty ? ' *' : ''}')),
-          body: Row(
-            children: [
-              // Left: library placeholder (v1 minimal)
-              Container(
-                width: 280,
-                decoration: BoxDecoration(
-                  border: Border(right: BorderSide(color: cs.outlineVariant)),
-                ),
-                child: FutureBuilder(
-                  future: sl<ComposeStore>().loadLibrary(),
-                  builder: (ctx, _) {
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: TextField(
-                            controller: _libSearchCtrl,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              labelText: 'Search',
-                              prefixIcon: Icon(Icons.search, size: 16),
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        Expanded(
-                          child: ComposeLibraryTree(
-                            store: sl<ComposeStore>(),
-                            onSelect: (tpl) async {
-                              await _maybeApplyTemplate(tpl);
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+            inputDecorationTheme: InputDecorationTheme(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceVariant,
+              labelStyle: const TextStyle(fontSize: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  width: 1,
                 ),
               ),
-              Expanded(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  width: 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.error,
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+          child: Scaffold(
+            appBar: AppBar(title: Text('Compose Request${_dirty ? ' *' : ''}')),
+            body: Row(
+              children: [
+                // Left: library placeholder (v1 minimal)
+                Container(
+                  width: 280,
+                  decoration: BoxDecoration(
+                    border: Border(right: BorderSide(color: cs.outlineVariant)),
+                  ),
+                  child: FutureBuilder(
+                    future: sl<ComposeStore>().loadLibrary(),
+                    builder: (ctx, _) {
+                      return Column(
                         children: [
-                          // Method
-                          SizedBox(
-                            width: 88,
-                            child: DropdownButtonFormField<String>(
-                              value: _method,
-                              onChanged: (v) {
-                                setState(() => _method = v ?? 'GET');
-                                _markDirty();
-                                _scheduleAutosave();
-                              },
-                              items:
-                                  const [
-                                        'GET',
-                                        'POST',
-                                        'PUT',
-                                        'DELETE',
-                                        'PATCH',
-                                        'HEAD',
-                                        'OPTIONS',
-                                      ]
-                                      .map(
-                                        (m) => DropdownMenuItem(
-                                          value: m,
-                                          child: Text(m),
-                                        ),
-                                      )
-                                      .toList(),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // URL
-                          Expanded(
-                            child: TextFormField(
-                              controller: _urlCtrl,
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: TextField(
+                              controller: _libSearchCtrl,
                               decoration: const InputDecoration(
-                                labelText: 'URL',
-                                hintText: 'https://api.example.com/v1',
+                                isDense: true,
+                                labelText: 'Search',
+                                prefixIcon: Icon(Icons.search, size: 16),
                               ),
-                              onChanged: (_) {
-                                setState(() {
-                                  _dirty = true;
-                                });
-                                _scheduleAutosave();
-                              },
+                              onChanged: (_) => setState(() {}),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Copy cURL',
-                                onPressed: _copyCurl,
-                                icon: const Icon(Icons.copy_all),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton.icon(
-                            onPressed: _sending ? null : _onSend,
-                            icon: const Icon(Icons.send),
-                            label:
-                                _sending
-                                    ? Row(
-                                      children: [
-                                        const SizedBox(
-                                          height: 16,
-                                          width: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text('Sending...'),
-                                      ],
-                                    )
-                                    : const Text('Send'),
+                          Expanded(
+                            child: ComposeLibraryTree(
+                              store: sl<ComposeStore>(),
+                              onSelect: (tpl) async {
+                                await _maybeApplyTemplate(tpl);
+                              },
+                            ),
                           ),
                         ],
-                      ),
-                    ),
-                    Expanded(
-                      child: DefaultTabController(
-                        length: 4,
-                        child: Column(
+                      );
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
                           children: [
-                            const TabBar(
-                              tabs: [
-                                Tab(text: 'Headers'),
-                                Tab(text: 'Query'),
-                                Tab(text: 'Body'),
-                                Tab(text: 'Auth'),
+                            // Method
+                            SizedBox(
+                              width: 110,
+                              child: DropdownButtonFormField<String>(
+                                value: _method,
+                                onChanged: (v) {
+                                  setState(() => _method = v ?? 'GET');
+                                  _markDirty();
+                                  _scheduleAutosave();
+                                },
+                                isDense: true,
+                                isExpanded: true,
+                                iconSize: 16,
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium?.copyWith(fontSize: 12),
+                                items:
+                                    const [
+                                          'GET',
+                                          'POST',
+                                          'PUT',
+                                          'DELETE',
+                                          'PATCH',
+                                          'HEAD',
+                                          'OPTIONS',
+                                        ]
+                                        .map(
+                                          (m) => DropdownMenuItem(
+                                            value: m,
+                                            child: Text(m),
+                                          ),
+                                        )
+                                        .toList(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // URL
+                            Expanded(
+                              child: TextFormField(
+                                controller: _urlCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'URL',
+                                  hintText: 'https://api.example.com/v1',
+                                ),
+                                onChanged: (_) {
+                                  setState(() {
+                                    _dirty = true;
+                                  });
+                                  _scheduleAutosave();
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Row(
+                              children: [
+                                IconButton(
+                                  tooltip: 'Copy cURL',
+                                  onPressed: _copyCurl,
+                                  icon: const Icon(Icons.copy_all),
+                                ),
                               ],
                             ),
-                            Expanded(
-                              child: TabBarView(
-                                children: [
-                                  Column(
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        child: Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            _quickHeaderButton(
-                                              'Content-Type',
-                                              'application/json',
+                            const SizedBox(width: 8),
+                            FilledButton.icon(
+                              onPressed: _sending ? null : _onSend,
+                              icon: const Icon(Icons.send),
+                              label:
+                                  _sending
+                                      ? Row(
+                                        children: [
+                                          const SizedBox(
+                                            height: 16,
+                                            width: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
                                             ),
-                                            _quickHeaderButton(
-                                              'Authorization',
-                                              'Bearer ',
-                                            ),
-                                            _quickHeaderButton(
-                                              'Accept',
-                                              'application/json',
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: KeyValueEditor(
-                                          key: const ValueKey('headers'),
-                                          items: _headers,
-                                          onChanged: (list) {
-                                            setState(() {
-                                              _dirty = true;
-                                            });
-                                            _scheduleAutosave();
-                                          },
-                                          labelKey: 'Header',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  KeyValueEditor(
-                                    key: const ValueKey('query'),
-                                    items: _query,
-                                    onChanged: (list) {
-                                      setState(() {
-                                        _dirty = true;
-                                      });
-                                      _scheduleAutosave();
-                                    },
-                                    labelKey: 'Param',
-                                  ),
-                                  BodyEditor(
-                                    mode: _bodyMode,
-                                    onModeChanged: (v) {
-                                      _markDirty();
-                                      setState(() {
-                                        _bodyMode = v;
-                                      });
-                                      _ensureContentType();
-                                      _scheduleAutosave();
-                                    },
-                                    rawCtrl: _rawCtrl,
-                                    jsonCtrl: _jsonCtrl,
-                                    form: _form,
-                                    multipart: _multipart,
-                                    maxUploadMB: _maxUploadMB,
-                                    autoContentType: _autoSetHeaders,
-                                    onAutoContentTypeChanged: (v) {
-                                      setState(() => _autoSetHeaders = v);
-                                    },
-                                    onFormChanged: (_) {
-                                      _markDirty();
-                                      _scheduleAutosave();
-                                    },
-                                    onMultipartChanged: (_) {
-                                      _markDirty();
-                                      _scheduleAutosave();
-                                    },
-                                  ),
-                                  AuthEditor(
-                                    authType: _authType,
-                                    onAuthTypeChanged: (v) {
-                                      setState(() => _authType = v);
-                                      _markDirty();
-                                      _scheduleAutosave();
-                                    },
-                                    basicUser: _basicUser,
-                                    basicPass: _basicPass,
-                                    bearer: _bearer,
-                                    apiKeyHeader: _apiKeyHeader,
-                                    apiKey: _apiKey,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Expanded(
-                              child: ComposeHttpDetails(
-                                data: _lastResponse,
-                                template: _lastSentTpl,
-                                onOpenSession: (id) {
-                                  try {
-                                    // ignore: discarded_futures
-                                    sl<HomeUiStore>().setSelectedSessionId(id);
-                                  } catch (_) {}
-                                  Navigator.of(context).pop();
-                                },
-                              ),
-                            ),
-                            SizedBox(
-                              height: 160,
-                              child: FutureBuilder<Map<String, dynamic>>(
-                                future: sl<ComposeRepository>().history(
-                                  limit: 20,
-                                ),
-                                builder: (ctx, snap) {
-                                  final items =
-                                      (snap.data?['items'] as List?)
-                                          ?.cast<Map>()
-                                          .map((e) => e.cast<String, dynamic>())
-                                          .toList() ??
-                                      const <Map<String, dynamic>>[];
-                                  return ComposeHistoryList(
-                                    items: items,
-                                    onTapTemplate: (tid) {
-                                      final t =
-                                          sl<ComposeStore>().requestsById[tid];
-                                      if (t != null) {
-                                        setState(() {
-                                          _applyTemplate(t);
-                                        });
-                                      }
-                                    },
-                                  );
-                                },
-                              ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text('Sending...'),
+                                        ],
+                                      )
+                                      : const Text('Send'),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                      Expanded(
+                        child: DefaultTabController(
+                          length: 4,
+                          child: Column(
+                            children: [
+                              const TabBar(
+                                tabs: [
+                                  Tab(text: 'Headers'),
+                                  Tab(text: 'Query'),
+                                  Tab(text: 'Body'),
+                                  Tab(text: 'Auth'),
+                                ],
+                              ),
+                              Expanded(
+                                child: TabBarView(
+                                  children: [
+                                    Column(
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 8,
+                                                  right: 8,
+                                                ),
+                                                child: Text(
+                                                  'Add:',
+                                                  style:
+                                                      Theme.of(
+                                                        context,
+                                                      ).textTheme.bodySmall,
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children: [
+                                                    _quickHeaderButton(
+                                                      'Content-Type',
+                                                      'application/json',
+                                                    ),
+                                                    _quickHeaderButton(
+                                                      'Authorization',
+                                                      'Bearer ',
+                                                    ),
+                                                    _quickHeaderButton(
+                                                      'Accept',
+                                                      'application/json',
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: KeyValueEditor(
+                                            key: const ValueKey('headers'),
+                                            items: _headers,
+                                            onChanged: (list) {
+                                              setState(() {
+                                                _dirty = true;
+                                              });
+                                              _scheduleAutosave();
+                                            },
+                                            labelKey: 'Header',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    KeyValueEditor(
+                                      key: const ValueKey('query'),
+                                      items: _query,
+                                      onChanged: (list) {
+                                        setState(() {
+                                          _dirty = true;
+                                        });
+                                        _scheduleAutosave();
+                                      },
+                                      labelKey: 'Param',
+                                    ),
+                                    BodyEditor(
+                                      mode: _bodyMode,
+                                      onModeChanged: (v) {
+                                        _markDirty();
+                                        setState(() {
+                                          _bodyMode = v;
+                                        });
+                                        _ensureContentType();
+                                        _scheduleAutosave();
+                                      },
+                                      rawCtrl: _rawCtrl,
+                                      jsonCtrl: _jsonCtrl,
+                                      form: _form,
+                                      multipart: _multipart,
+                                      maxUploadMB: _maxUploadMB,
+                                      onFormChanged: (_) {
+                                        _markDirty();
+                                        _scheduleAutosave();
+                                      },
+                                      onMultipartChanged: (_) {
+                                        _markDirty();
+                                        _scheduleAutosave();
+                                      },
+                                    ),
+                                    AuthEditor(
+                                      authType: _authType,
+                                      onAuthTypeChanged: (v) {
+                                        setState(() => _authType = v);
+                                        _markDirty();
+                                        _scheduleAutosave();
+                                      },
+                                      basicUser: _basicUser,
+                                      basicPass: _basicPass,
+                                      bearer: _bearer,
+                                      apiKeyHeader: _apiKeyHeader,
+                                      apiKey: _apiKey,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              Expanded(
+                                child: ComposeHttpDetails(
+                                  data: _lastResponse,
+                                  template: _lastSentTpl,
+                                  onOpenSession: (id) {
+                                    try {
+                                      // ignore: discarded_futures
+                                      sl<HomeUiStore>().setSelectedSessionId(
+                                        id,
+                                      );
+                                    } catch (_) {}
+                                    Navigator.of(context).pop();
+                                  },
+                                ),
+                              ),
+                              SizedBox(
+                                height: 160,
+                                child: FutureBuilder<Map<String, dynamic>>(
+                                  future: sl<ComposeRepository>().history(
+                                    limit: 20,
+                                  ),
+                                  builder: (ctx, snap) {
+                                    final items =
+                                        (snap.data?['items'] as List?)
+                                            ?.cast<Map>()
+                                            .map(
+                                              (e) => e.cast<String, dynamic>(),
+                                            )
+                                            .toList() ??
+                                        const <Map<String, dynamic>>[];
+                                    return ComposeHistoryList(
+                                      items: items,
+                                      onTapTemplate: (tid) {
+                                        final t =
+                                            sl<ComposeStore>()
+                                                .requestsById[tid];
+                                        if (t != null) {
+                                          setState(() {
+                                            _applyTemplate(t);
+                                          });
+                                        }
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -663,7 +733,6 @@ class _ComposePageState extends State<ComposePage> {
   }
 
   void _ensureContentType() {
-    if (!_autoSetHeaders) return;
     final hasCT = _headers.any((h) => h.key.toLowerCase() == 'content-type');
     if (hasCT) return;
     String? v;
@@ -728,19 +797,27 @@ class _ComposePageState extends State<ComposePage> {
   }
 
   Widget _quickHeaderButton(String key, String valueTemplate) {
+    // Hide button if header already exists
+    final exists = _headers.any(
+      (e) => e.key.toLowerCase() == key.toLowerCase(),
+    );
+    if (exists) {
+      return const SizedBox.shrink();
+    }
+
     return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
       onPressed: () {
-        final idx = _headers.indexWhere(
-          (e) => e.key.toLowerCase() == key.toLowerCase(),
-        );
-        if (idx < 0) {
-          setState(() {
-            _headers.add(KvPair(key, valueTemplate));
-            _dirty = true;
-          });
-        }
+        setState(() {
+          _headers.add(KvPair(key, valueTemplate));
+          _dirty = true;
+        });
       },
-      child: Text(key),
+      child: Text(key, style: const TextStyle(fontSize: 12)),
     );
   }
 

@@ -202,6 +202,80 @@ paths:
       responses:
         '204': { description: No Content }
 
+  /_api/v1/mapping/config:
+    get:
+      summary: Get Mapping feature config
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Update Mapping feature config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                uploadMaxMB: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /_api/v1/mapping/rules:
+    get:
+      summary: List mapping rules
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Upsert mapping rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /_api/v1/mapping/rules/reorder:
+    post:
+      summary: Reorder mapping rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { type: string }
+      responses:
+        '204': { description: No Content }
+
+  /_api/v1/mapping/rules/{id}:
+    delete:
+      summary: Delete mapping rule by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+
+  /_api/v1/mapping/upload:
+    post:
+      summary: Upload file for Map Local (Web)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200': { description: OK }
+
 components:
   schemas:
     InterceptConfig:

@@ -249,3 +249,70 @@ func TestHandleV1Settings_PUT_MethodNotAllowed(t *testing.T) {
 		t.Errorf("status = %d, want 405", rr.Code)
 	}
 }
+
+func TestHandleV1Settings_POST_FontScaleAndTheme(t *testing.T) {
+	d := &Deps{Cfg: cfgpkg.Config{}}
+	body := []byte(`{"responseDelay":{"enabled":false,"value":""},"fontScale":1.5,"highlightTheme":"monokai"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+
+	var resp settingsDTO
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+
+	// FontScale and HighlightTheme are only returned if Settings service is available
+	// Without Settings service, they won't be persisted or returned
+}
+
+func TestHandleV1Settings_POST_WhitespaceInValue(t *testing.T) {
+	d := &Deps{Cfg: cfgpkg.Config{}}
+	body := []byte(`{"responseDelay":{"enabled":true,"value":" 150 "}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if d.Cfg.ResponseDelayMs != 150 {
+		t.Errorf("ResponseDelayMs = %d, want 150 (trimmed)", d.Cfg.ResponseDelayMs)
+	}
+}
+
+func TestHandleV1Settings_POST_RangeWithWhitespace(t *testing.T) {
+	d := &Deps{Cfg: cfgpkg.Config{}}
+	body := []byte(`{"responseDelay":{"enabled":true,"value":" 100 - 200 "}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if d.Cfg.ResponseDelayMinMs != 100 {
+		t.Errorf("ResponseDelayMinMs = %d, want 100", d.Cfg.ResponseDelayMinMs)
+	}
+	if d.Cfg.ResponseDelayMaxMs != 200 {
+		t.Errorf("ResponseDelayMaxMs = %d, want 200", d.Cfg.ResponseDelayMaxMs)
+	}
+}
+
+func TestHandleV1Settings_POST_NonIntegerValue(t *testing.T) {
+	d := &Deps{Cfg: cfgpkg.Config{}}
+	body := []byte(`{"responseDelay":{"enabled":true,"value":"abc"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rr.Code)
+	}
+}

@@ -85,9 +85,7 @@ type Config struct {
 	InterceptURLContains  []string
 	InterceptContentTypes []string
 
-	// Compose/Request Builder storage and limits
-	ComposeLibraryPath string
-	ComposeHistoryPath string
+	// Compose/Request Builder limits
 	ComposeMaxUploadMB int
 }
 
@@ -249,8 +247,6 @@ func FromEnv() Config {
 	}
 
 	// Compose defaults
-	cfg.ComposeLibraryPath = getEnv("COMPOSE_LIBRARY_PATH", filepathJoinSafe("data", "compose_library.json"))
-	cfg.ComposeHistoryPath = getEnv("COMPOSE_HISTORY_PATH", filepathJoinSafe("data", "compose_history.json"))
 	cfg.ComposeMaxUploadMB = getEnvInt("COMPOSE_MAX_UPLOAD_MB", 10)
 	return cfg
 }

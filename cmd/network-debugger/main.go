@@ -16,6 +16,7 @@ import (
 
 	"network-debugger/internal/adapters/storage/memory"
 	compp "network-debugger/internal/features/compose/infrastructure/persistence"
+	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	setp "network-debugger/internal/features/settings/infrastructure/persistence"
 	cfgpkg "network-debugger/internal/infrastructure/config"
@@ -40,19 +41,30 @@ func main() {
 
 	// Init SQLite (GORM) — будет использовано фичами (settings/compose)
 	if dbPath := dbinfra.PathFromEnv(); dbPath != "" {
+		// detect first-run db file creation (best effort)
+		created := false
+		if !strings.HasPrefix(dbPath, "file:") && !strings.Contains(dbPath, ":memory") {
+			if _, statErr := os.Stat(dbPath); os.IsNotExist(statErr) {
+				created = true
+			}
+		}
 		if gdb, err := dbinfra.NewSQLite(dbPath); err != nil {
 			logger.Error().Err(err).Str("path", dbPath).Msg("db init failed")
 		} else {
 			deps.DB = gdb
 			// миграции фич
 			if cfg.DevMode {
-				if err := gdb.AutoMigrate(&setp.RuntimeSettingsModel{}, &setp.ThrottleProfileModel{}, &compp.ComposeLibraryModel{}, &compp.ComposeHistoryEntryModel{}, &proxyp.ProxyConfigModel{}); err != nil {
+				if err := gdb.AutoMigrate(&setp.RuntimeSettingsModel{}, &setp.ThrottleProfileModel{}, &compp.ComposeLibraryModel{}, &compp.ComposeHistoryEntryModel{}, &proxyp.ProxyConfigModel{}, &mappingp.MapRuleModel{}); err != nil {
 					logger.Error().Err(err).Msg("db automigrate failed")
 				}
 			} else {
 				logger.Info().Msg("auto-migrate disabled (non-dev). Apply SQL migrations via goose/migrate in CI/CD")
 			}
-			logger.Info().Str("db", dbPath).Msg("db connected (sqlite)")
+			if created {
+				logger.Info().Str("db", dbPath).Msg("db not found, created new (sqlite)")
+			} else {
+				logger.Info().Str("db", dbPath).Msg("db connected (sqlite)")
+			}
 		}
 	}
 	// init MITM (generate default CA if paths are not provided)

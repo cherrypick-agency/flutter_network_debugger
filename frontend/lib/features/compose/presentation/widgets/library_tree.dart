@@ -50,7 +50,43 @@ class _CollectionNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ExpansionTile(
-      title: Text(collection.name),
+      title: Row(
+        children: [
+          Expanded(child: Text(collection.name)),
+          Builder(
+            builder: (context) {
+              final vd = const VisualDensity(horizontal: -4, vertical: -4);
+              return IconButton(
+                tooltip: 'New folder',
+                icon: const Icon(Icons.add, size: 18),
+                visualDensity: vd,
+                onPressed: () async {
+                  final name = await _promptText(
+                    context,
+                    title: 'New folder name',
+                  );
+                  if (name == null || name.isEmpty) return;
+                  final repo = sl<ComposeRepository>();
+                  final root = _folderToMap(collection.root);
+                  _folderAdd(root, collection.root.id, {
+                    'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
+                    'name': name,
+                    'requests': <String>[],
+                    'folders': <Map<String, dynamic>>[],
+                  });
+                  await repo.upsertCollection({
+                    'id': collection.id,
+                    'name': collection.name,
+                    'root': root,
+                  });
+                  await store.loadLibrary();
+                },
+              );
+            },
+          ),
+          _CollectionMenu(collection: collection, store: store),
+        ],
+      ),
       children: [
         _FolderNode(
           collectionId: collection.id,
@@ -88,7 +124,47 @@ class _FolderNode extends StatelessWidget {
           return name.toLowerCase().contains(q);
         }).toList();
     return ExpansionTile(
-      title: Text(folder.name),
+      title: Row(
+        children: [
+          Expanded(child: Text(folder.name)),
+          Builder(
+            builder: (context) {
+              final vd = const VisualDensity(horizontal: -4, vertical: -4);
+              return IconButton(
+                tooltip: 'New subfolder',
+                icon: const Icon(Icons.add, size: 18),
+                visualDensity: vd,
+                onPressed: () async {
+                  final name = await _promptText(
+                    context,
+                    title: 'New folder name',
+                  );
+                  if (name == null || name.isEmpty) return;
+                  final repo = sl<ComposeRepository>();
+                  final col = store.collections.firstWhere(
+                    (c) => c.id == collectionId,
+                    orElse: () => store.collections.first,
+                  );
+                  final root = _folderToMap(col.root);
+                  _folderAdd(root, folder.id, {
+                    'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
+                    'name': name,
+                    'requests': <String>[],
+                    'folders': <Map<String, dynamic>>[],
+                  });
+                  await repo.upsertCollection({
+                    'id': col.id,
+                    'name': col.name,
+                    'root': root,
+                  });
+                  await store.loadLibrary();
+                },
+              );
+            },
+          ),
+          _FolderMenu(collectionId: collectionId, folder: folder, store: store),
+        ],
+      ),
       children: [
         // Drop area at top -> move to top of this folder
         _DropSpacer(
@@ -394,6 +470,251 @@ class _RequestMenu extends StatelessWidget {
           ],
     );
   }
+}
+
+class _CollectionMenu extends StatelessWidget {
+  const _CollectionMenu({required this.collection, required this.store});
+  final ComposeCollectionModel collection;
+  final ComposeStore store;
+  @override
+  Widget build(BuildContext context) {
+    final vd = const VisualDensity(horizontal: -4, vertical: -4);
+    return PopupMenuButton<String>(
+      tooltip: 'Collection',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 160),
+      itemBuilder:
+          (ctx) => const [
+            PopupMenuItem(value: 'new_folder', child: Text('New folder')),
+            PopupMenuItem(value: 'rename', child: Text('Rename collection')),
+            PopupMenuItem(value: 'delete', child: Text('Delete collection')),
+          ],
+      onSelected: (v) async {
+        final repo = sl<ComposeRepository>();
+        if (v == 'new_folder') {
+          final name = await _promptText(context, title: 'New folder name');
+          if (name == null || name.isEmpty) return;
+          final root = _folderToMap(collection.root);
+          _folderAdd(root, collection.root.id, {
+            'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
+            'name': name,
+            'requests': <String>[],
+            'folders': <Map<String, dynamic>>[],
+          });
+          final body = {
+            'id': collection.id,
+            'name': collection.name,
+            'root': root,
+          };
+          await repo.upsertCollection(body);
+          await store.loadLibrary();
+        }
+        if (v == 'rename') {
+          final name = await _promptText(
+            context,
+            title: 'Rename collection',
+            initial: collection.name,
+          );
+          if (name == null || name.isEmpty) return;
+          final body = {
+            'id': collection.id,
+            'name': name,
+            'root': _folderToMap(collection.root),
+          };
+          await repo.upsertCollection(body);
+          await store.loadLibrary();
+        }
+        if (v == 'delete') {
+          final ok = await _confirm(context, 'Delete collection?');
+          if (ok != true) return;
+          await repo.deleteCollection(collection.id);
+          await store.loadLibrary();
+        }
+      },
+      child: IconButton(
+        icon: const Icon(Icons.more_vert, size: 18),
+        visualDensity: vd,
+        onPressed: null,
+      ),
+    );
+  }
+}
+
+class _FolderMenu extends StatelessWidget {
+  const _FolderMenu({
+    required this.collectionId,
+    required this.folder,
+    required this.store,
+  });
+  final String collectionId;
+  final ComposeFolderModel folder;
+  final ComposeStore store;
+  @override
+  Widget build(BuildContext context) {
+    final vd = const VisualDensity(horizontal: -4, vertical: -4);
+    return PopupMenuButton<String>(
+      tooltip: 'Folder',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 160),
+      itemBuilder:
+          (ctx) => const [
+            PopupMenuItem(value: 'new_folder', child: Text('New subfolder')),
+            PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
+      onSelected: (v) async {
+        final repo = sl<ComposeRepository>();
+        final col = store.collections.firstWhere(
+          (c) => c.id == collectionId,
+          orElse: () => store.collections.first,
+        );
+        final root = _folderToMap(col.root);
+        if (v == 'new_folder') {
+          final name = await _promptText(context, title: 'New folder name');
+          if (name == null || name.isEmpty) return;
+          _folderAdd(root, folder.id, {
+            'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
+            'name': name,
+            'requests': <String>[],
+            'folders': <Map<String, dynamic>>[],
+          });
+          await repo.upsertCollection({
+            'id': col.id,
+            'name': col.name,
+            'root': root,
+          });
+          await store.loadLibrary();
+        }
+        if (v == 'rename') {
+          final name = await _promptText(
+            context,
+            title: 'Rename folder',
+            initial: folder.name,
+          );
+          if (name == null || name.isEmpty) return;
+          _folderRename(root, folder.id, name);
+          await repo.upsertCollection({
+            'id': col.id,
+            'name': col.name,
+            'root': root,
+          });
+          await store.loadLibrary();
+        }
+        if (v == 'delete') {
+          final ok = await _confirm(context, 'Delete folder and its contents?');
+          if (ok != true) return;
+          _folderDelete(root, folder.id);
+          await repo.upsertCollection({
+            'id': col.id,
+            'name': col.name,
+            'root': root,
+          });
+          await store.loadLibrary();
+        }
+      },
+      child: IconButton(
+        icon: const Icon(Icons.more_horiz, size: 18),
+        visualDensity: vd,
+        onPressed: null,
+      ),
+    );
+  }
+}
+
+Future<String?> _promptText(
+  BuildContext context, {
+  required String title,
+  String? initial,
+}) async {
+  final ctrl = TextEditingController(text: initial ?? '');
+  return showDialog<String>(
+    context: context,
+    builder:
+        (ctx) => AlertDialog(
+          title: Text(title),
+          content: TextField(controller: ctrl, autofocus: true),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+  );
+}
+
+Future<bool?> _confirm(BuildContext context, String message) {
+  return showDialog<bool>(
+    context: context,
+    builder:
+        (ctx) => AlertDialog(
+          title: const Text('Confirm'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+  );
+}
+
+Map<String, dynamic> _folderToMap(ComposeFolderModel f) => f.toJson();
+
+bool _folderAdd(
+  Map<String, dynamic> folder,
+  String parentId,
+  Map<String, dynamic> newFolder,
+) {
+  if (folder['id'] == parentId) {
+    final List<dynamic> list = (folder['folders'] as List?) ?? <dynamic>[];
+    list.add(newFolder);
+    folder['folders'] = list;
+    return true;
+  }
+  final List<dynamic> subs = (folder['folders'] as List?) ?? <dynamic>[];
+  for (final s in subs) {
+    if (_folderAdd((s as Map).cast<String, dynamic>(), parentId, newFolder)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _folderRename(Map<String, dynamic> folder, String id, String name) {
+  if (folder['id'] == id) {
+    folder['name'] = name;
+    return true;
+  }
+  final List<dynamic> subs = (folder['folders'] as List?) ?? <dynamic>[];
+  for (final s in subs) {
+    if (_folderRename((s as Map).cast<String, dynamic>(), id, name))
+      return true;
+  }
+  return false;
+}
+
+bool _folderDelete(Map<String, dynamic> folder, String id) {
+  final List<dynamic> subs = (folder['folders'] as List?) ?? <dynamic>[];
+  for (int i = 0; i < subs.length; i++) {
+    final m = (subs[i] as Map).cast<String, dynamic>();
+    if (m['id'] == id) {
+      subs.removeAt(i);
+      folder['folders'] = subs;
+      return true;
+    }
+    if (_folderDelete(m, id)) return true;
+  }
+  return false;
 }
 
 List<ComposeFolderModel> _flattenFolders(ComposeFolderModel root) {

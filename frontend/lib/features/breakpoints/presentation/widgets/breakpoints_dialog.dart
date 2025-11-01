@@ -200,7 +200,6 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
   bool _viewDecompressed = true;
   bool _submitting = false;
   String? _contentType;
-  bool _autoCT = true;
 
   @override
   void didChangeDependencies() {
@@ -462,10 +461,6 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
                                         form: const [],
                                         multipart: const [],
                                         allowedModes: const ['raw', 'json'],
-                                        autoContentType: _autoCT,
-                                        onAutoContentTypeChanged: (v) {
-                                          setState(() => _autoCT = v);
-                                        },
                                       ),
                             ),
                           ],
@@ -586,7 +581,6 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
   }
 
   void _ensureContentTypeForMode() {
-    if (!_autoCT) return;
     final hasCT = _headers.any((h) => h.key.toLowerCase() == 'content-type');
     if (_mode == 'json' && !hasCT) {
       _addOrUpdateHeader('Content-Type', 'application/json; charset=utf-8');

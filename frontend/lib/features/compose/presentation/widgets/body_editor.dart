@@ -21,8 +21,6 @@ class BodyEditor extends StatefulWidget {
     this.onFormChanged,
     this.onMultipartChanged,
     this.maxUploadMB,
-    required this.autoContentType,
-    required this.onAutoContentTypeChanged,
     this.allowedModes = const ['raw', 'json', 'form', 'multipart'],
   });
 
@@ -35,8 +33,6 @@ class BodyEditor extends StatefulWidget {
   final ValueChanged<List<ComposeFormFieldDTO>>? onFormChanged;
   final ValueChanged<List<ComposePartDTO>>? onMultipartChanged;
   final int? maxUploadMB;
-  final bool autoContentType;
-  final ValueChanged<bool> onAutoContentTypeChanged;
   final List<String> allowedModes;
 
   @override
@@ -59,32 +55,16 @@ class _BodyEditorState extends State<BodyEditor> {
                     ? widget.mode
                     : widget.allowedModes.first,
             onChanged: (v) => setState(() => widget.onModeChanged(v ?? 'raw')),
+            isDense: true,
+            isExpanded: true,
+            iconSize: 16,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontSize: 12),
             items:
                 widget.allowedModes
                     .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                     .toList(),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Tooltip(
-                message:
-                    'Auto-CT: автоматически проставлять заголовок Content-Type\nдля JSON и form. Можно вручную переопределить в Headers.',
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.info_outline, size: 16),
-                    SizedBox(width: 6),
-                    Text('Auto-CT'),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Switch(
-                value: widget.autoContentType,
-                onChanged: (v) => widget.onAutoContentTypeChanged(v),
-              ),
-            ],
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -103,20 +83,6 @@ class _BodyEditorState extends State<BodyEditor> {
                     setState(() => _jsonError = null);
                   },
                   child: const Text('Вставить JSON пример'),
-                ),
-              if (widget.mode == 'form')
-                OutlinedButton(
-                  onPressed: () {
-                    widget.form
-                      ..clear()
-                      ..addAll(const [
-                        ComposeFormFieldDTO(key: 'username', value: 'john'),
-                        ComposeFormFieldDTO(key: 'password', value: 'secret'),
-                      ]);
-                    setState(() {});
-                    widget.onFormChanged?.call(widget.form);
-                  },
-                  child: const Text('Form пример'),
                 ),
             ],
           ),

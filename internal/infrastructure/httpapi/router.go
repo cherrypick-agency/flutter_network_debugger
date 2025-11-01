@@ -128,6 +128,9 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 				SocksUser:      pc.SocksUser,
 				SocksPass:      pc.SocksPass,
 			}, forwardHandler)
+			if d.Logger != nil {
+				d.Logger.Info().Str("addr", pc.ForwardAddr).Msg("reverse proxy endpoints enabled (/httpproxy,/wsproxy)")
+			}
 		}
 	}
 	mux := buildBaseMux(d)

@@ -32,14 +32,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   bool _initLoaded = false;
 
   // Адрес прокси для подсказок/копирования
+  int? _proxyPort; // forward-proxy port from backend settings
   String get _proxyAddr {
-    try {
-      final u = Uri.parse(_baseUrl);
-      final p = u.hasPort ? u.port : 9092;
-      return '127.0.0.1:' + p.toString();
-    } catch (_) {
-      return '127.0.0.1:9092';
-    }
+    final p = (_proxyPort ?? 9091);
+    return '127.0.0.1:' + p.toString();
   }
 
   @override
@@ -64,6 +60,25 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       _sysProxy = await isSystemProxyEnabled();
       _osCAInstalled = await isDevCAInstalledSystem();
       _caFpSystem = await systemDevCAFingerprint();
+      // load forward proxy port (best-effort)
+      try {
+        final pc = await api.get(path: '/_api/v1/proxy/config');
+        final map =
+            (pc.data is Map)
+                ? (pc.data as Map).cast<String, dynamic>()
+                : jsonDecode(pc.data as String) as Map<String, dynamic>;
+        final p = map['forward']?['port'];
+        if (p is int && p > 0) {
+          _proxyPort = p;
+        } else {
+          final addr = (map['forward']?['addr'] ?? '').toString();
+          final i = addr.lastIndexOf(':');
+          if (i >= 0) {
+            final pp = int.tryParse(addr.substring(i + 1));
+            if (pp != null && pp > 0) _proxyPort = pp;
+          }
+        }
+      } catch (_) {}
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -91,6 +106,26 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       _sysProxy = await isSystemProxyEnabled();
       _osCAInstalled = await isDevCAInstalledSystem();
       _caFpSystem = await systemDevCAFingerprint();
+      // fetch proxy port
+      try {
+        final api2 = sl<http_client.AppHttpClient>();
+        final pc = await api2.get(path: '/_api/v1/proxy/config');
+        final map =
+            (pc.data is Map)
+                ? (pc.data as Map).cast<String, dynamic>()
+                : jsonDecode(pc.data as String) as Map<String, dynamic>;
+        final p = map['forward']?['port'];
+        if (p is int && p > 0) {
+          _proxyPort = p;
+        } else {
+          final addr = (map['forward']?['addr'] ?? '').toString();
+          final i = addr.lastIndexOf(':');
+          if (i >= 0) {
+            final pp = int.tryParse(addr.substring(i + 1));
+            if (pp != null && pp > 0) _proxyPort = pp;
+          }
+        }
+      } catch (_) {}
     } catch (_) {
       // ignore errors — show default values
     } finally {
@@ -286,7 +321,21 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
         _caFpRuntime!.toLowerCase() != _caFpSystem!.toLowerCase();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Integration: System Proxy and Certificate'),
+        title: Row(
+          children: [
+            const Text('Integration: System Proxy and Certificate'),
+            const SizedBox(width: 8),
+            Tooltip(
+              message:
+                  'System proxy allows you to debug all network requests from your system and applications by routing traffic through the network debugger. This enables you to inspect HTTPS traffic, modify requests/responses, and analyze all network activity.',
+              child: Icon(
+                Icons.info_outline,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+          ],
+        ),
         scrolledUnderElevation: 0,
       ),
       body:

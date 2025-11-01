@@ -1,12 +1,13 @@
 package db
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	glogger "gorm.io/gorm/logger"
 )
 
 // PathFromEnv возвращает путь к SQLite базе.
@@ -24,8 +25,13 @@ func NewSQLite(path string) (*gorm.DB, error) {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		_ = os.MkdirAll(dir, 0o755)
 	}
+	// GORM logger: suppress 'record not found' noise, keep WARN level
+	lg := glogger.New(log.New(os.Stdout, "", log.LstdFlags), glogger.Config{
+		IgnoreRecordNotFoundError: true,
+		LogLevel:                  glogger.Warn,
+	})
 	return gorm.Open(sqlite.Open(path), &gorm.Config{
-		Logger:      logger.Default.LogMode(logger.Warn),
+		Logger:      lg,
 		PrepareStmt: true,
 	})
 }

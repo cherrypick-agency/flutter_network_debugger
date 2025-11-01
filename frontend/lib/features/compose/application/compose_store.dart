@@ -75,6 +75,11 @@ class ComposeCollectionModel {
       ),
     );
   }
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'root': root.toJson(),
+  };
 }
 
 class ComposeFolderModel {
@@ -103,4 +108,10 @@ class ComposeFolderModel {
               .toList(),
     );
   }
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'requests': requests,
+    'folders': folders.map((e) => e.toJson()).toList(),
+  };
 }

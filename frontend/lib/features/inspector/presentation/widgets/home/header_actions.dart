@@ -24,6 +24,7 @@ class HeaderActions extends StatelessWidget {
     required this.onToggleTimeline,
     this.onOpenCompose,
     this.onOpenBreakpoints,
+    this.onOpenMapping,
   });
 
   final bool showFilters;
@@ -39,6 +40,7 @@ class HeaderActions extends StatelessWidget {
   final VoidCallback onToggleTimeline;
   final VoidCallback? onOpenCompose;
   final VoidCallback? onOpenBreakpoints;
+  final VoidCallback? onOpenMapping;
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +167,12 @@ class HeaderActions extends StatelessWidget {
             onPressed: onOpenBreakpoints,
             tooltip: 'Breakpoints',
             icon: const Icon(Icons.bug_report),
+          ),
+        if (onOpenMapping != null)
+          IconButton(
+            onPressed: onOpenMapping,
+            tooltip: 'Mapping',
+            icon: const Icon(Icons.link),
           ),
         if (onOpenIntegrations != null)
           IconButton(

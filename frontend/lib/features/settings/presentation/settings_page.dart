@@ -34,7 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // proxy runtime
   bool _fwdEnabled = true;
-  int _fwdPort = 8888;
+  int _fwdPort = 9091;
   bool _socksEnabled = false;
   int _socksPort = 8889;
   String _socksAuthMode = 'none';
@@ -97,14 +97,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        value: offline,
-                        onChanged: (v) {
-                          offline = (v ?? false);
+                      child: StatefulBuilder(
+                        builder: (context, setDialogState) {
+                          return CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            value: offline,
+                            onChanged: (v) {
+                              setDialogState(() {
+                                offline = (v ?? false);
+                              });
+                            },
+                            title: const Text('Offline'),
+                          );
                         },
-                        title: const Text('Offline'),
                       ),
                     ),
                   ],
@@ -127,24 +133,56 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (ok != true) return;
     final name = nameCtrl.text.trim();
+    if (name.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile name is required')),
+        );
+      }
+      return;
+    }
     final down = int.tryParse(downCtrl.text.trim()) ?? 0;
     final up = int.tryParse(upCtrl.text.trim()) ?? 0;
     final loss = (int.tryParse(lossCtrl.text.trim()) ?? 0).clamp(0, 100);
-    final saved = await ThrottleService().upsert(
-      ThrottleProfileDTO(
-        name: name,
-        downKbps: down,
-        upKbps: up,
-        packetLossPct: loss,
-        offline: offline,
-      ),
-    );
-    final ps = await ThrottleService().listProfiles();
-    if (!mounted) return;
-    setState(() {
-      _profiles = ps;
-      _selectedProfileId = saved.id;
-    });
+    try {
+      final saved = await ThrottleService().upsert(
+        ThrottleProfileDTO(
+          name: name,
+          downKbps: down,
+          upKbps: up,
+          packetLossPct: loss,
+          latencyMs: 0,
+          latencyJitter: 0,
+          offline: offline,
+        ),
+      );
+      final ps = await ThrottleService().listProfiles();
+      if (!mounted) return;
+      setState(() {
+        _profiles = ps;
+        // Only set selected if saved.id is not null and exists in the list
+        if (saved.id != null && ps.any((p) => p.id == saved.id)) {
+          _selectedProfileId = saved.id;
+        } else {
+          _selectedProfileId = null;
+        }
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Profile "$name" saved (total: ${ps.length}, with ID: ${ps.where((p) => p.id != null).length})',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save profile: $e')));
+      }
+    }
   }
 
   @override
@@ -183,6 +221,11 @@ class _SettingsPageState extends State<SettingsPage> {
         _thLoss = (t['packetLossPct'] ?? 0) as int;
         _thOffline = (t['offline'] ?? false) as bool;
         _profiles = ps;
+        // Reset selected profile if it doesn't exist in the loaded profiles
+        if (_selectedProfileId != null &&
+            !ps.any((p) => p.id == _selectedProfileId)) {
+          _selectedProfileId = null;
+        }
       });
     } catch (_) {}
     // load font scale
@@ -196,7 +239,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final pc = await SettingsService().fetchProxyConfig();
       setState(() {
         _fwdEnabled = (pc['forward']?['enabled'] ?? true) as bool;
-        _fwdPort = (pc['forward']?['port'] ?? 8888) as int;
+        _fwdPort = (pc['forward']?['port'] ?? 9091) as int;
         _socksEnabled = (pc['socks']?['enabled'] ?? false) as bool;
         _socksPort = (pc['socks']?['port'] ?? 8889) as int;
         _socksAuthMode = (pc['socks']?['authMode'] ?? 'none') as String;
@@ -228,6 +271,14 @@ class _SettingsPageState extends State<SettingsPage> {
         authMode: _socksAuthMode,
         user: _socksUserCtrl.text.trim(),
         pass: _socksPassCtrl.text.trim(),
+      );
+      // применить throttling настройки
+      await ThrottleService().apply(
+        enabled: _thEnabled,
+        downKbps: _thOffline ? 0 : _thDown,
+        upKbps: _thOffline ? 0 : _thUp,
+        packetLossPct: _thOffline ? 0 : _thLoss,
+        offline: _thOffline,
       );
       if (mounted) Navigator.of(context).pop();
     } finally {
@@ -415,7 +466,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             child: CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
                               dense: true,
-                              title: const Text('Offline'),
+                              title: const Text('Simulate offline'),
                               value: _thOffline,
                               onChanged:
                                   (v) =>
@@ -424,140 +475,151 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      Row(
                         children: [
-                          OutlinedButton(
-                            onPressed: () async {
-                              await ThrottleService().apply(
-                                enabled: true,
-                                downKbps: 400,
-                                upKbps: 400,
-                                packetLossPct: 0,
-                                offline: false,
-                              );
-                              setState(() {
-                                _thEnabled = true;
-                                _thDown = 400;
-                                _thUp = 400;
-                                _thLoss = 0;
-                                _thOffline = false;
-                              });
-                            },
-                            child: const Text('3G'),
+                          const Text(
+                            'Quick presets:',
+                            style: TextStyle(fontWeight: FontWeight.w500),
                           ),
-                          OutlinedButton(
-                            onPressed: () async {
-                              await ThrottleService().apply(
-                                enabled: true,
-                                downKbps: 1500,
-                                upKbps: 1500,
-                                packetLossPct: 0,
-                                offline: false,
-                              );
-                              setState(() {
-                                _thEnabled = true;
-                                _thDown = 1500;
-                                _thUp = 1500;
-                                _thLoss = 0;
-                                _thOffline = false;
-                              });
-                            },
-                            child: const Text('Slow 4G'),
-                          ),
-                          OutlinedButton(
-                            onPressed: () async {
-                              await ThrottleService().apply(
-                                enabled: true,
-                                downKbps: 3000,
-                                upKbps: 3000,
-                                packetLossPct: 0,
-                                offline: false,
-                              );
-                              setState(() {
-                                _thEnabled = true;
-                                _thDown = 3000;
-                                _thUp = 3000;
-                                _thLoss = 0;
-                                _thOffline = false;
-                              });
-                            },
-                            child: const Text('Fast 4G'),
-                          ),
-                          OutlinedButton(
-                            onPressed: () async {
-                              await ThrottleService().apply(
-                                enabled: true,
-                                downKbps: 0,
-                                upKbps: 0,
-                                packetLossPct: 0,
-                                offline: true,
-                              );
-                              setState(() {
-                                _thEnabled = true;
-                                _thDown = 0;
-                                _thUp = 0;
-                                _thLoss = 0;
-                                _thOffline = true;
-                              });
-                            },
-                            child: const Text('Offline'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () async {
+                                    await ThrottleService().apply(
+                                      enabled: true,
+                                      downKbps: 400,
+                                      upKbps: 400,
+                                      packetLossPct: 0,
+                                      offline: false,
+                                    );
+                                    setState(() {
+                                      _thEnabled = true;
+                                      _thDown = 400;
+                                      _thUp = 400;
+                                      _thLoss = 0;
+                                      _thOffline = false;
+                                    });
+                                  },
+                                  child: const Text('3G'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: () async {
+                                    await ThrottleService().apply(
+                                      enabled: true,
+                                      downKbps: 1500,
+                                      upKbps: 1500,
+                                      packetLossPct: 0,
+                                      offline: false,
+                                    );
+                                    setState(() {
+                                      _thEnabled = true;
+                                      _thDown = 1500;
+                                      _thUp = 1500;
+                                      _thLoss = 0;
+                                      _thOffline = false;
+                                    });
+                                  },
+                                  child: const Text('Slow 4G'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: () async {
+                                    await ThrottleService().apply(
+                                      enabled: true,
+                                      downKbps: 3000,
+                                      upKbps: 3000,
+                                      packetLossPct: 0,
+                                      offline: false,
+                                    );
+                                    setState(() {
+                                      _thEnabled = true;
+                                      _thDown = 3000;
+                                      _thUp = 3000;
+                                      _thLoss = 0;
+                                      _thOffline = false;
+                                    });
+                                  },
+                                  child: const Text('Fast 4G'),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const Divider(height: 24),
                       Row(
                         children: [
-                          ElevatedButton(
-                            onPressed:
-                                !_thEnabled
-                                    ? null
-                                    : () async {
-                                      await ThrottleService().apply(
-                                        enabled: _thEnabled,
-                                        downKbps: _thOffline ? 0 : _thDown,
-                                        upKbps: _thOffline ? 0 : _thUp,
-                                        packetLossPct: _thOffline ? 0 : _thLoss,
-                                        offline: _thOffline,
-                                      );
-                                    },
-                            child: const Text('Apply'),
+                          Text(
+                            'Saved profiles (${_profiles.where((p) => p.id != null).length}):',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(width: 12),
-                          DropdownButton<String>(
-                            hint: const Text('Custom profiles'),
-                            value: _selectedProfileId,
-                            items:
+                          if (_profiles.where((p) => p.id != null).isNotEmpty)
+                            DropdownButton<String>(
+                              key: ValueKey(
                                 _profiles
-                                    .map(
-                                      (p) => DropdownMenuItem(
-                                        value: p.id,
-                                        child: Text(p.name),
-                                      ),
-                                    )
-                                    .toList(),
-                            onChanged: (id) {
-                              setState(() => _selectedProfileId = id);
-                              final p = _profiles.firstWhere((e) => e.id == id);
-                              setState(() {
-                                _thEnabled = true;
-                                _thDown = p.downKbps;
-                                _thUp = p.upKbps;
-                                _thLoss = p.packetLossPct;
-                                _thOffline = p.offline;
-                              });
-                            },
-                          ),
-                          const Spacer(),
+                                    .where((p) => p.id != null)
+                                    .map((p) => p.id)
+                                    .join(','),
+                              ),
+                              hint: const Text('Select profile'),
+                              value:
+                                  _profiles
+                                          .where((p) => p.id != null)
+                                          .any(
+                                            (p) => p.id == _selectedProfileId,
+                                          )
+                                      ? _selectedProfileId
+                                      : null,
+                              items:
+                                  _profiles
+                                      .where((p) => p.id != null)
+                                      .map(
+                                        (p) => DropdownMenuItem(
+                                          value: p.id!,
+                                          child: Text(p.name),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (id) {
+                                if (id == null) {
+                                  setState(() => _selectedProfileId = null);
+                                  return;
+                                }
+                                final p = _profiles.firstWhere(
+                                  (e) => e.id == id,
+                                  orElse: () => _profiles.first,
+                                );
+                                setState(() {
+                                  _selectedProfileId = id;
+                                  _thEnabled = true;
+                                  _thDown = p.downKbps;
+                                  _thUp = p.upKbps;
+                                  _thLoss = p.packetLossPct;
+                                  _thOffline = p.offline;
+                                });
+                              },
+                            )
+                          else
+                            const Text(
+                              'No saved profiles',
+                              style: TextStyle(
+                                fontStyle: FontStyle.italic,
+                                color: Colors.grey,
+                              ),
+                            ),
                           IconButton(
-                            tooltip: 'Add profile',
+                            tooltip: 'Add new profile',
                             onPressed: () => _showAddProfileDialog(context),
-                            icon: const Icon(Icons.add),
+                            icon: const Icon(Icons.add_circle_outline),
+                            iconSize: 20,
                           ),
                           if (_selectedProfileId != null)
                             IconButton(
-                              tooltip: 'Delete profile',
+                              tooltip: 'Delete selected profile',
                               onPressed: () async {
                                 final id = _selectedProfileId!;
                                 await ThrottleService().deleteProfile(id);
@@ -569,7 +631,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                   _selectedProfileId = null;
                                 });
                               },
-                              icon: const Icon(Icons.delete_forever),
+                              icon: const Icon(Icons.delete_outline),
+                              iconSize: 20,
                             ),
                         ],
                       ),

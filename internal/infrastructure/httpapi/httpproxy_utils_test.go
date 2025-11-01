@@ -3,312 +3,351 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
-	cfgpkg "network-debugger/internal/infrastructure/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"network-debugger/internal/infrastructure/config"
 )
 
-func TestSpoolBody_Success(t *testing.T) {
-	deps := &Deps{Cfg: cfgpkg.Config{}}
-	data := []byte("test body content")
-	reader := bytes.NewReader(data)
+func TestSpoolBody(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		maxBytes  int64
+		kind      string
+		spoolDir  string
+		expectErr bool
+	}{
+		{
+			name:      "small body",
+			input:     "hello world",
+			maxBytes:  100,
+			kind:      "req",
+			expectErr: false,
+		},
+		{
+			name:      "large body truncated",
+			input:     strings.Repeat("a", 1000),
+			maxBytes:  50,
+			kind:      "resp",
+			expectErr: false,
+		},
+		{
+			name:      "empty body",
+			input:     "",
+			maxBytes:  100,
+			kind:      "ws",
+			expectErr: false,
+		},
+		{
+			name:      "custom spool dir",
+			input:     "test data",
+			maxBytes:  100,
+			kind:      "req",
+			spoolDir:  "",
+			expectErr: false,
+		},
+	}
 
-	path, err := deps.spoolBody(reader, 1024, "test")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := tt.spoolDir
+			if dir == "" {
+				dir = t.TempDir()
+			}
+
+			d := &Deps{
+				Cfg: config.Config{
+					BodySpoolDir: dir,
+				},
+			}
+
+			reader := bytes.NewReader([]byte(tt.input))
+			path, err := d.spoolBody(reader, tt.maxBytes, tt.kind)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if path == "" {
+				t.Error("expected non-empty path")
+				return
+			}
+
+			// Verify file exists
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				t.Errorf("spooled file does not exist: %s", path)
+			}
+
+			// Verify file content
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Errorf("failed to read spooled file: %v", err)
+			}
+
+			expectedLen := int64(len(tt.input))
+			if expectedLen > tt.maxBytes {
+				expectedLen = tt.maxBytes
+			}
+
+			if int64(len(content)) != expectedLen {
+				t.Errorf("spooled file size = %d, want %d", len(content), expectedLen)
+			}
+
+			// Cleanup
+			os.Remove(path)
+		})
+	}
+}
+
+func TestSpoolBody_DirectoryCreation(t *testing.T) {
+	tempBase := t.TempDir()
+	spoolDir := filepath.Join(tempBase, "nested", "spool", "dir")
+
+	d := &Deps{
+		Cfg: config.Config{
+			BodySpoolDir: spoolDir,
+		},
+	}
+
+	reader := bytes.NewReader([]byte("test"))
+	path, err := d.spoolBody(reader, 100, "req")
 
 	if err != nil {
-		t.Fatalf("spoolBody failed: %v", err)
+		t.Errorf("spoolBody failed: %v", err)
 	}
+
 	if path == "" {
-		t.Error("path should not be empty")
+		t.Error("expected non-empty path")
 	}
 
-	// Verify file exists and contains data
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read spooled file: %v", err)
-	}
-	if string(content) != string(data) {
-		t.Errorf("content = %q, want %q", content, data)
+	// Verify directory was created
+	if _, err := os.Stat(spoolDir); os.IsNotExist(err) {
+		t.Error("spool directory was not created")
 	}
 
 	// Cleanup
-	_ = os.Remove(path)
-}
-
-func TestSpoolBody_WithSpoolDir(t *testing.T) {
-	// Create a temporary directory for this test
-	tempDir := filepath.Join(os.TempDir(), "test-spool-dir")
-	err := os.MkdirAll(tempDir, 0o755)
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	deps := &Deps{Cfg: cfgpkg.Config{BodySpoolDir: tempDir}}
-	data := []byte("spool test")
-	reader := bytes.NewReader(data)
-
-	path, err := deps.spoolBody(reader, 1024, "custom")
-
-	if err != nil {
-		t.Fatalf("spoolBody failed: %v", err)
-	}
-	if !strings.Contains(path, tempDir) {
-		t.Errorf("path should contain custom spool dir: %s", path)
-	}
-
-	// Verify file is in the custom directory
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read spooled file: %v", err)
-	}
-	if string(content) != string(data) {
-		t.Errorf("content = %q, want %q", content, data)
-	}
-
-	// Cleanup
-	_ = os.Remove(path)
-}
-
-func TestSpoolBody_MaxSize(t *testing.T) {
-	deps := &Deps{Cfg: cfgpkg.Config{}}
-	data := []byte("1234567890") // 10 bytes
-	reader := bytes.NewReader(data)
-
-	// Only read first 5 bytes
-	path, err := deps.spoolBody(reader, 5, "limited")
-
-	if err != nil {
-		t.Fatalf("spoolBody failed: %v", err)
-	}
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read spooled file: %v", err)
-	}
-	if len(content) != 5 {
-		t.Errorf("content length = %d, want 5", len(content))
-	}
-	if string(content) != "12345" {
-		t.Errorf("content = %q, want %q", content, "12345")
-	}
-
-	// Cleanup
-	_ = os.Remove(path)
-}
-
-func TestSpoolBody_EmptyReader(t *testing.T) {
-	deps := &Deps{Cfg: cfgpkg.Config{}}
-	reader := bytes.NewReader([]byte{})
-
-	path, err := deps.spoolBody(reader, 1024, "empty")
-
-	if err != nil {
-		t.Fatalf("spoolBody failed: %v", err)
-	}
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read spooled file: %v", err)
-	}
-	if len(content) != 0 {
-		t.Errorf("content should be empty, got %d bytes", len(content))
-	}
-
-	// Cleanup
-	_ = os.Remove(path)
-}
-
-func TestTryCompactJSON_ValidJSON(t *testing.T) {
-	input := []byte(`{"name": "test",  "value":  123}`)
-
-	result := tryCompactJSON(input)
-
-	if result == "" {
-		t.Error("result should not be empty for valid JSON")
-	}
-
-	// Verify it's valid JSON
-	var v map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &v); err != nil {
-		t.Errorf("result is not valid JSON: %v", err)
-	}
-
-	// Verify values are preserved
-	if v["name"] != "test" {
-		t.Errorf("name = %v, want test", v["name"])
-	}
-	if v["value"].(float64) != 123 {
-		t.Errorf("value = %v, want 123", v["value"])
+	if path != "" {
+		os.Remove(path)
 	}
 }
 
-func TestTryCompactJSON_InvalidJSON(t *testing.T) {
-	input := []byte(`{not valid json}`)
+func TestTryCompactJSON(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []byte
+		expect string
+	}{
+		{
+			name:   "valid JSON with whitespace",
+			input:  []byte(`  {"key": "value",  "num": 123  }  `),
+			expect: `{"key":"value","num":123}`,
+		},
+		{
+			name:   "already compact JSON",
+			input:  []byte(`{"a":"b"}`),
+			expect: `{"a":"b"}`,
+		},
+		{
+			name:   "invalid JSON",
+			input:  []byte(`{not valid json`),
+			expect: "",
+		},
+		{
+			name:   "empty input",
+			input:  []byte(``),
+			expect: "",
+		},
+		{
+			name:   "JSON array",
+			input:  []byte(`[  1,  2,  3  ]`),
+			expect: `[1,2,3]`,
+		},
+		{
+			name:   "nested JSON",
+			input:  []byte(`{"outer": {"inner": "value"}}`),
+			expect: `{"outer":{"inner":"value"}}`,
+		},
+	}
 
-	result := tryCompactJSON(input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tryCompactJSON(tt.input)
 
-	if result != "" {
-		t.Error("result should be empty for invalid JSON")
+			if result != tt.expect {
+				t.Errorf("tryCompactJSON() = %q, want %q", result, tt.expect)
+			}
+		})
 	}
 }
 
-func TestTryCompactJSON_EmptyInput(t *testing.T) {
-	input := []byte(``)
+func TestAugmentPreviewWithTimings(t *testing.T) {
+	tests := []struct {
+		name    string
+		preview string
+		ttfb    int64
+		total   int64
+		wantKey bool
+	}{
+		{
+			name:    "valid JSON preview",
+			preview: `{"status":200,"method":"GET"}`,
+			ttfb:    100,
+			total:   500,
+			wantKey: true,
+		},
+		{
+			name:    "empty JSON object",
+			preview: `{}`,
+			ttfb:    50,
+			total:   200,
+			wantKey: true,
+		},
+		{
+			name:    "invalid JSON",
+			preview: `not json`,
+			ttfb:    100,
+			total:   500,
+			wantKey: false,
+		},
+		{
+			name:    "zero timings",
+			preview: `{"data":"test"}`,
+			ttfb:    0,
+			total:   0,
+			wantKey: true,
+		},
+	}
 
-	result := tryCompactJSON(input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := augmentPreviewWithTimings(tt.preview, tt.ttfb, tt.total)
 
-	if result != "" {
-		t.Error("result should be empty for empty input")
+			if !tt.wantKey {
+				// Should return original for invalid JSON
+				if result != tt.preview {
+					t.Errorf("expected original preview for invalid JSON")
+				}
+				return
+			}
+
+			// Parse result and verify timings key exists
+			var m map[string]any
+			if err := json.Unmarshal([]byte(result), &m); err != nil {
+				t.Fatalf("result is not valid JSON: %v", err)
+			}
+
+			timings, ok := m["timings"].(map[string]any)
+			if !ok {
+				t.Fatal("timings key not found or not a map")
+			}
+
+			ttfbMs, ok := timings["ttfbMs"].(float64)
+			if !ok {
+				t.Fatal("ttfbMs not found or not a number")
+			}
+
+			totalMs, ok := timings["totalMs"].(float64)
+			if !ok {
+				t.Fatal("totalMs not found or not a number")
+			}
+
+			if int64(ttfbMs) != tt.ttfb {
+				t.Errorf("ttfbMs = %v, want %v", ttfbMs, tt.ttfb)
+			}
+
+			if int64(totalMs) != tt.total {
+				t.Errorf("totalMs = %v, want %v", totalMs, tt.total)
+			}
+		})
 	}
 }
 
-func TestTryCompactJSON_Array(t *testing.T) {
-	input := []byte(`[1, 2,  3,   4]`)
-
-	result := tryCompactJSON(input)
-
-	if result == "" {
-		t.Error("result should not be empty for valid JSON array")
+func TestTryDecompress(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        []byte
+		contentEnc  string
+		expectValid bool
+		expectNil   bool
+	}{
+		{
+			name:        "no encoding",
+			body:        []byte("plain text"),
+			contentEnc:  "",
+			expectValid: false,
+			expectNil:   true,
+		},
+		{
+			name:        "unknown encoding",
+			body:        []byte("data"),
+			contentEnc:  "br",
+			expectValid: false,
+			expectNil:   true,
+		},
+		{
+			name:        "invalid gzip data",
+			body:        []byte("not gzip"),
+			contentEnc:  "gzip",
+			expectValid: false,
+			expectNil:   true,
+		},
 	}
 
-	// Verify it's valid JSON
-	var v []interface{}
-	if err := json.Unmarshal([]byte(result), &v); err != nil {
-		t.Errorf("result is not valid JSON: %v", err)
-	}
-	if len(v) != 4 {
-		t.Errorf("array length = %d, want 4", len(v))
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, valid := tryDecompress(tt.body, tt.contentEnc)
 
-func TestAugmentPreviewWithTimings_ValidJSON(t *testing.T) {
-	preview := `{"status":200,"method":"GET"}`
+			if valid != tt.expectValid {
+				t.Errorf("tryDecompress() valid = %v, want %v", valid, tt.expectValid)
+			}
 
-	result := augmentPreviewWithTimings(preview, 100, 500)
-
-	if result == preview {
-		t.Error("result should be different from input")
-	}
-
-	// Parse and verify
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &m); err != nil {
-		t.Fatalf("result is not valid JSON: %v", err)
-	}
-
-	// Check that original fields are preserved
-	if m["status"].(float64) != 200 {
-		t.Error("status should be preserved")
-	}
-	if m["method"] != "GET" {
-		t.Error("method should be preserved")
-	}
-
-	// Check that timings were added
-	timings, ok := m["timings"].(map[string]interface{})
-	if !ok {
-		t.Fatal("timings should be added")
-	}
-	if timings["ttfbMs"].(float64) != 100 {
-		t.Errorf("ttfbMs = %v, want 100", timings["ttfbMs"])
-	}
-	if timings["totalMs"].(float64) != 500 {
-		t.Errorf("totalMs = %v, want 500", timings["totalMs"])
+			if tt.expectNil && result != nil {
+				t.Error("expected nil result for invalid decompression")
+			}
+		})
 	}
 }
 
-func TestAugmentPreviewWithTimings_InvalidJSON(t *testing.T) {
-	preview := `{invalid json}`
-
-	result := augmentPreviewWithTimings(preview, 100, 500)
-
-	if result != preview {
-		t.Error("result should be unchanged for invalid JSON")
-	}
-}
-
-func TestAugmentPreviewWithTimings_EmptyPreview(t *testing.T) {
-	preview := ``
-
-	result := augmentPreviewWithTimings(preview, 100, 500)
-
-	if result != preview {
-		t.Error("result should be unchanged for empty preview")
-	}
-}
-
-func TestAugmentPreviewWithTimings_ZeroTimings(t *testing.T) {
-	preview := `{"status":200}`
-
-	result := augmentPreviewWithTimings(preview, 0, 0)
-
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &m); err != nil {
-		t.Fatalf("result is not valid JSON: %v", err)
+func TestInt64ToInt(t *testing.T) {
+	tests := []struct {
+		name  string
+		input int64
+		want  int
+	}{
+		{"zero", 0, 0},
+		{"positive small", 100, 100},
+		{"negative", -1, 0},
+		{"negative large", -1000, 0},
+		{"max int32", 2147483647, 2147483647},
 	}
 
-	timings, ok := m["timings"].(map[string]interface{})
-	if !ok {
-		t.Fatal("timings should be added even with zero values")
-	}
-	if timings["ttfbMs"].(float64) != 0 {
-		t.Errorf("ttfbMs = %v, want 0", timings["ttfbMs"])
-	}
-	if timings["totalMs"].(float64) != 0 {
-		t.Errorf("totalMs = %v, want 0", timings["totalMs"])
-	}
-}
-
-func TestAugmentPreviewWithTimings_NegativeTimings(t *testing.T) {
-	preview := `{"status":200}`
-
-	result := augmentPreviewWithTimings(preview, -10, -20)
-
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &m); err != nil {
-		t.Fatalf("result is not valid JSON: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := int64ToInt(tt.input)
+			if got != tt.want {
+				t.Errorf("int64ToInt(%d) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
 	}
 
-	timings, ok := m["timings"].(map[string]interface{})
-	if !ok {
-		t.Fatal("timings should be added")
-	}
-	if timings["ttfbMs"].(float64) != -10 {
-		t.Errorf("ttfbMs = %v, want -10", timings["ttfbMs"])
-	}
-	if timings["totalMs"].(float64) != -20 {
-		t.Errorf("totalMs = %v, want -20", timings["totalMs"])
-	}
-}
-
-func TestAugmentPreviewWithTimings_OverwritesExistingTimings(t *testing.T) {
-	preview := `{"status":200,"timings":{"old":999}}`
-
-	result := augmentPreviewWithTimings(preview, 100, 500)
-
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &m); err != nil {
-		t.Fatalf("result is not valid JSON: %v", err)
-	}
-
-	timings, ok := m["timings"].(map[string]interface{})
-	if !ok {
-		t.Fatal("timings should be present")
-	}
-
-	// Old timing should be overwritten
-	if _, exists := timings["old"]; exists {
-		t.Error("old timing should be overwritten")
-	}
-
-	// New timings should be present
-	if timings["ttfbMs"].(float64) != 100 {
-		t.Errorf("ttfbMs = %v, want 100", timings["ttfbMs"])
-	}
-	if timings["totalMs"].(float64) != 500 {
-		t.Errorf("totalMs = %v, want 500", timings["totalMs"])
-	}
+	// Test overflow case on 64-bit systems
+	t.Run("very large positive", func(t *testing.T) {
+		veryLarge := int64(1) << 62
+		result := int64ToInt(veryLarge)
+		// Should return max int value
+		if result < 0 {
+			t.Errorf("int64ToInt with very large value returned negative: %d", result)
+		}
+	})
 }

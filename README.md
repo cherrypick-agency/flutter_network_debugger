@@ -43,7 +43,18 @@ Suitable for local development and test environments. Has web interface (opens i
 - Send via backend with timings; response Pretty/Raw view
 - API: see `docs/openapi.yaml`
 
-### What it can do
+### Mapping (Map Local / Map Remote)
+- Replace responses with local files or redirect requests to another URL.
+- Desktop: choose `filePath`; Web: upload file to server (spool) → `blobPath`.
+- Preserve Host header is supported for Map Remote.
+- API:
+  - `GET/POST /_api/v1/mapping/config`
+  - `GET/POST /_api/v1/mapping/rules`
+  - `POST /_api/v1/mapping/rules/reorder`
+  - `DELETE /_api/v1/mapping/rules/{id}`
+  - `POST /_api/v1/mapping/upload`
+
+### Features
 - Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
 - Waterfall timeline of requests
 - grouping by domain/route
@@ -61,6 +72,7 @@ Suitable for local development and test environments. Has web interface (opens i
 - Crossplatform (WEB, Desktop, CLI)
 - The fastest GO backend for processing requests compared to competitors
 - An independent GO backend that can be run anywhere
+- Well covered with tests
 
 ...
 
@@ -93,14 +105,14 @@ Where UI opens
 
 ### Dart Packages
 
-| Package                                                                             | Version                                                                                                                      | Pub Points                                                                                                                                 | Popularity                                                                                                                                     | Description                            |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| [network_debugger](https://pub.dev/packages/network_debugger)                       | [![pub](https://img.shields.io/pub/v/network_debugger.svg)](https://pub.dev/packages/network_debugger)                       | [![pub points](https://img.shields.io/pub/points/network_debugger)](https://pub.dev/packages/network_debugger/score)                       | [![popularity](https://img.shields.io/pub/popularity/network_debugger)](https://pub.dev/packages/network_debugger/score)                       | Core CLI tool for starting the proxy   |
-| [dio_debugger](https://pub.dev/packages/dio_debugger)                               | [![pub](https://img.shields.io/pub/v/dio_debugger.svg)](https://pub.dev/packages/dio_debugger)                               | [![pub points](https://img.shields.io/pub/points/dio_debugger)](https://pub.dev/packages/dio_debugger/score)                               | [![popularity](https://img.shields.io/pub/popularity/dio_debugger)](https://pub.dev/packages/dio_debugger/score)                               | Interceptor for Dio HTTP client        |
-| [http_debugger](https://pub.dev/packages/http_debugger)                             | [![pub](https://img.shields.io/pub/v/http_debugger.svg)](https://pub.dev/packages/http_debugger)                             | [![pub points](https://img.shields.io/pub/points/http_debugger)](https://pub.dev/packages/http_debugger/score)                             | [![popularity](https://img.shields.io/pub/popularity/http_debugger)](https://pub.dev/packages/http_debugger/score)                             | Wrapper for package:http client        |
-| [web_socket_debugger](https://pub.dev/packages/web_socket_debugger)                 | [![pub](https://img.shields.io/pub/v/web_socket_debugger.svg)](https://pub.dev/packages/web_socket_debugger)                 | [![pub points](https://img.shields.io/pub/points/web_socket_debugger)](https://pub.dev/packages/web_socket_debugger/score)                 | [![popularity](https://img.shields.io/pub/popularity/web_socket_debugger)](https://pub.dev/packages/web_socket_debugger/score)                 | Wrapper for dart:io WebSocket          |
-| [web_socket_channel_debugger](https://pub.dev/packages/web_socket_channel_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_channel_debugger.svg)](https://pub.dev/packages/web_socket_channel_debugger) | [![pub points](https://img.shields.io/pub/points/web_socket_channel_debugger)](https://pub.dev/packages/web_socket_channel_debugger/score) | [![popularity](https://img.shields.io/pub/popularity/web_socket_channel_debugger)](https://pub.dev/packages/web_socket_channel_debugger/score) | Wrapper for package:web_socket_channel |
-| [socket_io_debugger](https://pub.dev/packages/socket_io_debugger)                   | [![pub](https://img.shields.io/pub/v/socket_io_debugger.svg)](https://pub.dev/packages/socket_io_debugger)                   | [![pub points](https://img.shields.io/pub/points/socket_io_debugger)](https://pub.dev/packages/socket_io_debugger/score)                   | [![popularity](https://img.shields.io/pub/popularity/socket_io_debugger)](https://pub.dev/packages/socket_io_debugger/score)                   | Wrapper for socket.io client           |
+| Package                                                                             | Version                                                                                                                      | Pub Points                                                                                                                                 | Description                            |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| [network_debugger](https://pub.dev/packages/network_debugger)                       | [![pub](https://img.shields.io/pub/v/network_debugger.svg)](https://pub.dev/packages/network_debugger)                       | [![pub points](https://img.shields.io/pub/points/network_debugger)](https://pub.dev/packages/network_debugger/score)                       | Core CLI tool for starting the proxy   |
+| [dio_debugger](https://pub.dev/packages/dio_debugger)                               | [![pub](https://img.shields.io/pub/v/dio_debugger.svg)](https://pub.dev/packages/dio_debugger)                               | [![pub points](https://img.shields.io/pub/points/dio_debugger)](https://pub.dev/packages/dio_debugger/score)                               | Interceptor for Dio HTTP client        |
+| [http_debugger](https://pub.dev/packages/http_debugger)                             | [![pub](https://img.shields.io/pub/v/http_debugger.svg)](https://pub.dev/packages/http_debugger)                             | [![pub points](https://img.shields.io/pub/points/http_debugger)](https://pub.dev/packages/http_debugger/score)                             | Wrapper for package:http client        |
+| [web_socket_debugger](https://pub.dev/packages/web_socket_debugger)                 | [![pub](https://img.shields.io/pub/v/web_socket_debugger.svg)](https://pub.dev/packages/web_socket_debugger)                 | [![pub points](https://img.shields.io/pub/points/web_socket_debugger)](https://pub.dev/packages/web_socket_debugger/score)                 | Wrapper for dart:io WebSocket          |
+| [web_socket_channel_debugger](https://pub.dev/packages/web_socket_channel_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_channel_debugger.svg)](https://pub.dev/packages/web_socket_channel_debugger) | [![pub points](https://img.shields.io/pub/points/web_socket_channel_debugger)](https://pub.dev/packages/web_socket_channel_debugger/score) | Wrapper for package:web_socket_channel |
+| [socket_io_debugger](https://pub.dev/packages/socket_io_debugger)                   | [![pub](https://img.shields.io/pub/v/socket_io_debugger.svg)](https://pub.dev/packages/socket_io_debugger)                   | [![pub points](https://img.shields.io/pub/points/socket_io_debugger)](https://pub.dev/packages/socket_io_debugger/score)                   | Wrapper for socket.io client           |
 
 
 ### Settings
@@ -191,3 +203,5 @@ Database migrations
 ### Useful to know
 - Binary cache: macOS/Linux `~/.cache/network_debugger/`, Windows `%LOCALAPPDATA%\network_debugger\Cache\`
 - Binary name: `network-debugger-web` (Windows — `network-debugger-web.exe`)
+
+<!-- https://github.com/flutter/devtools/issues/8223 -->

@@ -13,6 +13,8 @@ type Metrics struct {
 	// Interception metrics
 	InterceptsTotal *prometheus.CounterVec // labels: event(created|applied|canceled|timeout|overflow_autocontinue|overflow_drop), direction(request|response)
 	InterceptsQueue prometheus.Gauge
+	// Mapping metrics
+	MappingAppliedTotal *prometheus.CounterVec // labels: kind(local|remote)
 }
 
 func NewMetrics() *Metrics {
@@ -49,8 +51,13 @@ func NewMetrics() *Metrics {
 			Name:      "intercepts_queue",
 			Help:      "Current number of pending intercepts",
 		}),
+		MappingAppliedTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "network_debugger",
+			Name:      "mapping_applied_total",
+			Help:      "Total mapping applications",
+		}, []string{"kind"}),
 	}
-	r.MustRegister(m.ActiveSessions, m.FramesTotal, m.ProxyErrorsTotal, m.EvictionsTotal, m.InterceptsTotal, m.InterceptsQueue)
+	r.MustRegister(m.ActiveSessions, m.FramesTotal, m.ProxyErrorsTotal, m.EvictionsTotal, m.InterceptsTotal, m.InterceptsQueue, m.MappingAppliedTotal)
 	return m
 }
 

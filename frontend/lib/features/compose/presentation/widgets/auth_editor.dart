@@ -41,6 +41,7 @@ class AuthEditor extends StatelessWidget {
               controller: basicUser,
               decoration: const InputDecoration(labelText: 'Username'),
             ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: basicPass,
               decoration: const InputDecoration(labelText: 'Password'),
@@ -56,6 +57,7 @@ class AuthEditor extends StatelessWidget {
               controller: apiKeyHeader,
               decoration: const InputDecoration(labelText: 'Header name'),
             ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: apiKey,
               decoration: const InputDecoration(labelText: 'API Key'),

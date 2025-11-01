@@ -67,4 +67,22 @@ class ComposeRepository {
       },
     );
   }
+
+  Future<Map<String, dynamic>> upsertCollection(
+    Map<String, dynamic> collection,
+  ) async {
+    final resp = await _http.post<Map<String, dynamic>>(
+      path: '/_api/v1/compose/library/collections',
+      body: collection,
+    );
+    return resp.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> deleteCollection(String id) async {
+    final resp = await _http.delete<Map<String, dynamic>>(
+      path: '/_api/v1/compose/library/collections/$id',
+      body: const <String, dynamic>{},
+    );
+    return resp.data ?? <String, dynamic>{};
+  }
 }

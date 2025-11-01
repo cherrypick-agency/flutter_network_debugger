@@ -36,6 +36,7 @@ import 'core/hotkeys/hotkeys_service.dart';
 import 'core/utils/debouncer.dart';
 import 'features/common/notifications/notifications_overlay.dart';
 import 'features/breakpoints/presentation/widgets/breakpoints_dialog.dart';
+import 'features/mapping/presentation/widgets/mapping_dialog.dart';
 
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
 import 'theme/font_scale.dart';
@@ -668,6 +669,16 @@ class _MyHomePageState extends State<MyHomePage> {
                                       barrierLabel: 'Breakpoints',
                                       pageBuilder: (ctx, _, __) {
                                         return const BreakpointsDialog();
+                                      },
+                                    );
+                                  },
+                                  onOpenMapping: () async {
+                                    await showGeneralDialog(
+                                      context: context,
+                                      barrierDismissible: true,
+                                      barrierLabel: 'Mapping',
+                                      pageBuilder: (ctx, _, __) {
+                                        return const MappingDialog();
                                       },
                                     );
                                   },

@@ -96,7 +96,26 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
   ]);
 
   // 4) Enable HTTP/HTTPS proxy for every service (call networksetup per service)
-  final port = _tryParsePort(baseUrl) ?? 9092;
+  // Берём порт форвард‑прокси с бэка; фоллбек — 9091
+  int port = 9091;
+  try {
+    final api = sl<http_client.AppHttpClient>();
+    final resp = await api.get(path: '/_api/v1/proxy/config');
+    final data = jsonDecode(jsonEncode(resp.data)) as Map<String, dynamic>;
+    final p = data['forward']?['port'];
+    if (p is int && p > 0) {
+      port = p;
+    } else {
+      final addr = (data['forward']?['addr'] ?? '').toString();
+      final i = addr.lastIndexOf(':');
+      if (i >= 0) {
+        final pp = int.tryParse(addr.substring(i + 1));
+        if (pp != null && pp > 0) port = pp;
+      }
+    }
+  } catch (_) {
+    // ignore — остаёмся на 9091
+  }
   final servicesRes = await Process.run('bash', [
     '-lc',
     'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
@@ -228,14 +247,7 @@ Future<void> deleteDevCA() async {
   }
 }
 
-int? _tryParsePort(String baseUrl) {
-  try {
-    final u = Uri.parse(baseUrl);
-    return u.hasPort ? u.port : 80;
-  } catch (_) {
-    return null;
-  }
-}
+// removed legacy _tryParsePort; proxy port is fetched from backend settings
 
 Future<String> proxyDiagnostics() async {
   try {

@@ -32,70 +32,73 @@ class _MultipartEditorState extends State<MultipartEditor> {
     final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          // Глобальная зона для массового дропа файлов — добавляет новые части
-          SizedBox(
-            height: 64,
-            child: Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _hovering ? cs.primary : cs.outlineVariant,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Глобальная зона для массового дропа файлов — добавляет новые части
+            SizedBox(
+              height: 56,
+              child: Stack(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: _hovering ? cs.primary : cs.outlineVariant,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    alignment: Alignment.centerLeft,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      _hovering
+                          ? 'Отпустите файлы, чтобы добавить'
+                          : 'Перетащите файлы сюда, чтобы добавить как части',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    _hovering
-                        ? 'Отпустите файлы, чтобы добавить'
-                        : 'Перетащите файлы сюда, чтобы добавить как части',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                DndDropArea(
-                  onHoverChanged: (v) {
-                    setState(() => _hovering = v);
-                  },
-                  onDrop: (bytes, filename) {
-                    final b64 = base64Encode(bytes);
-                    setState(() {
-                      widget.items.add(
-                        ComposePartDTO(
-                          name: filename,
-                          isFile: true,
-                          fileName: filename,
-                          base64: b64,
-                        ),
-                      );
-                    });
-                    widget.onChanged?.call(widget.items);
-                  },
-                  onDropMany: (files) {
-                    setState(() {
-                      for (final f in files) {
-                        final b64 = base64Encode(f.bytes);
+                  DndDropArea(
+                    onHoverChanged: (v) {
+                      setState(() => _hovering = v);
+                    },
+                    onDrop: (bytes, filename) {
+                      final b64 = base64Encode(bytes);
+                      setState(() {
                         widget.items.add(
                           ComposePartDTO(
-                            name: f.filename,
+                            name: filename,
                             isFile: true,
-                            fileName: f.filename,
+                            fileName: filename,
                             base64: b64,
                           ),
                         );
-                      }
-                    });
-                    widget.onChanged?.call(widget.items);
-                  },
-                ),
-              ],
+                      });
+                      widget.onChanged?.call(widget.items);
+                    },
+                    onDropMany: (files) {
+                      setState(() {
+                        for (final f in files) {
+                          final b64 = base64Encode(f.bytes);
+                          widget.items.add(
+                            ComposePartDTO(
+                              name: f.filename,
+                              isFile: true,
+                              fileName: f.filename,
+                              base64: b64,
+                            ),
+                          );
+                        }
+                      });
+                      widget.onChanged?.call(widget.items);
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
+            const SizedBox(height: 8),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: widget.items.length,
               itemBuilder: (context, index) {
                 final item = widget.items[index];
@@ -113,7 +116,7 @@ class _MultipartEditorState extends State<MultipartEditor> {
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 90,
+                        width: 96,
                         child: DropdownButtonFormField<bool>(
                           value: item.isFile,
                           onChanged: (v) {
@@ -130,6 +133,12 @@ class _MultipartEditorState extends State<MultipartEditor> {
                             );
                             widget.onChanged?.call(widget.items);
                           },
+                          isDense: true,
+                          isExpanded: true,
+                          iconSize: 16,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(fontSize: 12),
                           items:
                               const [false, true]
                                   .map(
@@ -281,8 +290,8 @@ class _MultipartEditorState extends State<MultipartEditor> {
                       if (item.isFile) const SizedBox(width: 8),
                       if (item.isFile)
                         SizedBox(
-                          width: 180,
-                          height: 40,
+                          width: 160,
+                          height: 36,
                           child: Stack(
                             children: [
                               Container(
@@ -366,19 +375,15 @@ class _MultipartEditorState extends State<MultipartEditor> {
                 );
               },
             ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
+            const SizedBox(height: 8),
+            Text(
               'Лимит файла ~ ${widget.maxUploadMB}MB',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
+            const SizedBox(height: 6),
+            TextButton.icon(
               onPressed: () {
                 setState(
                   () => widget.items.add(
@@ -390,8 +395,8 @@ class _MultipartEditorState extends State<MultipartEditor> {
               icon: const Icon(Icons.add),
               label: const Text('Add part'),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

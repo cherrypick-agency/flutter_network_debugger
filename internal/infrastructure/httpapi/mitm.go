@@ -213,6 +213,11 @@ func (ca *CertAuthority) IssueFor(host string) (tls.Certificate, error) {
 		return tls.Certificate{}, err
 	}
 	ca.mu.Lock()
+	// Double-check: another goroutine might have generated and cached the cert while we were generating
+	if cached, ok := ca.cache[h]; ok {
+		ca.mu.Unlock()
+		return cached, nil
+	}
 	ca.cache[h] = leaf
 	ca.mu.Unlock()
 	return leaf, nil
