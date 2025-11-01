@@ -217,6 +217,7 @@ func TestNewJSONComposeHistoryRepo_MaxItems(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			r := NewJSONComposeHistoryRepo("/tmp/test.json", tt.input)
@@ -368,5 +369,73 @@ func TestJSONComposeHistoryRepo_ListHistory_CorruptFile(t *testing.T) {
 	}
 	if next != "" {
 		t.Errorf("next should be empty, got %s", next)
+	}
+}
+
+func TestJSONComposeLibraryRepo_SaveLibrary_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("directory creation error", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("skipping permission test when running as root")
+		}
+		t.Parallel()
+
+		dir := t.TempDir()
+		readOnlyDir := filepath.Join(dir, "readonly")
+		if err := os.Mkdir(readOnlyDir, 0o444); err != nil {
+			t.Fatalf("create readonly dir: %v", err)
+		}
+		defer os.Chmod(readOnlyDir, 0o755)
+
+		p := filepath.Join(readOnlyDir, "subdir", "lib.json")
+		r := NewJSONComposeLibraryRepo(p)
+
+		lib := domain.ComposeLibrary{
+			Collections:  []domain.ComposeCollection{},
+			RequestsByID: map[string]domain.ComposeRequestTemplate{},
+		}
+
+		err := r.SaveLibrary(context.Background(), lib)
+		if err == nil {
+			t.Error("expected error when directory can't be created")
+		}
+	})
+}
+
+func TestJSONComposeHistoryRepo_SaveAll_MaxItems(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "hist.json")
+	r := NewJSONComposeHistoryRepo(p, 5)
+
+	ctx := context.Background()
+
+	// Add more items than maxItems
+	for i := 0; i < 10; i++ {
+		entry := domain.ComposeHistoryEntry{
+			ID:     string(rune('a' + i)),
+			Method: "GET",
+			Status: 200,
+		}
+		if err := r.AppendHistory(ctx, entry); err != nil {
+			t.Fatalf("append %d failed: %v", i, err)
+		}
+	}
+
+	// Should only keep the last 5 items
+	items, _, err := r.ListHistory(ctx, "", 100)
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+
+	if len(items) != 5 {
+		t.Errorf("expected 5 items after trimming, got %d", len(items))
+	}
+
+	// Verify the last 5 items are kept (f, g, h, i, j)
+	expectedFirst := string(rune('a' + 5)) // 'f'
+	if len(items) > 0 && items[0].ID != expectedFirst {
+		t.Errorf("expected first item to be %q, got %q", expectedFirst, items[0].ID)
 	}
 }

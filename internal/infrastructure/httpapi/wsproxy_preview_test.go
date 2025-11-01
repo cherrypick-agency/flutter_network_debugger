@@ -7,9 +7,9 @@ import (
 )
 
 func TestBuildPreview_TextJSONRedaction_AndBinary(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 64
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(64)
+	defer func() { previewMaxBytes.Store(old) }()
 	// text json with sensitive keys
 	p := buildPreview(domain.OpcodeText, []byte(`{"authorization":"Bearer abc","access_token":"x","k":1}`))
 	if !strContains(p, `"authorization":"***"`) || !strContains(p, `"access_token":"***"`) {
@@ -32,9 +32,9 @@ func TestOpcodeFromType_Mapping(t *testing.T) {
 }
 
 func TestBuildPreview_TextNonJSON(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 64
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(64)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// Plain text (not JSON)
 	p := buildPreview(domain.OpcodeText, []byte("Hello, World!"))
@@ -44,9 +44,9 @@ func TestBuildPreview_TextNonJSON(t *testing.T) {
 }
 
 func TestBuildPreview_TextExceedsMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 10
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(10)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// Text longer than max
 	data := []byte("This is a very long text that exceeds the maximum preview size")
@@ -57,9 +57,9 @@ func TestBuildPreview_TextExceedsMax(t *testing.T) {
 }
 
 func TestBuildPreview_TextJSONExceedsMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 20
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(20)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// JSON that exceeds max after marshaling
 	data := []byte(`{"key":"value","another":"data","more":"fields"}`)
@@ -70,9 +70,9 @@ func TestBuildPreview_TextJSONExceedsMax(t *testing.T) {
 }
 
 func TestBuildPreview_TextZeroMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 0
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(0)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// With zero max, should use full data length
 	data := []byte("Test")
@@ -83,9 +83,9 @@ func TestBuildPreview_TextZeroMax(t *testing.T) {
 }
 
 func TestBuildPreview_TextNegativeMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = -1
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(-1)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// With negative max, should use full data length
 	data := []byte("Test")
@@ -96,9 +96,9 @@ func TestBuildPreview_TextNegativeMax(t *testing.T) {
 }
 
 func TestBuildPreview_BinarySmall(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 64
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(64)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// Small binary data
 	data := []byte{0x01, 0x02, 0x03}
@@ -109,9 +109,9 @@ func TestBuildPreview_BinarySmall(t *testing.T) {
 }
 
 func TestBuildPreview_BinaryZeroMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 0
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(0)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// With zero max, should use full data length
 	data := []byte{0xAA, 0xBB, 0xCC}
@@ -122,9 +122,9 @@ func TestBuildPreview_BinaryZeroMax(t *testing.T) {
 }
 
 func TestBuildPreview_BinaryExceedsMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 300 // > 256
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(300) // > 256
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// Large binary data - should cap at 256
 	data := make([]byte, 300)
@@ -139,9 +139,9 @@ func TestBuildPreview_BinaryExceedsMax(t *testing.T) {
 }
 
 func TestBuildPreview_BinaryLargerThanMax(t *testing.T) {
-	old := previewMaxBytes
-	previewMaxBytes = 10
-	defer func() { previewMaxBytes = old }()
+	old := previewMaxBytes.Load()
+	previewMaxBytes.Store(10)
+	defer func() { previewMaxBytes.Store(old) }()
 
 	// Binary data larger than max
 	data := make([]byte, 100)

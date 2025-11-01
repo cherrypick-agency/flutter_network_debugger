@@ -160,13 +160,14 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 	}
 	m.items[it.ID] = pe
 	m.queue = append(m.queue, it.ID)
+	queueLen := len(m.queue)
 	m.mu.Unlock()
 	if m.monitor != nil {
 		m.monitor.Broadcast(MonitorEvent{Type: "intercept_created", ID: it.SessionID, Ref: it.ID})
 	}
 	if m.metrics != nil {
 		m.metrics.InterceptsTotal.WithLabelValues("created", string(it.Direction)).Inc()
-		m.metrics.InterceptsQueue.Set(float64(len(m.queue)))
+		m.metrics.InterceptsQueue.Set(float64(queueLen))
 	}
 	return pe
 }

@@ -267,7 +267,7 @@ func opcodeFromType(mt int) domain.Opcode {
 
 func buildPreview(op domain.Opcode, data []byte) string {
 	if op == domain.OpcodeText {
-		max := previewMaxBytes
+		max := int(previewMaxBytes.Load())
 		if max <= 0 {
 			max = len(data)
 		}
@@ -291,7 +291,7 @@ func buildPreview(op domain.Opcode, data []byte) string {
 		return string(data[:max])
 	}
 	// Hex preview for binary
-	max := previewMaxBytes
+	max := int(previewMaxBytes.Load())
 	if max <= 0 || max > len(data) {
 		max = len(data)
 	}

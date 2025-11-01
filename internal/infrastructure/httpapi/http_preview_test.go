@@ -26,20 +26,20 @@ import (
 
 func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
 	// Сохраняем и восстанавливаем глобальные настройки
-	oldExpose := exposeSensitiveHeaders
-	oldDecomp := previewDecompress
-	oldMax := previewMaxBytes
+	oldExpose := exposeSensitiveHeaders.Load()
+	oldDecomp := previewDecompress.Load()
+	oldMax := previewMaxBytes.Load()
 	defer func() {
-		exposeSensitiveHeaders = oldExpose
-		previewDecompress = oldDecomp
-		previewMaxBytes = oldMax
+		exposeSensitiveHeaders.Store(oldExpose)
+		previewDecompress.Store(oldDecomp)
+		previewMaxBytes.Store(oldMax)
 	}()
 
 	// Явно включим декомпрессию и маскировку
 	t.Setenv("PREVIEW_DECOMPRESS", "1")
-	previewDecompress = true
-	exposeSensitiveHeaders = false
-	previewMaxBytes = 4096
+	previewDecompress.Store(true)
+	exposeSensitiveHeaders.Store(false)
+	previewMaxBytes.Store(4096)
 
 	payload := []byte(`{"authorization":"Bearer abc","access_token":"x","value":123}`)
 
@@ -89,7 +89,7 @@ func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
 			}
 
 			// Усечение
-			previewMaxBytes = 8
+			previewMaxBytes.Store(8)
 			resp = &http.Response{
 				StatusCode: 200,
 				Header: http.Header{
@@ -110,12 +110,12 @@ func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
 }
 
 func TestHTTPRequestPreview_HeadersRedaction_Toggle(t *testing.T) {
-	oldExpose := exposeSensitiveHeaders
-	defer func() { exposeSensitiveHeaders = oldExpose }()
+	oldExpose := exposeSensitiveHeaders.Load()
+	defer func() { exposeSensitiveHeaders.Store(oldExpose) }()
 
 	// false: только маски, без headersRaw
 	t.Setenv("EXPOSE_SENSITIVE_HEADERS", "0")
-	exposeSensitiveHeaders = false
+	exposeSensitiveHeaders.Store(false)
 	req, _ := http.NewRequest(http.MethodPost, "http://example.com/x", bytes.NewReader([]byte("a=1")))
 	req.Header.Set("Authorization", "Bearer secret")
 	req.Header.Set("Cookie", "sid=abc")
@@ -133,7 +133,7 @@ func TestHTTPRequestPreview_HeadersRedaction_Toggle(t *testing.T) {
 
 	// true: присутствует headersRaw с исходными значениями
 	t.Setenv("EXPOSE_SENSITIVE_HEADERS", "1")
-	exposeSensitiveHeaders = true
+	exposeSensitiveHeaders.Store(true)
 	out2 := buildHTTPRequestPreview(req, []byte("{}"))
 	var m2 map[string]any
 	_ = json.Unmarshal([]byte(out2), &m2)
@@ -147,8 +147,8 @@ func TestHTTPRequestPreview_HeadersRedaction_Toggle(t *testing.T) {
 }
 
 func TestHTTPResponsePreview_HeadersRedaction_Toggle(t *testing.T) {
-	oldExpose := exposeSensitiveHeaders
-	defer func() { exposeSensitiveHeaders = oldExpose }()
+	oldExpose := exposeSensitiveHeaders.Load()
+	defer func() { exposeSensitiveHeaders.Store(oldExpose) }()
 
 	resp := &http.Response{
 		StatusCode: 200,
@@ -160,7 +160,7 @@ func TestHTTPResponsePreview_HeadersRedaction_Toggle(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader([]byte("{}"))),
 	}
 
-	exposeSensitiveHeaders = false
+	exposeSensitiveHeaders.Store(false)
 	prev := buildHTTPResponsePreview(resp)
 	var m map[string]any
 	_ = json.Unmarshal([]byte(prev), &m)
@@ -172,7 +172,7 @@ func TestHTTPResponsePreview_HeadersRedaction_Toggle(t *testing.T) {
 		t.Fatalf("headersRaw must be absent when expose=false")
 	}
 
-	exposeSensitiveHeaders = true
+	exposeSensitiveHeaders.Store(true)
 	prev2 := buildHTTPResponsePreview(resp)
 	var m2 map[string]any
 	_ = json.Unmarshal([]byte(prev2), &m2)
@@ -186,9 +186,9 @@ func TestHTTPResponsePreview_HeadersRedaction_Toggle(t *testing.T) {
 }
 
 func TestBuildHTTPRequestPreview_FormURLEncoded_Truncation(t *testing.T) {
-	oldMax := previewMaxBytes
-	defer func() { previewMaxBytes = oldMax }()
-	previewMaxBytes = 8
+	oldMax := previewMaxBytes.Load()
+	defer func() { previewMaxBytes.Store(oldMax) }()
+	previewMaxBytes.Store(8)
 	body := []byte("a=1234567890&b=2")
 	req, _ := http.NewRequest(http.MethodPost, "http://example/form", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -212,13 +212,17 @@ func strIndex(s, sub string) int {
 }
 
 func TestBuildHTTPRequestPreview_FormParsingAndBody(t *testing.T) {
-	oldExpose := exposeSensitiveHeaders
-	oldDecomp := previewDecompress
-	oldMax := previewMaxBytes
-	defer func() { exposeSensitiveHeaders = oldExpose; previewDecompress = oldDecomp; previewMaxBytes = oldMax }()
-	exposeSensitiveHeaders = false
-	previewDecompress = true
-	previewMaxBytes = 1024
+	oldExpose := exposeSensitiveHeaders.Load()
+	oldDecomp := previewDecompress.Load()
+	oldMax := previewMaxBytes.Load()
+	defer func() {
+		exposeSensitiveHeaders.Store(oldExpose)
+		previewDecompress.Store(oldDecomp)
+		previewMaxBytes.Store(oldMax)
+	}()
+	exposeSensitiveHeaders.Store(false)
+	previewDecompress.Store(true)
+	previewMaxBytes.Store(1024)
 
 	// urlencoded
 	req1, _ := http.NewRequest(http.MethodPost, "http://example.com/x", bytes.NewReader([]byte("a=1&b=2")))
@@ -357,7 +361,7 @@ func TestSanitizeForUpgrade_AndCookieSummary(t *testing.T) {
 		},
 		Body: io.NopCloser(bytes.NewReader([]byte(""))),
 	}
-	exposeSensitiveHeaders = false
+	exposeSensitiveHeaders.Store(false)
 	prev := buildHTTPResponsePreview(resp)
 	var m map[string]any
 	_ = json.Unmarshal([]byte(prev), &m)
@@ -388,10 +392,10 @@ func TestHTTPResponsePreview_TLS_Summary(t *testing.T) {
 }
 
 func TestHTTPRequestPreview_GzipBody_Decompress(t *testing.T) {
-	oldDecomp, oldMax := previewDecompress, previewMaxBytes
-	defer func() { previewDecompress = oldDecomp; previewMaxBytes = oldMax }()
-	previewDecompress = true
-	previewMaxBytes = 64
+	oldDecomp, oldMax := previewDecompress.Load(), previewMaxBytes.Load()
+	defer func() { previewDecompress.Store(oldDecomp); previewMaxBytes.Store(oldMax) }()
+	previewDecompress.Store(true)
+	previewMaxBytes.Store(64)
 	// gzip body
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
@@ -408,10 +412,10 @@ func TestHTTPRequestPreview_GzipBody_Decompress(t *testing.T) {
 }
 
 func TestHTTPRequestPreview_NoDecompress_ShowsRaw(t *testing.T) {
-	oldDecomp, oldMax := previewDecompress, previewMaxBytes
-	defer func() { previewDecompress = oldDecomp; previewMaxBytes = oldMax }()
-	previewDecompress = false
-	previewMaxBytes = 64
+	oldDecomp, oldMax := previewDecompress.Load(), previewMaxBytes.Load()
+	defer func() { previewDecompress.Store(oldDecomp); previewMaxBytes.Store(oldMax) }()
+	previewDecompress.Store(false)
+	previewMaxBytes.Store(64)
 	// gzip body
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
@@ -429,10 +433,10 @@ func TestHTTPRequestPreview_NoDecompress_ShowsRaw(t *testing.T) {
 }
 
 func TestHTTPRequestPreview_DeflateBody_Decompress(t *testing.T) {
-	oldDecomp, oldMax := previewDecompress, previewMaxBytes
-	defer func() { previewDecompress = oldDecomp; previewMaxBytes = oldMax }()
-	previewDecompress = true
-	previewMaxBytes = 64
+	oldDecomp, oldMax := previewDecompress.Load(), previewMaxBytes.Load()
+	defer func() { previewDecompress.Store(oldDecomp); previewMaxBytes.Store(oldMax) }()
+	previewDecompress.Store(true)
+	previewMaxBytes.Store(64)
 	// deflate body (raw DEFLATE)
 	var buf bytes.Buffer
 	zw, _ := flate.NewWriter(&buf, flate.DefaultCompression)

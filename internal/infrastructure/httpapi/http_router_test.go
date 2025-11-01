@@ -7,12 +7,16 @@ import (
 )
 
 func TestBuildBaseMux_AppliesPreviewFlags(t *testing.T) {
-	oldMax, oldExpose, oldDecomp := previewMaxBytes, exposeSensitiveHeaders, previewDecompress
-	defer func() { previewMaxBytes, exposeSensitiveHeaders, previewDecompress = oldMax, oldExpose, oldDecomp }()
+	oldMax, oldExpose, oldDecomp := previewMaxBytes.Load(), exposeSensitiveHeaders.Load(), previewDecompress.Load()
+	defer func() {
+		previewMaxBytes.Store(oldMax)
+		exposeSensitiveHeaders.Store(oldExpose)
+		previewDecompress.Store(oldDecomp)
+	}()
 	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 777, ExposeSensitiveHeaders: false, PreviewDecompress: false}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions()}
 	_ = buildBaseMux(d)
-	if previewMaxBytes != 777 || exposeSensitiveHeaders != false || previewDecompress != false {
-		t.Fatalf("flags not applied: %d %v %v", previewMaxBytes, exposeSensitiveHeaders, previewDecompress)
+	if previewMaxBytes.Load() != 777 || exposeSensitiveHeaders.Load() != false || previewDecompress.Load() != false {
+		t.Fatalf("flags not applied: %d %v %v", previewMaxBytes.Load(), exposeSensitiveHeaders.Load(), previewDecompress.Load())
 	}
 }
 

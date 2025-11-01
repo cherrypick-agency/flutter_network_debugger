@@ -16,6 +16,9 @@ import (
 	"gorm.io/gorm"
 
 	composep "network-debugger/internal/features/compose/infrastructure/persistence"
+	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
+	mappingrt "network-debugger/internal/features/mapping/runtime"
+	mappinguc "network-debugger/internal/features/mapping/usecase"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	proxyuc "network-debugger/internal/features/proxy/usecase"
 	settingsp "network-debugger/internal/features/settings/infrastructure/persistence"
@@ -37,6 +40,8 @@ type Deps struct {
 	Settings    *settingsuc.Service
 	ProxySvc    *proxyuc.Service
 	ProxyRt     *pruntime.Manager
+	Mapping     *mappinguc.Service
+	MapRt       *mappingrt.Manager
 }
 
 func NewRouter(cfg config.Config, logger *zerolog.Logger, metrics *obs.Metrics) http.Handler {
@@ -71,6 +76,24 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 	if d.DB != nil && d.ProxySvc == nil {
 		repo := proxyp.NewRepo(d.DB)
 		d.ProxySvc = proxyuc.NewService(repo)
+	}
+	// Инициализация Mapping сервиса
+	if d.DB != nil && d.Mapping == nil {
+		mrepo := mappingp.NewRepo(d.DB)
+		d.Mapping = mappinguc.NewService(mrepo)
+	}
+	if d.MapRt == nil {
+		d.MapRt = mappingrt.New()
+		if d.Mapping != nil {
+			if rules, err := d.Mapping.List(contextWithNoCancel()); err == nil {
+				d.MapRt.Update(rules)
+			}
+		}
+		d.MapRt.SetOnFileChange(func(ruleID string, path string) {
+			if d.Monitor != nil {
+				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_file_changed", ID: "", Ref: ruleID})
+			}
+		})
 	}
 	if d.ProxyRt == nil {
 		// создадим рантайм-менеджер
@@ -172,10 +195,10 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	}
 
 	// Apply preview limit from config (<=0 disables truncation)
-	previewMaxBytes = d.Cfg.PreviewMaxBytes
+	previewMaxBytes.Store(int32(d.Cfg.PreviewMaxBytes))
 	// Apply sensitive headers exposure flag
-	exposeSensitiveHeaders = d.Cfg.ExposeSensitiveHeaders
-	previewDecompress = d.Cfg.PreviewDecompress
+	exposeSensitiveHeaders.Store(d.Cfg.ExposeSensitiveHeaders)
+	previewDecompress.Store(d.Cfg.PreviewDecompress)
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -287,6 +310,13 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	mux.HandleFunc("/_api/v1/intercept/rules", d.handleInterceptRules)
 	mux.HandleFunc("/_api/v1/intercept/pending", d.handleInterceptPending)
 	mux.HandleFunc("/_api/v1/intercept/items/", d.handleInterceptItem)
+
+	// Mapping API (Map Local/Remote)
+	mux.HandleFunc("/_api/v1/mapping/config", d.handleMappingConfig)
+	mux.HandleFunc("/_api/v1/mapping/rules", d.handleMappingRules)
+	mux.HandleFunc("/_api/v1/mapping/rules/reorder", d.handleMappingRules)
+	mux.HandleFunc("/_api/v1/mapping/rules/", d.handleMappingRuleByID)
+	mux.HandleFunc("/_api/v1/mapping/upload", d.handleMappingUpload)
 
 	return mux
 }

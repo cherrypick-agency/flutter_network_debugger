@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -343,7 +344,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			// Для превью: аккуратно пикнем тело
 			var reqBodyBuf []byte
 			if req.Body != nil {
-				peekSize := previewMaxBytes
+				peekSize := int(previewMaxBytes.Load())
 				if peekSize <= 0 {
 					peekSize = 65536
 				}
@@ -364,6 +365,44 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
 			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+
+			// Mapping (MITM): оценим и применим до отправки апстриму
+			if d.MapRt != nil {
+				if dec, ok := d.MapRt.EvalRequest(req); ok {
+					if dec.Kind == "local" {
+						var bodyAll []byte
+						if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
+							bodyAll, _ = os.ReadFile(*dec.LocalFilePath)
+						} else if dec.LocalBlobPath != nil && *dec.LocalBlobPath != "" {
+							bodyAll, _ = os.ReadFile(*dec.LocalBlobPath)
+						}
+						h := http.Header{}
+						if dec.ContentTypeOverride != "" {
+							h.Set("Content-Type", dec.ContentTypeOverride)
+						} else if len(bodyAll) > 0 {
+							h.Set("Content-Type", http.DetectContentType(bodyAll))
+						} else {
+							h.Set("Content-Type", "application/octet-stream")
+						}
+						h.Set("X-ND-Mapped", "local")
+						h.Set("X-ND-Rule", dec.RuleID)
+						resp := &http.Response{StatusCode: dec.StatusOverride, Status: strconv.Itoa(dec.StatusOverride) + " " + http.StatusText(dec.StatusOverride), Header: h, Body: io.NopCloser(bytes.NewReader(bodyAll)), ContentLength: int64(len(bodyAll))}
+						preview := buildHTTPResponsePreview(resp)
+						fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
+						_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+						d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+						d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+						_ = resp.Write(tlsSrv)
+						continue
+					}
+					if u, err := url.Parse(dec.RemoteURL); err == nil {
+						req.URL = u
+						if !dec.PreserveHost {
+							req.Host = u.Host
+						}
+					}
+				}
+			}
 
 			// Interception: request inside MITM tunnel
 			if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
@@ -507,7 +546,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	// Safely peek a small portion of request body and keep stream intact
 	var reqBodyBuf []byte
 	if outReq.Body != nil {
-		peekSize := previewMaxBytes
+		peekSize := int(previewMaxBytes.Load())
 		if peekSize <= 0 {
 			peekSize = 65536
 		}
@@ -529,6 +568,68 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
 	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+
+	// Mapping: Map Remote/Local
+	if d.MapRt != nil {
+		if dec, ok := d.MapRt.EvalRequest(outReq); ok {
+			if dec.Kind == "local" {
+				// Прочитаем файл/блоб
+				var bodyAll []byte
+				if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
+					bodyAll, _ = os.ReadFile(*dec.LocalFilePath)
+				} else if dec.LocalBlobPath != nil && *dec.LocalBlobPath != "" {
+					bodyAll, _ = os.ReadFile(*dec.LocalBlobPath)
+				}
+				// Сформируем ответ
+				headers := http.Header{}
+				if dec.ContentTypeOverride != "" {
+					headers.Set("Content-Type", dec.ContentTypeOverride)
+				} else if len(bodyAll) > 0 {
+					headers.Set("Content-Type", http.DetectContentType(bodyAll))
+				} else {
+					headers.Set("Content-Type", "application/octet-stream")
+				}
+				headers.Set("X-ND-Mapped", "local")
+				headers.Set("X-ND-Rule", dec.RuleID)
+				resp := &http.Response{StatusCode: dec.StatusOverride, Status: strconv.Itoa(dec.StatusOverride) + " " + http.StatusText(dec.StatusOverride), Header: headers, Body: io.NopCloser(bytes.NewReader(bodyAll)), ContentLength: int64(len(bodyAll))}
+				preview := buildHTTPResponsePreview(resp)
+				fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
+				_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+				d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+				// mapping_applied (local)
+				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+					d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+				}
+				d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+
+				// Отдаём клиенту
+				copyHeader(w.Header(), headers)
+				w.Header().Set("Connection", "close")
+				w.Header().Set("Content-Length", strconv.Itoa(len(bodyAll)))
+				w.WriteHeader(dec.StatusOverride)
+				if len(bodyAll) > 0 {
+					_, _ = w.Write(bodyAll)
+				}
+				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
+				return
+			}
+			// Remote — переписываем URL
+			if u, err := url.Parse(dec.RemoteURL); err == nil {
+				outReq.URL = u
+				if !dec.PreserveHost {
+					outReq.Host = u.Host
+				}
+				// mapping_applied (remote)
+				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+					d.Metrics.MappingAppliedTotal.WithLabelValues("remote").Inc()
+				}
+			}
+		}
+	}
 
 	// Interception: request (forward)
 	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {

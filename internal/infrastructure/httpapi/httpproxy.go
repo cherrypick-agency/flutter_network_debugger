@@ -144,10 +144,76 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
 
+	// Mapping (Map Remote/Local) — оценим по итоговому upstream URL
+	mappedPreserveHost := false
+	if d.MapRt != nil {
+		prevReq := r.Clone(r.Context())
+		u2 := upstream
+		prevReq.URL = &u2
+		prevReq.Host = u2.Host
+		if dec, ok := d.MapRt.EvalRequest(prevReq); ok {
+			if dec.Kind == "local" {
+				var bodyAll []byte
+				if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
+					bodyAll, _ = os.ReadFile(*dec.LocalFilePath)
+				} else if dec.LocalBlobPath != nil && *dec.LocalBlobPath != "" {
+					bodyAll, _ = os.ReadFile(*dec.LocalBlobPath)
+				}
+				h := http.Header{}
+				if dec.ContentTypeOverride != "" {
+					h.Set("Content-Type", dec.ContentTypeOverride)
+				} else if len(bodyAll) > 0 {
+					h.Set("Content-Type", http.DetectContentType(bodyAll))
+				} else {
+					h.Set("Content-Type", "application/octet-stream")
+				}
+				h.Set("X-ND-Mapped", "local")
+				h.Set("X-ND-Rule", dec.RuleID)
+				resp := &http.Response{StatusCode: dec.StatusOverride, Status: strconv.Itoa(dec.StatusOverride) + " " + http.StatusText(dec.StatusOverride), Header: h, Body: io.NopCloser(bytes.NewReader(bodyAll)), ContentLength: int64(len(bodyAll))}
+				basePreview := buildHTTPResponsePreview(resp)
+				preview := augmentPreviewWithTimings(basePreview, 0, durationMs(time.Now(), time.Now()))
+				fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
+				_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+				d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+				// mapping_applied (local)
+				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+					d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+				}
+				d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+
+				copyHeader(w.Header(), h)
+				w.Header().Set("Connection", "close")
+				w.Header().Set("Content-Length", strconv.Itoa(len(bodyAll)))
+				w.WriteHeader(dec.StatusOverride)
+				if len(bodyAll) > 0 {
+					_, _ = w.Write(bodyAll)
+				}
+				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
+				return
+			}
+			if u, err := url.Parse(dec.RemoteURL); err == nil {
+				upstream = *u
+				mappedPreserveHost = dec.PreserveHost
+				// mapping_applied (remote)
+				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+					d.Metrics.MappingAppliedTotal.WithLabelValues("remote").Inc()
+				}
+			}
+		}
+	}
+
 	// Create reverse proxy
 	director := func(req *http.Request) {
 		req.URL = &upstream
-		req.Host = upstream.Host
+		if mappedPreserveHost {
+			// keep original Host
+		} else {
+			req.Host = upstream.Host
+		}
 		// Clean hop-by-hop headers; httputil will remove most, but ensure here for clarity
 		removeHopHeaders(req.Header)
 		// In isolate mode переписываем Cookie: оставляем только текущий namespace и разворачиваем имена
@@ -351,7 +417,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	// Safely peek a small portion of request body and keep stream intact for upstream.
 	var reqBodyBuf []byte
 	if r.Body != nil {
-		peekSize := previewMaxBytes
+		peekSize := int(previewMaxBytes.Load())
 		if peekSize <= 0 {
 			peekSize = 65536
 		}
@@ -503,7 +569,7 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 		} else {
 			hdr[k] = val
 		}
-		if exposeSensitiveHeaders {
+		if exposeSensitiveHeaders.Load() {
 			hdrRaw[k] = val
 		}
 	}
@@ -514,16 +580,16 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 		"url":     r.URL.String(),
 		"headers": hdr,
 	}
-	if exposeSensitiveHeaders {
+	if exposeSensitiveHeaders.Load() {
 		preview["headersRaw"] = hdrRaw
 	}
 	// headersRaw currently disabled in preview helpers to avoid config deps
-	max := previewMaxBytes
+	max := int(previewMaxBytes.Load())
 	if len(body) > 0 {
 		// Best-effort: decompress request preview if Content-Encoding set
 		b := body
 		enc := strings.ToLower(r.Header.Get("Content-Encoding"))
-		if previewDecompress && (enc == "gzip" || enc == "deflate") {
+		if previewDecompress.Load() && (enc == "gzip" || enc == "deflate") {
 			if dec, ok := tryDecompress(b, enc); ok {
 				b = dec
 			}
@@ -644,7 +710,7 @@ func buildHTTPResponsePreview(resp *http.Response) string {
 		} else {
 			hdr[k] = val
 		}
-		if exposeSensitiveHeaders {
+		if exposeSensitiveHeaders.Load() {
 			hdrRaw[k] = val
 		}
 	}
@@ -653,7 +719,7 @@ func buildHTTPResponsePreview(resp *http.Response) string {
 		"status":  resp.StatusCode,
 		"headers": hdr,
 	}
-	if exposeSensitiveHeaders {
+	if exposeSensitiveHeaders.Load() {
 		preview["headersRaw"] = hdrRaw
 	}
 	// TLS/security summary
@@ -702,7 +768,7 @@ func buildHTTPResponsePreview(resp *http.Response) string {
 	if resp.Body != nil {
 		// If gzip encoded, we do not decompress to avoid corrupting stream. We just sample raw bytes.
 		// Read a small chunk and then reattach it in front so client receives original body in full.
-		peekSize := previewMaxBytes
+		peekSize := int(previewMaxBytes.Load())
 		if peekSize <= 0 {
 			peekSize = 65536
 		}
@@ -716,12 +782,12 @@ func buildHTTPResponsePreview(resp *http.Response) string {
 			resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(bodyBuf), resp.Body))
 		}
 	}
-	max := previewMaxBytes
+	max := int(previewMaxBytes.Load())
 	if len(bodyBuf) > 0 {
 		// Best-effort decompress for gzip/deflate for preview only
 		b := bodyBuf
 		enc := strings.ToLower(resp.Header.Get("Content-Encoding"))
-		if previewDecompress && (enc == "gzip" || enc == "deflate") {
+		if previewDecompress.Load() && (enc == "gzip" || enc == "deflate") {
 			if dec, ok := tryDecompress(b, enc); ok {
 				b = dec
 			}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -168,6 +169,7 @@ func TestComposeService_SetMaxUploadMB(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, nil)
@@ -739,6 +741,7 @@ func TestBuildHTTPRequestFromTemplate_QueryParams(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			tpl := domain.ComposeRequestTemplate{
@@ -752,8 +755,24 @@ func TestBuildHTTPRequestFromTemplate_QueryParams(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if req.URL.String() != tt.expected {
-				t.Errorf("URL = %s, want %s", req.URL.String(), tt.expected)
+			// Parse expected URL to compare properly (query param order doesn't matter)
+			expectedURL, err := url.Parse(tt.expected)
+			if err != nil {
+				t.Fatalf("failed to parse expected URL: %v", err)
+			}
+
+			if req.URL.Scheme != expectedURL.Scheme {
+				t.Errorf("Scheme = %s, want %s", req.URL.Scheme, expectedURL.Scheme)
+			}
+			if req.URL.Host != expectedURL.Host {
+				t.Errorf("Host = %s, want %s", req.URL.Host, expectedURL.Host)
+			}
+			if req.URL.Path != expectedURL.Path {
+				t.Errorf("Path = %s, want %s", req.URL.Path, expectedURL.Path)
+			}
+			// Compare query params regardless of order
+			if req.URL.Query().Encode() != expectedURL.Query().Encode() {
+				t.Errorf("Query = %s, want %s", req.URL.Query().Encode(), expectedURL.Query().Encode())
 			}
 		})
 	}
