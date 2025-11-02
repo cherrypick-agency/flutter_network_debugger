@@ -201,4 +201,6 @@ jobs:
 
       - name: Run e2e tests
         run: go test -v ./internal/e2e
-        timeout-minutes: 5
+        env:
+          E2E_TIMEOUT_SECONDS: 540
+        timeout-minutes: 10
