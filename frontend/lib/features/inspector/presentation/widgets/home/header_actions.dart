@@ -16,6 +16,7 @@ class HeaderActions extends StatelessWidget {
     required this.onToggleTheme,
     required this.onOpenHotkeys,
     required this.onOpenSettings,
+    this.onOpenUpdates,
     this.onOpenIntegrations,
     required this.isRecording,
     required this.onToggleRecording,
@@ -32,6 +33,7 @@ class HeaderActions extends StatelessWidget {
   final VoidCallback? onToggleTheme;
   final VoidCallback onOpenHotkeys;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenUpdates;
   final VoidCallback? onOpenIntegrations;
   final bool isRecording;
   final VoidCallback onToggleRecording;
@@ -156,6 +158,12 @@ class HeaderActions extends StatelessWidget {
           tooltip: 'Settings',
           icon: const Icon(Icons.settings),
         ),
+        if (onOpenUpdates != null)
+          IconButton(
+            onPressed: onOpenUpdates,
+            tooltip: 'Updates',
+            icon: const Icon(Icons.system_update_alt),
+          ),
         if (onOpenCompose != null)
           IconButton(
             onPressed: onOpenCompose,

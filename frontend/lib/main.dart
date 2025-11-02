@@ -18,7 +18,7 @@ import 'features/inspector/presentation/widgets/quick_filters_bar.dart';
 import 'features/inspector/presentation/widgets/home/header_actions.dart';
 import 'features/filters/presentation/widgets/sessions_filters.dart';
 import 'features/filters/application/stores/sessions_filters_store.dart';
-import 'core/di/di.dart';
+import 'core/di/di.dart' show getIt, setupDI, sl;
 import 'core/network/connectivity_banner.dart';
 import 'core/notifications/notifications_service.dart';
 import 'features/inspector/application/services/monitor_service.dart';
@@ -30,6 +30,7 @@ import 'package:app_http_client/application/app_http_client.dart'
 import 'features/hotkeys/presentation/hotkeys_settings_page.dart';
 import 'features/landing/presentation/pages/download_page.dart';
 import 'features/settings/presentation/settings_page.dart';
+import 'features/updates/presentation/pages/updates_page.dart';
 import 'features/landing/presentation/pages/integrations_page.dart';
 import 'features/compose/presentation/pages/compose_page.dart';
 import 'core/hotkeys/hotkeys_service.dart';
@@ -41,6 +42,16 @@ import 'features/mapping/presentation/widgets/mapping_dialog.dart';
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
 import 'theme/font_scale.dart';
 import 'package:http_debugger/http_debugger.dart';
+import 'core/desktop/desktop_bootstrap.dart';
+import 'dart:io' show exit;
+import 'dart:async' show StreamController;
+import 'package:dio/dio.dart' show CancelToken;
+import 'package:package_info_plus/package_info_plus.dart';
+import 'features/updates/application/services/updates_service.dart';
+import 'features/updates/domain/entities/update_info.dart';
+import 'features/updates/presentation/widgets/update_dialog.dart';
+import 'features/updates/presentation/widgets/download_progress_dialog.dart';
+import 'features/updates/infrastructure/platform/platform_installer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,8 +61,21 @@ void main() async {
   if (kIsWeb) {
     setUrlStrategy(const HashUrlStrategy());
   }
-  await setupDI(baseUrl: 'http://localhost:9092');
-  runApp(const MyApp());
+
+  // Для desktop - покажем bootstrap app который запросит конфигурацию
+  // Для web - сразу setupDI и запускаем
+  if (!kIsWeb && DesktopBootstrap.isDesktop()) {
+    runApp(const BootstrapApp());
+  } else {
+    final packageInfo = await PackageInfo.fromPlatform();
+    await setupDI(
+      baseUrl: 'http://localhost:9092',
+      githubOwner: 'cherrypick-agency',
+      githubRepo: 'flutter_network_debugger',
+      currentVersion: packageInfo.version,
+    );
+    runApp(const MyApp());
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -151,6 +175,7 @@ class _MyAppState extends State<MyApp> {
             routes: {
               '/hotkeys': (_) => const HotkeysSettingsPage(),
               '/settings': (_) => const SettingsPage(),
+              '/updates': (_) => const UpdatesPage(),
               '/download': (_) => const DownloadPage(),
               '/integrations': (_) => const IntegrationsPage(),
               '/compose': (_) => const ComposePage(),
@@ -627,6 +652,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                       context,
                                     ).pushNamed('/settings');
                                   },
+                                  onOpenUpdates: () {
+                                    Navigator.of(context).pushNamed('/updates');
+                                  },
                                   onOpenIntegrations: () {
                                     Navigator.of(
                                       context,
@@ -1038,5 +1066,401 @@ class _SessionPlaceholder extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Bootstrap приложение для desktop платформ
+/// Показывает startup dialog, запускает Go сервер, затем показывает MyApp
+class BootstrapApp extends StatefulWidget {
+  const BootstrapApp({super.key});
+
+  @override
+  State<BootstrapApp> createState() => _BootstrapAppState();
+}
+
+class _BootstrapAppState extends State<BootstrapApp> {
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Инициализация будет происходить после первого build
+    // когда context станет доступен
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialize();
+    });
+  }
+
+  Future<void> _initialize() async {
+    if (!mounted) return;
+
+    final apiPort = await DesktopBootstrap.bootstrap(context);
+
+    if (apiPort == null) {
+      // Пользователь отменил запуск или произошла ошибка
+      // Закрываем приложение
+      if (mounted) {
+        // ignore: use_build_context_synchronously
+        await showDialog(
+          context: context,
+          builder:
+              (ctx) => AlertDialog(
+                title: const Text('Startup Cancelled'),
+                content: const Text('Application will now exit.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      // Exit app
+                      exit(0);
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+        );
+      }
+      return;
+    }
+
+    // Инициализируем DI с правильным портом
+    PackageInfo packageInfo;
+    try {
+      packageInfo = await PackageInfo.fromPlatform();
+    } catch (e) {
+      // Fallback если package_info не сработал
+      packageInfo = PackageInfo(
+        appName: 'Network Debugger',
+        packageName: 'com.example.app',
+        version: '1.0.0',
+        buildNumber: '1',
+      );
+    }
+
+    await setupDI(
+      baseUrl: 'http://localhost:$apiPort',
+      githubOwner: 'cherrypick-agency',
+      githubRepo: 'flutter_network_debugger',
+      currentVersion: packageInfo.version,
+    );
+
+    if (mounted) {
+      setState(() {
+        _initialized = true;
+      });
+
+      // Проверяем обновления после успешной инициализации
+      _checkForUpdates();
+    }
+  }
+
+  /// Проверяет наличие обновлений и показывает диалог если доступны
+  Future<void> _checkForUpdates() async {
+    if (!mounted) return;
+
+    try {
+      final updatesService = getIt<UpdatesService>();
+      final updateInfo = await updatesService.checkForUpdates();
+
+      if (updateInfo != null && mounted) {
+        // ignore: use_build_context_synchronously
+        final result = await showUpdateDialog(context, updateInfo);
+
+        switch (result) {
+          case UpdateDialogResult.download:
+            // Запускаем загрузку с прогрессом
+            await _downloadAndInstall(updateInfo);
+            break;
+          case UpdateDialogResult.skip:
+            final updatesService = getIt<UpdatesService>();
+            await updatesService.skipVersion(updateInfo.version);
+            break;
+          case UpdateDialogResult.viewAllReleases:
+            // Открываем страницу со всеми релизами
+            // ignore: use_build_context_synchronously
+            Navigator.of(context).pushNamed('/updates');
+            break;
+          case UpdateDialogResult.remindLater:
+          case null:
+            // Ничего не делаем
+            break;
+        }
+      }
+    } catch (e) {
+      // Тихо игнорируем ошибки проверки обновлений
+      // чтобы не мешать работе приложения
+    }
+  }
+
+  /// Загружает и устанавливает обновление
+  Future<void> _downloadAndInstall(UpdateInfo updateInfo) async {
+    if (!mounted) return;
+
+    final progressController = StreamController<DownloadProgress>();
+    final cancelToken = CancelToken();
+
+    try {
+      // Показываем диалог прогресса
+      // ignore: use_build_context_synchronously
+      final updatesService = getIt<UpdatesService>();
+      final downloadFuture = updatesService.downloadUpdate(
+        updateInfo,
+        progressController: progressController,
+        cancelToken: cancelToken,
+      );
+
+      // ignore: use_build_context_synchronously
+      final downloadDialogFuture = showDownloadProgressDialog(
+        context,
+        progressStream: progressController.stream,
+        onCancel: () => cancelToken.cancel('User cancelled'),
+      );
+
+      try {
+        // Ждем завершения загрузки
+        final filePath = await downloadFuture;
+
+        // Ждем закрытия диалога прогресса (диалог может еще использовать stream)
+        final downloadResult = await downloadDialogFuture;
+
+        if (downloadResult == DownloadDialogResult.cancelled) {
+          // Пользователь отменил загрузку
+          return;
+        }
+
+        if (downloadResult == DownloadDialogResult.error || filePath == null) {
+          // Ошибка загрузки
+          if (mounted) {
+            // ignore: use_build_context_synchronously
+            await showDialog(
+              context: context,
+              builder:
+                  (ctx) => AlertDialog(
+                    title: const Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Download Failed'),
+                      ],
+                    ),
+                    content: const Text(
+                      'Failed to download update. Please try again later or download manually from GitHub.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+            );
+          }
+          return;
+        }
+
+        // Загрузка успешна - показываем диалог установки
+        if (mounted) {
+          // ignore: use_build_context_synchronously
+          final shouldInstall = await showDialog<bool>(
+            context: context,
+            builder:
+                (ctx) => AlertDialog(
+                  title: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green),
+                      SizedBox(width: 12),
+                      Text('Download Complete'),
+                    ],
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Update has been downloaded successfully!'),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.blue.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Colors.blue,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Version ${updateInfo.version}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Would you like to open the installer now?',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Later'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      icon: const Icon(Icons.install_desktop),
+                      label: const Text('Install Now'),
+                    ),
+                  ],
+                ),
+          );
+
+          if (shouldInstall == true) {
+            // Открываем установщик
+            final installerResult = await openInstaller(filePath);
+
+            if (mounted) {
+              if (installerResult.success) {
+                // Показываем инструкции если есть
+                if (installerResult.instructions != null) {
+                  // ignore: use_build_context_synchronously
+                  await showDialog(
+                    context: context,
+                    builder:
+                        (ctx) => AlertDialog(
+                          title: const Text('Installation Instructions'),
+                          content: SingleChildScrollView(
+                            child: Text(installerResult.instructions!),
+                          ),
+                          actions: [
+                            ElevatedButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                  );
+                }
+              } else {
+                // Показываем ошибку
+                // ignore: use_build_context_synchronously
+                await showDialog(
+                  context: context,
+                  builder:
+                      (ctx) => AlertDialog(
+                        title: const Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red),
+                            SizedBox(width: 12),
+                            Text('Installation Error'),
+                          ],
+                        ),
+                        content: Text(
+                          installerResult.errorMessage ??
+                              'Failed to open installer',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      ),
+                );
+              }
+            }
+          }
+        }
+      } finally {
+        // CRITICAL: Всегда закрываем stream после того как диалог закрылся
+        // Это предотвращает memory leak
+        if (!progressController.isClosed) {
+          await progressController.close();
+        }
+      }
+    } catch (e) {
+      // Показываем ошибку пользователю
+      if (mounted) {
+        // ignore: use_build_context_synchronously
+        await showDialog(
+          context: context,
+          builder:
+              (ctx) => AlertDialog(
+                title: const Text('Error'),
+                content: Text('Failed to download update: $e'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+        );
+      }
+    } finally {
+      // Финальная очистка - закрываем stream если еще не закрыт
+      // (на случай если что-то пошло не так в catch блоке)
+      if (!progressController.isClosed) {
+        await progressController.close();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // Останавливаем сервер при закрытии приложения
+    DesktopBootstrap.shutdown();
+    // Освобождаем ресурсы UpdatesService
+    try {
+      getIt<UpdatesService>().dispose();
+    } catch (e) {
+      // Ignore if not registered
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_initialized) {
+      // Показываем splash screen пока инициализируемся
+      return MaterialApp(
+        theme: buildLightTheme(),
+        darkTheme: buildDarkTheme(),
+        home: const Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.network_check, size: 64),
+                SizedBox(height: 16),
+                Text(
+                  'Network Debugger',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text('Initializing...'),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // После инициализации показываем основное приложение
+    return const MyApp();
   }
 }

@@ -30,10 +30,22 @@ import '../../features/breakpoints/domain/repositories/breakpoints_repository.da
 import '../../features/breakpoints/application/stores/breakpoints_store.dart';
 import '../../features/breakpoints/application/stores/intercept_queue_store.dart';
 import '../../features/breakpoints/application/stores/intercept_editor_store.dart';
+import '../../features/updates/data/datasources/github_api_datasource.dart';
+import '../../features/updates/data/datasources/updates_local_datasource.dart';
+import '../../features/updates/data/repositories/updates_repository_impl.dart';
+import '../../features/updates/domain/repositories/updates_repository.dart';
+import '../../features/updates/application/services/updates_service.dart';
+import '../../features/updates/application/stores/updates_store.dart';
 
 final sl = GetIt.instance;
+final getIt = sl; // Alias for consistency
 
-Future<void> setupDI({required String baseUrl}) async {
+Future<void> setupDI({
+  required String baseUrl,
+  required String githubOwner,
+  required String githubRepo,
+  required String currentVersion,
+}) async {
   // init http module (как в qovo_flutter)
   final container = ContainerDI(sl);
   // tokens storage внутри модуля; baseURL как лямбда
@@ -123,5 +135,26 @@ Future<void> setupDI({required String baseUrl}) async {
   );
   sl.registerLazySingleton<InterceptEditorStore>(
     () => InterceptEditorStore(sl<BreakpointsRepository>()),
+  );
+
+  // Updates feature
+  sl.registerLazySingleton<GitHubApiDataSource>(
+    () => GitHubApiDataSource(githubOwner: githubOwner, githubRepo: githubRepo),
+  );
+  sl.registerLazySingleton<UpdatesLocalDataSource>(
+    () => UpdatesLocalDataSource(),
+  );
+  sl.registerLazySingleton<UpdatesRepository>(
+    () => UpdatesRepositoryImpl(
+      githubApi: sl<GitHubApiDataSource>(),
+      localStorage: sl<UpdatesLocalDataSource>(),
+      currentVersion: currentVersion,
+    ),
+  );
+  sl.registerLazySingleton<UpdatesService>(
+    () => UpdatesService(repository: sl<UpdatesRepository>()),
+  );
+  sl.registerLazySingleton<UpdatesStore>(
+    () => UpdatesStore(sl<UpdatesService>()),
   );
 }
