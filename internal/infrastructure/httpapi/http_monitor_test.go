@@ -3,12 +3,14 @@ package httpapi
 import (
 	"testing"
 	"time"
+
+	"network-debugger/internal/domain"
 )
 
 func TestMonitorHub_SubscribeBroadcastUnsubscribe(t *testing.T) {
 	h := NewMonitorHub()
 	ch := h.Subscribe()
-	h.Broadcast(MonitorEvent{Type: "t", ID: "1"})
+	h.Broadcast(domain.MonitorEvent{Type: "t", ID: "1"})
 	select {
 	case ev := <-ch:
 		if ev.Type != "t" || ev.ID != "1" {

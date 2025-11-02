@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	mem "network-debugger/internal/adapters/storage/memory"
@@ -10,12 +11,15 @@ import (
 	uc "network-debugger/internal/usecase"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 func TestLegacyAndV1_DeleteSessionsAndByID(t *testing.T) {
 	store := mem.NewStore(100, 100, 0)
 	s := uc.NewSessionService(store, store, store)
-	d := &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	_ = s.Create(contextWithNoCancel(), domain.Session{ID: "s1", StartedAt: time.Unix(0, 0).UTC()})
 	h := NewRouterWithoutForwardProxy(d)
 

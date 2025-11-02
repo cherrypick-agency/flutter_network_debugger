@@ -1,17 +1,21 @@
 package httpapi
 
 import (
+	"io"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	uc "network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestRouter_BasicEndpoints(t *testing.T) {
 	// deps with stubs
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*", PreviewMaxBytes: 1024, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*", PreviewMaxBytes: 1024, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 
 	// healthz
@@ -57,7 +61,8 @@ func TestRouter_BasicEndpoints(t *testing.T) {
 
 func TestRouter_SessionsEndpointsAndMetrics(t *testing.T) {
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 
 	// list sessions

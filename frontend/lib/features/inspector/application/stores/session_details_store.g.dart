@@ -111,6 +111,23 @@ mixin _$SessionDetailsStore on _SessionDetailsStore, Store {
     return _$loadMoreEventsAsyncAction.run(() => super.loadMoreEvents());
   }
 
+  late final _$_SessionDetailsStoreActionController = ActionController(
+    name: '_SessionDetailsStore',
+    context: context,
+  );
+
+  @override
+  void dispose() {
+    final _$actionInfo = _$_SessionDetailsStoreActionController.startAction(
+      name: '_SessionDetailsStore.dispose',
+    );
+    try {
+      return super.dispose();
+    } finally {
+      _$_SessionDetailsStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
   @override
   String toString() {
     return '''

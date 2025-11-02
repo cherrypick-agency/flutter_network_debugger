@@ -129,6 +129,9 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		Namespace:       ns,
 	}
 
+	// Check if target should be monitored (exclude monitoring endpoints)
+	shouldMonitor := d.shouldMonitorTarget(upstream.Path)
+
 	sessionID := id.New()
 	sess := domain.Session{
 		ID:         sessionID,
@@ -137,12 +140,18 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		StartedAt:  time.Now().UTC(),
 		Kind:       "http",
 	}
-	if err := d.Svc.Create(r.Context(), sess); err != nil {
-		writeError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", err.Error(), nil)
-		return
+	if shouldMonitor {
+		d.Logger.Info().Str("session_id", sessionID).Str("target", upstream.String()).Msg("[HTTPPROXY] shouldMonitor=true, creating session")
+		if err := d.Svc.Create(r.Context(), sess); err != nil {
+			writeError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", err.Error(), nil)
+			return
+		}
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
+		d.Logger.Info().Str("session_id", sessionID).Msg("[HTTPPROXY] Broadcasted session_started event")
+		d.Metrics.ActiveSessions.Inc()
+	} else {
+		d.Logger.Info().Str("target", upstream.String()).Msg("[HTTPPROXY] shouldMonitor=false, SKIPPING session creation")
 	}
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
-	d.Metrics.ActiveSessions.Inc()
 
 	// Mapping (Map Remote/Local) — оценим по итоговому upstream URL
 	mappedPreserveHost := false
@@ -172,15 +181,17 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 				resp := &http.Response{StatusCode: dec.StatusOverride, Status: strconv.Itoa(dec.StatusOverride) + " " + http.StatusText(dec.StatusOverride), Header: h, Body: io.NopCloser(bytes.NewReader(bodyAll)), ContentLength: int64(len(bodyAll))}
 				basePreview := buildHTTPResponsePreview(resp)
 				preview := augmentPreviewWithTimings(basePreview, 0, durationMs(time.Now(), time.Now()))
-				fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
-				_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-				d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-				// mapping_applied (local)
-				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
-				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
-					d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+				if shouldMonitor {
+					fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
+					_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+					// mapping_applied (local)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+					if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+						d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+					}
+					d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 				}
-				d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
 				copyHeader(w.Header(), h)
 				w.Header().Set("Connection", "close")
@@ -189,18 +200,22 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 				if len(bodyAll) > 0 {
 					_, _ = w.Write(bodyAll)
 				}
-				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-				d.Metrics.ActiveSessions.Dec()
+				if shouldMonitor {
+					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+					d.Metrics.ActiveSessions.Dec()
+				}
 				return
 			}
 			if u, err := url.Parse(dec.RemoteURL); err == nil {
 				upstream = *u
 				mappedPreserveHost = dec.PreserveHost
 				// mapping_applied (remote)
-				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
-				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
-					d.Metrics.MappingAppliedTotal.WithLabelValues("remote").Inc()
+				if shouldMonitor {
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+					if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+						d.Metrics.MappingAppliedTotal.WithLabelValues("remote").Inc()
+					}
 				}
 			}
 		}
@@ -334,10 +349,12 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			ttfb := durationMs(tStart, firstByte)
 			total := durationMs(tStart, time.Now())
 			preview := augmentPreviewWithTimings(basePreview, ttfb, total)
-			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
-			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+			if shouldMonitor {
+				fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
+				_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+				d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+			}
 
 			// Persist HTTP transaction summary
 			dnsStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tDNSNs))
@@ -368,13 +385,17 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 					d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
 				}
 			}
-			_ = d.Svc.AddHTTPTransaction(contextWithNoCancel(), tx)
-			d.Monitor.Broadcast(MonitorEvent{Type: "http_tx_added", ID: sessionID, Ref: tx.ID})
+			if shouldMonitor {
+				_ = d.Svc.AddHTTPTransaction(contextWithNoCancel(), tx)
+				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "http_tx_added", ID: sessionID, Ref: tx.ID})
+			}
 			return nil
 		},
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
 			hadError = true
-			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			if shouldMonitor {
+				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			}
 
 			// Get human-readable error message and code
 			errorCode, errorMessage := humanizeProxyError(err)
@@ -390,10 +411,10 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 				Msg(errorMessage)
 
 			// Broadcast error to frontend with user-friendly message
-			d.Monitor.Broadcast(MonitorEvent{
+			d.broadcastMonitorEvent(domain.MonitorEvent{
 				Type: "session_error",
 				ID:   sessionID,
-				Error: &ErrorDetails{
+				Error: &domain.ErrorDetails{
 					Code:    errorCode,
 					Message: errorMessage,
 					Raw:     err.Error(),
@@ -406,12 +427,12 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Emit lightweight session-start heartbeat frame so UI can draw in-progress bar immediately.
-	{
+	if shouldMonitor {
 		hb := map[string]any{"type": "http_progress", "phase": "started"}
 		b, _ := json.Marshal(hb)
 		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: len(b), Preview: string(b)}
 		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-		d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 	}
 
 	// Safely peek a small portion of request body and keep stream intact for upstream.
@@ -446,14 +467,16 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	rPrev := *r
 	rPrev.URL = &upstream
 	reqPreview := buildHTTPRequestPreview(&rPrev, reqBodyBuf)
-	fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
-	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+	if shouldMonitor {
+		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
+		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+		d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+	}
 
 	// Also broadcast a lightweight event for frontend session_started consistency in HTTP flows
 	// (ws flow already broadcasts in network-debugger)
-	// d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID}) // already sent above
+	// d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID}) // already sent above
 
 	// Interception: request (MVP) — после предпросмотра, до отправки
 	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
@@ -467,9 +490,11 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		if dec, _ := d.Interceptor.InterceptRequest(r.Context(), sessionID, r, string(decCap), decCap, ct); dec != nil {
 			if strings.ToLower(dec.Action) == "drop" {
 				writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
-				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
-				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-				d.Metrics.ActiveSessions.Dec()
+				if shouldMonitor {
+					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+					d.Metrics.ActiveSessions.Dec()
+				}
 				return
 			}
 			if dec.Method != "" {
@@ -536,11 +561,13 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Serve
 	proxy.ServeHTTP(w, r)
-	if !hadError {
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+	if shouldMonitor {
+		if !hadError {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+		}
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		d.Metrics.ActiveSessions.Dec()
 	}
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-	d.Metrics.ActiveSessions.Dec()
 }
 
 func removeHopHeaders(h http.Header) {

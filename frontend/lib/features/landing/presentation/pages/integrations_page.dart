@@ -1,10 +1,12 @@
 import 'dart:convert';
-import 'dart:io' show Platform, File, Directory, Process;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../../../core/di/di.dart';
 import 'integrations_platform.dart';
+import '../../utils/os_detect.dart';
+import 'file_helper.dart';
 import 'package:app_http_client/application/app_http_client.dart'
     as http_client;
 import '../../../../theme/context_ext.dart';
@@ -154,30 +156,25 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           (resp.data is String)
               ? resp.data as String
               : utf8.decode((resp.data as List).cast<int>());
-      // 3) Save to Downloads (ensure dir exists); fallback to temp on failure
-      String path = _resolveDownloadsPath('network-debugger-dev-ca.crt');
-      try {
-        final file = File(path);
-        await file.parent.create(recursive: true);
-        await file.writeAsString(pem);
-      } catch (_) {
-        final tmpBase = Directory.systemTemp.path;
-        path =
-            tmpBase +
-            (Platform.isWindows ? '\\' : '/') +
-            'network-debugger-dev-ca.crt';
-        await File(path).writeAsString(pem);
-      }
+      // 3) Save to Downloads using web-compatible helper
+      final path = await saveFileToDownloads(
+        'network-debugger-dev-ca.crt',
+        pem,
+      );
+
       _hasCA = true;
       _lastCAPath = path;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Dev CA saved to: ' + path),
-            action: SnackBarAction(
-              label: 'Show',
-              onPressed: () => _revealFile(path),
-            ),
+            action:
+                !kIsWeb
+                    ? SnackBarAction(
+                      label: 'Show',
+                      onPressed: () => _revealFile(path),
+                    )
+                    : null,
           ),
         );
       }
@@ -230,40 +227,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
 
   // Функция открытия папки убрана — иконка скрыта
 
-  String _resolveDownloadsPath(String fileName) {
-    final home =
-        Platform.environment['HOME'] ??
-        Platform.environment['USERPROFILE'] ??
-        '.';
-    if (Platform.isWindows) {
-      final base = Platform.environment['USERPROFILE'] ?? home;
-      return base + '\\Downloads\\' + fileName;
-    }
-    return home + '/Downloads/' + fileName;
-  }
-
   String _suggestedCAPath() {
-    return _lastCAPath ?? _resolveDownloadsPath('network-debugger-dev-ca.crt');
-  }
-
-  String _quoteForShell(String path) {
-    if (Platform.isWindows) {
-      return '"' + path.replaceAll('/', '\\') + '"';
-    }
-    // macOS/Linux: single quotes with escaping
-    return "'" + path.replaceAll("'", "'\\''") + "'";
+    return _lastCAPath ?? resolveDownloadsPath('network-debugger-dev-ca.crt');
   }
 
   Future<void> _revealFile(String path) async {
-    try {
-      if (Platform.isMacOS) {
-        await Process.run('open', ['-R', path]);
-      } else if (Platform.isWindows) {
-        await Process.run('explorer', ['/select,', path.replaceAll('/', '\\')]);
-      } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [File(path).parent.path]);
-      }
-    } catch (_) {}
+    if (kIsWeb) return; // Not available in web
+    await revealInFileManager(path);
   }
 
   Future<void> _autoIntegrate() async {
@@ -305,14 +275,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final osLabel =
-        Platform.isMacOS
-            ? 'macOS'
-            : Platform.isWindows
-            ? 'Windows'
-            : Platform.isLinux
-            ? 'Linux'
-            : 'OS';
+    final osLabel = getOperatingSystemLabel();
     final bool caMismatch =
         _osCAInstalled &&
         _hasCA &&
@@ -404,39 +367,41 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                           : cs.surfaceVariant,
                                 ),
                               ),
-                              Tooltip(
-                                message:
-                                    _osCAInstalled
-                                        ? ((_caFpSystem ?? '').isNotEmpty
-                                            ? ('OS FP: ' + _caFpSystem!)
-                                            : 'OS trust: ON')
-                                        : 'System trust store (macOS System keychain / Windows Root) contains dev CA',
-                                child: Chip(
-                                  label: Text(
-                                    _osCAInstalled
-                                        ? 'OS trust: ON'
-                                        : 'OS trust: OFF',
-                                  ),
-                                  backgroundColor:
+                              if (!kIsWeb)
+                                Tooltip(
+                                  message:
                                       _osCAInstalled
-                                          ? context.appColors.success
-                                              .withOpacity(0.25)
-                                          : cs.surfaceVariant,
-                                ),
-                              ),
-                              Tooltip(
-                                message: 'System HTTP/HTTPS proxy status',
-                                child: Chip(
-                                  label: Text(
-                                    _sysProxy ? 'Proxy: ON' : 'Proxy: OFF',
+                                          ? ((_caFpSystem ?? '').isNotEmpty
+                                              ? ('OS FP: ' + _caFpSystem!)
+                                              : 'OS trust: ON')
+                                          : 'System trust store (macOS System keychain / Windows Root) contains dev CA',
+                                  child: Chip(
+                                    label: Text(
+                                      _osCAInstalled
+                                          ? 'OS trust: ON'
+                                          : 'OS trust: OFF',
+                                    ),
+                                    backgroundColor:
+                                        _osCAInstalled
+                                            ? context.appColors.success
+                                                .withOpacity(0.25)
+                                            : cs.surfaceVariant,
                                   ),
-                                  backgroundColor:
-                                      _sysProxy
-                                          ? context.appColors.success
-                                              .withOpacity(0.25)
-                                          : cs.surfaceVariant,
                                 ),
-                              ),
+                              if (!kIsWeb)
+                                Tooltip(
+                                  message: 'System HTTP/HTTPS proxy status',
+                                  child: Chip(
+                                    label: Text(
+                                      _sysProxy ? 'Proxy: ON' : 'Proxy: OFF',
+                                    ),
+                                    backgroundColor:
+                                        _sysProxy
+                                            ? context.appColors.success
+                                                .withOpacity(0.25)
+                                            : cs.surfaceVariant,
+                                  ),
+                                ),
                               if ((_caPath ?? '').isNotEmpty)
                                 Tooltip(
                                   message:
@@ -504,7 +469,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                           icon: const Icon(Icons.content_copy),
                         ),
                       */
-                              if (caMismatch)
+                              if (caMismatch && !kIsWeb)
                                 Tooltip(
                                   message:
                                       'OS-trusted CA differs from proxy runtime CA',
@@ -654,7 +619,31 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          if (!(_sysProxy && _hasCA))
+                          if (kIsWeb)
+                            Card(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: cs.primary.withOpacity(0.06),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: cs.primary.withOpacity(0.25),
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.info_outline, color: cs.primary),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: SelectableText(
+                                        'Web version: view instructions and download CA. System diagnostics (OS trust, proxy status) and auto-setup are only available in the desktop application.',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (!kIsWeb && !(_sysProxy && _hasCA))
                             Card(
                               child: Container(
                                 decoration: BoxDecoration(
@@ -820,17 +809,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                                   'OR remove via CLI:',
                                                 ),
                                                 const SizedBox(height: 6),
-                                                if (Platform.isMacOS)
+                                                if (detectOS() == 'mac')
                                                   const TerminalCommand(
                                                     command:
                                                         'sudo security delete-certificate -c "network-debugger dev CA" /Library/Keychains/System.keychain',
                                                   )
-                                                else if (Platform.isWindows)
+                                                else if (detectOS() == 'win')
                                                   const TerminalCommand(
                                                     command:
                                                         'certutil -user -delstore Root "network-debugger dev CA"',
                                                   )
-                                                else if (Platform.isLinux) ...[
+                                                else ...[
                                                   const TerminalCommand(
                                                     command:
                                                         'sudo find /usr/local/share/ca-certificates -name "network-debugger-dev-ca.crt" -delete && sudo update-ca-certificates',
@@ -851,7 +840,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                               ),
                             ),
                           // Notice when OS trust remains but runtime CA in proxy is missing (e.g., after server restart)
-                          if (_osCAInstalled && !_hasCA)
+                          if (_osCAInstalled && !_hasCA && !kIsWeb)
                             Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
@@ -880,7 +869,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                               (_caFpSystem != null &&
                                   _caFpSystem!.isNotEmpty) &&
                               _caFpRuntime!.toLowerCase() !=
-                                  _caFpSystem!.toLowerCase())
+                                  _caFpSystem!.toLowerCase() &&
+                              !kIsWeb)
                             Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
@@ -973,7 +963,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                             'Regenerate dev CA',
                                           ),
                                         ),
-                                        if (_lastCAPath != null)
+                                        if (_lastCAPath != null && !kIsWeb)
                                           TextButton.icon(
                                             onPressed:
                                                 _loading
@@ -1029,7 +1019,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                       text:
                                           'Download CA (.crt) using the button above',
                                     ),
-                                    if (Platform.isMacOS) ...const [
+                                    if (detectOS() == 'mac') ...const [
                                       _Bullet(
                                         text:
                                             'Open Keychain Access → System → Certificates',
@@ -1038,7 +1028,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                         text:
                                             'Import the .crt file, then Trust → Always Trust',
                                       ),
-                                    ] else if (Platform.isWindows) ...const [
+                                    ] else if (detectOS() == 'win') ...const [
                                       _Bullet(
                                         text:
                                             'Open certmgr.msc → Trusted Root Certification Authorities → Certificates',
@@ -1047,7 +1037,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                         text:
                                             'Actions → All Tasks → Import… → select the .crt and finish the wizard',
                                       ),
-                                    ] else if (Platform.isLinux) ...const [
+                                    ] else ...const [
                                       _Bullet(
                                         text:
                                             'Debian/Ubuntu: copy to /usr/local/share/ca-certificates and run update-ca-certificates (root)',
@@ -1061,27 +1051,23 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                       const SizedBox(height: 12),
                                       const SelectableText('Option B (CLI):'),
                                       const SizedBox(height: 8),
-                                      if (Platform.isMacOS)
+                                      if (detectOS() == 'mac')
                                         TerminalCommand(
                                           command:
                                               'sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ' +
-                                              _quoteForShell(
-                                                _suggestedCAPath(),
-                                              ),
+                                              quoteForShell(_suggestedCAPath()),
                                         )
-                                      else if (Platform.isWindows)
+                                      else if (detectOS() == 'win')
                                         TerminalCommand(
                                           command:
                                               'certutil -user -addstore Root ' +
-                                              _quoteForShell(
-                                                _suggestedCAPath(),
-                                              ),
+                                              quoteForShell(_suggestedCAPath()),
                                         )
-                                      else if (Platform.isLinux) ...[
+                                      else ...[
                                         TerminalCommand(
                                           command:
                                               'sudo cp ' +
-                                              _quoteForShell(
+                                              quoteForShell(
                                                 _suggestedCAPath(),
                                               ) +
                                               ' /usr/local/share/ca-certificates/',
@@ -1126,17 +1112,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    if (Platform.isMacOS) ...const [
+                                    if (detectOS() == 'mac') ...const [
                                       _Bullet(
                                         text:
                                             'System Settings → Network → Wi‑Fi → Details → Proxies',
                                       ),
-                                    ] else if (Platform.isWindows) ...const [
+                                    ] else if (detectOS() == 'win') ...const [
                                       _Bullet(
                                         text:
                                             'Settings → Network & Internet → Proxy → Use a proxy server',
                                       ),
-                                    ] else if (Platform.isLinux) ...const [
+                                    ] else ...const [
                                       _Bullet(
                                         text:
                                             'Desktop settings → Network → Network Proxy (varies by distro/DE)',
@@ -1245,26 +1231,33 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                                 children: [
                                   Icon(Icons.info_outline, color: cs.primary),
                                   const SizedBox(width: 12),
-                                  const Expanded(
+                                  Expanded(
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        SelectableText(
+                                        const SelectableText(
                                           'Verification',
                                           style: TextStyle(
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
-                                        SizedBox(height: 8),
-                                        _Bullet(
+                                        const SizedBox(height: 8),
+                                        const _Bullet(
                                           text:
                                               'Open any HTTPS website/client — requests will appear in the inspector',
                                         ),
-                                        _Bullet(
+                                        const _Bullet(
                                           text:
                                               'Apps with certificate pinning will not allow MITM — use dev builds without pinning',
                                         ),
+                                        if (kIsWeb) ...[
+                                          const SizedBox(height: 8),
+                                          const _Bullet(
+                                            text:
+                                                'Web version note: For full diagnostics (OS trust status, system proxy detection), use the desktop application',
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),

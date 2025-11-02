@@ -55,6 +55,35 @@ mixin _$AggregateStore on _AggregateStore, Store {
     return _$loadAsyncAction.run(() => super.load(groupBy: groupBy));
   }
 
+  late final _$_AggregateStoreActionController = ActionController(
+    name: '_AggregateStore',
+    context: context,
+  );
+
+  @override
+  void clear() {
+    final _$actionInfo = _$_AggregateStoreActionController.startAction(
+      name: '_AggregateStore.clear',
+    );
+    try {
+      return super.clear();
+    } finally {
+      _$_AggregateStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void applyAggregate(List<Map<String, dynamic>> data) {
+    final _$actionInfo = _$_AggregateStoreActionController.startAction(
+      name: '_AggregateStore.applyAggregate',
+    );
+    try {
+      return super.applyAggregate(data);
+    } finally {
+      _$_AggregateStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
   @override
   String toString() {
     return '''

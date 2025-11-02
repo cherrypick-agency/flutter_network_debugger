@@ -413,6 +413,23 @@ func (s *Store) ListHTTPTransactions(ctx context.Context, sessionID string, from
 	return out, next, nil
 }
 
+// FindHTTPTransaction возвращает транзакцию по её ID для указанной сессии.
+// Идём от конца списка к началу, так как чаще нужен последний элемент.
+func (s *Store) FindHTTPTransaction(sessionID string, txID string) (domain.HTTPTransaction, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	e, ok := s.items[sessionID]
+	if !ok {
+		return domain.HTTPTransaction{}, false
+	}
+	for i := len(e.httpTxs) - 1; i >= 0; i-- {
+		if e.httpTxs[i].ID == txID {
+			return e.httpTxs[i], true
+		}
+	}
+	return domain.HTTPTransaction{}, false
+}
+
 func (s *Store) evictExpiredLocked() {
 	if s.ttl <= 0 {
 		return

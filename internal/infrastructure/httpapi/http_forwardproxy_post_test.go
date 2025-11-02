@@ -3,12 +3,15 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	uc "network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestWithForwardProxy_AbsoluteURI_POST_WithBody(t *testing.T) {
@@ -17,7 +20,8 @@ func TestWithForwardProxy_AbsoluteURI_POST_WithBody(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 128, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 128, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Logger: &logger, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := withForwardProxy(d, NewRouterWithoutForwardProxy(d))
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, upstream.URL+"/echo", bytes.NewReader([]byte(`{"x":1}`)))

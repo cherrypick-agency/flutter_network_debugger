@@ -64,6 +64,59 @@ mixin _$SessionsStore on _SessionsStore, Store {
     );
   }
 
+  late final _$_SessionsStoreActionController = ActionController(
+    name: '_SessionsStore',
+    context: context,
+  );
+
+  @override
+  void clear() {
+    final _$actionInfo = _$_SessionsStoreActionController.startAction(
+      name: '_SessionsStore.clear',
+    );
+    try {
+      return super.clear();
+    } finally {
+      _$_SessionsStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void applyInit(List<Session> data) {
+    final _$actionInfo = _$_SessionsStoreActionController.startAction(
+      name: '_SessionsStore.applyInit',
+    );
+    try {
+      return super.applyInit(data);
+    } finally {
+      _$_SessionsStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void upsert(Session s) {
+    final _$actionInfo = _$_SessionsStoreActionController.startAction(
+      name: '_SessionsStore.upsert',
+    );
+    try {
+      return super.upsert(s);
+    } finally {
+      _$_SessionsStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void removeById(String id) {
+    final _$actionInfo = _$_SessionsStoreActionController.startAction(
+      name: '_SessionsStore.removeById',
+    );
+    try {
+      return super.removeById(id);
+    } finally {
+      _$_SessionsStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
   @override
   String toString() {
     return '''

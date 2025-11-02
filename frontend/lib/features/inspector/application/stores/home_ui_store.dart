@@ -21,7 +21,7 @@ class HomeUiStore {
     sessionSearchQuery = mobx.Observable<String>('');
     isRecording = mobx.Observable<bool>(true);
     captureScope = mobx.Observable<String>('current'); // current | all
-    includePaused = mobx.Observable<bool>(false);
+    includePaused = mobx.Observable<bool>(true);
     recentWindowEnabled = mobx.Observable<bool>(false);
     recentWindowMinutes = mobx.Observable<int>(5);
     // Быстрые фильтры под таймлайном

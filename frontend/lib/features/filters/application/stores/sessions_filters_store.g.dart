@@ -9,6 +9,16 @@ part of 'sessions_filters_store.dart';
 // ignore_for_file: non_constant_identifier_names, unnecessary_brace_in_string_interps, unnecessary_lambdas, prefer_expression_function_bodies, lines_longer_than_80_chars, avoid_as, avoid_annotating_with_dynamic, no_leading_underscores_for_local_identifiers
 
 mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
+  Computed<bool>? _$hasActiveComputed;
+
+  @override
+  bool get hasActive =>
+      (_$hasActiveComputed ??= Computed<bool>(
+            () => super.hasActive,
+            name: '_SessionsFiltersStore.hasActive',
+          ))
+          .value;
+
   late final _$targetAtom = Atom(
     name: '_SessionsFiltersStore.target',
     context: context,
@@ -153,15 +163,106 @@ mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
     });
   }
 
-  Computed<bool>? _$hasActiveComputed;
+  late final _$_SessionsFiltersStoreActionController = ActionController(
+    name: '_SessionsFiltersStore',
+    context: context,
+  );
 
   @override
-  bool get hasActive =>
-      (_$hasActiveComputed ??= Computed<bool>(
-            () => super.hasActive,
-            name: '_SessionsFiltersStore.hasActive',
-          ))
-          .value;
+  void setTarget(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setTarget',
+    );
+    try {
+      return super.setTarget(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setHttpMethod(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setHttpMethod',
+    );
+    try {
+      return super.setHttpMethod(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setHttpStatus(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setHttpStatus',
+    );
+    try {
+      return super.setHttpStatus(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setHttpMime(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setHttpMime',
+    );
+    try {
+      return super.setHttpMime(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setHttpMinDurationMs(int v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setHttpMinDurationMs',
+    );
+    try {
+      return super.setHttpMinDurationMs(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setGroupBy(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setGroupBy',
+    );
+    try {
+      return super.setGroupBy(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setHeaderKey(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setHeaderKey',
+    );
+    try {
+      return super.setHeaderKey(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setHeaderVal(String v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setHeaderVal',
+    );
+    try {
+      return super.setHeaderVal(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
 
   @override
   String toString() {

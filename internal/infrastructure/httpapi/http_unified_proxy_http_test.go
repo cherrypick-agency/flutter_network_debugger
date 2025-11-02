@@ -8,6 +8,8 @@ import (
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestUnifiedProxy_HTTP_HappyPath(t *testing.T) {
@@ -16,7 +18,8 @@ func TestUnifiedProxy_HTTP_HappyPath(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d := &Deps{Monitor: NewMonitorHub(), Metrics: obs.NewMetrics()}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Monitor: NewMonitorHub(), Metrics: obs.NewMetrics()}
 	store := mem.NewStore(8, 8, 0)
 	d.Svc = usecase.NewSessionService(store, store, store)
 

@@ -56,7 +56,7 @@ func (r *HistoryRepo) AppendHistory(ctx context.Context, e domain.ComposeHistory
 	if e.When.IsZero() {
 		e.When = time.Now().UTC()
 	}
-	m := ComposeHistoryEntryModel{ID: e.ID, Template: e.Template, Method: e.Method, URL: e.URL, Status: e.Status, When: e.When}
+	m := ComposeHistoryEntryModel{ID: e.ID, Template: e.Template, Session: e.Session, Method: e.Method, URL: e.URL, Status: e.Status, When: e.When}
 	return r.db.WithContext(ctx).Create(&m).Error
 }
 
@@ -71,7 +71,7 @@ func (r *HistoryRepo) ListHistory(ctx context.Context, from string, limit int) (
 	out := make([]domain.ComposeHistoryEntry, 0, len(rows))
 	for i := range rows {
 		m := rows[i]
-		out = append(out, domain.ComposeHistoryEntry{ID: m.ID, Template: m.Template, Method: m.Method, URL: m.URL, Status: m.Status, When: m.When})
+		out = append(out, domain.ComposeHistoryEntry{ID: m.ID, Template: m.Template, Session: m.Session, Method: m.Method, URL: m.URL, Status: m.Status, When: m.When})
 	}
 	return out, "", nil
 }

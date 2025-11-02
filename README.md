@@ -97,6 +97,66 @@ Suitable for local development and test environments. Has web interface (opens i
   ./network-debugger-web
   ```
 
+### CLI sessions mode (colored console output)
+
+Run server with CLI output enabled (no browser auto‑open):
+
+```bash
+./network-debugger --cli --cli-preset basic
+# or fine‑tune fields:
+./network-debugger --cli \
+  --cli-fields line,sizes,timings,req-headers,resp-headers \
+  --cli-color auto \
+  --cli-filter "/api/" \
+  --cli-body-bytes 50000
+```
+
+Presets: `minimal | basic | advanced | full` (fields listed below). `--cli-fields` overrides preset entirely.
+Color modes: `auto | always | never`. Body preview default uses `PREVIEW_MAX_BYTES`.
+
+Flags
+- `--cli`: enable CLI mode (disables auto‑open browser)
+- `--cli-preset`: one of `minimal|basic|advanced|full`
+- `--cli-fields`: comma‑separated list of sections to show (overrides preset)
+- `--cli-body-bytes`: body preview limit (bytes); 0 = use `PREVIEW_MAX_BYTES`
+- `--cli-color`: `auto|always|never`
+- `--cli-filter`: substring filter (matches URL/method/status)
+
+Fields (sections)
+- `line`: single‑line summary (time, METHOD, URL, STATUS, totalMs, sizes)
+- `sizes`: request/response byte sizes (also included in `line` summary)
+- `timings`: HTTP timings (DNS/Connect/TLS/TTFB/Total) when available
+- `req-headers`, `resp-headers`: selected headers with masking of sensitive values
+- `req-body`, `resp-body`: pretty JSON or raw preview, trimmed by `--cli-body-bytes`
+- `tls`: TLS peer info (version/cipher/ALPN/certs summary) when available
+- `cookies`: Set‑Cookie flags summary (counts of Secure/HttpOnly/SameSite)
+- `ids`: internal IDs (session/tx) for cross‑referencing
+
+Presets mapping
+- minimal: `line`
+- basic: `line,sizes`
+- advanced: `line,sizes,timings,req-headers,resp-headers`
+- full: `advanced + req-body,resp-body,tls,cookies,ids`
+
+Notes
+- HTTP request/response bodies shown are previews; they may be truncated and/or decompressed for readability.
+- Sensitive headers are masked by default; enable raw exposure via server config if needed.
+- Colors are enabled automatically for TTY; force with `--cli-color always`.
+
+Examples
+```bash
+# Show only single-line summaries, always with colors
+./network-debugger --cli --cli-preset minimal --cli-color always
+
+# Full details but limit body previews to 16KB
+./network-debugger --cli --cli-preset full --cli-body-bytes 16384
+
+# Custom selection with filtering for API routes
+./network-debugger --cli \
+  --cli-fields line,timings,req-headers,resp-headers \
+  --cli-filter "/v1/"
+```
+
 Where UI opens
 - By default server listens on :9092 (UI), proxy (forward) is on :9091:
   - UI: http://localhost:9092/

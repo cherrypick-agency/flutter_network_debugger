@@ -27,7 +27,7 @@ func (d *Deps) handleListSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		// and broadcast a synthetic event so frontends can refresh
 		if d.Monitor != nil {
-			d.Monitor.Broadcast(MonitorEvent{Type: "sessions_cleared", ID: "*"})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -256,7 +256,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 			d.Live.CloseAll()
 		}
 		if d.Monitor != nil {
-			d.Monitor.Broadcast(MonitorEvent{Type: "sessions_cleared", ID: "*"})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -676,12 +676,9 @@ func (d *Deps) handleV1SessionsAggregate(w http.ResponseWriter, r *http.Request)
 	}
 	agg := map[string]int{}
 	for _, s := range items {
-		key := s.Target
-		if i := strings.Index(key, "://"); i >= 0 {
-			key = key[i+3:]
-		}
-		if j := strings.IndexByte(key, '/'); j >= 0 {
-			key = key[:j]
+		key := normalizeHost(s.Target)
+		if key == "" {
+			key = "unknown"
 		}
 		agg[key]++
 	}
@@ -1062,76 +1059,4 @@ func containsFoldSlice(arr []string, val string) bool {
 		}
 	}
 	return false
-}
-
-// handleSessionStream provides Server-Sent Events for real-time updates of a session.
-// Path: /api/sessions_stream/{id}
-func (d *Deps) handleSessionStream(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/sessions_stream/")
-	if id == "" {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "STREAM_UNSUPPORTED", "stream unsupported", nil)
-		return
-	}
-
-	// Push-based stream: subscribe to in-process monitor bus and fan-out events for this session
-	sub := d.Monitor.Subscribe()
-	defer d.Monitor.Unsubscribe(sub)
-	enc := json.NewEncoder(w)
-	// initial catch-up (optional): send last chunks
-	if frames, _, _ := d.Svc.ListFrames(r.Context(), id, "", 1000); len(frames) > 0 {
-		_ = writeSSE(w, flusher, "frames", frames, enc)
-	}
-	if evs, _, _ := d.Svc.ListEvents(r.Context(), id, "", 1000); len(evs) > 0 {
-		_ = writeSSE(w, flusher, "events", evs, enc)
-	}
-	if txs, _, _ := d.Svc.ListHTTPTransactions(r.Context(), id, "", 1000); len(txs) > 0 {
-		_ = writeSSE(w, flusher, "http", txs, enc)
-	}
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case ev := <-sub:
-			// Filter by session id
-			if ev.ID != id {
-				continue
-			}
-			switch ev.Type {
-			case "frame_added":
-				if frames, _, _ := d.Svc.ListFrames(r.Context(), id, "", 1<<30); len(frames) > 0 {
-					last := frames[len(frames)-1:]
-					_ = writeSSE(w, flusher, "frames", last, enc)
-				}
-			case "event_added", "sio_probe":
-				if evs, _, _ := d.Svc.ListEvents(r.Context(), id, "", 1<<30); len(evs) > 0 {
-					last := evs[len(evs)-1:]
-					_ = writeSSE(w, flusher, "events", last, enc)
-				}
-			case "http_tx_added":
-				if txs, _, _ := d.Svc.ListHTTPTransactions(r.Context(), id, "", 1<<30); len(txs) > 0 {
-					last := txs[len(txs)-1:]
-					_ = writeSSE(w, flusher, "http", last, enc)
-				}
-			case "session_ended", "session_started":
-				_ = writeSSE(w, flusher, ev.Type, ev, enc)
-			}
-		}
-	}
-}
-
-func writeSSE(w http.ResponseWriter, flusher http.Flusher, event string, data any, enc *json.Encoder) error {
-	_, _ = w.Write([]byte("event: " + event + "\n"))
-	// write data: <json> in one line
-	_ = enc.Encode(data)
-	_, _ = w.Write([]byte("\n"))
-	flusher.Flush()
-	return nil
 }

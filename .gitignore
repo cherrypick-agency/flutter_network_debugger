@@ -1,7 +1,9 @@
+./network-debugger
 /tmp/
 /build/
 /web/downloads/
 /dist/
+*/.dart_tool/*
 
 .clinerules/byterover-rules.md
 .kilocode/rules/byterover-rules.md
@@ -92,4 +94,3 @@ frontend/windows/flutter/ephemeral/
 # Embedded web build for desktop wrapper
 cmd/network-debugger-web/_web/
 
-/.dart_tool/*

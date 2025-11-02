@@ -101,6 +101,7 @@ type ComposeLibrary struct {
 type ComposeHistoryEntry struct {
 	ID       string    `json:"id"`
 	Template string    `json:"templateId,omitempty"`
+	Session  string    `json:"sessionId,omitempty"`
 	Method   string    `json:"method"`
 	URL      string    `json:"url"`
 	Status   int       `json:"status"`

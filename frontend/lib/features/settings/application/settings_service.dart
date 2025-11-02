@@ -18,6 +18,33 @@ class SettingsService {
     );
   }
 
+  Future<void> saveHighlightThemeDual({
+    required String light,
+    required String dark,
+  }) async {
+    final api = sl<AppHttpClient>();
+    await api.post(
+      path: '/_api/v1/settings',
+      body: {'highlightThemeLight': light, 'highlightThemeDark': dark},
+    );
+  }
+
+  Future<void> saveHighlightThemeLight(String themeKey) async {
+    final api = sl<AppHttpClient>();
+    await api.post(
+      path: '/_api/v1/settings',
+      body: {'highlightThemeLight': themeKey},
+    );
+  }
+
+  Future<void> saveHighlightThemeDark(String themeKey) async {
+    final api = sl<AppHttpClient>();
+    await api.post(
+      path: '/_api/v1/settings',
+      body: {'highlightThemeDark': themeKey},
+    );
+  }
+
   Future<void> syncPrefsToBackend() async {
     try {
       final data = await PrefsService().load();

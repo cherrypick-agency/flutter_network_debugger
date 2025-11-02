@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 import '../../domain/models.dart';
 import '../../data/compose_repository.dart';
 import '../../application/compose_store.dart';
-import '../widgets/library_tree.dart';
+import '../widgets/library_animated_tree.dart';
+import '../widgets/folder_picker_dialog.dart';
 import '../widgets/compose_http_details.dart';
 import '../widgets/key_value_editor.dart';
 import '../widgets/kv.dart';
@@ -74,6 +75,12 @@ class _ComposePageState extends State<ComposePage> {
     super.initState();
     _loadComposeConfig();
     _loadDraftIfAny();
+    // загрузим библиотеку один раз при входе, без FutureBuilder в дереве
+    // ignore: discarded_futures
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ignore: discarded_futures
+      sl<ComposeStore>().loadLibrary();
+    });
   }
 
   void _markDirty() {
@@ -358,131 +365,132 @@ class _ComposePageState extends State<ComposePage> {
                   decoration: BoxDecoration(
                     border: Border(right: BorderSide(color: cs.outlineVariant)),
                   ),
-                  child: FutureBuilder(
-                    future: sl<ComposeStore>().loadLibrary(),
-                    builder: (ctx, _) {
-                      return Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: TextField(
-                              controller: _libSearchCtrl,
-                              decoration: const InputDecoration(
-                                isDense: true,
-                                labelText: 'Search',
-                                prefixIcon: Icon(Icons.search, size: 16),
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                          Expanded(
-                            child: ComposeLibraryTree(
-                              store: sl<ComposeStore>(),
-                              onSelect: (tpl) async {
-                                await _maybeApplyTemplate(tpl);
-                              },
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                Expanded(
                   child: Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            // Method
-                            SizedBox(
-                              width: 110,
-                              child: DropdownButtonFormField<String>(
-                                value: _method,
-                                onChanged: (v) {
-                                  setState(() => _method = v ?? 'GET');
-                                  _markDirty();
-                                  _scheduleAutosave();
-                                },
-                                isDense: true,
-                                isExpanded: true,
-                                iconSize: 16,
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.bodyMedium?.copyWith(fontSize: 12),
-                                items:
-                                    const [
-                                          'GET',
-                                          'POST',
-                                          'PUT',
-                                          'DELETE',
-                                          'PATCH',
-                                          'HEAD',
-                                          'OPTIONS',
-                                        ]
-                                        .map(
-                                          (m) => DropdownMenuItem(
-                                            value: m,
-                                            child: Text(m),
-                                          ),
-                                        )
-                                        .toList(),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // URL
-                            Expanded(
-                              child: TextFormField(
-                                controller: _urlCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'URL',
-                                  hintText: 'https://api.example.com/v1',
-                                ),
-                                onChanged: (_) {
-                                  setState(() {
-                                    _dirty = true;
-                                  });
-                                  _scheduleAutosave();
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Row(
-                              children: [
-                                IconButton(
-                                  tooltip: 'Copy cURL',
-                                  onPressed: _copyCurl,
-                                  icon: const Icon(Icons.copy_all),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton.icon(
-                              onPressed: _sending ? null : _onSend,
-                              icon: const Icon(Icons.send),
-                              label:
-                                  _sending
-                                      ? Row(
-                                        children: [
-                                          const SizedBox(
-                                            height: 16,
-                                            width: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Text('Sending...'),
-                                        ],
-                                      )
-                                      : const Text('Send'),
-                            ),
-                          ],
+                        padding: const EdgeInsets.all(8),
+                        child: TextField(
+                          controller: _libSearchCtrl,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            labelText: 'Search',
+                            prefixIcon: Icon(Icons.search, size: 16),
+                          ),
+                          onChanged: (_) => setState(() {}),
                         ),
                       ),
                       Expanded(
-                        child: DefaultTabController(
+                        child: LibraryAnimatedTree(
+                          store: sl<ComposeStore>(),
+                          onSelect: (tpl) async {
+                            await _maybeApplyTemplate(tpl);
+                          },
+                          searchQuery: _libSearchCtrl.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              // Method
+                              SizedBox(
+                                width: 110,
+                                child: DropdownButtonFormField<String>(
+                                  value: _method,
+                                  onChanged: (v) {
+                                    setState(() => _method = v ?? 'GET');
+                                    _markDirty();
+                                    _scheduleAutosave();
+                                  },
+                                  isDense: true,
+                                  isExpanded: true,
+                                  iconSize: 16,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(fontSize: 12),
+                                  items:
+                                      const [
+                                            'GET',
+                                            'POST',
+                                            'PUT',
+                                            'DELETE',
+                                            'PATCH',
+                                            'HEAD',
+                                            'OPTIONS',
+                                          ]
+                                          .map(
+                                            (m) => DropdownMenuItem(
+                                              value: m,
+                                              child: Text(m),
+                                            ),
+                                          )
+                                          .toList(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // URL
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _urlCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'URL',
+                                    hintText: 'https://api.example.com/v1',
+                                  ),
+                                  onChanged: (_) {
+                                    setState(() {
+                                      _dirty = true;
+                                    });
+                                    _scheduleAutosave();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Copy cURL',
+                                    onPressed: _copyCurl,
+                                    icon: const Icon(Icons.copy_all),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                onPressed: _onSaveToCollection,
+                                icon: const Icon(Icons.folder_open),
+                                label: const Text('Save to...'),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton.icon(
+                                onPressed: _sending ? null : _onSend,
+                                icon: const Icon(Icons.send),
+                                label:
+                                    _sending
+                                        ? Row(
+                                          children: [
+                                            const SizedBox(
+                                              height: 16,
+                                              width: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            const Text('Sending...'),
+                                          ],
+                                        )
+                                        : const Text('Send'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        DefaultTabController(
                           length: 4,
                           child: Column(
                             children: [
@@ -494,137 +502,177 @@ class _ComposePageState extends State<ComposePage> {
                                   Tab(text: 'Auth'),
                                 ],
                               ),
-                              Expanded(
-                                child: TabBarView(
-                                  children: [
-                                    Column(
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
+                              Builder(
+                                builder: (ctx) {
+                                  final ctrl = DefaultTabController.of(ctx);
+                                  return AnimatedBuilder(
+                                    animation: ctrl!,
+                                    builder: (ctx, _) {
+                                      final idx = ctrl.index;
+                                      return IndexedStack(
+                                        index: idx,
+                                        children: [
+                                          // Headers — делаем контент прокручиваемым, а
+                                          // редактор ключ-значение растягиваем по контенту
+                                          SingleChildScrollView(
+                                            padding: EdgeInsets.zero,
+                                            child: Column(
+                                              children: [
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 8,
+                                                      ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              top: 8,
+                                                              right: 8,
+                                                            ),
+                                                        child: Text(
+                                                          'Add:',
+                                                          style:
+                                                              Theme.of(context)
+                                                                  .textTheme
+                                                                  .bodySmall,
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        child: Wrap(
+                                                          spacing: 8,
+                                                          runSpacing: 8,
+                                                          children: [
+                                                            _quickHeaderButton(
+                                                              'Content-Type',
+                                                              'application/json',
+                                                            ),
+                                                            _quickHeaderButton(
+                                                              'Authorization',
+                                                              'Bearer ',
+                                                            ),
+                                                            _quickHeaderButton(
+                                                              'Accept',
+                                                              'application/json',
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                KeyValueEditor(
+                                                  key: const ValueKey(
+                                                    'headers',
+                                                  ),
+                                                  items: _headers,
+                                                  onChanged: (list) {
+                                                    setState(() {
+                                                      _dirty = true;
+                                                    });
+                                                    _scheduleAutosave();
+                                                  },
+                                                  labelKey: 'Header',
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 8,
-                                                  right: 8,
-                                                ),
-                                                child: Text(
-                                                  'Add:',
-                                                  style:
-                                                      Theme.of(
-                                                        context,
-                                                      ).textTheme.bodySmall,
-                                                ),
-                                              ),
-                                              Expanded(
-                                                child: Wrap(
-                                                  spacing: 8,
-                                                  runSpacing: 8,
-                                                  children: [
-                                                    _quickHeaderButton(
-                                                      'Content-Type',
-                                                      'application/json',
-                                                    ),
-                                                    _quickHeaderButton(
-                                                      'Authorization',
-                                                      'Bearer ',
-                                                    ),
-                                                    _quickHeaderButton(
-                                                      'Accept',
-                                                      'application/json',
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
+                                          SingleChildScrollView(
+                                            padding: EdgeInsets.zero,
+                                            child: KeyValueEditor(
+                                              key: const ValueKey('query'),
+                                              items: _query,
+                                              onChanged: (list) {
+                                                setState(() {
+                                                  _dirty = true;
+                                                });
+                                                _scheduleAutosave();
+                                              },
+                                              labelKey: 'Param',
+                                            ),
                                           ),
-                                        ),
-                                        Expanded(
-                                          child: KeyValueEditor(
-                                            key: const ValueKey('headers'),
-                                            items: _headers,
-                                            onChanged: (list) {
+                                          BodyEditor(
+                                            mode: _bodyMode,
+                                            onModeChanged: (v) {
+                                              _markDirty();
                                               setState(() {
-                                                _dirty = true;
+                                                _bodyMode = v;
                                               });
+                                              _ensureContentType();
                                               _scheduleAutosave();
                                             },
-                                            labelKey: 'Header',
+                                            rawCtrl: _rawCtrl,
+                                            jsonCtrl: _jsonCtrl,
+                                            form: _form,
+                                            multipart: _multipart,
+                                            maxUploadMB: _maxUploadMB,
+                                            onFormChanged: (_) {
+                                              _markDirty();
+                                              _scheduleAutosave();
+                                            },
+                                            onMultipartChanged: (_) {
+                                              _markDirty();
+                                              _scheduleAutosave();
+                                            },
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                    KeyValueEditor(
-                                      key: const ValueKey('query'),
-                                      items: _query,
-                                      onChanged: (list) {
-                                        setState(() {
-                                          _dirty = true;
-                                        });
-                                        _scheduleAutosave();
-                                      },
-                                      labelKey: 'Param',
-                                    ),
-                                    BodyEditor(
-                                      mode: _bodyMode,
-                                      onModeChanged: (v) {
-                                        _markDirty();
-                                        setState(() {
-                                          _bodyMode = v;
-                                        });
-                                        _ensureContentType();
-                                        _scheduleAutosave();
-                                      },
-                                      rawCtrl: _rawCtrl,
-                                      jsonCtrl: _jsonCtrl,
-                                      form: _form,
-                                      multipart: _multipart,
-                                      maxUploadMB: _maxUploadMB,
-                                      onFormChanged: (_) {
-                                        _markDirty();
-                                        _scheduleAutosave();
-                                      },
-                                      onMultipartChanged: (_) {
-                                        _markDirty();
-                                        _scheduleAutosave();
-                                      },
-                                    ),
-                                    AuthEditor(
-                                      authType: _authType,
-                                      onAuthTypeChanged: (v) {
-                                        setState(() => _authType = v);
-                                        _markDirty();
-                                        _scheduleAutosave();
-                                      },
-                                      basicUser: _basicUser,
-                                      basicPass: _basicPass,
-                                      bearer: _bearer,
-                                      apiKeyHeader: _apiKeyHeader,
-                                      apiKey: _apiKey,
-                                    ),
-                                  ],
-                                ),
+                                          AuthEditor(
+                                            authType: _authType,
+                                            onAuthTypeChanged: (v) {
+                                              setState(() => _authType = v);
+                                              _markDirty();
+                                              _scheduleAutosave();
+                                            },
+                                            basicUser: _basicUser,
+                                            basicPass: _basicPass,
+                                            bearer: _bearer,
+                                            apiKeyHeader: _apiKeyHeader,
+                                            apiKey: _apiKey,
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
                               ),
                               const Divider(height: 1),
-                              Expanded(
-                                child: ComposeHttpDetails(
-                                  data: _lastResponse,
-                                  template: _lastSentTpl,
-                                  onOpenSession: (id) {
-                                    try {
-                                      // ignore: discarded_futures
-                                      sl<HomeUiStore>().setSelectedSessionId(
-                                        id,
-                                      );
-                                    } catch (_) {}
-                                    Navigator.of(context).pop();
-                                  },
-                                ),
+                              Builder(
+                                builder: (_) {
+                                  final hasData = _lastResponse != null;
+                                  final details = ComposeHttpDetails(
+                                    data: _lastResponse,
+                                    template: _lastSentTpl,
+                                    onOpenSession: (id) {
+                                      try {
+                                        // ignore: discarded_futures
+                                        sl<HomeUiStore>().setSelectedSessionId(
+                                          id,
+                                        );
+                                      } catch (_) {}
+                                      Navigator.of(context).pop();
+                                    },
+                                  );
+                                  // Если данных ещё нет — не фиксируем высоту (даём
+                                  // занять столько, сколько нужно), но ограничим максимумом.
+                                  // Если данные есть, панель деталей требует ограниченной
+                                  // высоты, поэтому зададим 500.
+                                  if (hasData) {
+                                    return SizedBox(
+                                      height: 500,
+                                      child: details,
+                                    );
+                                  }
+                                  return ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 500,
+                                    ),
+                                    child: details,
+                                  );
+                                },
                               ),
                               SizedBox(
                                 height: 160,
@@ -643,6 +691,15 @@ class _ComposePageState extends State<ComposePage> {
                                         const <Map<String, dynamic>>[];
                                     return ComposeHistoryList(
                                       items: items,
+                                      currentTemplateId: _currentTplId,
+                                      onTapSessionId: (sid) {
+                                        if (sid != null && sid.isNotEmpty) {
+                                          setState(() {
+                                            _lastResponse = {'sessionId': sid};
+                                            _lastSentTpl = null;
+                                          });
+                                        }
+                                      },
                                       onTapTemplate: (tid) {
                                         final t =
                                             sl<ComposeStore>()
@@ -660,8 +717,8 @@ class _ComposePageState extends State<ComposePage> {
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -744,6 +801,10 @@ class _ComposePageState extends State<ComposePage> {
   }
 
   Future<void> _onSave() async {
+    await _saveTemplate(showToast: true);
+  }
+
+  Future<void> _saveTemplate({required bool showToast}) async {
     try {
       final repo = sl<ComposeRepository>();
       _currentTplId ??= 'tpl-${DateTime.now().microsecondsSinceEpoch}';
@@ -781,7 +842,7 @@ class _ComposePageState extends State<ComposePage> {
       );
       await repo.upsertRequest(tpl);
       _dirty = false;
-      if (mounted) {
+      if (mounted && showToast) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Сохранено в библиотеку')));
@@ -793,6 +854,36 @@ class _ComposePageState extends State<ComposePage> {
       } catch (_) {}
       await sl<ComposeStore>().loadLibrary();
       setState(() {});
+    } catch (_) {}
+  }
+
+  Future<void> _onSaveToCollection() async {
+    try {
+      // 1) Сохраняем запрос без всплывашки
+      await _saveTemplate(showToast: false);
+      final store = sl<ComposeStore>();
+      if (store.collections.isEmpty || _currentTplId == null) return;
+
+      // 2) Выбор папки в древовидном виде
+      final pick = await showDialog<FolderSelection>(
+        context: context,
+        builder: (_) => const FolderPickerDialog(),
+      );
+      if (pick == null) return;
+
+      // 3) Перемещаем в выбранную папку
+      await sl<ComposeRepository>().moveRequest(
+        id: _currentTplId!,
+        collectionId: pick.collectionId,
+        folderId: pick.folderId,
+        index: -1,
+      );
+      await store.loadLibrary();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Сохранено в коллекцию')));
+      }
     } catch (_) {}
   }
 
@@ -950,6 +1041,19 @@ class _ComposePageState extends State<ComposePage> {
       }
     } catch (_) {}
     return {'error': true, 'message': msg};
+  }
+
+  List<ComposeFolderModel> _flattenFolders(ComposeFolderModel root) {
+    final out = <ComposeFolderModel>[];
+    void walk(ComposeFolderModel f) {
+      out.add(f);
+      for (final c in f.folders) {
+        walk(c);
+      }
+    }
+
+    walk(root);
+    return out;
   }
 }
 

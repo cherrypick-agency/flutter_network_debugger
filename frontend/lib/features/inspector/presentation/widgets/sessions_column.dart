@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../core/di/di.dart';
 import '../../application/stores/home_ui_store.dart';
+import 'package:provider/provider.dart';
+import '../../application/stores/aggregate_store.dart';
 
 class SessionsColumn extends StatefulWidget {
   const SessionsColumn({
@@ -121,14 +123,25 @@ class _SessionsColumnState extends State<SessionsColumn> {
         // Domains inline (up to 3 rows), then scroll — only from filtered sessions
         Builder(
           builder: (_) {
-            // Collect domain counters from current sessions list
+            // Источник доменных счётчиков: сначала realtime aggregate от сервера,
+            // при его отсутствии — локальный подсчёт на основе видимого списка
+            final agg = context.watch<AggregateStore>().groups.toList();
             final Map<String, int> counts = <String, int>{};
-            for (final s in widget.sessions) {
-              try {
-                final host = Uri.parse((s.target as String)).host;
-                if (host.isEmpty) continue;
-                counts[host] = (counts[host] ?? 0) + 1;
-              } catch (_) {}
+            if (agg.isNotEmpty) {
+              for (final m in agg) {
+                final key = (m['key'] ?? '').toString();
+                final cnt = int.tryParse((m['count'] ?? '0').toString()) ?? 0;
+                if (key.isEmpty) continue;
+                counts[key] = cnt;
+              }
+            } else {
+              for (final s in widget.sessions) {
+                try {
+                  final host = Uri.parse((s.target as String)).host;
+                  if (host.isEmpty) continue;
+                  counts[host] = (counts[host] ?? 0) + 1;
+                } catch (_) {}
+              }
             }
             // Ensure selected domains are present even if they zeroed out by other filters
             for (final d in widget.selectedDomains) {

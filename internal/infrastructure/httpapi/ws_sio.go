@@ -22,7 +22,7 @@ func (d *Deps) recordSIOIfAny(sessionID string, raw string, frameID string) bool
 		}
 		e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: nsp, Name: ev, AckID: ack, ArgsPreview: argsJSON, FrameIDs: []string{frameID}}
 		_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-		d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
 		return true
 	}
 	// Фолбэки для распространённых форм
@@ -31,7 +31,7 @@ func (d *Deps) recordSIOIfAny(sessionID string, raw string, frameID string) bool
 			aa := a
 			e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "ack", AckID: &aa, ArgsPreview: "[]", FrameIDs: []string{frameID}}
 			_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-			d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
 			return true
 		}
 	}
@@ -43,7 +43,7 @@ func (d *Deps) recordSIOIfAny(sessionID string, raw string, frameID string) bool
 			}
 			e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: nsp, Name: ev, AckID: ack, ArgsPreview: argsJSON, FrameIDs: []string{frameID}}
 			_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-			d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
 			return true
 		}
 	}

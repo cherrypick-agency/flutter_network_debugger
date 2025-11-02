@@ -308,10 +308,9 @@
       "languageVersion": "3.0"
     }
   ],
-  "generated": "2025-10-30T00:16:53.254533Z",
   "generator": "pub",
-  "generatorVersion": "3.7.2",
-  "flutterRoot": "file:///Users/belief/dev/flutter",
-  "flutterVersion": "3.29.3",
+  "generatorVersion": "3.9.2",
+  "flutterRoot": "file:///Users/belief/fvm/versions/3.35.7",
+  "flutterVersion": "3.35.7",
   "pubCache": "file:///Users/belief/.pub-cache"
 }

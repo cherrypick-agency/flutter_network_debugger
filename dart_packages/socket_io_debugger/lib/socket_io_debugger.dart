@@ -21,6 +21,10 @@ const String _kDefineSocketProxyEnabled =
     String.fromEnvironment('SOCKET_PROXY_ENABLED');
 const String _kDefineProxyModeGeneric =
     String.fromEnvironment('SOCKET_PROXY_MODE');
+const String _kDefineDioDebuggerEnabled =
+    String.fromEnvironment('DIO_DEBUGGER_ENABLED');
+const String _kDefineSocketProxyAllowBadCerts =
+    String.fromEnvironment('SOCKET_PROXY_ALLOW_BAD_CERTS');
 
 class SocketIoConfig {
   const SocketIoConfig({
@@ -43,7 +47,7 @@ class SocketIoDebugger {
 
   static SocketIoConfig attach({
     required String baseUrl,
-    required String socketPath,
+    String path = '/socket.io/',
     String? proxyBaseUrl,
     String? proxyHttpPath,
     bool? enabled,
@@ -52,7 +56,7 @@ class SocketIoDebugger {
     if (!enabledEffective) {
       return SocketIoConfig(
         effectiveBaseUrl: baseUrl,
-        effectivePath: socketPath,
+        effectivePath: path,
         query: const {},
         useForwardOverrides: false,
       );
@@ -64,8 +68,8 @@ class SocketIoDebugger {
           _kDefineSocketProxy,
           readEnvVar('SOCKET_PROXY'),
         ]) ??
-        '';
-    final path = (proxyHttpPath ??
+        (Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091');
+    final proxyPath = (proxyHttpPath ??
         _firstNonEmpty([
           _kDefineSocketProxyPath,
           readEnvVar('SOCKET_PROXY_PATH'),
@@ -75,13 +79,13 @@ class SocketIoDebugger {
     // Диагностика (dev): печатаем ключевые параметры
     // ignore: avoid_print
     print(
-        '[SocketIoDebugger] mode=$mode baseUrl=$baseUrl socketPath=$socketPath proxy=$proxy path=$path');
+        '[SocketIoDebugger] mode=$mode baseUrl=$baseUrl path=$path proxy=$proxy proxyPath=$proxyPath');
 
     if (mode == 'forward') {
       if (proxy.isEmpty) {
         return SocketIoConfig(
           effectiveBaseUrl: baseUrl,
-          effectivePath: socketPath,
+          effectivePath: path,
           query: const {},
           useForwardOverrides: false,
         );
@@ -89,7 +93,7 @@ class SocketIoDebugger {
       final allowBadCerts = _computeAllowBadCerts();
       return forwardProxyAttach(
         baseUrl: baseUrl,
-        socketPath: socketPath,
+        path: path,
         proxyHostPort: _normalizeProxy(proxy),
         allowBadCerts: allowBadCerts,
       );
@@ -99,13 +103,13 @@ class SocketIoDebugger {
       if (proxy.isEmpty) {
         return SocketIoConfig(
           effectiveBaseUrl: baseUrl,
-          effectivePath: socketPath,
+          effectivePath: path,
           query: const {},
           useForwardOverrides: false,
         );
       }
       final proxyBase = ensureHttpScheme(proxy);
-      final effectivePath = path; // используем ровно указанный путь прокси
+      final effectivePath = proxyPath; // используем ровно указанный путь прокси
       // Сохраняем namespace из исходного baseUrl (например, '/chat')
       final srcNsPath = Uri.tryParse(ensureHttpScheme(baseUrl))?.path ?? '';
       final effectiveBaseWithNs =
@@ -124,8 +128,8 @@ class SocketIoDebugger {
           upstream = envUpstream;
         }
       }
-      // Если переданный socketPath относится к прокси (содержит wsproxy), пытаемся взять апстрим path/target из ENV
-      var upstreamSocketPath = socketPath;
+      // Если переданный path относится к прокси (содержит wsproxy), пытаемся взять апстрим path/target из ENV
+      var upstreamPath = path;
       // Полный target из ENV имеет приоритет
       final explicitTarget = _firstNonEmpty([
         _kDefineSocketUpstreamTarget,
@@ -142,17 +146,17 @@ class SocketIoDebugger {
           useForwardOverrides: false,
         );
       }
-      if (socketPath.contains('wsproxy')) {
-        upstreamSocketPath = _firstNonEmpty([
+      if (path.contains('wsproxy')) {
+        upstreamPath = _firstNonEmpty([
               _kDefineSocketUpstreamPath,
               readEnvVar('SOCKET_UPSTREAM_PATH'),
             ]) ??
-            '/socket.io';
+            '/socket.io/';
       }
-      final target = buildEngineIoTarget(upstream, upstreamSocketPath);
+      final target = buildEngineIoTarget(upstream, upstreamPath);
       // ignore: avoid_print
       print(
-          '[SocketIoDebugger] reverse: proxyBase=$proxyBase effectiveBaseUrl=$effectiveBaseWithNs effectivePath=$effectivePath upstream=$upstream upstreamPath=$upstreamSocketPath target=$target');
+          '[SocketIoDebugger] reverse: proxyBase=$proxyBase effectiveBaseUrl=$effectiveBaseWithNs effectivePath=$effectivePath upstream=$upstream upstreamPath=$upstreamPath target=$target');
       return SocketIoConfig(
         effectiveBaseUrl: effectiveBaseWithNs,
         effectivePath: effectivePath,
@@ -164,7 +168,7 @@ class SocketIoDebugger {
     // none
     return SocketIoConfig(
       effectiveBaseUrl: baseUrl,
-      effectivePath: socketPath,
+      effectivePath: path,
       query: const {},
       useForwardOverrides: false,
     );
@@ -173,7 +177,7 @@ class SocketIoDebugger {
   static bool _computeEnabledFromEnv() {
     final v = _firstNonEmpty([
       _kDefineSocketProxyEnabled,
-      String.fromEnvironment('DIO_DEBUGGER_ENABLED'),
+      _kDefineDioDebuggerEnabled,
       readEnvVar('SOCKET_PROXY_ENABLED'),
       readEnvVar('DIO_DEBUGGER_ENABLED'),
     ]);
@@ -193,7 +197,7 @@ class SocketIoDebugger {
 
   static bool _computeAllowBadCerts() {
     final v = _firstNonEmpty([
-      String.fromEnvironment('SOCKET_PROXY_ALLOW_BAD_CERTS'),
+      _kDefineSocketProxyAllowBadCerts,
       readEnvVar('SOCKET_PROXY_ALLOW_BAD_CERTS'),
     ])?.trim().toLowerCase();
     if (v == null) return false;

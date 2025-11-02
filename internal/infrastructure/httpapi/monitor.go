@@ -4,39 +4,26 @@ import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"net/http"
+	"network-debugger/internal/domain"
 	"sync"
 	"time"
 )
 
-type MonitorEvent struct {
-	Type  string        `json:"type"`
-	ID    string        `json:"id"`
-	Ref   string        `json:"ref,omitempty"`
-	Error *ErrorDetails `json:"error,omitempty"`
-}
-
-type ErrorDetails struct {
-	Code    string `json:"code"`             // Error code: CONNECTION_CLOSED, SERVER_UNAVAILABLE, etc.
-	Message string `json:"message"`          // Human-readable error message
-	Raw     string `json:"raw,omitempty"`    // Original technical error (for debugging)
-	Target  string `json:"target,omitempty"` // Target URL
-	Method  string `json:"method,omitempty"` // HTTP method
-}
-
+// MonitorHub manages WebSocket connections and in-process listeners for monitor events.
 type MonitorHub struct {
 	mu       sync.RWMutex
 	clients  map[*websocket.Conn]chan []byte
 	upgrader websocket.Upgrader
 	// listeners are in-process subscribers (e.g., SSE forwarders)
 	lmu       sync.RWMutex
-	listeners map[chan MonitorEvent]struct{}
+	listeners map[chan domain.MonitorEvent]struct{}
 }
 
 func NewMonitorHub() *MonitorHub {
 	return &MonitorHub{
 		clients:   make(map[*websocket.Conn]chan []byte),
 		upgrader:  websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
-		listeners: make(map[chan MonitorEvent]struct{}),
+		listeners: make(map[chan domain.MonitorEvent]struct{}),
 	}
 }
 
@@ -74,41 +61,33 @@ func (h *MonitorHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 }
 
-func (h *MonitorHub) Broadcast(ev MonitorEvent) {
+func (h *MonitorHub) Broadcast(ev domain.MonitorEvent) {
 	data, _ := json.Marshal(ev)
-	// snapshot clients to avoid holding read lock during writes
+	// Отправляем под RLock, чтобы не пересечься с close(ch) при удалении клиента.
+	// Отправка неблокирующая, поэтому держать RLock безопасно и коротко.
 	h.mu.RLock()
-	outs := make([]chan []byte, 0, len(h.clients))
 	for _, ch := range h.clients {
-		outs = append(outs, ch)
-	}
-	h.mu.RUnlock()
-	// snapshot listeners
-	h.lmu.RLock()
-	subs := make([]chan MonitorEvent, 0, len(h.listeners))
-	for ch := range h.listeners {
-		subs = append(subs, ch)
-	}
-	h.lmu.RUnlock()
-	// non-blocking fan-out
-	for _, ch := range outs {
 		select {
 		case ch <- data:
 		default: /* drop if slow */
 		}
 	}
-	// non-blocking notify listeners
-	for _, ch := range subs {
+	h.mu.RUnlock()
+
+	// Аналогично для in-process listeners
+	h.lmu.RLock()
+	for ch := range h.listeners {
 		select {
 		case ch <- ev:
 		default: /* drop if slow */
 		}
 	}
+	h.lmu.RUnlock()
 }
 
 // Subscribe returns a channel receiving monitor events. Caller must Unsubscribe.
-func (h *MonitorHub) Subscribe() chan MonitorEvent {
-	ch := make(chan MonitorEvent, 256)
+func (h *MonitorHub) Subscribe() chan domain.MonitorEvent {
+	ch := make(chan domain.MonitorEvent, 256)
 	h.lmu.Lock()
 	h.listeners[ch] = struct{}{}
 	h.lmu.Unlock()
@@ -116,7 +95,7 @@ func (h *MonitorHub) Subscribe() chan MonitorEvent {
 }
 
 // Unsubscribe removes a listener channel.
-func (h *MonitorHub) Unsubscribe(ch chan MonitorEvent) {
+func (h *MonitorHub) Unsubscribe(ch chan domain.MonitorEvent) {
 	h.lmu.Lock()
 	if _, ok := h.listeners[ch]; ok {
 		delete(h.listeners, ch)

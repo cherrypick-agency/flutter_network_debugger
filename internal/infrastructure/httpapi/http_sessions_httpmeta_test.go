@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	mem "network-debugger/internal/adapters/storage/memory"
@@ -11,12 +12,15 @@ import (
 	uc "network-debugger/internal/usecase"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 func TestV1Session_ViewEnrichment_HTTPMetaAndSizes(t *testing.T) {
 	store := mem.NewStore(100, 100, 0)
 	s := uc.NewSessionService(store, store, store)
-	d := &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	// create session and append tx + frames with previews
 	sid := "sx"
 	_ = s.Create(contextWithNoCancel(), domain.Session{ID: sid, StartedAt: time.Unix(0, 0).UTC()})
@@ -48,7 +52,8 @@ func TestV1Session_ViewEnrichment_HTTPMetaAndSizes(t *testing.T) {
 func TestV1Session_ViewEnrichment_CORSMethodReason(t *testing.T) {
 	store := mem.NewStore(100, 100, 0)
 	s := uc.NewSessionService(store, store, store)
-	d := &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	sid := "sy"
 	_ = s.Create(contextWithNoCancel(), domain.Session{ID: sid, StartedAt: time.Unix(0, 0).UTC()})
 	tx := domain.HTTPTransaction{ID: "t1", SessionID: sid, Method: http.MethodGet, URL: "http://x", Status: 200, ReqSize: 1, RespSize: 1, Timings: domain.HTTPTimings{Total: 1}}

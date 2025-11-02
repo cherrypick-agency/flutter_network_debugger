@@ -17,6 +17,8 @@ import '../../features/settings/application/settings_service.dart';
 import '../../features/filters/application/stores/sessions_filters_store.dart';
 import '../../features/inspector/application/stores/home_ui_store.dart';
 import '../../features/inspector/application/services/monitor_service.dart';
+import '../realtime/socket_io_service.dart';
+import '../../features/inspector/application/services/realtime_inspector_service.dart';
 import '../../features/inspector/application/services/http_meta_service.dart';
 import '../../features/inspector/application/services/sessions_polling_service.dart';
 import '../../features/inspector/application/services/recent_window_service.dart';
@@ -73,6 +75,10 @@ Future<void> setupDI({required String baseUrl}) async {
   sl.registerLazySingleton<HomeUiStore>(() => HomeUiStore());
   // Services
   sl.registerLazySingleton<MonitorService>(() => MonitorService());
+  sl.registerLazySingleton<SocketIoService>(() => SocketIoService());
+  sl.registerLazySingleton<RealtimeInspectorService>(
+    () => RealtimeInspectorService(),
+  );
   sl.registerLazySingleton<HttpMetaService>(() => HttpMetaService());
   sl.registerLazySingleton<SessionsPollingService>(
     () => SessionsPollingService(),

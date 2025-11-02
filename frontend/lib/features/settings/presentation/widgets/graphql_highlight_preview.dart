@@ -65,7 +65,8 @@ console.log(u);''';
   border-radius: 6px;
 }''';
 
-  late String _selectedTheme;
+  late String _lightTheme;
+  late String _darkTheme;
   bool _selectable = true;
   String _lang = 'graphql';
   String _code = _sample;
@@ -73,29 +74,38 @@ console.log(u);''';
   @override
   void initState() {
     super.initState();
-    // Подберём дефолт в зависимости от темы
-    final isDark =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
-    _selectedTheme = isDark ? 'a11y-dark' : 'a11y-light';
-    // загрузим сохранённую тему с бэкенда, если есть
+    _lightTheme = 'a11y-light';
+    _darkTheme = 'a11y-dark';
+    // загрузим сохранённые темы с бэкенда, если есть
     SettingsService().fetchRuntime().then((data) {
       if (!mounted) return;
-      final saved = (data['highlightTheme'] ?? '').toString();
-      final candidate = saved.isNotEmpty ? saved : _selectedTheme;
+      final savedLight = (data['highlightThemeLight'] ?? '').toString();
+      final savedDark = (data['highlightThemeDark'] ?? '').toString();
+      final legacy = (data['highlightTheme'] ?? '').toString();
+      final candidateLight =
+          savedLight.isNotEmpty
+              ? savedLight
+              : (legacy.isNotEmpty ? legacy : _lightTheme);
+      final candidateDark =
+          savedDark.isNotEmpty
+              ? savedDark
+              : (legacy.isNotEmpty ? legacy : _darkTheme);
       setState(() {
-        _selectedTheme =
-            themeMap.containsKey(candidate) ? candidate : _selectedTheme;
+        _lightTheme =
+            themeMap.containsKey(candidateLight) ? candidateLight : _lightTheme;
+        _darkTheme =
+            themeMap.containsKey(candidateDark) ? candidateDark : _darkTheme;
       });
     });
-    if (!themeMap.containsKey(_selectedTheme)) {
-      _selectedTheme = themeMap.keys.first;
-    }
+    if (!themeMap.containsKey(_lightTheme)) _lightTheme = themeMap.keys.first;
+    if (!themeMap.containsKey(_darkTheme)) _darkTheme = themeMap.keys.first;
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeStyles = themeMap[_selectedTheme]!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final active = isDark ? _darkTheme : _lightTheme;
+    final themeStyles = themeMap[active]!;
     final bgColor = themeStyles['root']?.backgroundColor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,9 +115,9 @@ console.log(u);''';
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text('Theme:'),
+            const Text('Light theme:'),
             DropdownButton<String>(
-              value: _selectedTheme,
+              value: _lightTheme,
               items:
                   themeMap.keys
                       .map(
@@ -116,9 +126,26 @@ console.log(u);''';
                       )
                       .toList(),
               onChanged: (v) async {
-                final next = v ?? _selectedTheme;
-                setState(() => _selectedTheme = next);
-                await SettingsService().saveHighlightTheme(next);
+                final next = v ?? _lightTheme;
+                setState(() => _lightTheme = next);
+                await SettingsService().saveHighlightThemeLight(_lightTheme);
+              },
+            ),
+            const SizedBox(width: 12),
+            const Text('Dark theme:'),
+            DropdownButton<String>(
+              value: _darkTheme,
+              items:
+                  themeMap.keys
+                      .map(
+                        (k) =>
+                            DropdownMenuItem<String>(value: k, child: Text(k)),
+                      )
+                      .toList(),
+              onChanged: (v) async {
+                final next = v ?? _darkTheme;
+                setState(() => _darkTheme = next);
+                await SettingsService().saveHighlightThemeDark(_darkTheme);
               },
             ),
             const SizedBox(width: 12),
@@ -184,7 +211,7 @@ console.log(u);''';
                 padding: const EdgeInsets.all(12),
                 child: HighlightSelectable(
                   key: ValueKey(
-                    'hs:${_selectedTheme}|${_lang}|${_selectable}|${_code.hashCode}',
+                    'hs:${active}|${_lang}|${_selectable}|${_code.hashCode}',
                   ),
                   _code,
                   language: _lang,

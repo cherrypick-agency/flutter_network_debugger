@@ -37,4 +37,9 @@ abstract class _AggregateStore with Store {
       loading = false;
     }
   }
+
+  @action
+  void applyAggregate(List<Map<String, dynamic>> data) {
+    groups = ObservableList.of(data);
+  }
 }

@@ -5,10 +5,9 @@
   "packages": [
     {
       "name": "dio_debugger",
-      "version": "0.1.0",
+      "version": "0.1.4",
       "dependencies": [
-        "dio",
-        "meta"
+        "dio"
       ],
       "devDependencies": [
         "lints"
@@ -17,11 +16,6 @@
     {
       "name": "lints",
       "version": "3.0.0",
-      "dependencies": []
-    },
-    {
-      "name": "meta",
-      "version": "1.17.0",
       "dependencies": []
     },
     {
@@ -55,6 +49,11 @@
     {
       "name": "mime",
       "version": "2.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "meta",
+      "version": "1.17.0",
       "dependencies": []
     },
     {

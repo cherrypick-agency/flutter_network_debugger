@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 
+	"network-debugger/internal/domain"
 	"network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
@@ -44,6 +45,20 @@ type Deps struct {
 	MapRt       *mappingrt.Manager
 }
 
+// shouldMonitorTarget returns false if the target URL path is a monitoring endpoint
+// to prevent recursive monitoring (monitoring endpoints monitoring themselves)
+func (d *Deps) shouldMonitorTarget(targetPath string) bool {
+	// Exclude monitoring endpoints from being monitored
+	return !strings.HasPrefix(targetPath, "/_api/v1/monitor/")
+}
+
+// broadcastMonitorEvent safely broadcasts a monitor event, checking for nil Monitor first
+func (d *Deps) broadcastMonitorEvent(ev domain.MonitorEvent) {
+	if d.Monitor != nil {
+		d.Monitor.Broadcast(ev)
+	}
+}
+
 func NewRouter(cfg config.Config, logger *zerolog.Logger, metrics *obs.Metrics) http.Handler {
 	// backward compatibility shim for early main.go; will be removed when deps used everywhere
 	d := &Deps{Cfg: cfg, Logger: logger, Metrics: metrics, Monitor: NewMonitorHub(), Live: NewLiveSessions()}
@@ -68,7 +83,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		libRepo := composep.NewLibraryRepo(d.DB)
 		histRepo := composep.NewHistoryRepo(d.DB)
 		clientFactory := func() *http.Client { return &http.Client{Transport: newTransport(d.Cfg), Timeout: 30 * time.Second} }
-		d.Compose = usecase.NewComposeService(libRepo, histRepo, d.Svc, clientFactory)
+		d.Compose = usecase.NewComposeService(libRepo, histRepo, d.Svc, d.Monitor, clientFactory)
 		d.Compose.SetMaxUploadMB(d.Cfg.ComposeMaxUploadMB)
 	}
 
@@ -91,7 +106,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		}
 		d.MapRt.SetOnFileChange(func(ruleID string, path string) {
 			if d.Monitor != nil {
-				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_file_changed", ID: "", Ref: ruleID})
+				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_file_changed", ID: "", Ref: ruleID})
 			}
 		})
 	}
@@ -234,9 +249,6 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 		d.handleSessionByID(w, r)
 	})
 
-	// SSE stream for real-time updates (frames/events/httpTxs)
-	mux.HandleFunc("/api/sessions_stream/", d.handleSessionStream)
-
 	// Monitor WS (legacy)
 	mux.HandleFunc("/api/monitor/ws", d.Monitor.HandleWS)
 
@@ -274,6 +286,10 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	// Runtime settings (response delay, etc.)
 	mux.HandleFunc("/_api/v1/settings", d.handleV1Settings)
 	mux.HandleFunc("/_api/v1/monitor/ws", d.Monitor.HandleWS)
+	// Socket.IO endpoint для push‑обновлений (sessions/aggregate)
+	// StripPrefix убирает /_api/v1/monitor/io перед передачей в Socket.IO
+	// Клиент подключается: /_api/v1/monitor/io/socket.io/ (path="/socket.io/")
+	mux.Handle("/_api/v1/monitor/io/", http.StripPrefix("/_api/v1/monitor/io", NewSocketIOServer(d)))
 	mux.HandleFunc("/_api/v1/httpproxy", d.handleHTTPProxy)
 	mux.HandleFunc("/_api/v1/httpproxy/", d.handleHTTPProxy)
 

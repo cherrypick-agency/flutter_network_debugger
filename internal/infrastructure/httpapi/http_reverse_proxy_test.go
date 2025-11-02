@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	uc "network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestHTTPProxy_SimpleGET(t *testing.T) {
@@ -19,7 +22,8 @@ func TestHTTPProxy_SimpleGET(t *testing.T) {
 
 	// deps
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 1024, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{PreviewMaxBytes: 1024, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 
 	rr := httptest.NewRecorder()
@@ -32,7 +36,8 @@ func TestHTTPProxy_SimpleGET(t *testing.T) {
 
 func TestHTTPProxy_InvalidTarget(t *testing.T) {
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/httpproxy", nil)

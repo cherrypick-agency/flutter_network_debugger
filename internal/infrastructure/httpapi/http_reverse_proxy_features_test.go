@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	uc "network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 // upstream that returns gzip+json and Set-Cookie to exercise response preview/cookies
@@ -34,7 +37,8 @@ func TestHTTPProxy_ResponsePreview_Cookies_QueryAndStealth(t *testing.T) {
 	upstream := makeUpstreamGzipJSON()
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 256, ExposeSensitiveHeaders: false, PreviewDecompress: true, ResponseDelayMs: 1, Cookies: cfgpkg.CookiesConfig{Mode: "auto", DomainStrategy: "hostOnly", PathStrategy: "prefix"}}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 256, ExposeSensitiveHeaders: false, PreviewDecompress: true, ResponseDelayMs: 1, Cookies: cfgpkg.CookiesConfig{Mode: "auto", DomainStrategy: "hostOnly", PathStrategy: "prefix"}}, Logger: &logger, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 
 	// include suffix path and _stealth toggle to exercise branches
@@ -50,7 +54,8 @@ func TestHTTPProxy_ResponsePreview_NoDecompressAndExpose(t *testing.T) {
 	upstream := makeUpstreamGzipJSON()
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 64, ExposeSensitiveHeaders: true, PreviewDecompress: false}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{PreviewMaxBytes: 64, ExposeSensitiveHeaders: true, PreviewDecompress: false}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/httpproxy?_target="+upstream.URL, nil)
@@ -64,7 +69,8 @@ func TestHTTPProxy_V1RouteAlias(t *testing.T) {
 	upstream := makeUpstreamGzipJSON()
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 64, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{PreviewMaxBytes: 64, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/httpproxy?_target="+upstream.URL, nil)
@@ -78,7 +84,8 @@ func TestUnifiedProxy_HTTPPath(t *testing.T) {
 	upstream := makeUpstreamGzipJSON()
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{DefaultTarget: upstream.URL, PreviewMaxBytes: 128, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{DefaultTarget: upstream.URL, PreviewMaxBytes: 128, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithDeps(d)
 	rr := httptest.NewRecorder()
 	// unified /proxy should fall back to HTTP reverse handler

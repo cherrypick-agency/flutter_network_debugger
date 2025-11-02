@@ -49,7 +49,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     if (_highlightThemeKey != null) return;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final def = isDark ? 'a11y-dark' : 'a11y-light';
-    _fetchHighlightThemeFromBackend().then((saved) {
+    _fetchHighlightThemeFromBackend(isDark: isDark).then((saved) {
       if (!mounted) return;
       setState(() {
         _highlightThemeKey =
@@ -59,13 +59,23 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     _highlightThemeKey = def;
   }
 
-  Future<String?> _fetchHighlightThemeFromBackend() async {
+  Future<String?> _fetchHighlightThemeFromBackend({
+    required bool isDark,
+  }) async {
     try {
       final api = sl<AppHttpClient>();
       final res = await api.get(path: '/_api/v1/settings');
       final data = (res.data as Map).cast<String, dynamic>();
-      final ht = (data['highlightTheme'] ?? '').toString();
-      return ht.isEmpty ? null : ht;
+      final light = (data['highlightThemeLight'] ?? '').toString();
+      final dark = (data['highlightThemeDark'] ?? '').toString();
+      final legacy = (data['highlightTheme'] ?? '').toString();
+      if (isDark) {
+        final k = dark.isNotEmpty ? dark : legacy;
+        return k.isEmpty ? null : k;
+      } else {
+        final k = light.isNotEmpty ? light : legacy;
+        return k.isEmpty ? null : k;
+      }
     } catch (_) {
       return null;
     }

@@ -27,3 +27,5 @@ CREATE TABLE IF NOT EXISTS map_rules (
 CREATE INDEX IF NOT EXISTS idx_map_rules_enabled ON map_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_map_rules_priority ON map_rules(priority);
 
+
+

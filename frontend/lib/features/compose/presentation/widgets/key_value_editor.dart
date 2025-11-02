@@ -29,66 +29,67 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          Expanded(
-            child: ListView.builder(
-              itemCount: widget.items.length,
-              itemBuilder: (context, index) {
-                final item = widget.items[index];
-                final keyCtrl = TextEditingController(text: item.key);
-                final valCtrl = TextEditingController(text: item.value);
+          // Список делаем shrinkWrap, чтобы блок растягивался по содержимому,
+          // а прокрутка была общей у страницы, а не локальной у списка
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: widget.items.length,
+            itemBuilder: (context, index) {
+              final item = widget.items[index];
+              final keyCtrl = TextEditingController(text: item.key);
+              final valCtrl = TextEditingController(text: item.value);
 
-                final isKeyEmpty = item.key.trim().isEmpty;
-                final isDup =
-                    item.key.isNotEmpty && _dupKeys.contains(item.key);
+              final isKeyEmpty = item.key.trim().isEmpty;
+              final isDup = item.key.isNotEmpty && _dupKeys.contains(item.key);
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: keyCtrl,
-                          decoration: InputDecoration(
-                            labelText: '${widget.labelKey} key',
-                            errorText:
-                                isKeyEmpty
-                                    ? 'Пустой ключ'
-                                    : (isDup ? 'Дубликат ключа' : null),
-                          ),
-                          onChanged: (v) {
-                            widget.items[index] = widget.items[index].copyWith(
-                              key: v,
-                            );
-                            setState(() {});
-                            widget.onChanged(widget.items);
-                          },
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: keyCtrl,
+                        decoration: InputDecoration(
+                          labelText: '${widget.labelKey} key',
+                          errorText:
+                              isKeyEmpty
+                                  ? 'Пустой ключ'
+                                  : (isDup ? 'Дубликат ключа' : null),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: valCtrl,
-                          decoration: const InputDecoration(labelText: 'Value'),
-                          onChanged: (v) {
-                            widget.items[index] = widget.items[index].copyWith(
-                              value: v,
-                            );
-                            widget.onChanged(widget.items);
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () {
-                          setState(() => widget.items.removeAt(index));
+                        onChanged: (v) {
+                          widget.items[index] = widget.items[index].copyWith(
+                            key: v,
+                          );
+                          setState(() {});
                           widget.onChanged(widget.items);
                         },
-                        icon: const Icon(Icons.delete_outline),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: valCtrl,
+                        decoration: const InputDecoration(labelText: 'Value'),
+                        onChanged: (v) {
+                          widget.items[index] = widget.items[index].copyWith(
+                            value: v,
+                          );
+                          widget.onChanged(widget.items);
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        setState(() => widget.items.removeAt(index));
+                        widget.onChanged(widget.items);
+                      },
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           Align(
             alignment: Alignment.centerLeft,

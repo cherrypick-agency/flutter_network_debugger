@@ -17,7 +17,8 @@ func TestHTTPProxy_POST_SpoolAndFormPreview(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 1024, ExposeSensitiveHeaders: false, PreviewDecompress: true, CaptureBodies: true, BodyMaxBytes: 1024}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{PreviewMaxBytes: 1024, ExposeSensitiveHeaders: false, PreviewDecompress: true, CaptureBodies: true, BodyMaxBytes: 1024}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 
 	// multipart body

@@ -4,11 +4,15 @@ class ComposeHistoryList extends StatelessWidget {
   const ComposeHistoryList({
     super.key,
     required this.items,
+    this.currentTemplateId,
+    this.onTapSessionId,
     required this.onTapTemplate,
   });
 
   final List<Map<String, dynamic>>
   items; // {id, templateId, method, url, status, when}
+  final String? currentTemplateId;
+  final void Function(String? sessionId)? onTapSessionId;
   final void Function(String templateId) onTapTemplate;
 
   @override
@@ -25,8 +29,13 @@ class ComposeHistoryList extends StatelessWidget {
         final url = (it['url'] ?? '').toString();
         final status = (it['status'] ?? '').toString();
         final templateId = (it['templateId'] ?? '').toString();
+        final sessionId = (it['sessionId'] ?? '').toString();
         return ListTile(
           dense: true,
+          selected:
+              currentTemplateId != null &&
+              templateId.isNotEmpty &&
+              templateId == currentTemplateId,
           leading: CircleAvatar(
             radius: 10,
             backgroundColor: _statusColor(context, int.tryParse(status) ?? 0),
@@ -39,6 +48,7 @@ class ComposeHistoryList extends StatelessWidget {
           ),
           subtitle: Text('Status: $status'),
           onTap: () {
+            onTapSessionId?.call(sessionId.isNotEmpty ? sessionId : null);
             if (templateId.isNotEmpty) onTapTemplate(templateId);
           },
         );

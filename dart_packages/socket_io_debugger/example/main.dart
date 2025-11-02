@@ -7,8 +7,8 @@ Future<void> main() async {
   // Attach proxy config (reverse by default). Adjust values for your local proxy.
   final cfg = SocketIoDebugger.attach(
     baseUrl: 'https://chat.example.com',
-    socketPath: '/socket.io',
-    proxyBaseUrl: 'http://localhost:9092',
+    path: '/socket.io/',
+    proxyBaseUrl: 'http://localhost:9091',
     proxyHttpPath: '/wsproxy',
   );
 

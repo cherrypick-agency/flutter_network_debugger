@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	mem "network-debugger/internal/adapters/storage/memory"
@@ -12,12 +13,15 @@ import (
 	uc "network-debugger/internal/usecase"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 func makeDepsWithMemory() *Deps {
 	store := mem.NewStore(100, 1000, 0)
 	s := uc.NewSessionService(store, store, store)
-	return &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	return &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Logger: &logger, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 }
 
 func TestV1Capture_GetStartStopAndList(t *testing.T) {

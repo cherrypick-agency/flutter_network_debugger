@@ -67,12 +67,13 @@ type composeConfigDTO struct {
 }
 
 type composeHistoryItemDTO struct {
-	ID       string    `json:"id"`
-	Template string    `json:"templateId,omitempty"`
-	Method   string    `json:"method"`
-	URL      string    `json:"url"`
-	Status   int       `json:"status"`
-	When     time.Time `json:"when"`
+	ID        string    `json:"id"`
+	Template  string    `json:"templateId,omitempty"`
+	SessionID string    `json:"sessionId,omitempty"`
+	Method    string    `json:"method"`
+	URL       string    `json:"url"`
+	Status    int       `json:"status"`
+	When      time.Time `json:"when"`
 }
 
 type composeHistoryResponse struct {
@@ -151,7 +152,7 @@ func (d *Deps) handleComposeHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]composeHistoryItemDTO, 0, len(items))
 	for _, it := range items {
-		out = append(out, composeHistoryItemDTO{ID: it.ID, Template: it.Template, Method: it.Method, URL: it.URL, Status: it.Status, When: it.When})
+		out = append(out, composeHistoryItemDTO{ID: it.ID, Template: it.Template, SessionID: it.Session, Method: it.Method, URL: it.URL, Status: it.Status, When: it.When})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(composeHistoryResponse{Items: out, Next: next})

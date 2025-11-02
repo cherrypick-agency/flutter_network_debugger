@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	uc "network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestHTTPProxy_SetsForwardHeaders_WhenStealthDisabled(t *testing.T) {
@@ -20,7 +23,8 @@ func TestHTTPProxy_SetsForwardHeaders_WhenStealthDisabled(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 64, ExposeSensitiveHeaders: false, PreviewDecompress: true, StealthHeaders: false}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{PreviewMaxBytes: 64, ExposeSensitiveHeaders: false, PreviewDecompress: true, StealthHeaders: false}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := NewRouterWithoutForwardProxy(d)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/httpproxy?_target="+upstream.URL+"/hdr", nil)

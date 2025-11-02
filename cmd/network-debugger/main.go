@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,6 +19,8 @@ import (
 	compp "network-debugger/internal/features/compose/infrastructure/persistence"
 	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
+	sessionscli "network-debugger/internal/features/sessions_cli"
+	cliopts "network-debugger/internal/features/sessions_cli/domain"
 	setp "network-debugger/internal/features/settings/infrastructure/persistence"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	dbinfra "network-debugger/internal/infrastructure/db"
@@ -28,7 +31,26 @@ import (
 
 func main() {
 	loadDotEnv()
+	// Флаги CLI режима вывода сессий
+	var cliMode bool
+	var cliPreset string
+	var cliFields string
+	var cliBodyBytes int
+	var cliColor string
+	var cliFilter string
+
+	flag.BoolVar(&cliMode, "cli", false, "enable CLI sessions output mode")
+	flag.StringVar(&cliPreset, "cli-preset", "basic", "preset: minimal|basic|advanced|full")
+	flag.StringVar(&cliFields, "cli-fields", "", "comma-separated sections to show (overrides preset)")
+	flag.IntVar(&cliBodyBytes, "cli-body-bytes", 0, "body preview limit (bytes); 0 = use PREVIEW_MAX_BYTES")
+	flag.StringVar(&cliColor, "cli-color", "auto", "color mode: auto|always|never")
+	flag.StringVar(&cliFilter, "cli-filter", "", "simple substring filter (URL/method/status)")
+	flag.Parse()
+
 	cfg := cfgpkg.FromEnv()
+	if cliMode {
+		cfg.NoBrowser = true
+	}
 
 	logger := obs.NewLogger(cfg.LogLevel)
 	logger.Info().Str("addr", cfg.Addr).Msg("starting network-debugger")
@@ -146,6 +168,40 @@ func main() {
 		}
 	}()
 
+	// CLI режим: запускаем печать сессий после старта сервера
+	var cliCancel context.CancelFunc
+	if cliMode {
+		// Подготовим опции
+		opts := cliopts.Options{Preset: cliPreset, BodyPreviewBytes: cliBodyBytes, Filter: cliFilter}
+		switch strings.ToLower(cliColor) {
+		case "always":
+			opts.Color = cliopts.ColorAlways
+		case "never":
+			opts.Color = cliopts.ColorNever
+		default:
+			opts.Color = cliopts.ColorAuto
+		}
+		if fields := strings.TrimSpace(cliFields); fields != "" {
+			opts.Fields = map[string]bool{}
+			for _, f := range strings.Split(fields, ",") {
+				f = strings.TrimSpace(f)
+				if f != "" {
+					opts.Fields[f] = true
+				}
+			}
+		}
+		if opts.BodyPreviewBytes <= 0 {
+			opts.BodyPreviewBytes = cfg.PreviewMaxBytes
+		}
+		var ctx context.Context
+		ctx, cliCancel = context.WithCancel(context.Background())
+		go func() {
+			if err := sessionscli.Run(ctx, deps, opts, os.Stdout); err != nil {
+				logger.Error().Err(err).Msg("cli sessions printer stopped with error")
+			}
+		}()
+	}
+
 	// Launch browser to downloads page on start (best-effort)
 	go func() {
 		time.Sleep(300 * time.Millisecond)
@@ -167,6 +223,9 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if cliCancel != nil {
+		cliCancel()
+	}
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error().Err(err).Msg("server shutdown error")
 	}

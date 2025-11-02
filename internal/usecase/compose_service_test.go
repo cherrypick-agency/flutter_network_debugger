@@ -32,7 +32,7 @@ func TestComposeService_Send_JSON_GET(t *testing.T) {
 	// in-memory compose repo (json file repo requires fs). Use noop via memory lib
 	lib := &noopLibRepo{}
 	hist := &noopHistRepo{}
-	s := NewComposeService(lib, hist, sess, func() *http.Client { return srv.Client() })
+	s := NewComposeService(lib, hist, sess, nil, func() *http.Client { return srv.Client() })
 
 	res, err := s.Send(context.Background(), ComposeSendCmd{Template: domain.ComposeRequestTemplate{Method: "GET", URL: srv.URL, Body: domain.ComposeBody{Mode: domain.ComposeBodyRaw}}})
 	if err != nil {
@@ -127,7 +127,7 @@ func TestComposeService_NewComposeService(t *testing.T) {
 		customClient := &http.Client{Timeout: 5 * time.Second}
 		factory := func() *http.Client { return customClient }
 
-		svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, factory)
+		svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, nil, factory)
 
 		if svc == nil {
 			t.Fatal("expected non-nil service")
@@ -142,7 +142,7 @@ func TestComposeService_NewComposeService(t *testing.T) {
 
 	t.Run("with nil client factory uses default", func(t *testing.T) {
 		t.Parallel()
-		svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, nil, nil)
 
 		client := svc.newClient()
 		if client == nil {
@@ -172,7 +172,7 @@ func TestComposeService_SetMaxUploadMB(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, nil)
+			svc := NewComposeService(&noopLibRepo{}, &noopHistRepo{}, nil, nil, nil)
 
 			svc.SetMaxUploadMB(tt.input)
 
@@ -195,7 +195,7 @@ func TestComposeService_LoadLibrary(t *testing.T) {
 				RequestsByID: nil, // nil should be initialized
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		result, err := svc.LoadLibrary(ctx)
 
@@ -213,7 +213,7 @@ func TestComposeService_LoadLibrary(t *testing.T) {
 	t.Run("error from repo", func(t *testing.T) {
 		t.Parallel()
 		lib := &memoryLibRepo{loadErr: context.DeadlineExceeded}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		_, err := svc.LoadLibrary(ctx)
 
@@ -230,7 +230,7 @@ func TestComposeService_SaveLibrary(t *testing.T) {
 	t.Run("saves and ensures RequestsByID", func(t *testing.T) {
 		t.Parallel()
 		lib := &memoryLibRepo{}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		input := domain.ComposeLibrary{
 			Collections:  []domain.ComposeCollection{{ID: "c1"}},
@@ -260,7 +260,7 @@ func TestComposeService_UpsertRequest(t *testing.T) {
 				RequestsByID: map[string]domain.ComposeRequestTemplate{},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		tpl := domain.ComposeRequestTemplate{
 			ID:     "req1",
@@ -292,7 +292,7 @@ func TestComposeService_UpsertRequest(t *testing.T) {
 				},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		tpl := domain.ComposeRequestTemplate{
 			ID:     "req1",
@@ -329,7 +329,7 @@ func TestComposeService_DeleteRequest(t *testing.T) {
 				},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		result, err := svc.DeleteRequest(ctx, "req1")
 
@@ -365,7 +365,7 @@ func TestComposeService_DeleteRequest(t *testing.T) {
 				},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		result, err := svc.DeleteRequest(ctx, "req1")
 
@@ -395,7 +395,7 @@ func TestComposeService_UpsertCollection(t *testing.T) {
 				RequestsByID: map[string]domain.ComposeRequestTemplate{},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		col := domain.ComposeCollection{
 			ID:   "c1",
@@ -426,7 +426,7 @@ func TestComposeService_UpsertCollection(t *testing.T) {
 				RequestsByID: map[string]domain.ComposeRequestTemplate{},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		col := domain.ComposeCollection{
 			ID:   "c1",
@@ -463,7 +463,7 @@ func TestComposeService_DeleteCollection(t *testing.T) {
 				RequestsByID: map[string]domain.ComposeRequestTemplate{},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		result, err := svc.DeleteCollection(ctx, "c1")
 
@@ -507,7 +507,7 @@ func TestComposeService_MoveRequest(t *testing.T) {
 				},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		result, err := svc.MoveRequest(ctx, "req1", "c1", "sub1", 0)
 
@@ -548,7 +548,7 @@ func TestComposeService_MoveRequest(t *testing.T) {
 				},
 			},
 		}
-		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil)
+		svc := NewComposeService(lib, &noopHistRepo{}, nil, nil, nil)
 
 		// Move req1 to position 1 (between req2 and req3)
 		result, err := svc.MoveRequest(ctx, "req1", "c1", "root", 1)
@@ -579,7 +579,7 @@ func TestComposeService_ListHistory(t *testing.T) {
 				{ID: "h2", Method: "POST", URL: "http://b.com", Status: 201},
 			},
 		}
-		svc := NewComposeService(&noopLibRepo{}, hist, nil, nil)
+		svc := NewComposeService(&noopLibRepo{}, hist, nil, nil, nil)
 
 		result, next, err := svc.ListHistory(ctx, "", 10)
 
@@ -596,7 +596,7 @@ func TestComposeService_ListHistory(t *testing.T) {
 
 	t.Run("returns empty when histRepo is nil", func(t *testing.T) {
 		t.Parallel()
-		svc := NewComposeService(&noopLibRepo{}, nil, nil, nil)
+		svc := NewComposeService(&noopLibRepo{}, nil, nil, nil, nil)
 
 		result, next, err := svc.ListHistory(ctx, "", 10)
 

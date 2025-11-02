@@ -48,10 +48,10 @@ For more options and programmatic usage, see the [network_debugger package docum
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:socket_io_debugger/socket_io_debugger.dart';
 
-// Configure the proxy
+// Configure the proxy (path parameter is optional, defaults to '/socket.io/')
 final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
-  socketPath: '/socket.io',
+  // path: '/socket.io/',  // Optional: Socket.IO path (default)
 );
 
 // Create socket with proxy configuration
@@ -75,6 +75,65 @@ if (cfg.useForwardOverrides) {
 }
 ```
 
+## Understanding Socket.IO Path and Namespace
+
+Socket.IO has two separate concepts that are often confused:
+
+### Path (the `path` parameter)
+
+The **path** is the HTTP endpoint where Socket.IO protocol communication occurs.
+
+- **Default**: `"/socket.io/"`
+- **Must match** between client and server
+- Set via `path` parameter in `SocketIoDebugger.attach()`
+- Example: `path: "/my-custom-path/"`
+
+### Namespace (part of `baseUrl`)
+
+The **namespace** is a logical channel for organizing application logic.
+
+- **Default**: `"/"`
+- Specified as **part of the baseUrl path**
+- Example: `baseUrl: "https://example.com/admin"` (namespace = `/admin`)
+
+### Complete Example
+
+```dart
+// Connect to the '/order' namespace with custom Socket.IO path
+final cfg = SocketIoDebugger.attach(
+  baseUrl: 'https://example.com/order',  // namespace: /order
+  path: '/my-custom-path/',              // Socket.IO path option
+);
+// Results in: GET https://example.com/my-custom-path/?EIO=4&transport=websocket
+// Connected to namespace: /order
+```
+
+### Examples
+
+**Default namespace, default path:**
+```dart
+final cfg = SocketIoDebugger.attach(
+  baseUrl: 'https://example.com',     // namespace: / (default)
+  // path defaults to '/socket.io/'
+);
+```
+
+**Custom namespace, default path:**
+```dart
+final cfg = SocketIoDebugger.attach(
+  baseUrl: 'https://example.com/admin',  // namespace: /admin
+  // path defaults to '/socket.io/'
+);
+```
+
+**Custom namespace, custom path:**
+```dart
+final cfg = SocketIoDebugger.attach(
+  baseUrl: 'https://example.com/chat',  // namespace: /chat
+  path: '/_api/v1/monitor/io/',         // custom Socket.IO path
+);
+```
+
 ## Advanced options
 
 ### Reverse proxy mode (default)
@@ -84,10 +143,9 @@ Reverse proxy mode routes traffic through the proxy's HTTP endpoint:
 ```dart
 final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
-  socketPath: '/socket.io',
+  path: '/socket.io/',  // Socket.IO path (with trailing slash)
   proxyBaseUrl: 'http://localhost:9092',
-  proxyPath: '/wsproxy',  // WebSocket proxy endpoint
-  mode: ProxyMode.reverse,
+  proxyHttpPath: '/wsproxy',  // WebSocket proxy endpoint
 );
 ```
 
@@ -98,10 +156,8 @@ Forward proxy mode uses `HttpOverrides` to route traffic:
 ```dart
 final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
-  socketPath: '/socket.io',
+  path: '/socket.io/',  // Socket.IO path (with trailing slash)
   proxyBaseUrl: 'http://localhost:9091',
-  mode: ProxyMode.forward,
-  allowBadCerts: true,  // Allow self-signed certificates
 );
 ```
 
@@ -112,7 +168,7 @@ When testing on Android emulator, use `10.0.2.2` instead of `localhost`:
 ```dart
 final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
-  socketPath: '/socket.io',
+  path: '/socket.io/',  // Socket.IO path (with trailing slash)
   proxyBaseUrl: Platform.isAndroid
     ? 'http://10.0.2.2:9092'
     : 'http://localhost:9092',

@@ -1,12 +1,14 @@
 package httpapi
 
 import (
-	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"network-debugger/internal/domain"
 )
 
 func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
@@ -19,7 +21,7 @@ func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
 		t.Fatalf("dial ws: %v", err)
 	}
 	// после подключения пошлём событие и убедимся, что оно доезжает
-	hub.Broadcast(MonitorEvent{Type: "test", ID: "1"})
+	hub.Broadcast(domain.MonitorEvent{Type: "test", ID: "1"})
 	_ = c.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 	_, msg, err := c.ReadMessage()
 	if err != nil || len(msg) == 0 {

@@ -17,6 +17,7 @@ func (ComposeLibraryModel) TableName() string { return "compose_library" }
 type ComposeHistoryEntryModel struct {
 	ID       string `gorm:"type:text;primaryKey"`
 	Template string `gorm:"type:text"`
+	Session  string `gorm:"type:text"`
 	Method   string `gorm:"type:text"`
 	URL      string `gorm:"type:text"`
 	Status   int

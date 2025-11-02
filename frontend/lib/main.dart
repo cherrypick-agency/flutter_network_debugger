@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'theme/app_theme.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'dart:async';
 import 'services/prefs.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
+import 'package:mobx/mobx.dart' as mobx;
 import 'features/inspector/application/stores/sessions_store.dart';
 import 'features/inspector/application/stores/session_details_store.dart';
 import 'features/inspector/application/stores/aggregate_store.dart';
@@ -21,9 +22,8 @@ import 'core/di/di.dart';
 import 'core/network/connectivity_banner.dart';
 import 'core/notifications/notifications_service.dart';
 import 'features/inspector/application/services/monitor_service.dart';
-import 'features/inspector/application/services/http_meta_service.dart';
-import 'features/inspector/application/services/sessions_polling_service.dart'
-    as features_inspector_application_services;
+// import removed: http_meta_service not used here
+import 'features/inspector/application/services/realtime_inspector_service.dart';
 
 import 'package:app_http_client/application/app_http_client.dart'
     as http_client;
@@ -33,16 +33,20 @@ import 'features/settings/presentation/settings_page.dart';
 import 'features/landing/presentation/pages/integrations_page.dart';
 import 'features/compose/presentation/pages/compose_page.dart';
 import 'core/hotkeys/hotkeys_service.dart';
-import 'core/utils/debouncer.dart';
+// import removed: debouncer
 import 'features/common/notifications/notifications_overlay.dart';
 import 'features/breakpoints/presentation/widgets/breakpoints_dialog.dart';
 import 'features/mapping/presentation/widgets/mapping_dialog.dart';
 
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
 import 'theme/font_scale.dart';
+import 'package:http_debugger/http_debugger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kDebugMode) {
+    HttpDebugger.enable();
+  }
   if (kIsWeb) {
     setUrlStrategy(const HashUrlStrategy());
   }
@@ -182,30 +186,59 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _namespaceFilterCtrl = TextEditingController();
 
   // sessions from store
-  bool _loadingSessions = false;
   final ScrollController _framesCtrl = ScrollController();
   final ScrollController _eventsCtrl = ScrollController();
   // Sessions scroll: if user is at the bottom — stick to bottom when new items arrive
   final ScrollController _sessionsCtrl = ScrollController();
   Timer? _pollTimer;
-  Debouncer _sessionsReloadDebounce = Debouncer(
-    const Duration(milliseconds: 300),
-  );
-  Debouncer _detailsRefreshDebounce = Debouncer(
-    const Duration(milliseconds: 150),
-  );
+  // removed: _detailsRefreshDebounce (SSE обновляет детали)
   // Background polling of sessions list as backup update channel
 
   final FocusNode _searchFocus = FocusNode();
   MonitorListener? _monitorListener;
+  final List<mobx.ReactionDisposer> _reactions = [];
 
   @override
   void initState() {
     super.initState();
     _connectMonitor();
     _restorePrefs().then((_) {
-      // After restoring saved filters, immediately load the list
-      _loadSessions();
+      // После восстановления фильтров сразу подписываемся на realtime
+      // ignore: discarded_futures
+      sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+      // Ресабскрайб при изменении ключевых фильтров
+      final ui = sl<HomeUiStore>();
+      final f = context.read<SessionsFiltersStore>();
+      _reactions.add(
+        mobx.reaction((_) => ui.captureScope.value, (_) {
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        }),
+      );
+      _reactions.add(
+        mobx.reaction((_) => ui.quickTypes.toList(growable: false), (_) {
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        }),
+      );
+      _reactions.add(
+        mobx.reaction((_) => ui.quickStatusGroups.toList(growable: false), (_) {
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        }),
+      );
+      _reactions.add(
+        mobx.reaction((_) => f.target, (_) {
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        }),
+      );
+      _reactions.add(
+        mobx.reaction((_) => ui.includePaused.value, (_) {
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        }),
+      );
     });
 
     _framesCtrl.addListener(_onFramesScroll);
@@ -213,20 +246,9 @@ class _MyHomePageState extends State<MyHomePage> {
     _sessionsCtrl.addListener(_onSessionsScroll);
     _sessionSearchCtrl.addListener(() {
       sl<HomeUiStore>().setSessionSearchQuery(_sessionSearchCtrl.text);
-      _scheduleSessionsReload();
+      // ignore: discarded_futures
+      sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
     });
-    // Background loading via service
-    sl<features_inspector_application_services.SessionsPollingService>().start(
-      onTick: () async {
-        if (!mounted) return;
-        final ui = sl<HomeUiStore>();
-        if (!ui.isRecording.value) return;
-        final store = context.read<SessionsStore>();
-        if (!store.loading && !_loadingSessions) {
-          await _loadSessions();
-        }
-      },
-    );
   }
 
   @override
@@ -237,12 +259,15 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     monitor.dispose();
     _pollTimer?.cancel();
-    _sessionsReloadDebounce.dispose();
-    sl<features_inspector_application_services.SessionsPollingService>().stop();
     _framesCtrl.dispose();
     _eventsCtrl.dispose();
     _sessionsCtrl.dispose();
     _searchFocus.dispose();
+    for (final d in _reactions) {
+      try {
+        d();
+      } catch (_) {}
+    }
     super.dispose();
   }
 
@@ -265,30 +290,16 @@ class _MyHomePageState extends State<MyHomePage> {
           ui.setWfFitAll(true);
           // выровняем since на сейчас, чтобы повторная подгрузка не схватила старые
           ui.setSince(DateTime.now().toUtc());
-          // финальный мягкий перезагруз списка (без гонок с дебаунсером)
-          _scheduleSessionsReload();
+          // realtime: пересоберём подписку
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
           return;
         }
-        if (t == 'session_started' || t == 'session_ended') {
-          if (!ui.isRecording.value) return;
-          if (_loadingSessions) return;
-          _scheduleSessionsReload();
-          Future.microtask(() {
-            try {
-              context.read<AggregateStore>().load(groupBy: 'domain');
-            } catch (_) {}
-          });
-        }
+        // список обновляется по сокету — перезагрузка не нужна
         if (!ui.isRecording.value && t == 'session_started') {
           return; // paused: don't pick up updates
         }
-        if (t == 'frame_added' || t == 'event_added' || t == 'sio_probe') {
-          final sid = (ev['id'] ?? '').toString();
-          if (ui.selectedSessionId.value != null &&
-              sid == ui.selectedSessionId.value) {
-            _tickRefresh();
-          }
-        }
+        // frames/events приходят по SSE, доп. поллинг не нужен
         if (t == 'session_error') {
           // Display user-friendly error notification
           final errorData = ev['error'] as Map<String, dynamic>?;
@@ -330,8 +341,7 @@ class _MyHomePageState extends State<MyHomePage> {
               title,
               '$method $displayTarget\n$message\nSession: $sessionDisplay...',
             );
-            // Reload sessions to show error state
-            _scheduleSessionsReload();
+            // realtime обновит список автоматически
           }
         }
       } catch (_) {}
@@ -343,15 +353,7 @@ class _MyHomePageState extends State<MyHomePage> {
     monitor.connect();
   }
 
-  void _scheduleSessionsReload() {
-    _sessionsReloadDebounce.run(() {
-      final ui = sl<HomeUiStore>();
-      if (!ui.isRecording.value) return;
-      if (!_loadingSessions) {
-        _loadSessions();
-      }
-    });
-  }
+  // removed: _scheduleSessionsReload (REST поллинг заменён на сокеты)
 
   Future<void> _clearAllSessions() async {
     final ok = await showDialog<bool>(
@@ -428,27 +430,14 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       await context.read<AggregateStore>().load(groupBy: 'domain');
     } catch (_) {}
-    // temporarily suppress auto-reload caused by monitor events
-    _sessionsReloadDebounce.dispose();
-    _loadingSessions = true;
-    await Future.delayed(const Duration(milliseconds: 300));
-    _loadingSessions = false;
-    // final reload to confirm empty state
+    // realtime заново подтянет состояние
     await _loadSessions();
   }
 
   Future<void> _loadSessions() async {
-    final store = context.read<SessionsStore>();
-    final q = sl<HomeUiStore>().sessionSearchQuery.value.trim();
-    final target = context.read<SessionsFiltersStore>().target.trim();
-    await store.load(q: q, target: target);
-    _suckMetaFromSessions();
-    // fire and forget lightweight warmup to enrich httpMeta
+    // realtime подписка заменяет REST-загрузку списка/агрегатов
     // ignore: discarded_futures
-    sl<HttpMetaService>().warmup(limit: 50);
-    try {
-      await context.read<AggregateStore>().load(groupBy: 'domain');
-    } catch (_) {}
+    sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
   }
 
   Future<void> _restorePrefs() async {
@@ -525,27 +514,11 @@ class _MyHomePageState extends State<MyHomePage> {
   // no-op retained for compatibility with shortcuts (kept for future keyboard shortcuts)
 
   void _startAutoRefresh() {
+    // отключено: детали обновляет SSE-stream
     _pollTimer?.cancel();
-    final ui = sl<HomeUiStore>();
-    if (ui.selectedSessionId.value == null) return;
-    _pollTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _tickRefresh(),
-    );
   }
 
-  Future<void> _tickRefresh() async {
-    final ui = sl<HomeUiStore>();
-    if (ui.selectedSessionId.value == null) return;
-    _detailsRefreshDebounce.run(() async {
-      try {
-        await Future.wait([
-          context.read<SessionDetailsStore>().loadMoreFrames(),
-          context.read<SessionDetailsStore>().loadMoreEvents(),
-        ]);
-      } catch (_) {}
-    });
-  }
+  // removed: _tickRefresh (SSE обновляет детали)
 
   void _onSessionsScroll() {
     if (!_sessionsCtrl.hasClients) return;
@@ -1032,15 +1005,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  void _suckMetaFromSessions() {
-    final src = context.read<SessionsStore>().items.toList();
-    for (final s in src) {
-      final meta = s.httpMeta;
-      if (meta != null && meta.isNotEmpty) {
-        sl<HomeUiStore>().httpMeta[s.id] = Map<String, dynamic>.from(meta);
-      }
-    }
-  }
+  // removed: _suckMetaFromSessions (meta приходит сразу в init/upsert)
 }
 
 class _SessionPlaceholder extends StatelessWidget {

@@ -71,26 +71,35 @@ func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
 // Делает hijack клиентского соединения, устанавливает соединение к апстриму,
 // передаёт исходный Upgrade‑запрос (origin‑form) и после 101 прокачивает байты в обе стороны.
 func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Check if target should be monitored (exclude monitoring endpoints)
+	shouldMonitor := d.shouldMonitorTarget(r.URL.Path)
+
 	// Создаём сессию (ws)
 	sessionID := id.New()
-	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "ws"})
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
-	d.Metrics.ActiveSessions.Inc()
+	if shouldMonitor {
+		_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "ws"})
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
+		d.Metrics.ActiveSessions.Inc()
+	}
 
 	// Hijack клиента
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "HIJACK_NOT_SUPPORTED", "proxy: hijacking not supported", nil)
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("hijack not supported"))
-		d.Metrics.ActiveSessions.Dec()
-		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		if shouldMonitor {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("hijack not supported"))
+			d.Metrics.ActiveSessions.Dec()
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		}
 		return
 	}
 	clientConn, clientBuf, err := hj.Hijack()
 	if err != nil {
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-		d.Metrics.ActiveSessions.Dec()
-		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		if shouldMonitor {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			d.Metrics.ActiveSessions.Dec()
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		}
 		return
 	}
 
@@ -105,9 +114,11 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		_, _ = clientBuf.WriteString("HTTP/1.1 502 Bad Gateway\r\n\r\n")
 		_ = clientBuf.Flush()
 		_ = clientConn.Close()
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-		d.Metrics.ActiveSessions.Dec()
-		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		if shouldMonitor {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			d.Metrics.ActiveSessions.Dec()
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		}
 		return
 	}
 
@@ -123,11 +134,13 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 	sanitizeForUpgrade(outReq.Header)
 
 	// Лёгкое превью запроса (кадр вниз по потоку)
-	reqPreview := buildHTTPRequestPreview(outReq, nil)
-	fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: 0, Preview: reqPreview}
-	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+	if shouldMonitor {
+		reqPreview := buildHTTPRequestPreview(outReq, nil)
+		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: 0, Preview: reqPreview}
+		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+		d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+	}
 
 	// Пишем апстриму Upgrade‑запрос
 	if err := outReq.Write(upstreamConn); err != nil {
@@ -135,9 +148,11 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		_ = clientBuf.Flush()
 		_ = clientConn.Close()
 		_ = upstreamConn.Close()
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-		d.Metrics.ActiveSessions.Dec()
-		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		if shouldMonitor {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			d.Metrics.ActiveSessions.Dec()
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		}
 		return
 	}
 
@@ -149,9 +164,11 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		_ = clientBuf.Flush()
 		_ = clientConn.Close()
 		_ = upstreamConn.Close()
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-		d.Metrics.ActiveSessions.Dec()
-		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		if shouldMonitor {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			d.Metrics.ActiveSessions.Dec()
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		}
 		return
 	}
 	// Отдадим клиенту статус/заголовки
@@ -173,21 +190,25 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		}
 		// Сигнализируем в монитор о факте апгрейда (минимальное событие),
 		// далее полноценные события будут приходить из pipeWSMessages при разборе SIO
-		e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "/_sys", Name: "upgraded", ArgsPreview: "[]"}
-		_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
-		d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
+		if shouldMonitor {
+			e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "/_sys", Name: "upgraded", ArgsPreview: "[]"}
+			_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
+		}
 
-		go d.pipeWSMessages(sessionID, clientConn, upstreamConn, domain.DirectionClientToUpstream)
-		d.pipeWSMessages(sessionID, upstreamConn, clientConn, domain.DirectionUpstreamToClient)
+		go d.pipeWSMessages(sessionID, clientConn, upstreamConn, domain.DirectionClientToUpstream, shouldMonitor)
+		d.pipeWSMessages(sessionID, upstreamConn, clientConn, domain.DirectionUpstreamToClient, shouldMonitor)
 		return
 	}
 
 	// Не 101 — считаем завершённой попытку Upgrade
 	_ = clientConn.Close()
 	_ = upstreamConn.Close()
-	_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-	d.Metrics.ActiveSessions.Dec()
+	if shouldMonitor {
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		d.Metrics.ActiveSessions.Dec()
+	}
 }
 
 // sanitizeForUpgrade удаляет hop-by-hop заголовки, оставляя Upgrade/Connection.
@@ -227,11 +248,11 @@ func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
 	// minimal session for CONNECT (add a synthetic event for observability)
 	sessionID := id.New()
 	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "connect://" + upstream, ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC()})
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
+	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
 	// Synthetic event to signal established tunnel (useful for tests and UI)
 	_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "/_sys", Name: "tunnel_established", ArgsPreview: "{}"})
-	d.Monitor.Broadcast(MonitorEvent{Type: "event_added", ID: sessionID})
+	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "event_added", ID: sessionID})
 
 	// bidirectional copy
 	go func() {
@@ -242,7 +263,7 @@ func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
 	_ = clientConn.Close()
 
 	_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
 	d.Metrics.ActiveSessions.Dec()
 }
 
@@ -301,7 +322,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 	// Создаем сессию (тип http), будем логировать запросы/ответы
 	sessionID := id.New()
 	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "mitm://" + upstream, ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "http"})
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
+	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
 
 	// Простой цикл: читаем HTTP запросы от клиента, отправляем к апстриму, читаем ответ, отдаем назад.
@@ -313,7 +334,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			ctx := contextWithNoCancel()
 			if sess, ok, _ := d.Svc.Get(ctx, sessionID); !ok || sess.ClosedAt == nil {
 				_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), nil)
-				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
 				d.Metrics.ActiveSessions.Dec()
 			}
 		}()
@@ -363,7 +384,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			reqPreview := buildHTTPRequestPreview(rPrev, reqBodyBuf)
 			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(req.ContentLength), Preview: reqPreview}
 			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
 			// Mapping (MITM): оценим и применим до отправки апстриму
@@ -390,7 +411,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 						preview := buildHTTPResponsePreview(resp)
 						fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
 						_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
-						d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+						d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
 						d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 						_ = resp.Write(tlsSrv)
 						continue
@@ -456,7 +477,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			preview := buildHTTPResponsePreview(resp)
 			fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
 			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
-			d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
 			// Ограничим скорость выгрузки апстрима клиенту
@@ -507,8 +528,10 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 
 			if resp.StatusCode == http.StatusSwitchingProtocols {
 				// После 101 HTTP больше нет — переключаемся на прокачку WS с логированием кадров.
-				go d.pipeWSMessages(sessionID, tlsSrv, tlsCli, domain.DirectionClientToUpstream)
-				d.pipeWSMessages(sessionID, tlsCli, tlsSrv, domain.DirectionUpstreamToClient)
+				// Check if this specific request path should be monitored
+				shouldMonitor := d.shouldMonitorTarget(req.URL.Path)
+				go d.pipeWSMessages(sessionID, tlsSrv, tlsCli, domain.DirectionClientToUpstream, shouldMonitor)
+				d.pipeWSMessages(sessionID, tlsCli, tlsSrv, domain.DirectionUpstreamToClient, shouldMonitor)
 				return
 			}
 		}
@@ -517,11 +540,16 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) {
 	// r.URL is absolute here (scheme+host+path)
+	// Check if target should be monitored (exclude monitoring endpoints)
+	shouldMonitor := d.shouldMonitorTarget(r.URL.Path)
+
 	// Create session for logging
 	sessionID := id.New()
-	_ = d.Svc.Create(r.Context(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC()})
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
-	d.Metrics.ActiveSessions.Inc()
+	if shouldMonitor {
+		_ = d.Svc.Create(r.Context(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC()})
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
+		d.Metrics.ActiveSessions.Inc()
+	}
 
 	// Prepare outbound request: clone the original request but with absolute URL
 	outURL := *r.URL
@@ -561,13 +589,15 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	// For preview, use the real upstream absolute URL
-	rPrev := *r
-	rPrev.URL = &outURL
-	reqPreview := buildHTTPRequestPreview(&rPrev, reqBodyBuf)
-	fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
-	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+	if shouldMonitor {
+		rPrev := *r
+		rPrev.URL = &outURL
+		reqPreview := buildHTTPRequestPreview(&rPrev, reqBodyBuf)
+		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
+		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+		d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
+	}
 
 	// Mapping: Map Remote/Local
 	if d.MapRt != nil {
@@ -592,16 +622,18 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 				headers.Set("X-ND-Mapped", "local")
 				headers.Set("X-ND-Rule", dec.RuleID)
 				resp := &http.Response{StatusCode: dec.StatusOverride, Status: strconv.Itoa(dec.StatusOverride) + " " + http.StatusText(dec.StatusOverride), Header: headers, Body: io.NopCloser(bytes.NewReader(bodyAll)), ContentLength: int64(len(bodyAll))}
-				preview := buildHTTPResponsePreview(resp)
-				fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
-				_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
-				d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
-				// mapping_applied (local)
-				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
-				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
-					d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+				if shouldMonitor {
+					preview := buildHTTPResponsePreview(resp)
+					fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(bodyAll), Preview: preview}
+					_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+					// mapping_applied (local)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+					if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+						d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+					}
+					d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 				}
-				d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
 				// Отдаём клиенту
 				copyHeader(w.Header(), headers)
@@ -611,9 +643,11 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 				if len(bodyAll) > 0 {
 					_, _ = w.Write(bodyAll)
 				}
-				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-				d.Metrics.ActiveSessions.Dec()
+				if shouldMonitor {
+					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+					d.Metrics.ActiveSessions.Dec()
+				}
 				return
 			}
 			// Remote — переписываем URL
@@ -623,9 +657,11 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 					outReq.Host = u.Host
 				}
 				// mapping_applied (remote)
-				d.Monitor.Broadcast(MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
-				if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
-					d.Metrics.MappingAppliedTotal.WithLabelValues("remote").Inc()
+				if shouldMonitor {
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+					if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+						d.Metrics.MappingAppliedTotal.WithLabelValues("remote").Inc()
+					}
 				}
 			}
 		}
@@ -643,9 +679,11 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 		if dec, _ := d.Interceptor.InterceptRequest(r.Context(), sessionID, outReq, string(decCap), decCap, ct); dec != nil {
 			if strings.ToLower(dec.Action) == "drop" {
 				writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
-				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
-				d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-				d.Metrics.ActiveSessions.Dec()
+				if shouldMonitor {
+					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+					d.Metrics.ActiveSessions.Dec()
+				}
 				return
 			}
 			if dec.Method != "" {
@@ -694,14 +732,17 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 		outReq.Body = io.NopCloser(wrapReaderThrottleLoss(outReq.Body, bps, d.Cfg.ThrottlePacketLoss))
 	}
 
-	// Send using unified transport
+	// Send using unified transport with simple timing
 	tr := newTransport(d.Cfg)
+	tStart := time.Now().UTC()
 	resp, err := tr.RoundTrip(outReq)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "UPSTREAM_ERROR", err.Error(), map[string]any{"target": outURL.String()})
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-		d.Metrics.ActiveSessions.Dec()
-		d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+		if shouldMonitor {
+			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+			d.Metrics.ActiveSessions.Dec()
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		}
 		return
 	}
 	defer resp.Body.Close()
@@ -713,11 +754,32 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Build response preview and keep body intact for client
-	preview := buildHTTPResponsePreview(resp)
-	fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
-	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
-	d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
-	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+	if shouldMonitor {
+		preview := buildHTTPResponsePreview(resp)
+		fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
+		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+		d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+	}
+
+	// Persist HTTP transaction summary (forward-proxy path)
+	tx := domain.HTTPTransaction{
+		ID: id.New(), SessionID: sessionID,
+		Method: r.Method, URL: outURL.String(),
+		Status:  resp.StatusCode,
+		ReqSize: int(r.ContentLength), RespSize: int(resp.ContentLength),
+		StartedAt: tStart, EndedAt: time.Now().UTC(),
+		Timings: domain.HTTPTimings{
+			Total: durationMs(tStart, time.Now()),
+		},
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		tx.ContentType = ct
+	}
+	if shouldMonitor {
+		_ = d.Svc.AddHTTPTransaction(contextWithNoCancel(), tx)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "http_tx_added", ID: sessionID, Ref: tx.ID})
+	}
 
 	// Interception: response (forward)
 	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptResponses {
@@ -779,9 +841,11 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 		_, _ = w.Write(bodyAll)
 	}
 
-	_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-	d.Metrics.ActiveSessions.Dec()
+	if shouldMonitor {
+		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+		d.Metrics.ActiveSessions.Dec()
+	}
 }
 
 func cloneHeader(h http.Header) http.Header {

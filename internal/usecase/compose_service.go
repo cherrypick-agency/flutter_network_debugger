@@ -13,6 +13,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"network-debugger/internal/domain"
@@ -23,15 +24,16 @@ type ComposeService struct {
 	libRepo        ComposeLibraryRepository
 	histRepo       ComposeHistoryRepository
 	sessions       *SessionService
+	monitor        domain.Broadcaster  // broadcaster for real-time updates
 	newClient      func() *http.Client // factory to create configured HTTP client
 	maxUploadBytes int
 }
 
-func NewComposeService(lr ComposeLibraryRepository, hr ComposeHistoryRepository, sessions *SessionService, clientFactory func() *http.Client) *ComposeService {
+func NewComposeService(lr ComposeLibraryRepository, hr ComposeHistoryRepository, sessions *SessionService, monitor domain.Broadcaster, clientFactory func() *http.Client) *ComposeService {
 	if clientFactory == nil {
 		clientFactory = func() *http.Client { return &http.Client{Timeout: 30 * time.Second} }
 	}
-	return &ComposeService{libRepo: lr, histRepo: hr, sessions: sessions, newClient: clientFactory, maxUploadBytes: 10 << 20}
+	return &ComposeService{libRepo: lr, histRepo: hr, sessions: sessions, monitor: monitor, newClient: clientFactory, maxUploadBytes: 10 << 20}
 }
 
 // SetMaxUploadMB sets the limit for single multipart file in megabytes.
@@ -213,43 +215,61 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 	if cmd.Template.Method == "" || cmd.Template.URL == "" {
 		return ComposeSendResult{}, errors.New("invalid template: method and url are required")
 	}
-	// Create session
+	// Create session with current CaptureID to ensure it appears in Sessions list
 	sess := domain.Session{ID: generateID(), Target: cmd.Template.URL, StartedAt: time.Now().UTC(), Kind: "http"}
+	// Get current capture ID from store if available
+	if repo := s.sessions.SessionsRepoUnsafe(); repo != nil {
+		if st, ok := repo.(interface {
+			RecordingState() (bool, int)
+		}); ok {
+			recording, captureID := st.RecordingState()
+			if recording {
+				sess.CaptureID = &captureID
+			}
+		}
+	}
 	_ = s.sessions.Create(ctx, sess)
+	// Broadcast session_started event for real-time updates
+	if s.monitor != nil {
+		s.monitor.Broadcast(domain.MonitorEvent{Type: "session_started", ID: sess.ID})
+	}
 
 	// Build request
 	req, err := buildHTTPRequestFromTemplate(cmd.Template, s.maxUploadBytes)
 	if err != nil {
 		errStr := err.Error()
 		_ = s.sessions.SetClosed(ctx, sess.ID, time.Now().UTC(), &errStr)
+		if s.monitor != nil {
+			s.monitor.Broadcast(domain.MonitorEvent{Type: "session_ended", ID: sess.ID})
+		}
 		return ComposeSendResult{}, err
 	}
 
 	var tStart, tDNSStart, tConnStart, tTLSStart, tFirstByte time.Time
-	var dnsMs, connMs, tlsMs, ttfbMs int64
+	var dnsMs, connMs, tlsMs, ttfbMs atomic.Int64
 	trace := &httptrace.ClientTrace{
 		DNSStart: func(httptrace.DNSStartInfo) { tDNSStart = time.Now() },
 		DNSDone: func(httptrace.DNSDoneInfo) {
 			if !tDNSStart.IsZero() {
-				dnsMs = time.Since(tDNSStart).Milliseconds()
+				dnsMs.Store(time.Since(tDNSStart).Milliseconds())
 			}
 		},
 		ConnectStart: func(_, _ string) { tConnStart = time.Now() },
 		ConnectDone: func(string, string, error) {
 			if !tConnStart.IsZero() {
-				connMs = time.Since(tConnStart).Milliseconds()
+				connMs.Store(time.Since(tConnStart).Milliseconds())
 			}
 		},
 		TLSHandshakeStart: func() { tTLSStart = time.Now() },
 		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
 			if !tTLSStart.IsZero() {
-				tlsMs = time.Since(tTLSStart).Milliseconds()
+				tlsMs.Store(time.Since(tTLSStart).Milliseconds())
 			}
 		},
 		GotFirstResponseByte: func() {
 			if !tStart.IsZero() {
 				tFirstByte = time.Now()
-				ttfbMs = tFirstByte.Sub(tStart).Milliseconds()
+				ttfbMs.Store(tFirstByte.Sub(tStart).Milliseconds())
 			}
 		},
 	}
@@ -259,6 +279,7 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 	tStart = time.Now()
 	// Log request frame (synthetic) so compose session has the same frames as proxy-based sessions
 	// Build minimal request preview from template
+	var reqFrameID string
 	func() {
 		// best-effort, ignore errors
 		prev := minimalHTTPRequestPreviewFromTemplate(cmd.Template)
@@ -266,8 +287,9 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 		if size < 0 {
 			size = 0
 		}
+		reqFrameID = generateID()
 		_ = s.sessions.AddFrame(ctx, sess.ID, domain.Frame{
-			ID:        generateID(),
+			ID:        reqFrameID,
 			Ts:        tStart.UTC(),
 			Direction: domain.DirectionClientToUpstream,
 			Opcode:    domain.OpcodeText,
@@ -275,10 +297,16 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 			Preview:   prev,
 		})
 	}()
+	if s.monitor != nil {
+		s.monitor.Broadcast(domain.MonitorEvent{Type: "frame_added", ID: sess.ID, Ref: reqFrameID})
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		errStr := err.Error()
 		_ = s.sessions.SetClosed(ctx, sess.ID, time.Now().UTC(), &errStr)
+		if s.monitor != nil {
+			s.monitor.Broadcast(domain.MonitorEvent{Type: "session_ended", ID: sess.ID})
+		}
 		return ComposeSendResult{}, err
 	}
 	defer resp.Body.Close()
@@ -297,14 +325,20 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 		RespSize:    int(resp.ContentLength),
 		StartedAt:   tStart.UTC(),
 		EndedAt:     time.Now().UTC(),
-		Timings:     domain.HTTPTimings{DNS: dnsMs, Connect: connMs, TLS: tlsMs, TTFB: ttfbMs, Total: ttfbMs},
+		Timings:     domain.HTTPTimings{DNS: dnsMs.Load(), Connect: connMs.Load(), TLS: tlsMs.Load(), TTFB: ttfbMs.Load(), Total: ttfbMs.Load()},
 		ContentType: resp.Header.Get("Content-Type"),
 	}
 	_ = s.sessions.AddHTTPTransaction(ctx, tx)
+	if s.monitor != nil {
+		s.monitor.Broadcast(domain.MonitorEvent{Type: "http_tx_added", ID: sess.ID, Ref: tx.ID})
+	}
 	_ = s.sessions.SetClosed(ctx, sess.ID, time.Now().UTC(), nil)
+	if s.monitor != nil {
+		s.monitor.Broadcast(domain.MonitorEvent{Type: "session_ended", ID: sess.ID})
+	}
 
 	if s.histRepo != nil {
-		_ = s.histRepo.AppendHistory(ctx, domain.ComposeHistoryEntry{ID: generateID(), Template: cmd.Template.ID, Method: cmd.Template.Method, URL: cmd.Template.URL, Status: resp.StatusCode, When: time.Now().UTC()})
+		_ = s.histRepo.AppendHistory(ctx, domain.ComposeHistoryEntry{ID: generateID(), Template: cmd.Template.ID, Session: sess.ID, Method: cmd.Template.Method, URL: cmd.Template.URL, Status: resp.StatusCode, When: time.Now().UTC()})
 	}
 
 	preview := minimalHTTPResponsePreview(resp)
@@ -313,7 +347,7 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 		var m map[string]any
 		if json.Unmarshal([]byte(preview), &m) == nil {
 			total := time.Since(tStart).Milliseconds()
-			m["timings"] = map[string]any{"ttfbMs": ttfbMs, "totalMs": total}
+			m["timings"] = map[string]any{"ttfbMs": ttfbMs.Load(), "totalMs": total}
 			// attach body preview as string
 			// try compact JSON first to keep it readable
 			bstr := string(bodyBuf)
@@ -332,14 +366,18 @@ func (s *ComposeService) Send(ctx context.Context, cmd ComposeSendCmd) (ComposeS
 		}
 	}
 	// Add response frame
+	respFrameID := generateID()
 	_ = s.sessions.AddFrame(ctx, sess.ID, domain.Frame{
-		ID:        generateID(),
+		ID:        respFrameID,
 		Ts:        time.Now().UTC(),
 		Direction: domain.DirectionUpstreamToClient,
 		Opcode:    domain.OpcodeText,
 		Size:      int(resp.ContentLength),
 		Preview:   preview,
 	})
+	if s.monitor != nil {
+		s.monitor.Broadcast(domain.MonitorEvent{Type: "frame_added", ID: sess.ID, Ref: respFrameID})
+	}
 	return ComposeSendResult{SessionID: sess.ID, Transaction: tx, RespPreview: preview, RespBody: bodyBuf}, nil
 }
 

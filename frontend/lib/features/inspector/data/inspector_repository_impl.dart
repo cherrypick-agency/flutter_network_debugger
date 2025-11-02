@@ -40,7 +40,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
         host: null,
         path: '/_api/v1/sessions',
         query: {
-          'limit': '100',
+          'limit': '1000',
           if (q != null && q.isNotEmpty) 'q': q,
           if (target != null && target.isNotEmpty) '_target': target,
           if (scope == 'all') 'captures': 'all',

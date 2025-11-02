@@ -20,6 +20,14 @@ const String _kDefineProxy = String.fromEnvironment('PROXY_BASE_URL');
 const String _kDefineHttpProxy = String.fromEnvironment('HTTP_PROXY');
 const String _kDefineProxyPath = String.fromEnvironment('PROXY_HTTP_PATH');
 const String _kDefineHttpProxyPath = String.fromEnvironment('HTTP_PROXY_PATH');
+const String _kDefineDioDebuggerEnabled =
+    String.fromEnvironment('DIO_DEBUGGER_ENABLED');
+const String _kDefineHttpProxyEnabled =
+    String.fromEnvironment('HTTP_PROXY_ENABLED');
+const String _kDefineHttpProxyMode = String.fromEnvironment('HTTP_PROXY_MODE');
+const String _kDefineProxyMode = String.fromEnvironment('PROXY_MODE');
+const String _kDefineHttpProxyAllowBadCerts =
+    String.fromEnvironment('HTTP_PROXY_ALLOW_BAD_CERTS');
 
 /// Простая утилита для привязки reverse‑proxy к существующему Dio экземпляру.
 /// По умолчанию пытается взять настройки из ENV переменных (через Platform.environment):
@@ -136,8 +144,8 @@ class DioDebugger {
 
   static bool _computeEnabledFromEnv() {
     final v = _firstNonEmpty([
-      String.fromEnvironment('DIO_DEBUGGER_ENABLED'),
-      String.fromEnvironment('HTTP_PROXY_ENABLED'),
+      _kDefineDioDebuggerEnabled,
+      _kDefineHttpProxyEnabled,
       readEnvVar('DIO_DEBUGGER_ENABLED'),
       readEnvVar('HTTP_PROXY_ENABLED'),
     ]);
@@ -153,8 +161,8 @@ class DioDebugger {
 
   static String _computeMode() {
     final v = _firstNonEmpty([
-      String.fromEnvironment('HTTP_PROXY_MODE'),
-      String.fromEnvironment('PROXY_MODE'),
+      _kDefineHttpProxyMode,
+      _kDefineProxyMode,
       readEnvVar('HTTP_PROXY_MODE'),
       readEnvVar('PROXY_MODE'),
     ])?.trim().toLowerCase();
@@ -164,7 +172,7 @@ class DioDebugger {
 
   static bool _computeAllowBadCerts() {
     final v = _firstNonEmpty([
-      String.fromEnvironment('HTTP_PROXY_ALLOW_BAD_CERTS'),
+      _kDefineHttpProxyAllowBadCerts,
       readEnvVar('HTTP_PROXY_ALLOW_BAD_CERTS'),
     ])?.trim().toLowerCase();
     if (v == null) return false;

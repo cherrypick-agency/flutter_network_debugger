@@ -25,6 +25,26 @@ abstract class _SessionsStore with Store {
   }
 
   @action
+  void applyInit(List<Session> data) {
+    items = ObservableList.of(data);
+  }
+
+  @action
+  void upsert(Session s) {
+    final idx = items.indexWhere((e) => e.id == s.id);
+    if (idx >= 0) {
+      items[idx] = s;
+    } else {
+      items.add(s);
+    }
+  }
+
+  @action
+  void removeById(String id) {
+    items.removeWhere((e) => e.id == id);
+  }
+
+  @action
   Future<void> load({
     String? q,
     String? target,

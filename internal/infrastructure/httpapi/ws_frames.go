@@ -27,7 +27,7 @@ func (d *Deps) pipeWSRaw(sessionID string, src net.Conn, dst net.Conn, direction
 		ctx := contextWithNoCancel()
 		if sess, ok, _ := d.Svc.Get(ctx, sessionID); !ok || sess.ClosedAt == nil {
 			_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), nil)
-			d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
 			d.Metrics.ActiveSessions.Dec()
 		}
 	}()
@@ -44,7 +44,7 @@ func (d *Deps) pipeWSRaw(sessionID string, src net.Conn, dst net.Conn, direction
 		// Логируем кадр
 		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: direction, Opcode: op, Size: size, Preview: preview}
 		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-		d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 		d.Metrics.FramesTotal.WithLabelValues(string(direction), string(op)).Inc()
 	}
 }
@@ -52,15 +52,17 @@ func (d *Deps) pipeWSRaw(sessionID string, src net.Conn, dst net.Conn, direction
 // pipeWSMessages собирает WS-сообщения из последовательности кадров (учитывая continuation/FIN),
 // пишет исходные кадры в dst и логирует превью на уровне сообщения. Поддерживает best-effort
 // распаковку permessage-deflate для превью, если включено в конфиге.
-func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, direction domain.Direction) {
+func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, direction domain.Direction, shouldMonitor bool) {
 	defer func() {
 		_ = src.Close()
 		_ = dst.Close()
-		ctx := contextWithNoCancel()
-		if sess, ok, _ := d.Svc.Get(ctx, sessionID); !ok || sess.ClosedAt == nil {
-			_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), nil)
-			d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-			d.Metrics.ActiveSessions.Dec()
+		if shouldMonitor {
+			ctx := contextWithNoCancel()
+			if sess, ok, _ := d.Svc.Get(ctx, sessionID); !ok || sess.ClosedAt == nil {
+				_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), nil)
+				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
+			}
 		}
 	}()
 
@@ -70,25 +72,27 @@ func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, dire
 	for {
 		opMain, msgSize, preview, rawText, bodyFile, err := d.forwardOneWSMessage(br, pacedDst)
 		if err != nil {
-			if err != io.EOF {
+			if err != io.EOF && shouldMonitor {
 				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 			}
 			return
 		}
-		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: direction, Opcode: opMain, Size: msgSize, Preview: preview}
-		if bodyFile != "" {
-			fr.BodyFile = bodyFile
-		}
-		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-		d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-		d.Metrics.FramesTotal.WithLabelValues(string(direction), string(opMain)).Inc()
+		if shouldMonitor {
+			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: direction, Opcode: opMain, Size: msgSize, Preview: preview}
+			if bodyFile != "" {
+				fr.BodyFile = bodyFile
+			}
+			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+			d.Metrics.FramesTotal.WithLabelValues(string(direction), string(opMain)).Inc()
 
-		// SIO parse for text messages (forward mode) — единый путь
-		if opMain == domain.OpcodeText {
-			if len(rawText) > 0 {
-				_ = d.recordSIOIfAny(sessionID, rawText, fr.ID)
-			} else if len(preview) > 0 {
-				_ = d.recordSIOIfAny(sessionID, preview, fr.ID)
+			// SIO parse for text messages (forward mode) — единый путь
+			if opMain == domain.OpcodeText {
+				if len(rawText) > 0 {
+					_ = d.recordSIOIfAny(sessionID, rawText, fr.ID)
+				} else if len(preview) > 0 {
+					_ = d.recordSIOIfAny(sessionID, preview, fr.ID)
+				}
 			}
 		}
 	}

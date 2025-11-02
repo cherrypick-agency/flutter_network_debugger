@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"network-debugger/internal/domain"
@@ -11,6 +12,8 @@ import (
 	uc "network-debugger/internal/usecase"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 type apiStubRepo struct{}
@@ -48,7 +51,8 @@ func (apiStubRepo) ListHTTPTransactions(context.Context, string, string, int) ([
 
 func makeDepsWithAPIStub() *Deps {
 	s := uc.NewSessionService(apiStubRepo{}, apiStubRepo{}, apiStubRepo{})
-	return &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	return &Deps{Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Logger: &logger, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 }
 
 func TestHandleListSessions_GetAndDelete(t *testing.T) {

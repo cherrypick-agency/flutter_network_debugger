@@ -46,85 +46,106 @@ class _BodyEditorState extends State<BodyEditor> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DropdownButtonFormField<String>(
-            value:
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final hasBoundedHeight = constraints.maxHeight.isFinite;
+          Widget editor() {
+            final mode =
                 widget.allowedModes.contains(widget.mode)
                     ? widget.mode
-                    : widget.allowedModes.first,
-            onChanged: (v) => setState(() => widget.onModeChanged(v ?? 'raw')),
-            isDense: true,
-            isExpanded: true,
-            iconSize: 16,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontSize: 12),
-            items:
-                widget.allowedModes
-                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                    .toList(),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (widget.mode == 'json')
-                OutlinedButton(
-                  onPressed: () {
-                    final sample = const JsonEncoder.withIndent('  ').convert({
-                      'name': 'John',
-                      'email': 'john@example.com',
-                      'active': true,
-                    });
-                    widget.jsonCtrl.text = sample;
-                    setState(() => _jsonError = null);
+                    : widget.allowedModes.first;
+            switch (mode) {
+              case 'json':
+                return JsonCodeEditor(
+                  controller: widget.jsonCtrl,
+                  errorText: _jsonError,
+                  onChanged: (s) {
+                    _validateJson(s);
                   },
-                  child: const Text('Вставить JSON пример'),
-                ),
+                );
+              case 'form':
+                return FormEditor(
+                  items: widget.form,
+                  onChanged: widget.onFormChanged,
+                );
+              case 'multipart':
+                return MultipartEditor(
+                  items: widget.multipart,
+                  maxUploadMB: widget.maxUploadMB ?? 10,
+                  onChanged: widget.onMultipartChanged,
+                );
+              case 'raw':
+              default:
+                return TextFormField(
+                  controller: widget.rawCtrl,
+                  maxLines: null,
+                  expands: true,
+                  decoration: const InputDecoration(labelText: 'Raw body'),
+                );
+            }
+          }
+
+          final header = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                value:
+                    widget.allowedModes.contains(widget.mode)
+                        ? widget.mode
+                        : widget.allowedModes.first,
+                onChanged:
+                    (v) => setState(() => widget.onModeChanged(v ?? 'raw')),
+                isDense: true,
+                isExpanded: true,
+                iconSize: 16,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontSize: 12),
+                items:
+                    widget.allowedModes
+                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                        .toList(),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (widget.mode == 'json')
+                    OutlinedButton(
+                      onPressed: () {
+                        final sample = const JsonEncoder.withIndent(
+                          '  ',
+                        ).convert({
+                          'name': 'John',
+                          'email': 'john@example.com',
+                          'active': true,
+                        });
+                        widget.jsonCtrl.text = sample;
+                        setState(() => _jsonError = null);
+                      },
+                      child: const Text('Вставить JSON пример'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
             ],
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: () {
-              final mode =
-                  widget.allowedModes.contains(widget.mode)
-                      ? widget.mode
-                      : widget.allowedModes.first;
-              switch (mode) {
-                case 'json':
-                  return JsonCodeEditor(
-                    controller: widget.jsonCtrl,
-                    errorText: _jsonError,
-                    onChanged: (s) {
-                      _validateJson(s);
-                    },
-                  );
-                case 'form':
-                  return FormEditor(
-                    items: widget.form,
-                    onChanged: widget.onFormChanged,
-                  );
-                case 'multipart':
-                  return MultipartEditor(
-                    items: widget.multipart,
-                    maxUploadMB: widget.maxUploadMB ?? 10,
-                    onChanged: widget.onMultipartChanged,
-                  );
-                case 'raw':
-                default:
-                  return TextFormField(
-                    controller: widget.rawCtrl,
-                    maxLines: null,
-                    expands: true,
-                    decoration: const InputDecoration(labelText: 'Raw body'),
-                  );
-              }
-            }(),
-          ),
-        ],
+          );
+
+          if (hasBoundedHeight) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [header, Expanded(child: editor())],
+            );
+          }
+
+          // В неблиндированных по высоте местах используем фиксированную высоту редактора,
+          // чтобы не падать по Expanded/expands=true
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [header, SizedBox(height: 320, child: editor())],
+          );
+        },
       ),
     );
   }

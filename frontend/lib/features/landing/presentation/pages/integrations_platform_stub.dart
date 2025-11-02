@@ -7,3 +7,4 @@ Future<String> proxyDiagnostics() async => 'N/A';
 Future<void> openSystemProxySettings() async {}
 Future<bool> isDevCAInstalledSystem() async => false;
 Future<String?> systemDevCAFingerprint() async => null;
+Future<void> revealInFileManager(String path) async {}

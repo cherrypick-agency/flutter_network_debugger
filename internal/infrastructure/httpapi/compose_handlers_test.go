@@ -149,6 +149,14 @@ func (m *mockHistoryRepo) ListHistory(ctx context.Context, from string, limit in
 	return m.entries, "", nil
 }
 
+// --- Mock Broadcaster ---
+
+type mockBroadcasterImpl struct{}
+
+func (m *mockBroadcasterImpl) Broadcast(event domain.MonitorEvent) {
+	// no-op for tests
+}
+
 // --- Helper functions ---
 
 func setupComposeDeps(mock *mockComposeService) *Deps {
@@ -172,12 +180,15 @@ func setupComposeDeps(mock *mockComposeService) *Deps {
 		return &http.Client{Timeout: 1 * time.Second}
 	}
 
+	// Create mock broadcaster
+	mockBroadcaster := &mockBroadcasterImpl{}
+
 	d := &Deps{
 		Cfg:     cfg,
 		Logger:  &logger,
 		Metrics: m,
 		Svc:     sessionSvc,
-		Compose: usecase.NewComposeService(libRepo, histRepo, sessionSvc, clientFactory),
+		Compose: usecase.NewComposeService(libRepo, histRepo, sessionSvc, mockBroadcaster, clientFactory),
 	}
 
 	return d
@@ -209,12 +220,15 @@ func setupComposeDepsWithError(loadErr, saveErr error) *Deps {
 		return &http.Client{Timeout: 1 * time.Second}
 	}
 
+	// Create mock broadcaster
+	mockBroadcaster := &mockBroadcasterImpl{}
+
 	d := &Deps{
 		Cfg:     cfg,
 		Logger:  &logger,
 		Metrics: m,
 		Svc:     sessionSvc,
-		Compose: usecase.NewComposeService(libRepo, histRepo, sessionSvc, clientFactory),
+		Compose: usecase.NewComposeService(libRepo, histRepo, sessionSvc, mockBroadcaster, clientFactory),
 	}
 
 	return d

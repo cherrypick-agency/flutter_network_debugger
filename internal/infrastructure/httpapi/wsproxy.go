@@ -51,6 +51,9 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if this target should be monitored (exclude monitoring endpoints)
+	shouldMonitor := d.shouldMonitorTarget(u.Path)
+
 	sessionID := id.New()
 	sess := domain.Session{
 		ID:         sessionID,
@@ -59,13 +62,19 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		StartedAt:  time.Now().UTC(),
 		Kind:       "ws",
 	}
-	if err := d.Svc.Create(r.Context(), sess); err != nil {
-		writeError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", err.Error(), nil)
-		return
+
+	// Only create session in storage and broadcast if this is not a monitoring endpoint
+	if shouldMonitor {
+		if err := d.Svc.Create(r.Context(), sess); err != nil {
+			writeError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", err.Error(), nil)
+			return
+		}
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
+		d.Metrics.ActiveSessions.Inc()
+		d.Logger.Info().Str("session", sessionID).Str("target", u.String()).Str("client", sess.ClientAddr).Msg("network-debugger: incoming WS session")
+	} else {
+		d.Logger.Debug().Str("session", sessionID).Str("target", u.String()).Msg("network-debugger: skipping monitoring for internal endpoint")
 	}
-	d.Monitor.Broadcast(MonitorEvent{Type: "session_started", ID: sessionID})
-	d.Metrics.ActiveSessions.Inc()
-	d.Logger.Info().Str("session", sessionID).Str("target", u.String()).Str("client", sess.ClientAddr).Msg("network-debugger: incoming WS session")
 
 	upgrader := websocket.Upgrader{
 		CheckOrigin:  func(r *http.Request) bool { return true },
@@ -76,20 +85,21 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		errorCode, errorMessage := humanizeProxyError(err)
 		d.Logger.Error().Err(err).Str("errorCode", errorCode).Msg(errorMessage)
 
-		// Broadcast error to frontend
-		d.Monitor.Broadcast(MonitorEvent{
-			Type: "session_error",
-			ID:   sessionID,
-			Error: &ErrorDetails{
-				Code:    errorCode,
-				Message: "WebSocket upgrade failed: " + errorMessage,
-				Raw:     err.Error(),
-				Target:  tgt,
-				Method:  "WS",
-			},
-		})
-
-		_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		// Broadcast error to frontend (only if monitoring)
+		if shouldMonitor {
+			d.broadcastMonitorEvent(domain.MonitorEvent{
+				Type: "session_error",
+				ID:   sessionID,
+				Error: &domain.ErrorDetails{
+					Code:    errorCode,
+					Message: "WebSocket upgrade failed: " + errorMessage,
+					Raw:     err.Error(),
+					Target:  tgt,
+					Method:  "WS",
+				},
+			})
+			_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		}
 		return
 	}
 	d.Logger.Info().Str("session", sessionID).Msg("network-debugger: client upgraded to WebSocket")
@@ -137,22 +147,24 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 			d.Logger.Error().Err(err).Str("errorCode", errorCode).Msg(errorMessage)
 		}
 
-		// Broadcast error to frontend
-		d.Monitor.Broadcast(MonitorEvent{
-			Type: "session_error",
-			ID:   sessionID,
-			Error: &ErrorDetails{
-				Code:    errorCode,
-				Message: errorMessage,
-				Raw:     err.Error(),
-				Target:  u.String(),
-				Method:  "WS",
-			},
-		})
+		// Broadcast error to frontend (only if monitoring)
+		if shouldMonitor {
+			d.broadcastMonitorEvent(domain.MonitorEvent{
+				Type: "session_error",
+				ID:   sessionID,
+				Error: &domain.ErrorDetails{
+					Code:    errorCode,
+					Message: errorMessage,
+					Raw:     err.Error(),
+					Target:  u.String(),
+					Method:  "WS",
+				},
+			})
+			_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
+		}
 
 		_ = clientConn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, errorMessage), time.Now().Add(2*time.Second))
 		_ = clientConn.Close()
-		_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 		return
 	}
 	d.Logger.Info().Str("session", sessionID).Str("upstream", u.String()).Msg("network-debugger: connected to upstream")
@@ -162,29 +174,31 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start pumps
-	go d.pipe(sessionID, clientConn, upstreamConn, domain.DirectionClientToUpstream)
-	go d.pipe(sessionID, upstreamConn, clientConn, domain.DirectionUpstreamToClient)
+	go d.pipe(sessionID, clientConn, upstreamConn, domain.DirectionClientToUpstream, shouldMonitor)
+	go d.pipe(sessionID, upstreamConn, clientConn, domain.DirectionUpstreamToClient, shouldMonitor)
 }
 
-func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain.Direction) {
+func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain.Direction, shouldMonitor bool) {
 	loggedFirst := false
 	loggedFirstUpstreamText := false
 	var lastErr error
 	defer func() {
 		_ = src.Close()
 		_ = dst.Close()
-		// Закрываем сессию один раз, не затирая потенциальную ошибку
-		ctx := contextWithNoCancel()
-		sess, ok, _ := d.Svc.Get(ctx, sessionID)
-		if !ok || sess.ClosedAt == nil {
-			var errPtr *string
-			if lastErr != nil {
-				s := lastErr.Error()
-				errPtr = &s
+		// Закрываем сессию один раз, не затирая потенциальную ошибку (only if monitoring)
+		if shouldMonitor {
+			ctx := contextWithNoCancel()
+			sess, ok, _ := d.Svc.Get(ctx, sessionID)
+			if !ok || sess.ClosedAt == nil {
+				var errPtr *string
+				if lastErr != nil {
+					s := lastErr.Error()
+					errPtr = &s
+				}
+				_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), errPtr)
+				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+				d.Metrics.ActiveSessions.Dec()
 			}
-			_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), errPtr)
-			d.Monitor.Broadcast(MonitorEvent{Type: "session_ended", ID: sessionID})
-			d.Metrics.ActiveSessions.Dec()
 		}
 		d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Msg("network-debugger: stream closed")
 		if d.Live != nil {
@@ -212,38 +226,40 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 			return
 		}
 
-		// log frame
-		opcode := opcodeFromType(mt)
-		preview := buildPreview(opcode, data)
-		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: direction, Opcode: opcode, Size: len(data), Preview: preview}
-		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-		d.Monitor.Broadcast(MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-		d.Metrics.FramesTotal.WithLabelValues(string(direction), string(opcode)).Inc()
+		// log frame (only if monitoring)
+		if shouldMonitor {
+			opcode := opcodeFromType(mt)
+			preview := buildPreview(opcode, data)
+			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: direction, Opcode: opcode, Size: len(data), Preview: preview}
+			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+			d.Metrics.FramesTotal.WithLabelValues(string(direction), string(opcode)).Inc()
 
-		// best-effort Socket.IO event decoding for text frames
-		if !loggedFirst {
-			d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Str("opcode", string(opcode)).Int("size", len(data)).Msg("network-debugger: first frame proxied")
-			loggedFirst = true
-		}
-		if opcode == domain.OpcodeText {
-			// Parse from raw text (not from preview), to preserve SIO prefixes 42/43
-			raw := strings.TrimSpace(string(data))
-			if direction == domain.DirectionUpstreamToClient && !loggedFirstUpstreamText {
-				// emit lightweight probe (no payload exposure)
-				// payload: {dir:"upstream", prefix:"<first 6>", len:n}
-				pref := raw
-				if len(pref) > 6 {
-					pref = pref[:6]
-				}
-				_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{
-					ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "sio_probe", AckID: nil,
-					ArgsPreview: "{\"dir\":\"upstream\",\"prefix\":\"" + pref + "\",\"len\":" + strconv.Itoa(len(raw)) + "}",
-					FrameIDs:    []string{fr.ID},
-				})
-				d.Monitor.Broadcast(MonitorEvent{Type: "sio_probe", ID: sessionID, Ref: pref})
-				loggedFirstUpstreamText = true
+			// best-effort Socket.IO event decoding for text frames
+			if !loggedFirst {
+				d.Logger.Info().Str("session", sessionID).Str("direction", string(direction)).Str("opcode", string(opcode)).Int("size", len(data)).Msg("network-debugger: first frame proxied")
+				loggedFirst = true
 			}
-			_ = d.recordSIOIfAny(sessionID, raw, fr.ID)
+			if opcode == domain.OpcodeText {
+				// Parse from raw text (not from preview), to preserve SIO prefixes 42/43
+				raw := strings.TrimSpace(string(data))
+				if direction == domain.DirectionUpstreamToClient && !loggedFirstUpstreamText {
+					// emit lightweight probe (no payload exposure)
+					// payload: {dir:"upstream", prefix:"<first 6>", len:n}
+					pref := raw
+					if len(pref) > 6 {
+						pref = pref[:6]
+					}
+					_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, domain.Event{
+						ID: id.New(), Ts: time.Now().UTC(), Namespace: "", Name: "sio_probe", AckID: nil,
+						ArgsPreview: "{\"dir\":\"upstream\",\"prefix\":\"" + pref + "\",\"len\":" + strconv.Itoa(len(raw)) + "}",
+						FrameIDs:    []string{fr.ID},
+					})
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sio_probe", ID: sessionID, Ref: pref})
+					loggedFirstUpstreamText = true
+				}
+				_ = d.recordSIOIfAny(sessionID, raw, fr.ID)
+			}
 		}
 	}
 }
@@ -327,7 +343,18 @@ func tryExtractAckID(s string) int64 {
 		return -1
 	}
 	i := 2
-	// optional comma directly after type (e.g., 43,5[])
+	// Handle binary packets 45/46: skip attachments section like "<n>-"
+	if s[0] == '4' && (s[1] == '5' || s[1] == '6') {
+		k := i
+		// read digits
+		for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+			k++
+		}
+		if k < len(s) && s[k] == '-' {
+			i = k + 1
+		}
+	}
+	// optional comma directly after type or namespace (e.g., 43,5[])
 	if i < len(s) && s[i] == ',' {
 		i++
 	}

@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	uc "network-debugger/internal/usecase"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestWithForwardProxy_AbsoluteURI_GET(t *testing.T) {
@@ -17,7 +20,8 @@ func TestWithForwardProxy_AbsoluteURI_GET(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
-	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 512, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Cfg: cfgpkg.Config{PreviewMaxBytes: 512, ExposeSensitiveHeaders: false, PreviewDecompress: true}, Logger: &logger, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
 	h := withForwardProxy(d, NewRouterWithoutForwardProxy(d))
 	rr := httptest.NewRecorder()
 	// absolute-URI request triggers forward proxy

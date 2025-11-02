@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"network-debugger/internal/domain"
 	"network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/pkg/shared/id"
@@ -126,7 +127,7 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 		default:
 		}
 		if m.monitor != nil {
-			m.monitor.Broadcast(MonitorEvent{Type: "intercept_timeout", ID: pe.item.SessionID, Ref: pe.item.ID})
+			m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_timeout", ID: pe.item.SessionID, Ref: pe.item.ID})
 		}
 		if m.metrics != nil {
 			m.metrics.InterceptsTotal.WithLabelValues("timeout", string(pe.item.Direction)).Inc()
@@ -163,7 +164,7 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 	queueLen := len(m.queue)
 	m.mu.Unlock()
 	if m.monitor != nil {
-		m.monitor.Broadcast(MonitorEvent{Type: "intercept_created", ID: it.SessionID, Ref: it.ID})
+		m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_created", ID: it.SessionID, Ref: it.ID})
 	}
 	if m.metrics != nil {
 		m.metrics.InterceptsTotal.WithLabelValues("created", string(it.Direction)).Inc()
@@ -263,12 +264,12 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 		switch d := v.(type) {
 		case *HTTPRequestDecision:
 			if m.monitor != nil {
-				m.monitor.Broadcast(MonitorEvent{Type: "intercept_applied", ID: it.SessionID, Ref: it.ID})
+				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_applied", ID: it.SessionID, Ref: it.ID})
 			}
 			return d, nil
 		default:
 			if m.monitor != nil {
-				m.monitor.Broadcast(MonitorEvent{Type: "intercept_timeout", ID: it.SessionID, Ref: it.ID})
+				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_timeout", ID: it.SessionID, Ref: it.ID})
 			}
 			return nil, nil // auto-continue
 		}
@@ -332,12 +333,12 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 		switch d := v.(type) {
 		case *HTTPResponseDecision:
 			if m.monitor != nil {
-				m.monitor.Broadcast(MonitorEvent{Type: "intercept_applied", ID: it.SessionID, Ref: it.ID})
+				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_applied", ID: it.SessionID, Ref: it.ID})
 			}
 			return d, nil
 		default:
 			if m.monitor != nil {
-				m.monitor.Broadcast(MonitorEvent{Type: "intercept_timeout", ID: it.SessionID, Ref: it.ID})
+				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_timeout", ID: it.SessionID, Ref: it.ID})
 			}
 			return nil, nil
 		}
@@ -387,7 +388,7 @@ func (m *InterceptorManager) Cancel(id string) bool {
 	default:
 	}
 	if m.monitor != nil {
-		m.monitor.Broadcast(MonitorEvent{Type: "intercept_canceled", ID: pe.item.SessionID, Ref: pe.item.ID})
+		m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_canceled", ID: pe.item.SessionID, Ref: pe.item.ID})
 	}
 	if m.metrics != nil {
 		m.metrics.InterceptsTotal.WithLabelValues("canceled", string(pe.item.Direction)).Inc()

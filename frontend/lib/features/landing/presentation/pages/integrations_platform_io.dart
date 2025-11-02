@@ -410,3 +410,15 @@ Future<String?> systemDevCAFingerprint() async {
   } catch (_) {}
   return null;
 }
+
+Future<void> revealInFileManager(String path) async {
+  try {
+    if (Platform.isMacOS) {
+      await Process.run('open', ['-R', path]);
+    } else if (Platform.isWindows) {
+      await Process.run('explorer', ['/select,', path.replaceAll('/', '\\')]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [File(path).parent.path]);
+    }
+  } catch (_) {}
+}
