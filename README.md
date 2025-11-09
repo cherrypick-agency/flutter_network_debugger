@@ -30,35 +30,21 @@
   </a>
 </p>
 
+
+![Screenshot](./screenshot.png)
+
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
-Free tool for debugging HTTP and WebSocket which is MUCH BETTER than the built-in Flutter Netwrok Devtools. 
 
-Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
+Free tool for debugging HTTP, WebSocket, SOCKS which is MUCH BETTER than the built-in Flutter Netwrok Devtools. 
 
-### Compose / Request Builder
-- Build HTTP requests (raw/JSON, x-www-form-urlencoded, multipart with files)
-- Auth helpers (Basic, Bearer, API Key)
-- Save requests in collections/folders (JSON backend storage by default)
-- Send via backend with timings; response Pretty/Raw view
-- API: see `docs/openapi.yaml`
-
-### Mapping (Map Local / Map Remote)
-- Replace responses with local files or redirect requests to another URL.
-- Desktop: choose `filePath`; Web: upload file to server (spool) → `blobPath`.
-- Preserve Host header is supported for Map Remote.
-- API:
-  - `GET/POST /_api/v1/mapping/config`
-  - `GET/POST /_api/v1/mapping/rules`
-  - `POST /_api/v1/mapping/rules/reorder`
-  - `DELETE /_api/v1/mapping/rules/{id}`
-  - `POST /_api/v1/mapping/upload`
+Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 
 ### Features
 - Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
 - Waterfall timeline of requests
 - grouping by domain/route
-- Filters: method, status, MIME, minimum duration, by headers
+- Filters: method, status, MIME, minimum duration, by headers...
 - Convenient search with highlighting
 - HTTP details: headers (with sensitive data masking), body (pretty/JSON tree), TTFB/Total
 - CORS/Cache hints, cookies and TLS summary
@@ -73,20 +59,69 @@ Suitable for local development and test environments. Has web interface (opens i
 - The fastest GO backend for processing requests compared to competitors
 - An independent GO backend that can be run anywhere
 - Well covered with tests
+- Compose / Request Builder + Library
+- Mapping (Map Local / Map Remote)
+- Throttling with profiles
+- Tags & Annotations: Tag and annotate sessions for better organization
+- Performance Insights Dashboard: Real-time performance metrics and analytics
+- Privacy first. Works offline.
+- Scriping (language agnostic! Go, Rust, JS/TS, C/C++, even Swift, Kotlin, Dart and more) Currently in beta.
+- Settings
 
 ...
 
 ### Quick start
-- Via CLI (automatically downloads binary and opens UI):
+
+#### Desktop App (Native GUI)
+
+**Download standalone desktop application** for macOS, Windows, or Linux from [GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases):
+
+- **macOS**: Download `.dmg` for your architecture (Intel or Apple Silicon)
+  - Open DMG and drag app to Applications
+  - Auto-update support via GitHub Releases
+
+- **Windows**: Download `.zip` archive
+  - Extract and run `install.bat`
+  - Creates shortcuts on Desktop and Start Menu
+
+- **Linux**: Download `.deb` or `.tar.gz`
+  ```bash
+  # Debian/Ubuntu
+  sudo dpkg -i network-debugger_*_amd64.deb
+
+  # Other distros
+  tar -xzf NetworkDebugger-*-linux-amd64.tar.gz
+  cd NetworkDebugger-*
+  ./install.sh
+  ```
+
+Desktop app features:
+- Native UI with Flutter
+- Integrated Go proxy server (single process)
+- Startup dialog for port configuration
+- Auto-update from GitHub Releases
+- Cross-platform support
+
+See [docs/DESKTOP_SETUP.md](docs/DESKTOP_SETUP.md) for detailed setup and development guide.
+
+#### CLI (automatically downloads binary)
+
+- Via CLI tool:
   ```bash
   dart pub global activate network_debugger
   network_debugger
   ```
-- Docker:
+
+#### Docker
+
+- Docker Compose:
   ```bash
   docker compose -f deploy/docker-compose.yml up -d
   ```
-- From source (Go):
+
+#### From Source (Go)
+
+- Build from source:
   ```bash
   # server/desktop binary
   go build -o ./network-debugger ./cmd/network-debugger
@@ -259,6 +294,11 @@ Database migrations
   network-debugger serve-artifacts --dir ./dist --port 8099
   network-debugger --base-url http://127.0.0.1:8099 --no-remote
   ```
+
+### TODO
+- Plugins marketplace (write/install plugins on almost any language!)
+- Analytics (alredy started)
+- 
 
 ### Useful to know
 - Binary cache: macOS/Linux `~/.cache/network_debugger/`, Windows `%LOCALAPPDATA%\network_debugger\Cache\`
