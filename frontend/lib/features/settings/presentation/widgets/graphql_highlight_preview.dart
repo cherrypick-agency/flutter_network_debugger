@@ -25,7 +25,18 @@ class _GraphqlHighlightPreviewState extends State<GraphqlHighlightPreview> {
   }
 }''';
 
-  // Тестовый JSON-запрос GraphQL (оставлен как пример формата в HTTP body)
+  static const String _sampleJson = '''{
+  "user": {
+    "id": "123",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "roles": ["admin", "user"],
+    "settings": {
+      "theme": "dark",
+      "notifications": true
+    }
+  }
+}''';
 
   static const String _sampleHtml = '''<!DOCTYPE html>
 <html>
@@ -68,8 +79,8 @@ console.log(u);''';
   late String _lightTheme;
   late String _darkTheme;
   bool _selectable = true;
-  String _lang = 'graphql';
-  String _code = _sample;
+  String _lang = 'json';
+  String _code = _sampleJson;
 
   @override
   void initState() {
@@ -82,19 +93,19 @@ console.log(u);''';
       final savedLight = (data['highlightThemeLight'] ?? '').toString();
       final savedDark = (data['highlightThemeDark'] ?? '').toString();
       final legacy = (data['highlightTheme'] ?? '').toString();
-      final candidateLight =
-          savedLight.isNotEmpty
-              ? savedLight
-              : (legacy.isNotEmpty ? legacy : _lightTheme);
-      final candidateDark =
-          savedDark.isNotEmpty
-              ? savedDark
-              : (legacy.isNotEmpty ? legacy : _darkTheme);
+      final candidateLight = savedLight.isNotEmpty
+          ? savedLight
+          : (legacy.isNotEmpty ? legacy : _lightTheme);
+      final candidateDark = savedDark.isNotEmpty
+          ? savedDark
+          : (legacy.isNotEmpty ? legacy : _darkTheme);
       setState(() {
-        _lightTheme =
-            themeMap.containsKey(candidateLight) ? candidateLight : _lightTheme;
-        _darkTheme =
-            themeMap.containsKey(candidateDark) ? candidateDark : _darkTheme;
+        _lightTheme = themeMap.containsKey(candidateLight)
+            ? candidateLight
+            : _lightTheme;
+        _darkTheme = themeMap.containsKey(candidateDark)
+            ? candidateDark
+            : _darkTheme;
       });
     });
     if (!themeMap.containsKey(_lightTheme)) _lightTheme = themeMap.keys.first;
@@ -118,13 +129,11 @@ console.log(u);''';
             const Text('Light theme:'),
             DropdownButton<String>(
               value: _lightTheme,
-              items:
-                  themeMap.keys
-                      .map(
-                        (k) =>
-                            DropdownMenuItem<String>(value: k, child: Text(k)),
-                      )
-                      .toList(),
+              items: themeMap.keys
+                  .map(
+                    (k) => DropdownMenuItem<String>(value: k, child: Text(k)),
+                  )
+                  .toList(),
               onChanged: (v) async {
                 final next = v ?? _lightTheme;
                 setState(() => _lightTheme = next);
@@ -135,13 +144,11 @@ console.log(u);''';
             const Text('Dark theme:'),
             DropdownButton<String>(
               value: _darkTheme,
-              items:
-                  themeMap.keys
-                      .map(
-                        (k) =>
-                            DropdownMenuItem<String>(value: k, child: Text(k)),
-                      )
-                      .toList(),
+              items: themeMap.keys
+                  .map(
+                    (k) => DropdownMenuItem<String>(value: k, child: Text(k)),
+                  )
+                  .toList(),
               onChanged: (v) async {
                 final next = v ?? _darkTheme;
                 setState(() => _darkTheme = next);
@@ -163,6 +170,7 @@ console.log(u);''';
                 DropdownButton<String>(
                   value: _lang,
                   items: const [
+                    DropdownMenuItem(value: 'json', child: Text('JSON')),
                     DropdownMenuItem(value: 'graphql', child: Text('GraphQL')),
                     DropdownMenuItem(value: 'html', child: Text('HTML')),
                     DropdownMenuItem(value: 'xml', child: Text('XML')),
@@ -181,12 +189,14 @@ console.log(u);''';
                     setState(() {
                       _lang = next;
                       _code = switch (next) {
+                        'json' => _sampleJson,
+                        'graphql' => _sample,
                         'html' => _sampleHtml,
                         'xml' => _sampleXml,
                         'javascript' => _sampleJs,
                         'typescript' => _sampleTs,
                         'css' => _sampleCss,
-                        _ => _sample,
+                        _ => _sampleJson,
                       };
                     });
                   },
@@ -230,8 +240,8 @@ console.log(u);''';
                     IconButton(
                       tooltip: 'Copy',
                       visualDensity: VisualDensity.compact,
-                      onPressed:
-                          () => Clipboard.setData(ClipboardData(text: _code)),
+                      onPressed: () =>
+                          Clipboard.setData(ClipboardData(text: _code)),
                       icon: const Icon(Icons.copy, size: 18),
                     ),
                     IconButton(

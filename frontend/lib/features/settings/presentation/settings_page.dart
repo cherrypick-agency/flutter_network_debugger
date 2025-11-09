@@ -4,6 +4,8 @@ import '../../../services/prefs.dart';
 import '../application/throttle_service.dart';
 import '../../../theme/font_scale.dart';
 import 'widgets/graphql_highlight_preview.dart';
+import '../../custom_fonts/presentation/providers/font_provider.dart';
+import '../../custom_fonts/presentation/widgets/custom_font_selector.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -40,6 +42,9 @@ class _SettingsPageState extends State<SettingsPage> {
   String _socksAuthMode = 'none';
   final TextEditingController _socksUserCtrl = TextEditingController();
   final TextEditingController _socksPassCtrl = TextEditingController();
+
+  // custom fonts
+  late final FontProvider _fontProvider;
 
   Future<void> _showAddProfileDialog(BuildContext context) async {
     final nameCtrl = TextEditingController();
@@ -188,6 +193,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _fontProvider = FontProvider();
     _load();
   }
 
@@ -197,6 +203,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _adminTokenCtrl.dispose();
     _socksUserCtrl.dispose();
     _socksPassCtrl.dispose();
+    _fontProvider.dispose();
     super.dispose();
   }
 
@@ -353,14 +360,13 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           TextButton(
             onPressed: _saving ? null : _save,
-            child:
-                _saving
-                    ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                    : const Text('Save'),
+            child: _saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Save'),
           ),
         ],
       ),
@@ -407,14 +413,13 @@ class _SettingsPageState extends State<SettingsPage> {
                                 labelText: 'Down (kbit/s)',
                                 isDense: true,
                               ),
-                              controller: TextEditingController(
-                                  text: '$_thDown',
-                                )
-                                ..selection = TextSelection.collapsed(
-                                  offset: '$_thDown'.length,
-                                ),
-                              onChanged:
-                                  (v) => _thDown = int.tryParse(v.trim()) ?? 0,
+                              controller:
+                                  TextEditingController(text: '$_thDown')
+                                    ..selection = TextSelection.collapsed(
+                                      offset: '$_thDown'.length,
+                                    ),
+                              onChanged: (v) =>
+                                  _thDown = int.tryParse(v.trim()) ?? 0,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -430,8 +435,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ..selection = TextSelection.collapsed(
                                   offset: '$_thUp'.length,
                                 ),
-                              onChanged:
-                                  (v) => _thUp = int.tryParse(v.trim()) ?? 0,
+                              onChanged: (v) =>
+                                  _thUp = int.tryParse(v.trim()) ?? 0,
                             ),
                           ),
                         ],
@@ -446,19 +451,13 @@ class _SettingsPageState extends State<SettingsPage> {
                                 labelText: 'Packet loss %',
                                 isDense: true,
                               ),
-                              controller: TextEditingController(
-                                  text: '$_thLoss',
-                                )
-                                ..selection = TextSelection.collapsed(
-                                  offset: '$_thLoss'.length,
-                                ),
-                              onChanged:
-                                  (v) =>
-                                      _thLoss =
-                                          int.tryParse(
-                                            v.trim(),
-                                          )?.clamp(0, 100) ??
-                                          0,
+                              controller:
+                                  TextEditingController(text: '$_thLoss')
+                                    ..selection = TextSelection.collapsed(
+                                      offset: '$_thLoss'.length,
+                                    ),
+                              onChanged: (v) => _thLoss =
+                                  int.tryParse(v.trim())?.clamp(0, 100) ?? 0,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -468,9 +467,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               dense: true,
                               title: const Text('Simulate offline'),
                               value: _thOffline,
-                              onChanged:
-                                  (v) =>
-                                      setState(() => _thOffline = (v ?? false)),
+                              onChanged: (v) =>
+                                  setState(() => _thOffline = (v ?? false)),
                             ),
                           ),
                         ],
@@ -568,22 +566,19 @@ class _SettingsPageState extends State<SettingsPage> {
                               hint: const Text('Select profile'),
                               value:
                                   _profiles
-                                          .where((p) => p.id != null)
-                                          .any(
-                                            (p) => p.id == _selectedProfileId,
-                                          )
-                                      ? _selectedProfileId
-                                      : null,
-                              items:
-                                  _profiles
                                       .where((p) => p.id != null)
-                                      .map(
-                                        (p) => DropdownMenuItem(
-                                          value: p.id!,
-                                          child: Text(p.name),
-                                        ),
-                                      )
-                                      .toList(),
+                                      .any((p) => p.id == _selectedProfileId)
+                                  ? _selectedProfileId
+                                  : null,
+                              items: _profiles
+                                  .where((p) => p.id != null)
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p.id!,
+                                      child: Text(p.name),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (id) {
                                 if (id == null) {
                                   setState(() => _selectedProfileId = null);
@@ -623,8 +618,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               onPressed: () async {
                                 final id = _selectedProfileId!;
                                 await ThrottleService().deleteProfile(id);
-                                final ps =
-                                    await ThrottleService().listProfiles();
+                                final ps = await ThrottleService()
+                                    .listProfiles();
                                 if (!mounted) return;
                                 setState(() {
                                   _profiles = ps;
@@ -731,6 +726,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      CustomFontSelector(provider: _fontProvider),
                     ],
                   ),
                 ),
@@ -764,9 +761,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                         value: _recentEnabled,
-                        onChanged:
-                            (v) =>
-                                setState(() => _recentEnabled = (v ?? false)),
+                        onChanged: (v) =>
+                            setState(() => _recentEnabled = (v ?? false)),
                         title: const Text('Show only last N minutes'),
                         subtitle: const Text(
                           'Show only last N minutes in Sessions and Timeline',
@@ -825,11 +821,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           ..selection = TextSelection.collapsed(
                             offset: '$_fwdPort'.length,
                           ),
-                        onChanged:
-                            (v) =>
-                                _fwdPort =
-                                    int.tryParse(v.trim())?.clamp(0, 65535) ??
-                                    0,
+                        onChanged: (v) => _fwdPort =
+                            int.tryParse(v.trim())?.clamp(0, 65535) ?? 0,
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
@@ -850,11 +843,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           ..selection = TextSelection.collapsed(
                             offset: '$_socksPort'.length,
                           ),
-                        onChanged:
-                            (v) =>
-                                _socksPort =
-                                    int.tryParse(v.trim())?.clamp(0, 65535) ??
-                                    0,
+                        onChanged: (v) => _socksPort =
+                            int.tryParse(v.trim())?.clamp(0, 65535) ?? 0,
                       ),
                       DropdownButtonFormField<String>(
                         value: _socksAuthMode,
@@ -869,12 +859,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             child: Text('user/pass'),
                           ),
                         ],
-                        onChanged:
-                            !_socksEnabled
-                                ? null
-                                : (v) => setState(
-                                  () => _socksAuthMode = v ?? 'none',
-                                ),
+                        onChanged: !_socksEnabled
+                            ? null
+                            : (v) =>
+                                  setState(() => _socksAuthMode = v ?? 'none'),
                       ),
                       if (_socksEnabled && _socksAuthMode == 'userpass') ...[
                         TextField(
