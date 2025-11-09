@@ -4,6 +4,7 @@
 /web/downloads/
 /dist/
 */.dart_tool/*
+/cache/
 
 .clinerules/byterover-rules.md
 .kilocode/rules/byterover-rules.md

@@ -1,5 +1,6 @@
 SHELL := /bin/bash
-ADDR ?= :9092
+API_PORT ?= 9092
+PROXY_PORT ?= 9091
 
 # Build metadata
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -14,13 +15,13 @@ build:
 	cd cmd/network-debugger && go build -race -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger
 
 run: build
-	ADDR=$(ADDR) ./bin/network-debugger
+	API_PORT=$(API_PORT) FORWARD_PROXY_DEFAULT_PORT=$(PROXY_PORT) ./bin/network-debugger
 
 # Development auto-reload using Air (https://github.com/cosmtrek/air)
 # Install: go install github.com/cosmtrek/air@latest
 dev:
 	@if ! command -v air >/dev/null 2>&1; then echo "air not found. Install with: go install github.com/air-verse/air@latest"; exit 1; fi
-	ADDR=$(ADDR) DEV_MODE=1 air -c .air.toml
+	API_PORT=$(API_PORT) FORWARD_PROXY_DEFAULT_PORT=$(PROXY_PORT) DEV_MODE=1 air -c .air.toml
 
 tidy:
 	go mod tidy
@@ -80,7 +81,7 @@ build-app:
 	cd cmd/network-debugger-web && go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web
 
 run-app: build-app
-	ADDR=$(ADDR) ./bin/network-debugger-web
+	API_PORT=$(API_PORT) FORWARD_PROXY_DEFAULT_PORT=$(PROXY_PORT) ./bin/network-debugger-web
 
 win-app:
 	$(MAKE) frontend-build-web
@@ -163,4 +164,52 @@ frontend-dev-macos:
 
 frontend-dev-windows:
 	cd frontend && flutter run -d windows
+
+frontend-dev-linux:
+	cd frontend && flutter run -d linux
+
+# Desktop application packaging
+.PHONY: desktop-macos desktop-windows desktop-linux desktop-all
+
+desktop-macos:
+	@echo "Building macOS desktop app..."
+	@chmod +x scripts/package-macos.sh
+	VERSION=$(VERSION) ./scripts/package-macos.sh
+	@echo "✓ macOS DMG created in dist/"
+
+desktop-windows:
+	@echo "Building Windows desktop app..."
+	powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -Version "$(VERSION)"
+	@echo "✓ Windows ZIP created in dist/"
+
+desktop-linux:
+	@echo "Building Linux desktop app..."
+	@chmod +x scripts/package-linux.sh
+	VERSION=$(VERSION) ARCH=amd64 ./scripts/package-linux.sh
+	@echo "✓ Linux packages created in dist/"
+
+desktop-all:
+	@echo "Building desktop apps for all platforms..."
+	@echo "Note: This requires running on each platform separately or using CI/CD"
+	@echo "Run 'make desktop-macos' on macOS"
+	@echo "Run 'make desktop-windows' on Windows"
+	@echo "Run 'make desktop-linux' on Linux"
+	@echo "Or push a version tag to trigger GitHub Actions workflow"
+
+# Desktop development helpers
+.PHONY: desktop-clean desktop-flutter-clean
+
+desktop-clean:
+	@echo "Cleaning desktop build artifacts..."
+	rm -rf dist/
+	rm -rf frontend/build/macos/
+	rm -rf frontend/build/windows/
+	rm -rf frontend/build/linux/
+	@echo "✓ Desktop artifacts cleaned"
+
+desktop-flutter-clean:
+	@echo "Running Flutter clean..."
+	cd frontend && flutter clean
+	cd frontend && flutter pub get
+	@echo "✓ Flutter cleaned and dependencies updated"
 

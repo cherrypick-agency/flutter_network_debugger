@@ -21,6 +21,7 @@ tmp_dir = "./tmp"
   runner = "magenta"
 
 [env]
-  ADDR = ":9091"
+  API_PORT = ":9092"
+  FORWARD_PROXY_DEFAULT_PORT = ":9091"
 
 
