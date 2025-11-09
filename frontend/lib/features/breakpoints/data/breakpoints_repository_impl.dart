@@ -112,34 +112,31 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   };
 
   InterceptWhen _mapWhen(Map<String, dynamic> m) {
-    RuleStringMatch? _r(Map<String, dynamic>? x) =>
-        x == null
-            ? null
-            : RuleStringMatch(
-              equals: x['equals'] as String?,
-              prefix: x['prefix'] as String?,
-              suffix: x['suffix'] as String?,
-              contains: x['contains'] as String?,
-              anyOf: (x['anyOf'] as List<dynamic>?)?.cast<String>() ?? const [],
-              regex: x['regex'] as String?,
-            );
-    RuleHeaderMatch? _h(Map<String, dynamic>? x) =>
-        x == null
-            ? null
-            : RuleHeaderMatch(
-              name: _r((x['name'] as Map<String, dynamic>?))!,
-              value: _r(x['value'] as Map<String, dynamic>?),
-            );
-    RuleStatusMatch? _s(Map<String, dynamic>? x) =>
-        x == null
-            ? null
-            : RuleStatusMatch(
-              equals: (x['equals'] as List<dynamic>?)?.cast<int>() ?? const [],
-              from: x['from'] as int?,
-              to: x['to'] as int?,
-              is4xx: (x['is4xx'] ?? false) as bool,
-              is5xx: (x['is5xx'] ?? false) as bool,
-            );
+    RuleStringMatch? _r(Map<String, dynamic>? x) => x == null
+        ? null
+        : RuleStringMatch(
+            equals: x['equals'] as String?,
+            prefix: x['prefix'] as String?,
+            suffix: x['suffix'] as String?,
+            contains: x['contains'] as String?,
+            anyOf: (x['anyOf'] as List<dynamic>?)?.cast<String>() ?? const [],
+            regex: x['regex'] as String?,
+          );
+    RuleHeaderMatch? _h(Map<String, dynamic>? x) => x == null
+        ? null
+        : RuleHeaderMatch(
+            name: _r((x['name'] as Map<String, dynamic>?))!,
+            value: _r(x['value'] as Map<String, dynamic>?),
+          );
+    RuleStatusMatch? _s(Map<String, dynamic>? x) => x == null
+        ? null
+        : RuleStatusMatch(
+            equals: (x['equals'] as List<dynamic>?)?.cast<int>() ?? const [],
+            from: x['from'] as int?,
+            to: x['to'] as int?,
+            is4xx: (x['is4xx'] ?? false) as bool,
+            is5xx: (x['is5xx'] ?? false) as bool,
+          );
     return InterceptWhen(
       method: (m['method'] as List<dynamic>?)?.cast<String>() ?? const [],
       scheme: (m['scheme'] as List<dynamic>?)?.cast<String>() ?? const [],
