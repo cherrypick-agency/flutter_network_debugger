@@ -3,6 +3,8 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:provider/provider.dart';
 
 import '../../application/stores/sessions_filters_store.dart';
+import '../../../../core/di/di.dart';
+import '../../../tags/application/stores/tags_store.dart';
 
 class SessionsFilters extends StatelessWidget {
   const SessionsFilters({super.key, required this.onApply});
@@ -215,6 +217,8 @@ class SessionsFilters extends StatelessWidget {
               ),
             ),
             */
+            // Tags filter section
+            _TagsFilterSection(onApply: onApply),
             // Кнопка сброса появляется только когда есть отклонения от дефолтов
             if (store.hasActive)
               IntrinsicWidth(
@@ -236,7 +240,8 @@ class SessionsFilters extends StatelessWidget {
                       ..setHttpMinDurationMs(0)
                       ..setGroupBy('none')
                       ..setHeaderKey('')
-                      ..setHeaderVal('');
+                      ..setHeaderVal('')
+                      ..clearTags();
                     onApply();
                   },
                   icon: const Icon(Icons.restart_alt, size: 16),
@@ -258,6 +263,117 @@ class SessionsFilters extends StatelessWidget {
             ),
             */
           ],
+        );
+      },
+    );
+  }
+}
+
+// Widget for tags filtering section
+class _TagsFilterSection extends StatefulWidget {
+  const _TagsFilterSection({required this.onApply});
+
+  final VoidCallback onApply;
+
+  @override
+  State<_TagsFilterSection> createState() => _TagsFilterSectionState();
+}
+
+class _TagsFilterSectionState extends State<_TagsFilterSection> {
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTags();
+  }
+
+  Future<void> _loadTags() async {
+    if (_loaded) return;
+    try {
+      await sl<TagsStore>().loadPredefinedTags();
+      _loaded = true;
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tagsStore = sl<TagsStore>();
+    final filtersStore = context.read<SessionsFiltersStore>();
+
+    return Observer(
+      builder: (_) {
+        final tags = tagsStore.predefinedTags;
+        if (tags.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final selectedTags = filtersStore.selectedTags;
+
+        return MenuAnchor(
+          menuChildren: tags.map((tag) {
+            final isSelected = selectedTags.contains(tag.name);
+            return MenuItemButton(
+              leadingIcon: isSelected
+                  ? const Icon(Icons.check_box, size: 18)
+                  : const Icon(Icons.check_box_outline_blank, size: 18),
+              onPressed: () {
+                filtersStore.toggleTag(tag.name);
+                widget.onApply();
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Color(
+                        int.parse(tag.color.substring(1), radix: 16) +
+                            0xFF000000,
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(tag.name, style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            );
+          }).toList(),
+          builder: (context, controller, child) {
+            return IntrinsicWidth(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                onPressed: () {
+                  controller.isOpen ? controller.close() : controller.open();
+                },
+                icon: Icon(
+                  Icons.label,
+                  size: 16,
+                  color: selectedTags.isNotEmpty
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
+                label: Text(
+                  selectedTags.isEmpty
+                      ? 'Filter by tags'
+                      : 'Tags (${selectedTags.length})',
+                  style: TextStyle(
+                    color: selectedTags.isNotEmpty
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );

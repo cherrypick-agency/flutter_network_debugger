@@ -11,7 +11,11 @@ import 'package:frontend/features/inspector/presentation/utils/sessions_filterin
 
 class _FakeRepo implements InspectorRepository {
   @override
-  Future<List<Session>> listSessions({String? q, String? target}) async => [];
+  Future<List<Session>> listSessions({
+    String? q,
+    String? target,
+    List<String>? tags,
+  }) async => [];
   @override
   Future<List<Map<String, dynamic>>> aggregateSessions({
     String groupBy = 'domain',

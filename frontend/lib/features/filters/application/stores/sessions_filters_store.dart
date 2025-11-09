@@ -30,6 +30,9 @@ abstract class _SessionsFiltersStore with Store {
   @observable
   String headerVal = '';
 
+  @observable
+  ObservableList<String> selectedTags = ObservableList<String>();
+
   // Простой индикатор активности фильтров именно этой фичи (без доменов/диапазонов)
   @computed
   bool get hasActive =>
@@ -40,7 +43,11 @@ abstract class _SessionsFiltersStore with Store {
       httpMinDurationMs > 0 ||
       groupBy != 'none' ||
       headerKey.trim().isNotEmpty ||
-      headerVal.trim().isNotEmpty;
+      headerVal.trim().isNotEmpty ||
+      selectedTags.isNotEmpty;
+
+  @computed
+  bool get hasTagFilters => selectedTags.isNotEmpty;
 
   @action
   void setTarget(String v) => target = v;
@@ -65,4 +72,24 @@ abstract class _SessionsFiltersStore with Store {
 
   @action
   void setHeaderVal(String v) => headerVal = v;
+
+  @action
+  void setSelectedTags(List<String> tags) {
+    selectedTags.clear();
+    selectedTags.addAll(tags);
+  }
+
+  @action
+  void toggleTag(String tag) {
+    if (selectedTags.contains(tag)) {
+      selectedTags.remove(tag);
+    } else {
+      selectedTags.add(tag);
+    }
+  }
+
+  @action
+  void clearTags() {
+    selectedTags.clear();
+  }
 }

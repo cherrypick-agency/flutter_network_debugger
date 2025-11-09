@@ -12,12 +12,17 @@ mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
   Computed<bool>? _$hasActiveComputed;
 
   @override
-  bool get hasActive =>
-      (_$hasActiveComputed ??= Computed<bool>(
-            () => super.hasActive,
-            name: '_SessionsFiltersStore.hasActive',
-          ))
-          .value;
+  bool get hasActive => (_$hasActiveComputed ??= Computed<bool>(
+    () => super.hasActive,
+    name: '_SessionsFiltersStore.hasActive',
+  )).value;
+  Computed<bool>? _$hasTagFiltersComputed;
+
+  @override
+  bool get hasTagFilters => (_$hasTagFiltersComputed ??= Computed<bool>(
+    () => super.hasTagFilters,
+    name: '_SessionsFiltersStore.hasTagFilters',
+  )).value;
 
   late final _$targetAtom = Atom(
     name: '_SessionsFiltersStore.target',
@@ -163,6 +168,24 @@ mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
     });
   }
 
+  late final _$selectedTagsAtom = Atom(
+    name: '_SessionsFiltersStore.selectedTags',
+    context: context,
+  );
+
+  @override
+  ObservableList<String> get selectedTags {
+    _$selectedTagsAtom.reportRead();
+    return super.selectedTags;
+  }
+
+  @override
+  set selectedTags(ObservableList<String> value) {
+    _$selectedTagsAtom.reportWrite(value, super.selectedTags, () {
+      super.selectedTags = value;
+    });
+  }
+
   late final _$_SessionsFiltersStoreActionController = ActionController(
     name: '_SessionsFiltersStore',
     context: context,
@@ -265,6 +288,42 @@ mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
   }
 
   @override
+  void setSelectedTags(List<String> tags) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setSelectedTags',
+    );
+    try {
+      return super.setSelectedTags(tags);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void toggleTag(String tag) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.toggleTag',
+    );
+    try {
+      return super.toggleTag(tag);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void clearTags() {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.clearTags',
+    );
+    try {
+      return super.clearTags();
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   String toString() {
     return '''
 target: ${target},
@@ -275,7 +334,9 @@ httpMinDurationMs: ${httpMinDurationMs},
 groupBy: ${groupBy},
 headerKey: ${headerKey},
 headerVal: ${headerVal},
-hasActive: ${hasActive}
+selectedTags: ${selectedTags},
+hasActive: ${hasActive},
+hasTagFilters: ${hasTagFilters}
     ''';
   }
 }
