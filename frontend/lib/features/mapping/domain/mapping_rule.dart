@@ -57,11 +57,10 @@ class MappingRule {
     priority: (j['priority'] ?? 0) as int,
     kind: (j['kind'] ?? 'remote') as String,
     stopProcessing: (j['stopProcessing'] ?? true) as bool,
-    methods:
-        ((j['methods'] as List<dynamic>?) ?? const <dynamic>[])
-            .map((e) => (e ?? '').toString())
-            .where((e) => e.isNotEmpty)
-            .toList(),
+    methods: ((j['methods'] as List<dynamic>?) ?? const <dynamic>[])
+        .map((e) => (e ?? '').toString())
+        .where((e) => e.isNotEmpty)
+        .toList(),
     hostPattern: (j['hostPattern'] ?? '') as String,
     pathPattern: (j['pathPattern'] ?? '') as String,
     patternType: (j['patternType'] ?? 'glob') as String,

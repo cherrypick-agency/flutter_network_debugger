@@ -118,15 +118,14 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                       DropdownMenuItem(value: 'local', child: Text('Local')),
                       DropdownMenuItem(value: 'remote', child: Text('Remote')),
                     ],
-                    onChanged:
-                        _saving
-                            ? null
-                            : (v) {
-                              if (v == null) return;
-                              setState(() {
-                                _kind = v;
-                              });
-                            },
+                    onChanged: _saving
+                        ? null
+                        : (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _kind = v;
+                            });
+                          },
                     decoration: const InputDecoration(labelText: 'Kind'),
                   ),
                 ),
@@ -151,8 +150,9 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                     dense: true,
                     title: const Text('Enabled'),
                     value: _enabled,
-                    onChanged:
-                        _saving ? null : (v) => setState(() => _enabled = v),
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _enabled = v),
                   ),
                 ),
               ],
@@ -203,10 +203,9 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                       DropdownMenuItem(value: 'glob', child: Text('glob')),
                       DropdownMenuItem(value: 'regex', child: Text('regex')),
                     ],
-                    onChanged:
-                        _saving
-                            ? null
-                            : (v) => setState(() => _patternType = v ?? 'glob'),
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _patternType = v ?? 'glob'),
                     decoration: const InputDecoration(
                       labelText: 'Pattern type',
                     ),
@@ -220,10 +219,9 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                     dense: true,
                     title: const Text('Stop processing'),
                     value: _stopProcessing,
-                    onChanged:
-                        _saving
-                            ? null
-                            : (v) => setState(() => _stopProcessing = v),
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _stopProcessing = v),
                   ),
                 ),
               ],
@@ -241,14 +239,13 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: _saving ? null : _save,
-                  icon:
-                      _saving
-                          ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Icon(Icons.save),
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save),
                   label: const Text('Save'),
                 ),
               ],
@@ -303,8 +300,9 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
               ),
               IconButton(
                 tooltip: 'Clear uploaded',
-                onPressed:
-                    _saving ? null : () => setState(() => _blobPath = null),
+                onPressed: _saving
+                    ? null
+                    : () => setState(() => _blobPath = null),
                 icon: const Icon(Icons.clear),
               ),
             ],
@@ -387,12 +385,11 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final methods =
-          _methods.text
-              .split(',')
-              .map((e) => e.trim().toUpperCase())
-              .where((e) => e.isNotEmpty)
-              .toList();
+      final methods = _methods.text
+          .split(',')
+          .map((e) => e.trim().toUpperCase())
+          .where((e) => e.isNotEmpty)
+          .toList();
 
       final rule = MappingRule(
         id: widget.initial?.id ?? '',
@@ -404,21 +401,21 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
         hostPattern: _hostPattern.text.trim(),
         pathPattern: _pathPattern.text.trim(),
         patternType: _patternType,
-        filePath:
-            _kind == 'local' && _filePath.text.trim().isNotEmpty
-                ? _filePath.text.trim()
-                : null,
+        filePath: _kind == 'local' && _filePath.text.trim().isNotEmpty
+            ? _filePath.text.trim()
+            : null,
         blobPath: _kind == 'local' ? _blobPath : null,
         statusOverride:
             _kind == 'local' && _statusOverride.text.trim().isNotEmpty
-                ? int.tryParse(_statusOverride.text.trim())
-                : null,
+            ? int.tryParse(_statusOverride.text.trim())
+            : null,
         contentTypeOverride:
             _kind == 'local' && _contentTypeOverride.text.trim().isNotEmpty
-                ? _contentTypeOverride.text.trim()
-                : null,
-        targetURLTemplate:
-            _kind == 'remote' ? _targetURLTemplate.text.trim() : null,
+            ? _contentTypeOverride.text.trim()
+            : null,
+        targetURLTemplate: _kind == 'remote'
+            ? _targetURLTemplate.text.trim()
+            : null,
         preserveHost: _kind == 'remote' ? _preserveHost : false,
       );
 
