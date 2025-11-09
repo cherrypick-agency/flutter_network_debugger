@@ -1,0 +1,19 @@
+{
+  "name": "Add Custom Headers",
+  "description": "Adds custom headers to HTTP requests for tracking and debugging",
+  "runtime": "extism",
+  "language": "rust",
+  "sourceCode": "use extism_pdk::*;\nuse serde::{Deserialize, Serialize};\nuse std::collections::HashMap;\n\n#[derive(Deserialize, Serialize)]\nstruct HTTPRequest {\n    method: String,\n    url: String,\n    headers: HashMap<String, Vec<String>>,\n    body: Vec<u8>,\n}\n\n#[plugin_fn]\npub fn process(Json(mut req): Json<HTTPRequest>) -> FnResult<Json<HTTPRequest>> {\n    log!(LogLevel::Info, \"Processing {} {}\", req.method, req.url);\n    \n    req.headers.insert(\"X-Script-Processed\".to_string(), vec![\"Rust\".to_string()]);\n    req.headers.insert(\"X-Compiled-With\".to_string(), vec![\"in-app-compilation\".to_string()]);\n    \n    Ok(Json(req))\n}",
+  "triggerType": "request",
+  "priority": 10,
+  "enabled": true,
+  "matchRules": {
+    "methods": ["GET", "POST"],
+    "pathPattern": "/api/*",
+    "patternType": "wildcard"
+  },
+  "config": {
+    "timeoutMs": 5000,
+    "memoryLimitMB": 10
+  }
+}

@@ -1,0 +1,1 @@
+/Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/add_header/target/wasm32-unknown-unknown/release/add_header.wasm: /Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/add_header/src/lib.rs

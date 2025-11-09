@@ -1,0 +1,19 @@
+{
+  "name": "Python: Add Custom Headers",
+  "description": "Adds custom headers to HTTP requests using Python with RustPython runtime",
+  "runtime": "extism",
+  "language": "python",
+  "sourceCode": "# Simple Python script that adds custom headers\n\n# Add custom headers\nif \"X-Python-Processed\" not in request.headers:\n    request.headers[\"X-Python-Processed\"] = [\"true\"]\n\nrequest.headers[\"X-Script-Language\"] = [\"Python\"]\nrequest.headers[\"X-Runtime\"] = [\"RustPython-WASM\"]\n\n# Log the request\nprint(f\"Processing {request.method} {request.url}\")\n",
+  "triggerType": "request",
+  "priority": 10,
+  "enabled": false,
+  "matchRules": {
+    "methods": ["GET", "POST", "PUT", "DELETE"],
+    "pathPattern": "*",
+    "patternType": "wildcard"
+  },
+  "config": {
+    "timeoutMs": 5000,
+    "memoryLimitMB": 50
+  }
+}

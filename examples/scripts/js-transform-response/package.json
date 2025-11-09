@@ -1,0 +1,15 @@
+{
+  "name": "transform-json-response",
+  "version": "1.0.0",
+  "description": "Transform JSON responses by adding custom metadata",
+  "main": "index.ts",
+  "scripts": {
+    "build": "asc index.ts -o output.wasm --optimize"
+  },
+  "keywords": ["extism", "wasm", "http", "proxy"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "assemblyscript": "^0.27.0"
+  }
+}

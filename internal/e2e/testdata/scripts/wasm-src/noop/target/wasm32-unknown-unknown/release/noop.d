@@ -1,0 +1,1 @@
+/Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/noop/target/wasm32-unknown-unknown/release/noop.wasm: /Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/noop/src/lib.rs

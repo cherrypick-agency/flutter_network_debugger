@@ -1,0 +1,1 @@
+/Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/failing/target/wasm32-unknown-unknown/release/failing.wasm: /Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/failing/src/lib.rs
