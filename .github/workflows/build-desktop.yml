@@ -75,6 +75,12 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: Enable macOS desktop
+        working-directory: frontend
+        run: |
+          flutter config --enable-macos-desktop
+          flutter create --platforms=macos .
+
       - name: Set version
         id: version
         run: |
@@ -153,6 +159,12 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: Enable Windows desktop
+        working-directory: frontend
+        run: |
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows .
+
       - name: Set version
         id: version
         shell: bash
@@ -225,6 +237,12 @@ jobs:
       - name: Flutter pub get
         working-directory: frontend
         run: flutter pub get
+
+      - name: Enable Linux desktop
+        working-directory: frontend
+        run: |
+          flutter config --enable-linux-desktop
+          flutter create --platforms=linux .
 
       - name: Set version
         id: version
