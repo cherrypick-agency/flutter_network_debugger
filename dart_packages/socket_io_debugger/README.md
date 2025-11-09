@@ -4,6 +4,21 @@
 
 One-call helper to attach a proxy to a Socket.IO client (reverse/forward modes). Useful for local debugging, traffic interception, and bypassing CORS/certificates via your local proxy.
 
+## Version Compatibility
+
+**IMPORTANT**: Choose the correct version based on your Socket.IO server version:
+
+| socket_io_debugger | socket_io_client | Socket.IO Server | Engine.IO |
+|-------------------|------------------|------------------|-----------|
+| **1.0.0+** | ^3.0.0 | v4.7+ | v4 |
+| **^0.1.0** | ^2.0.3 | v2.*/v3.*/v4.6 | v3/v4 |
+
+**How to choose:**
+- If your server uses Socket.IO **v4.7 or higher** → use `socket_io_debugger: ^1.0.0`
+- If your server uses Socket.IO **v2, v3, or v4.6 and below** → use `socket_io_debugger: ^0.1.0`
+
+**Note**: The API remains the same between versions, so migration only requires updating dependencies.
+
 ## Features
 
 - One-liner attach: `SocketIoDebugger.attach()`
@@ -20,10 +35,20 @@ One-call helper to attach a proxy to a Socket.IO client (reverse/forward modes).
 
 Add to your `pubspec.yaml`:
 
+### For Socket.IO server v4.7+
+
+```yaml
+dependencies:
+  socket_io_client: ^3.0.0
+  socket_io_debugger: ^1.0.0
+```
+
+### For Socket.IO server v2.*/v3.*/v4.6 and below
+
 ```yaml
 dependencies:
   socket_io_client: ^2.0.3
-  socket_io_debugger: ^0.1.1
+  socket_io_debugger: ^0.1.0
 ```
 
 ## Starting the Proxy
