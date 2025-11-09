@@ -1,0 +1,30 @@
+name: multi_editor_plugin_dart
+description: Dart language support plugin for MultiEditor - provides syntax highlighting, code snippets, and language-specific features for Dart development.
+version: 0.1.1
+homepage: https://github.com/777genius/multi_editor_flutter
+repository: https://github.com/777genius/multi_editor_flutter/tree/main/modules/plugins/multi_editor_plugin_dart
+issue_tracker: https://github.com/777genius/multi_editor_flutter/issues
+
+environment:
+  sdk: ^3.8.0
+
+
+topics:
+  - editor
+  - plugin
+  - language-support
+  - syntax-highlighting
+
+dependencies:
+  multi_editor_core: ^0.1.0
+  multi_editor_plugins: ^0.1.0
+  multi_editor_plugin_base: ^0.1.0
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  test: ^1.24.0
+  freezed: ^3.1.0
+  json_serializable: ^6.8.0
+  build_runner: ^2.4.12
+  lints: ^5.0.0

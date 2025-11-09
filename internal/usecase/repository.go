@@ -45,6 +45,9 @@ type SessionFilter struct {
 	Opcode            *domain.Opcode
 	Limit             int
 	Offset            int
-	CaptureID         *int // nil: any; -1 means current; otherwise exact id
-	IncludeUnassigned bool // include sessions with CaptureID==nil
+	CaptureID         *int       // nil: any; -1 means current; otherwise exact id
+	IncludeUnassigned bool       // include sessions with CaptureID==nil
+	SessionIDs        []string   // filter by specific session IDs (from tags filtering)
+	TimeFrom          *time.Time // filter sessions started on or after this time
+	TimeTo            *time.Time // filter sessions started on or before this time
 }

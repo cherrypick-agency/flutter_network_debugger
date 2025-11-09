@@ -101,7 +101,7 @@ type CookiesConfig struct {
 
 func FromEnv() Config {
 	cfg := Config{
-		Addr:            getEnv("ADDR", ":9092"),
+		Addr:            getAPIPort(":9092"),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 		CORSAllowOrigin: getEnv("CORS_ALLOW_ORIGIN", "*"),
 	}
@@ -263,6 +263,27 @@ func getEnvInt(key string, def int) int {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
+	}
+	return def
+}
+
+// getAPIPort reads API_PORT env var with fallback to ADDR for backward compatibility.
+// Formats the port with ":" prefix if needed (e.g., "9092" -> ":9092").
+func getAPIPort(def string) string {
+	// Try API_PORT first (new variable)
+	if v := os.Getenv("API_PORT"); v != "" {
+		// If it's just a number, add ":" prefix
+		if !strings.HasPrefix(v, ":") && v != "" {
+			// Check if it's a valid number
+			if _, err := strconv.Atoi(v); err == nil {
+				return ":" + v
+			}
+		}
+		return v
+	}
+	// Fallback to ADDR for backward compatibility
+	if v := os.Getenv("ADDR"); v != "" {
+		return v
 	}
 	return def
 }

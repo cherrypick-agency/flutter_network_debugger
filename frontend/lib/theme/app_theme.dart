@@ -101,11 +101,12 @@ class AppTextStyles extends ThemeExtension<AppTextStyles> {
   }
 }
 
-ThemeData buildLightTheme() {
+ThemeData buildLightTheme({String? fontFamily}) {
   final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF3F51B5));
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
+    fontFamily: fontFamily,
     extensions: [
       AppColors(
         background: scheme.background,
@@ -118,17 +119,25 @@ ThemeData buildLightTheme() {
         danger: const Color(0xFFC62828),
         border: scheme.outline,
       ),
-      const AppTextStyles(
-        title: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        subtitle: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        body: TextStyle(fontSize: 13),
-        monospace: TextStyle(fontSize: 12, fontFamily: 'monospace'),
+      AppTextStyles(
+        title: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          fontFamily: fontFamily,
+        ),
+        subtitle: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          fontFamily: fontFamily,
+        ),
+        body: TextStyle(fontSize: 13, fontFamily: fontFamily),
+        monospace: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
       ),
     ],
   );
 }
 
-ThemeData buildDarkTheme() {
+ThemeData buildDarkTheme({String? fontFamily}) {
   final scheme = ColorScheme.fromSeed(
     seedColor: const Color(0xFF90CAF9),
     brightness: Brightness.dark,
@@ -136,6 +145,7 @@ ThemeData buildDarkTheme() {
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
+    fontFamily: fontFamily,
     extensions: [
       AppColors(
         background: scheme.background,
@@ -148,11 +158,19 @@ ThemeData buildDarkTheme() {
         danger: const Color(0xFFEF5350),
         border: scheme.outline,
       ),
-      const AppTextStyles(
-        title: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        subtitle: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        body: TextStyle(fontSize: 13),
-        monospace: TextStyle(fontSize: 12, fontFamily: 'monospace'),
+      AppTextStyles(
+        title: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          fontFamily: fontFamily,
+        ),
+        subtitle: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          fontFamily: fontFamily,
+        ),
+        body: TextStyle(fontSize: 13, fontFamily: fontFamily),
+        monospace: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
       ),
     ],
   );

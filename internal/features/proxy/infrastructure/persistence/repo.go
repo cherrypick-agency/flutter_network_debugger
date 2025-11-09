@@ -2,6 +2,9 @@ package persistence
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	pdomain "network-debugger/internal/features/proxy/domain"
@@ -21,7 +24,16 @@ func (r *Repo) Load(ctx context.Context) (pdomain.ProxyConfig, error) {
 		if tx.Error == gorm.ErrRecordNotFound {
 			now := time.Now().UTC()
 			// По умолчанию оставляем forward‑proxy на 9091, UI живёт на отдельном порту (Addr).
-			def := ProxyConfigModel{ID: 1, ForwardEnabled: true, ForwardAddr: ":9091", SocksEnabled: false, SocksAddr: ":8889", SocksAuthMode: "none", UpdatedAt: now}
+			// Можно переопределить через env variable FORWARD_PROXY_DEFAULT_PORT
+			forwardAddr := ":9091"
+			if port := os.Getenv("FORWARD_PROXY_DEFAULT_PORT"); port != "" {
+				// Валидация порта
+				if p, err := strconv.Atoi(port); err == nil && p > 0 && p <= 65535 {
+					forwardAddr = fmt.Sprintf(":%d", p)
+				}
+				// Если порт невалидный, используем дефолтный 9091
+			}
+			def := ProxyConfigModel{ID: 1, ForwardEnabled: true, ForwardAddr: forwardAddr, SocksEnabled: false, SocksAddr: ":8889", SocksAuthMode: "none", UpdatedAt: now}
 			if err := r.db.WithContext(ctx).Create(&def).Error; err != nil {
 				return toDomain(&def), nil
 			}

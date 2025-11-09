@@ -28,6 +28,7 @@ class PrefsService {
   static const _keyAdminToken = 'admin_token';
   static const _keyFontScale = 'font_scale';
   static const _keyHighlightTheme = 'highlight_theme';
+  static const _keySelectedTags = 'selected_tags';
 
   Future<void> save({
     required String baseUrl,
@@ -46,6 +47,7 @@ class PrefsService {
     String? headerVal,
     bool? respDelayEnabled,
     String? respDelayValue,
+    String? selectedTags,
   }) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyBaseUrl, baseUrl);
@@ -67,6 +69,7 @@ class PrefsService {
       await p.setBool(_keyRespDelayEnabled, respDelayEnabled);
     if (respDelayValue != null)
       await p.setString(_keyRespDelayValue, respDelayValue);
+    if (selectedTags != null) await p.setString(_keySelectedTags, selectedTags);
   }
 
   Future<Map<String, String>> load() async {
@@ -89,12 +92,13 @@ class PrefsService {
       'respDelayEnabled': (p.getBool(_keyRespDelayEnabled) ?? false).toString(),
       'respDelayValue': p.getString(_keyRespDelayValue) ?? '',
       // recent window (stringified for legacy map)
-      'recentWindowEnabled':
-          (p.getBool(_keyRecentWindowEnabled) ?? false).toString(),
-      'recentWindowMinutes':
-          (p.getInt(_keyRecentWindowMinutes) ?? 5).toString(),
+      'recentWindowEnabled': (p.getBool(_keyRecentWindowEnabled) ?? false)
+          .toString(),
+      'recentWindowMinutes': (p.getInt(_keyRecentWindowMinutes) ?? 5)
+          .toString(),
       'adminToken': p.getString(_keyAdminToken) ?? '',
       'fontScale': (p.getDouble(_keyFontScale) ?? 1.0).toString(),
+      'selectedTags': p.getString(_keySelectedTags) ?? '',
     };
   }
 

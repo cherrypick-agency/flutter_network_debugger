@@ -77,7 +77,7 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 	// Создаём сессию (ws)
 	sessionID := id.New()
 	if shouldMonitor {
-		_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "ws"})
+		_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: r.RemoteAddr, StartedAt: time.Now().UTC(), Kind: "ws"})
 		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 		d.Metrics.ActiveSessions.Inc()
 	}
@@ -247,7 +247,7 @@ func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
 
 	// minimal session for CONNECT (add a synthetic event for observability)
 	sessionID := id.New()
-	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "connect://" + upstream, ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC()})
+	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "connect://" + upstream, ClientAddr: r.RemoteAddr, StartedAt: time.Now().UTC()})
 	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
 	// Synthetic event to signal established tunnel (useful for tests and UI)
@@ -321,7 +321,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 
 	// Создаем сессию (тип http), будем логировать запросы/ответы
 	sessionID := id.New()
-	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "mitm://" + upstream, ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC(), Kind: "http"})
+	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "mitm://" + upstream, ClientAddr: r.RemoteAddr, StartedAt: time.Now().UTC(), Kind: "http"})
 	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
 
@@ -357,10 +357,11 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			req.URL.Host = upstream
 			req.RequestURI = ""
 			removeHopHeaders(req.Header)
-			if ip := clientHost(r.RemoteAddr); ip != "" {
-				req.Header.Set("X-Forwarded-For", ip)
-			}
-			req.Header.Set("Via", "network-debugger")
+			// Removed X-Forwarded-For and Via headers by default
+			// if ip := clientHost(r.RemoteAddr); ip != "" {
+			// 	req.Header.Set("X-Forwarded-For", ip)
+			// }
+			// req.Header.Set("Via", "network-debugger")
 
 			// Для превью: аккуратно пикнем тело
 			var reqBodyBuf []byte
@@ -546,7 +547,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	// Create session for logging
 	sessionID := id.New()
 	if shouldMonitor {
-		_ = d.Svc.Create(r.Context(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: clientHost(r.RemoteAddr), StartedAt: time.Now().UTC()})
+		_ = d.Svc.Create(r.Context(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: r.RemoteAddr, StartedAt: time.Now().UTC(), Kind: "http"})
 		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 		d.Metrics.ActiveSessions.Inc()
 	}
@@ -561,15 +562,16 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	// Remove hop headers
 	removeHopHeaders(outReq.Header)
 	// Standard forwarding headers
-	if ip := clientHost(r.RemoteAddr); ip != "" {
-		outReq.Header.Set("X-Forwarded-For", ip)
-	}
+	// Removed X-Forwarded-For and Via headers by default
+	// if ip := clientHost(r.RemoteAddr); ip != "" {
+	// 	outReq.Header.Set("X-Forwarded-For", ip)
+	// }
 	if r.TLS != nil {
 		outReq.Header.Set("X-Forwarded-Proto", "https")
 	} else {
 		outReq.Header.Set("X-Forwarded-Proto", "http")
 	}
-	outReq.Header.Set("Via", "network-debugger")
+	// outReq.Header.Set("Via", "network-debugger")
 
 	// Safely peek a small portion of request body and keep stream intact
 	var reqBodyBuf []byte

@@ -36,6 +36,37 @@ import '../../features/updates/data/repositories/updates_repository_impl.dart';
 import '../../features/updates/domain/repositories/updates_repository.dart';
 import '../../features/updates/application/services/updates_service.dart';
 import '../../features/updates/application/stores/updates_store.dart';
+import '../../features/scripts/data/services/scripts_api_service.dart';
+import '../../features/scripts/data/repositories/scripts_repository_impl.dart';
+import '../../features/scripts/domain/repositories/scripts_repository.dart';
+import '../../features/scripts/domain/usecases/create_script_usecase.dart';
+import '../../features/scripts/domain/usecases/update_script_usecase.dart';
+import '../../features/scripts/domain/usecases/delete_script_usecase.dart';
+import '../../features/scripts/domain/usecases/get_scripts_usecase.dart';
+import '../../features/scripts/domain/usecases/toggle_script_usecase.dart';
+import '../../features/scripts/domain/usecases/test_script_usecase.dart';
+import '../../features/scripts/domain/usecases/compile_script_usecase.dart';
+import '../../features/scripts/domain/usecases/export_script_usecase.dart';
+import '../../features/scripts/domain/usecases/import_script_usecase.dart';
+import '../../features/scripts/application/stores/scripts_store.dart';
+import '../../features/scripts/application/stores/script_editor_store.dart';
+import '../../features/compiler_management/data/datasources/compiler_api.dart';
+import '../../features/compiler_management/data/repositories/compiler_repository_impl.dart';
+import '../../features/compiler_management/domain/repositories/compiler_repository.dart';
+import '../../features/compiler_management/domain/usecases/get_compilers_usecase.dart';
+import '../../features/compiler_management/domain/usecases/install_compiler_usecase.dart';
+import '../../features/compiler_management/domain/usecases/uninstall_compiler_usecase.dart';
+import '../../features/compiler_management/domain/usecases/watch_progress_usecase.dart';
+import '../../features/compiler_management/presentation/stores/compiler_list_store.dart';
+import '../../features/compiler_management/presentation/stores/installation_progress_store.dart';
+import '../../features/tags/data/tags_api.dart';
+import '../../features/tags/data/tags_repository_impl.dart';
+import '../../features/tags/domain/repositories/tags_repository.dart';
+import '../../features/tags/application/stores/tags_store.dart';
+import '../../features/performance/data/performance_api.dart';
+import '../../features/performance/data/performance_repository_impl.dart';
+import '../../features/performance/domain/repositories/performance_repository.dart';
+import '../../features/performance/application/stores/performance_store.dart';
 
 final sl = GetIt.instance;
 final getIt = sl; // Alias for consistency
@@ -156,5 +187,105 @@ Future<void> setupDI({
   );
   sl.registerLazySingleton<UpdatesStore>(
     () => UpdatesStore(sl<UpdatesService>()),
+  );
+
+  // Scripts feature
+  sl.registerLazySingleton<ScriptsApiService>(
+    () => ScriptsApiService(sl<AppHttpClient>()),
+  );
+  sl.registerLazySingleton<ScriptsRepository>(
+    () => ScriptsRepositoryImpl(sl<ScriptsApiService>()),
+  );
+  // Use cases
+  sl.registerLazySingleton<GetScriptsUseCase>(
+    () => GetScriptsUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<CreateScriptUseCase>(
+    () => CreateScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<UpdateScriptUseCase>(
+    () => UpdateScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<DeleteScriptUseCase>(
+    () => DeleteScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<ToggleScriptUseCase>(
+    () => ToggleScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<TestScriptUseCase>(
+    () => TestScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<CompileScriptUseCase>(
+    () => CompileScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<ExportScriptUseCase>(
+    () => ExportScriptUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<ImportScriptUseCase>(
+    () => ImportScriptUseCase(sl<ScriptsRepository>()),
+  );
+  // Stores
+  sl.registerLazySingleton<ScriptsStore>(
+    () => ScriptsStore(
+      getScriptsUseCase: sl<GetScriptsUseCase>(),
+      createUseCase: sl<CreateScriptUseCase>(),
+      updateUseCase: sl<UpdateScriptUseCase>(),
+      deleteUseCase: sl<DeleteScriptUseCase>(),
+      toggleUseCase: sl<ToggleScriptUseCase>(),
+      compileUseCase: sl<CompileScriptUseCase>(),
+      exportUseCase: sl<ExportScriptUseCase>(),
+      importUseCase: sl<ImportScriptUseCase>(),
+    ),
+  );
+  sl.registerFactory<ScriptEditorStore>(
+    () => ScriptEditorStore(testUseCase: sl<TestScriptUseCase>()),
+  );
+
+  // Compiler Management feature
+  sl.registerLazySingleton<CompilerApi>(() => CompilerApi(baseUrl: baseUrl));
+  sl.registerLazySingleton<CompilerRepository>(
+    () => CompilerRepositoryImpl(sl<CompilerApi>()),
+  );
+  // Use cases
+  sl.registerLazySingleton<GetCompilersUseCase>(
+    () => GetCompilersUseCase(sl<CompilerRepository>()),
+  );
+  sl.registerLazySingleton<InstallCompilerUseCase>(
+    () => InstallCompilerUseCase(sl<CompilerRepository>()),
+  );
+  sl.registerLazySingleton<UninstallCompilerUseCase>(
+    () => UninstallCompilerUseCase(sl<CompilerRepository>()),
+  );
+  sl.registerLazySingleton<WatchProgressUseCase>(
+    () => WatchProgressUseCase(sl<CompilerRepository>()),
+  );
+  // Stores
+  sl.registerLazySingleton<CompilerListStore>(
+    () => CompilerListStore(
+      getCompilers: sl<GetCompilersUseCase>(),
+      installCompiler: sl<InstallCompilerUseCase>(),
+      uninstallCompiler: sl<UninstallCompilerUseCase>(),
+    ),
+  );
+  sl.registerLazySingleton<InstallationProgressStore>(
+    () => InstallationProgressStore(watchProgress: sl<WatchProgressUseCase>()),
+  );
+
+  // Tags feature
+  sl.registerLazySingleton<TagsApi>(() => TagsApi(sl<AppHttpClient>()));
+  sl.registerLazySingleton<TagsRepository>(
+    () => TagsRepositoryImpl(sl<TagsApi>()),
+  );
+  sl.registerLazySingleton<TagsStore>(() => TagsStore(sl<TagsRepository>()));
+
+  // Performance feature
+  sl.registerLazySingleton<PerformanceApi>(
+    () => PerformanceApi(sl<AppHttpClient>()),
+  );
+  sl.registerLazySingleton<PerformanceRepository>(
+    () => PerformanceRepositoryImpl(sl<PerformanceApi>()),
+  );
+  sl.registerLazySingleton<PerformanceStore>(
+    () => PerformanceStore(sl<PerformanceRepository>()),
   );
 }

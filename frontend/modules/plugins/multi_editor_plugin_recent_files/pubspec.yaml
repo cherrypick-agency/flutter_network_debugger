@@ -1,0 +1,33 @@
+name: multi_editor_plugin_recent_files
+description: Recent files plugin for MultiEditor - tracks and displays recently opened files with quick access UI for improved workflow efficiency.
+version: 0.1.1
+homepage: https://github.com/777genius/multi_editor_flutter
+repository: https://github.com/777genius/multi_editor_flutter/tree/main/modules/plugins/multi_editor_plugin_recent_files
+issue_tracker: https://github.com/777genius/multi_editor_flutter/issues
+
+environment:
+  sdk: ^3.8.0
+
+
+topics:
+  - editor
+  - plugin
+  - recent-files
+  - flutter
+
+dependencies:
+  flutter:
+    sdk: flutter
+  multi_editor_core: ^0.1.0
+  multi_editor_plugins: ^0.1.0
+  multi_editor_plugin_base: ^0.1.0
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  freezed: ^3.1.0
+  json_serializable: ^6.8.0
+  build_runner: ^2.4.12
+  flutter_lints: ^5.0.0

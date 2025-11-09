@@ -3,6 +3,8 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,29 +22,44 @@ import (
 	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
 	mappingrt "network-debugger/internal/features/mapping/runtime"
 	mappinguc "network-debugger/internal/features/mapping/usecase"
+	performanceuc "network-debugger/internal/features/performance/usecase"
+	processdetector "network-debugger/internal/features/process/infrastructure/detector"
+	processhelper "network-debugger/internal/features/process/infrastructure/helper"
+	processicon "network-debugger/internal/features/process/infrastructure/icon"
+	processp "network-debugger/internal/features/process/infrastructure/persistence"
+	processuc "network-debugger/internal/features/process/usecase"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	proxyuc "network-debugger/internal/features/proxy/usecase"
+	scriptinguc "network-debugger/internal/features/scripting/usecase"
 	settingsp "network-debugger/internal/features/settings/infrastructure/persistence"
 	settingsuc "network-debugger/internal/features/settings/usecase"
+	tagsp "network-debugger/internal/features/tags/infrastructure/persistence"
+	tagsuc "network-debugger/internal/features/tags/usecase"
 	pruntime "network-debugger/internal/infrastructure/proxyruntime"
 )
 
 type Deps struct {
-	Cfg         config.Config
-	Logger      *zerolog.Logger
-	Metrics     *obs.Metrics
-	Svc         *usecase.SessionService
-	Monitor     *MonitorHub
-	Live        *LiveSessions
-	MITM        *MITM
-	Compose     *usecase.ComposeService
-	Interceptor *InterceptorManager
-	DB          *gorm.DB
-	Settings    *settingsuc.Service
-	ProxySvc    *proxyuc.Service
-	ProxyRt     *pruntime.Manager
-	Mapping     *mappinguc.Service
-	MapRt       *mappingrt.Manager
+	Cfg                     config.Config
+	Logger                  *zerolog.Logger
+	Metrics                 *obs.Metrics
+	Svc                     *usecase.SessionService
+	Monitor                 *MonitorHub
+	Live                    *LiveSessions
+	MITM                    *MITM
+	Compose                 *usecase.ComposeService
+	Interceptor             *InterceptorManager
+	DB                      *gorm.DB
+	Settings                *settingsuc.Service
+	ProxySvc                *proxyuc.Service
+	ProxyRt                 *pruntime.Manager
+	Mapping                 *mappinguc.Service
+	MapRt                   *mappingrt.Manager
+	ProcessSvc              *processuc.Service
+	ScriptSvc               *scriptinguc.ScriptService
+	CompilationSvc          *scriptinguc.CompilationService
+	CompilerInstallationSvc *scriptinguc.CompilerInstallationService
+	TagsSvc                 *tagsuc.Service
+	PerformanceSvc          *performanceuc.Service
 }
 
 // shouldMonitorTarget returns false if the target URL path is a monitoring endpoint
@@ -97,6 +114,47 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		mrepo := mappingp.NewRepo(d.DB)
 		d.Mapping = mappinguc.NewService(mrepo)
 	}
+	// Инициализация Tags сервиса
+	if d.DB != nil && d.TagsSvc == nil {
+		tagsRepo := tagsp.NewRepo(d.DB)
+		d.TagsSvc = tagsuc.NewService(tagsRepo)
+	}
+	// Инициализация Performance сервиса
+	if d.Svc != nil && d.PerformanceSvc == nil {
+		d.PerformanceSvc = performanceuc.NewService(d.Svc)
+	}
+	// Инициализация Process Detection сервиса
+	if d.DB != nil && d.ProcessSvc == nil {
+		processConfigRepo := processp.NewConfigRepo(d.DB)
+		iconCacheRepo := processp.NewIconCacheRepo(d.DB)
+		localDetector, _ := processdetector.NewDetector(false)
+		iconExtractor, _ := processicon.NewExtractor()
+
+		// Helper client и installer
+		helperClient := processhelper.NewHelperClient()
+		helperInstaller := processhelper.NewInstaller()
+
+		// Путь к helper binary - используем абсолютный путь
+		// Попробуем найти binary относительно executable или в стандартных местах
+		helperBinaryPath := findHelperBinary(d.Logger)
+
+		d.ProcessSvc = processuc.NewService(
+			processConfigRepo,
+			iconCacheRepo,
+			localDetector,
+			helperClient,
+			iconExtractor,
+			helperInstaller,
+			helperBinaryPath,
+			d.Logger,
+		)
+	}
+	// Связать ProcessSvc с SessionService для автоматической детекции
+	if d.ProcessSvc != nil && d.Svc != nil {
+		d.Svc.SetProcessService(d.ProcessSvc)
+	}
+	// Scripting service initialization is now in main.go
+	// This allows better control of lifecycle and dependency injection
 	if d.MapRt == nil {
 		d.MapRt = mappingrt.New()
 		if d.Mapping != nil {
@@ -218,10 +276,12 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	exposeSensitiveHeaders.Store(d.Cfg.ExposeSensitiveHeaders)
 	previewDecompress.Store(d.Cfg.PreviewDecompress)
 
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
-	})
+	}
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/_health", healthHandler) // Alias for desktop app
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ready"))
@@ -278,7 +338,6 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 		})
 	})
 	mux.HandleFunc("/_api/v1/sessions", d.handleV1ListSessions)
-	mux.HandleFunc("/_api/v1/sessions/", d.handleV1SessionByID)
 	mux.HandleFunc("/_api/v1/sessions/aggregate", d.handleV1SessionsAggregate)
 	// Capture controls
 	mux.HandleFunc("/_api/v1/capture", d.handleV1Capture)
@@ -337,6 +396,78 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	mux.HandleFunc("/_api/v1/mapping/rules/", d.handleMappingRuleByID)
 	mux.HandleFunc("/_api/v1/mapping/upload", d.handleMappingUpload)
 
+	// Process Detection API
+	mux.HandleFunc("/_api/v1/process/config", d.handleV1ProcessConfig)
+	mux.HandleFunc("/_api/v1/process/helper/status", d.handleV1ProcessHelperStatus)
+	mux.HandleFunc("/_api/v1/process/helper/install", d.handleV1ProcessHelperInstall)
+
+	// Tags & Annotations API
+	mux.HandleFunc("/_api/v1/tags/predefined", d.handlePredefinedTags)
+	mux.HandleFunc("/_api/v1/tags/predefined/", d.handlePredefinedTagByID)
+	mux.HandleFunc("/_api/v1/tags/bulk", d.handleBulkTags)
+
+	// Session-specific tags & annotations
+	mux.HandleFunc("/_api/v1/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.Contains(path, "/tags") {
+			d.handleSessionTags(w, r)
+		} else if strings.Contains(path, "/annotations") {
+			d.handleSessionAnnotations(w, r)
+		} else {
+			d.handleV1SessionByID(w, r)
+		}
+	})
+
+	// Performance Insights API
+	mux.HandleFunc("/_api/v1/performance/overview", d.handlePerformanceOverview)
+
+	// Scripting API
+	if d.ScriptSvc != nil {
+		scriptHandlers := NewScriptHandlers(d.ScriptSvc)
+		// Set compilation service if available (for sourceCode compilation support)
+		if d.CompilationSvc != nil {
+			scriptHandlers.SetCompilationService(d.CompilationSvc)
+		}
+		mux.HandleFunc("POST /_api/v1/scripts", scriptHandlers.CreateScript)
+		mux.HandleFunc("GET /_api/v1/scripts", scriptHandlers.ListScripts)
+		mux.HandleFunc("GET /_api/v1/scripts/{id}", scriptHandlers.GetScript)
+		mux.HandleFunc("PUT /_api/v1/scripts/{id}", scriptHandlers.UpdateScript)
+		mux.HandleFunc("DELETE /_api/v1/scripts/{id}", scriptHandlers.DeleteScript)
+		mux.HandleFunc("PATCH /_api/v1/scripts/{id}/toggle", scriptHandlers.ToggleScript)
+		mux.HandleFunc("POST /_api/v1/scripts/test", scriptHandlers.TestScript)
+		mux.HandleFunc("GET /_api/v1/scripts/examples", scriptHandlers.ListExamples)
+
+		// Project Upload/Download API (multi-file support for IDE plugins)
+		mux.HandleFunc("POST /_api/v1/scripts/{id}/upload-project", scriptHandlers.UploadProject)
+		mux.HandleFunc("GET /_api/v1/scripts/{id}/download-project", scriptHandlers.DownloadProject)
+		mux.HandleFunc("GET /_api/v1/scripts/{id}/files", scriptHandlers.ListProjectFiles)
+
+		// Import/Export complete scripts as ZIP (with metadata + WASM)
+		mux.HandleFunc("GET /_api/v1/scripts/{id}/export-zip", scriptHandlers.ExportScriptAsZip)
+		mux.HandleFunc("POST /_api/v1/scripts/import-zip", scriptHandlers.ImportScriptFromZip)
+
+		// Compilation API
+		if d.CompilationSvc != nil {
+			compilationHandlers := NewCompilationHandlers(d.CompilationSvc)
+			mux.HandleFunc("POST /_api/v1/scripts/{id}/compile", compilationHandlers.CompileScript)
+			mux.HandleFunc("POST /_api/v1/scripts/validate", compilationHandlers.ValidateSyntax)
+			mux.HandleFunc("GET /_api/v1/scripts/compilers", compilationHandlers.ListCompilers)
+		}
+
+		// Compiler Installation API (download-on-demand for Zig, Kotlin, Swift)
+		if d.CompilerInstallationSvc != nil {
+			installHandlers := NewCompilerInstallationHandlers(d.CompilerInstallationSvc, *d.Logger)
+			mux.HandleFunc("GET /_api/v1/compilers/status", installHandlers.GetCompilersStatus)
+			mux.HandleFunc("GET /_api/v1/compilers/supported", installHandlers.GetSupportedLanguages)
+			mux.HandleFunc("GET /_api/v1/compilers/{language}/status", installHandlers.GetCompilerStatus)
+			mux.HandleFunc("POST /_api/v1/compilers/{language}/install", installHandlers.InstallCompiler)
+			mux.HandleFunc("DELETE /_api/v1/compilers/{language}", installHandlers.UninstallCompiler)
+			mux.HandleFunc("GET /_api/v1/compilers/{language}/progress", installHandlers.GetInstallationProgress)
+			mux.HandleFunc("GET /_api/v1/compilers/cache/size", installHandlers.GetCacheSize)
+			mux.HandleFunc("DELETE /_api/v1/compilers/cache", installHandlers.ClearCache)
+		}
+	}
+
 	return mux
 }
 
@@ -362,4 +493,51 @@ func withCORS(cfg config.Config, h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// findHelperBinary - найти helper binary используя абсолютные пути
+func findHelperBinary(logger *zerolog.Logger) string {
+	// Попробовать найти в стандартных местах
+	candidates := []string{}
+
+	// 1. Получить путь к текущему executable
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		// Helper должен быть в той же директории что и main binary
+		candidates = append(candidates, filepath.Join(exeDir, "process-helper"))
+		// Или в ../bin относительно executable
+		candidates = append(candidates, filepath.Join(exeDir, "..", "bin", "process-helper"))
+	}
+
+	// 2. Относительно текущей рабочей директории (но как абсолютный путь)
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(wd, "bin", "process-helper"))
+		candidates = append(candidates, filepath.Join(wd, "..", "bin", "process-helper"))
+	}
+
+	// 3. Проверить каждый candidate
+	for _, path := range candidates {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(absPath); err == nil {
+			if logger != nil {
+				logger.Info().Str("path", absPath).Msg("Found helper binary")
+			}
+			return absPath
+		}
+	}
+
+	// Fallback - вернуть первый candidate как есть (установщик может скопировать binary позже)
+	if len(candidates) > 0 {
+		absPath, _ := filepath.Abs(candidates[0])
+		if logger != nil {
+			logger.Warn().Str("path", absPath).Msg("Helper binary not found, using fallback path")
+		}
+		return absPath
+	}
+
+	// Last resort
+	return "bin/process-helper"
 }

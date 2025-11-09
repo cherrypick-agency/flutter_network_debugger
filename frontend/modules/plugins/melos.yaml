@@ -1,0 +1,52 @@
+name: editor_plugins_workspace
+repository: https://github.com/yourorg/multi_file_code_editor
+
+packages:
+  - plugin_*
+
+command:
+  bootstrap:
+    runPubGetInParallel: true
+    runPubGetOffline: false
+
+  version:
+    branch: main
+    message: "chore(plugins): publish packages"
+
+  publish:
+    dry-run: true
+
+scripts:
+  analyze:
+    run: flutter analyze
+    description: Run Dart static analysis for all plugin packages
+    exec:
+      concurrency: 1
+
+  format:
+    run: dart format . --set-exit-if-changed
+    description: Format all plugin packages
+
+  test:
+    run: flutter test --coverage
+    description: Run all plugin tests with coverage
+    exec:
+      concurrency: 1
+
+  clean:
+    run: flutter clean
+    description: Clean all plugin packages
+    exec:
+      concurrency: 1
+
+  get:
+    run: flutter pub get
+    description: Get dependencies for all plugin packages
+    exec:
+      concurrency: 1
+
+  build_runner:
+    run: flutter pub run build_runner build --delete-conflicting-outputs
+    description: Run build_runner for all plugin packages
+    exec:
+      concurrency: 1

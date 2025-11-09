@@ -1,0 +1,12 @@
+name: webview_cef
+description: Stub package to disable webview_cef on macOS
+version: 0.2.2
+
+environment:
+  sdk: ^3.8.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.0

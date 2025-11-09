@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import '../../features/startup/startup_dialog.dart';
 
 class ConnectivityBanner extends StatefulWidget {
   const ConnectivityBanner({super.key, required this.baseUrl});
@@ -96,8 +97,9 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
     final theme = Theme.of(context);
     final bg = theme.colorScheme.errorContainer;
     final on = theme.colorScheme.onErrorContainer;
-    final insets =
-        MediaQuery.of(context).padding; // используем только top для статуса
+    final insets = MediaQuery.of(
+      context,
+    ).padding; // используем только top для статуса
     return Container(
       width: double.infinity,
       color: bg,
@@ -128,6 +130,25 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
                 _checkOnce();
               },
               child: Text('Retry', style: TextStyle(color: on)),
+            ),
+            const SizedBox(width: 6),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: const Size(40, 28),
+                textStyle: theme.textTheme.labelSmall,
+                backgroundColor: on,
+                foregroundColor: bg,
+              ),
+              onPressed: () async {
+                final config = await showStartupDialog(context);
+                if (config != null && mounted) {
+                  // After configuration, check connection again
+                  _checkOnce();
+                }
+              },
+              icon: Icon(Icons.settings, size: 14),
+              label: Text('Configure'),
             ),
             const SizedBox(width: 6),
             TextButton(

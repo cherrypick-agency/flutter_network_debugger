@@ -204,6 +204,26 @@ func (s *Store) ListSessions(ctx context.Context, f usecase.SessionFilter) ([]do
 				}
 			}
 		}
+		// SessionIDs filter (from tags filtering)
+		if len(f.SessionIDs) > 0 {
+			found := false
+			for _, allowedID := range f.SessionIDs {
+				if e.session.ID == allowedID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		// Time range filter
+		if f.TimeFrom != nil && e.session.StartedAt.Before(*f.TimeFrom) {
+			continue
+		}
+		if f.TimeTo != nil && e.session.StartedAt.After(*f.TimeTo) {
+			continue
+		}
 		// target filter: allow substring (case-insensitive) to match domain/URL parts
 		if f.Target != "" && !containsFold(e.session.Target, f.Target) {
 			continue

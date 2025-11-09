@@ -58,7 +58,7 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	sess := domain.Session{
 		ID:         sessionID,
 		Target:     u.String(),
-		ClientAddr: clientHost(r.RemoteAddr),
+		ClientAddr: r.RemoteAddr,
 		StartedAt:  time.Now().UTC(),
 		Kind:       "ws",
 	}

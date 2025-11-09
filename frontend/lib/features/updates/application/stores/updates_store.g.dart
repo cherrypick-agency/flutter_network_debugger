@@ -14,10 +14,9 @@ mixin _$UpdatesStore on _UpdatesStore, Store {
   @override
   List<UpdateInfo> get filteredReleases =>
       (_$filteredReleasesComputed ??= Computed<List<UpdateInfo>>(
-            () => super.filteredReleases,
-            name: '_UpdatesStore.filteredReleases',
-          ))
-          .value;
+        () => super.filteredReleases,
+        name: '_UpdatesStore.filteredReleases',
+      )).value;
 
   late final _$releasesAtom = Atom(
     name: '_UpdatesStore.releases',

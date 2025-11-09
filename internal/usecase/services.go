@@ -3,14 +3,16 @@ package usecase
 import (
 	"context"
 	"network-debugger/internal/domain"
+	processuc "network-debugger/internal/features/process/usecase"
 	"time"
 )
 
 type SessionService struct {
-	sessions SessionRepository
-	frames   FrameRepository
-	events   EventRepository
-	httpTxs  HTTPTransactionRepository
+	sessions   SessionRepository
+	frames     FrameRepository
+	events     EventRepository
+	httpTxs    HTTPTransactionRepository
+	processSvc *processuc.Service
 }
 
 func NewSessionService(s SessionRepository, f FrameRepository, e EventRepository) *SessionService {
@@ -23,11 +25,46 @@ func NewSessionService(s SessionRepository, f FrameRepository, e EventRepository
 	return &SessionService{sessions: s, frames: f, events: e, httpTxs: h}
 }
 
+// SetProcessService - установить сервис детекции процессов (опционально)
+func (s *SessionService) SetProcessService(p *processuc.Service) {
+	s.processSvc = p
+}
+
 // Temporary unsafe accessor for underlying sessions repo (for in-memory capture MVP)
 func (s *SessionService) SessionsRepoUnsafe() any { return s.sessions }
 
 func (s *SessionService) Create(ctx context.Context, sess domain.Session) error {
+	// Попытаться детектировать процесс если ProcessService доступен
+	if s.processSvc != nil && sess.ProcessInfo == nil {
+		// Извлечь порт из ClientAddr (формат: "ip:port")
+		if port := extractPortFromAddr(sess.ClientAddr); port > 0 {
+			processInfo, err := s.processSvc.DetectForConnection(ctx, port)
+			if err == nil && processInfo != nil {
+				sess.ProcessInfo = processInfo
+			}
+			// Игнорируем ошибки детекции - это не критично
+		}
+	}
+
 	return s.sessions.CreateSession(ctx, sess)
+}
+
+// extractPortFromAddr - извлечь порт из адреса вида "ip:port"
+func extractPortFromAddr(addr string) uint32 {
+	// Простой парсинг последней части после ":"
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			portStr := addr[i+1:]
+			var port uint32
+			for _, c := range portStr {
+				if c >= '0' && c <= '9' {
+					port = port*10 + uint32(c-'0')
+				}
+			}
+			return port
+		}
+	}
+	return 0
 }
 
 func (s *SessionService) Get(ctx context.Context, id string) (domain.Session, bool, error) {

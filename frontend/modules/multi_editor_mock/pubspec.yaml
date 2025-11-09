@@ -1,0 +1,25 @@
+name: multi_editor_mock
+description: Mock implementations for testing MultiEditor - provides in-memory file system, mock repositories, and test utilities for unit and integration testing.
+version: 0.1.0
+homepage: https://github.com/777genius/multi_editor_flutter
+repository: https://github.com/777genius/multi_editor_flutter
+issue_tracker: https://github.com/777genius/multi_editor_flutter/issues
+
+environment:
+  sdk: ^3.8.0
+
+resolution: workspace
+
+topics:
+  - editor
+  - testing
+  - mocks
+  - flutter
+
+dependencies:
+  multi_editor_core: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
