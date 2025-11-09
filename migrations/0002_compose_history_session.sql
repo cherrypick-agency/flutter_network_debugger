@@ -6,3 +6,11 @@ ALTER TABLE compose_history ADD COLUMN session TEXT;
 
 
 
+
+
+
+
+
+
+
+
