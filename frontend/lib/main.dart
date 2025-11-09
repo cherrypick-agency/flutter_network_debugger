@@ -4,6 +4,7 @@ import 'theme/app_theme.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'services/prefs.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
@@ -18,6 +19,8 @@ import 'features/inspector/presentation/widgets/quick_filters_bar.dart';
 import 'features/inspector/presentation/widgets/home/header_actions.dart';
 import 'features/filters/presentation/widgets/sessions_filters.dart';
 import 'features/filters/application/stores/sessions_filters_store.dart';
+import 'features/tags/application/stores/tags_store.dart';
+import 'features/performance/application/stores/performance_store.dart';
 import 'core/di/di.dart' show getIt, setupDI, sl;
 import 'core/network/connectivity_banner.dart';
 import 'core/notifications/notifications_service.dart';
@@ -33,14 +36,21 @@ import 'features/settings/presentation/settings_page.dart';
 import 'features/updates/presentation/pages/updates_page.dart';
 import 'features/landing/presentation/pages/integrations_page.dart';
 import 'features/compose/presentation/pages/compose_page.dart';
+import 'features/scripts/presentation/pages/scripts_page_full.dart';
+import 'features/scripts/application/stores/scripts_store.dart';
 import 'core/hotkeys/hotkeys_service.dart';
+import 'features/compiler_management/presentation/pages/compilers_page.dart';
+import 'features/compiler_management/presentation/stores/compiler_list_store.dart';
+import 'features/compiler_management/presentation/stores/installation_progress_store.dart';
 // import removed: debouncer
 import 'features/common/notifications/notifications_overlay.dart';
 import 'features/breakpoints/presentation/widgets/breakpoints_dialog.dart';
 import 'features/mapping/presentation/widgets/mapping_dialog.dart';
+import 'features/performance/presentation/pages/performance_page.dart';
 
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
 import 'theme/font_scale.dart';
+import 'features/custom_fonts/application/font_service.dart';
 import 'package:http_debugger/http_debugger.dart';
 import 'core/desktop/desktop_bootstrap.dart';
 import 'dart:io' show exit;
@@ -55,9 +65,9 @@ import 'features/updates/infrastructure/platform/platform_installer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (kDebugMode) {
-    HttpDebugger.enable();
-  }
+  // if (kDebugMode) {
+  //   HttpDebugger.enable();
+  // }
   if (kIsWeb) {
     setUrlStrategy(const HashUrlStrategy());
   }
@@ -74,6 +84,10 @@ void main() async {
       githubRepo: 'flutter_network_debugger',
       currentVersion: packageInfo.version,
     );
+
+    // Initialize custom fonts service
+    await FontService().initialize();
+
     runApp(const MyApp());
   }
 }
@@ -88,6 +102,8 @@ class _MyAppState extends State<MyApp> {
   ThemeMode _mode = ThemeMode.system;
   bool _themeToggled = false;
   double _fontScale = 1.0;
+  String? _fontFamily;
+  late final VoidCallback _fontListener;
 
   @override
   void initState() {
@@ -100,6 +116,16 @@ class _MyAppState extends State<MyApp> {
         _fontScale = FontScale.value.value;
       });
     });
+    // Listen to custom font changes
+    _fontListener = () {
+      if (!mounted) return;
+      setState(() {
+        _fontFamily = FontService().getCurrentFontFamily();
+      });
+    };
+    FontService().currentFont.addListener(_fontListener);
+    // Set initial font family
+    _fontFamily = FontService().getCurrentFontFamily();
   }
 
   Future<void> _loadTheme() async {
@@ -157,12 +183,14 @@ class _MyAppState extends State<MyApp> {
         Provider<AggregateStore>.value(value: sl<AggregateStore>()),
         Provider<SessionsFiltersStore>.value(value: sl<SessionsFiltersStore>()),
         Provider<HomeUiStore>.value(value: sl<HomeUiStore>()),
+        Provider<TagsStore>.value(value: sl<TagsStore>()),
+        Provider<PerformanceStore>.value(value: sl<PerformanceStore>()),
       ],
       child: Builder(
         builder: (context) {
           return MaterialApp(
-            theme: buildLightTheme(),
-            darkTheme: buildDarkTheme(),
+            theme: buildLightTheme(fontFamily: _fontFamily),
+            darkTheme: buildDarkTheme(fontFamily: _fontFamily),
             themeMode: _mode,
             builder: (context, child) {
               final mq = MediaQuery.of(context);
@@ -179,6 +207,12 @@ class _MyAppState extends State<MyApp> {
               '/download': (_) => const DownloadPage(),
               '/integrations': (_) => const IntegrationsPage(),
               '/compose': (_) => const ComposePage(),
+              '/scripts': (_) => ScriptsPageFull(store: sl<ScriptsStore>()),
+              '/compilers': (_) => CompilersPage(
+                store: sl<CompilerListStore>(),
+                progressStore: sl<InstallationProgressStore>(),
+              ),
+              '/performance': (_) => const PerformancePage(),
             },
             home: MyHomePage(onToggleTheme: _toggleTheme),
           );
@@ -196,6 +230,12 @@ class _MyAppState extends State<MyApp> {
       });
       FontScale.value.value = v;
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    FontService().currentFont.removeListener(_fontListener);
+    super.dispose();
   }
 }
 
@@ -227,52 +267,70 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     _connectMonitor();
-    _restorePrefs().then((_) {
-      // После восстановления фильтров сразу подписываемся на realtime
-      // ignore: discarded_futures
-      sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-      // Ресабскрайб при изменении ключевых фильтров
-      final ui = sl<HomeUiStore>();
-      final f = context.read<SessionsFiltersStore>();
-      _reactions.add(
-        mobx.reaction((_) => ui.captureScope.value, (_) {
-          // ignore: discarded_futures
-          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-        }),
-      );
-      _reactions.add(
-        mobx.reaction((_) => ui.quickTypes.toList(growable: false), (_) {
-          // ignore: discarded_futures
-          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-        }),
-      );
-      _reactions.add(
-        mobx.reaction((_) => ui.quickStatusGroups.toList(growable: false), (_) {
-          // ignore: discarded_futures
-          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-        }),
-      );
-      _reactions.add(
-        mobx.reaction((_) => f.target, (_) {
-          // ignore: discarded_futures
-          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-        }),
-      );
-      _reactions.add(
-        mobx.reaction((_) => ui.includePaused.value, (_) {
-          // ignore: discarded_futures
-          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-        }),
-      );
-    });
 
+    // Setup synchronous listeners first
     _framesCtrl.addListener(_onFramesScroll);
     _eventsCtrl.addListener(_onEventsScroll);
     _sessionsCtrl.addListener(_onSessionsScroll);
-    _sessionSearchCtrl.addListener(() {
-      sl<HomeUiStore>().setSessionSearchQuery(_sessionSearchCtrl.text);
-      // ignore: discarded_futures
-      sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+
+    // Move ALL async initialization to post-frame callback
+    // This ensures widget tree is fully built before accessing context
+    // Prevents deadlock between setState() and context.read()
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restorePrefs().then((_) {
+        // Setup search controller listener AFTER preferences are restored
+        // This prevents cascade of resubscribe calls during initialization
+        _sessionSearchCtrl.addListener(() {
+          sl<HomeUiStore>().setSessionSearchQuery(_sessionSearchCtrl.text);
+          // ignore: discarded_futures
+          sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        });
+
+        // После восстановления фильтров сразу подписываемся на realtime
+        // ignore: discarded_futures
+        sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+        // Ресабскрайб при изменении ключевых фильтров
+        final ui = sl<HomeUiStore>();
+        final f = context.read<SessionsFiltersStore>();
+        _reactions.add(
+          mobx.reaction((_) => ui.captureScope.value, (_) {
+            // ignore: discarded_futures
+            sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+          }),
+        );
+        _reactions.add(
+          mobx.reaction((_) => ui.quickTypes.toList(growable: false), (_) {
+            // ignore: discarded_futures
+            sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+          }),
+        );
+        _reactions.add(
+          mobx.reaction((_) => ui.quickStatusGroups.toList(growable: false), (
+            _,
+          ) {
+            // ignore: discarded_futures
+            sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+          }),
+        );
+        _reactions.add(
+          mobx.reaction((_) => f.target, (_) {
+            // ignore: discarded_futures
+            sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+          }),
+        );
+        _reactions.add(
+          mobx.reaction((_) => ui.includePaused.value, (_) {
+            // ignore: discarded_futures
+            sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+          }),
+        );
+        _reactions.add(
+          mobx.reaction((_) => f.selectedTags.toList(growable: false), (_) {
+            // ignore: discarded_futures
+            sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
+          }),
+        );
+      });
     });
   }
 
@@ -351,16 +409,16 @@ class _MyHomePageState extends State<MyHomePage> {
             }
 
             // Truncate long URLs for readability
-            final displayTarget =
-                target.length > 50 ? '${target.substring(0, 47)}...' : target;
+            final displayTarget = target.length > 50
+                ? '${target.substring(0, 47)}...'
+                : target;
 
             // Handle empty or short session IDs
-            final sessionDisplay =
-                sessionId.isEmpty
-                    ? 'Unknown'
-                    : (sessionId.length >= 8
-                        ? sessionId.substring(0, 8)
-                        : sessionId);
+            final sessionDisplay = sessionId.isEmpty
+                ? 'Unknown'
+                : (sessionId.length >= 8
+                      ? sessionId.substring(0, 8)
+                      : sessionId);
 
             sl<NotificationsService>().error(
               title,
@@ -383,26 +441,25 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _clearAllSessions() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('Clear all sessions?'),
-            content: const Text(
-              'This will remove all sessions from backend and UI.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                ),
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Clear'),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear all sessions?'),
+        content: const Text(
+          'This will remove all sessions from backend and UI.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
           ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
     );
     if (ok != true) return;
     try {
@@ -485,6 +542,13 @@ class _MyHomePageState extends State<MyHomePage> {
     f.setGroupBy(data['groupBy'] ?? 'none');
     f.setHeaderKey(data['headerKey'] ?? '');
     f.setHeaderVal(data['headerVal'] ?? '');
+    // restore selected tags
+    try {
+      final tagsJson = data['selectedTags'];
+      if (tagsJson != null && tagsJson.isNotEmpty) {
+        f.setSelectedTags(List<String>.from(jsonDecode(tagsJson) as List));
+      }
+    } catch (_) {}
     // restore since-ts if any
     try {
       ui.setSince(await PrefsService().loadSince());
@@ -513,6 +577,7 @@ class _MyHomePageState extends State<MyHomePage> {
       groupBy: f.groupBy,
       headerKey: f.headerKey,
       headerVal: f.headerVal,
+      selectedTags: jsonEncode(f.selectedTags.toList()),
     );
   }
 
@@ -663,6 +728,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                   onOpenCompose: () {
                                     Navigator.of(context).pushNamed('/compose');
                                   },
+                                  onOpenScripts: () {
+                                    Navigator.of(context).pushNamed('/scripts');
+                                  },
                                   onOpenBreakpoints: () async {
                                     await showGeneralDialog(
                                       context: context,
@@ -683,6 +751,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                       },
                                     );
                                   },
+                                  // onOpenPerformance: () {
+                                  //   Navigator.of(
+                                  //     context,
+                                  //   ).pushNamed('/performance');
+                                  // },
                                   isRecording: ui.isRecording.value,
                                   onToggleRecording: () async {
                                     // Toggle on backend via capture API
@@ -728,26 +801,24 @@ class _MyHomePageState extends State<MyHomePage> {
                                 duration: const Duration(milliseconds: 220),
                                 curve: Curves.easeInOutCubic,
                                 alignment: Alignment.topCenter,
-                                child:
-                                    ui.showTimeline.value
-                                        ? TimelineBlock(
-                                          since: ui.since.value,
-                                          wfFitAll: ui.wfFitAll.value,
-                                          onFitAllChanged:
-                                              (v) => ui.setWfFitAll(v),
-                                          onSelectSession: (id) {
-                                            ui.setSelectedSessionId(id);
-                                            _loadDetails(id);
-                                          },
-                                          onClearAllSessions: _clearAllSessions,
-                                          selectedRange: ui.selectedRange.value,
-                                          onRangeChanged:
-                                              (range) =>
-                                                  ui.setSelectedRange(range),
-                                          onRangeCleared:
-                                              () => ui.clearSelectedRange(),
-                                        )
-                                        : const SizedBox.shrink(),
+                                child: ui.showTimeline.value
+                                    ? TimelineBlock(
+                                        since: ui.since.value,
+                                        wfFitAll: ui.wfFitAll.value,
+                                        onFitAllChanged: (v) =>
+                                            ui.setWfFitAll(v),
+                                        onSelectSession: (id) {
+                                          ui.setSelectedSessionId(id);
+                                          _loadDetails(id);
+                                        },
+                                        onClearAllSessions: _clearAllSessions,
+                                        selectedRange: ui.selectedRange.value,
+                                        onRangeChanged: (range) =>
+                                            ui.setSelectedRange(range),
+                                        onRangeCleared: () =>
+                                            ui.clearSelectedRange(),
+                                      )
+                                    : const SizedBox.shrink(),
                               );
                             },
                           ),
@@ -762,31 +833,30 @@ class _MyHomePageState extends State<MyHomePage> {
                                 duration: const Duration(milliseconds: 220),
                                 curve: Curves.easeInOutCubic,
                                 alignment: Alignment.topCenter,
-                                child:
-                                    show
-                                        ? Theme(
-                                          data: Theme.of(context).copyWith(
-                                            inputDecorationTheme:
-                                                const InputDecorationTheme(
-                                                  isDense: true,
-                                                  contentPadding:
-                                                      EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4,
-                                                      ),
-                                                  labelStyle: TextStyle(
-                                                    fontSize: 12,
-                                                  ),
+                                child: show
+                                    ? Theme(
+                                        data: Theme.of(context).copyWith(
+                                          inputDecorationTheme:
+                                              const InputDecorationTheme(
+                                                isDense: true,
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                labelStyle: TextStyle(
+                                                  fontSize: 12,
                                                 ),
-                                          ),
-                                          child: SessionsFilters(
-                                            onApply: () async {
-                                              await _savePrefs();
-                                              await _loadSessions();
-                                            },
-                                          ),
-                                        )
-                                        : const SizedBox.shrink(),
+                                              ),
+                                        ),
+                                        child: SessionsFilters(
+                                          onApply: () async {
+                                            await _savePrefs();
+                                            await _loadSessions();
+                                          },
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
                               );
                             },
                           ),
@@ -839,13 +909,10 @@ class _MyHomePageState extends State<MyHomePage> {
                                                         .selectedSessionId
                                                         .value !=
                                                     null) {
-                                                  final items =
-                                                      context
-                                                          .watch<
-                                                            SessionsStore
-                                                          >()
-                                                          .items
-                                                          .toList();
+                                                  final items = context
+                                                      .watch<SessionsStore>()
+                                                      .items
+                                                      .toList();
                                                   Map<String, dynamic>? meta;
                                                   String? kind;
                                                   for (final s in items) {
@@ -882,78 +949,69 @@ class _MyHomePageState extends State<MyHomePage> {
                                                 // tabs/views are not needed because TabBar is built inline
 
                                                 return DefaultTabController(
-                                                  length:
-                                                      (() {
-                                                        if (selIsWs &&
-                                                            selIsHttp)
-                                                          return 2;
-                                                        if (selIsWs ||
-                                                            selIsHttp)
-                                                          return 1;
-                                                        return 2;
-                                                      })(),
+                                                  length: (() {
+                                                    if (selIsWs && selIsHttp)
+                                                      return 2;
+                                                    if (selIsWs || selIsHttp)
+                                                      return 1;
+                                                    return 2;
+                                                  })(),
                                                   child: Observer(
                                                     builder: (_) {
-                                                      final details =
-                                                          context
-                                                              .watch<
-                                                                SessionDetailsStore
-                                                              >();
-                                                      final frames =
-                                                          details.frames
-                                                              .map(
-                                                                (f) => {
-                                                                  'id': f.id,
-                                                                  'ts':
-                                                                      f.ts.toIso8601String(),
-                                                                  'direction':
-                                                                      f.direction,
-                                                                  'opcode':
-                                                                      f.opcode,
-                                                                  'size':
-                                                                      f.size,
-                                                                  'preview':
-                                                                      f.preview,
-                                                                },
-                                                              )
-                                                              .toList();
-                                                      final events =
-                                                          details.events
-                                                              .map(
-                                                                (e) => {
-                                                                  'id': e.id,
-                                                                  'ts':
-                                                                      e.ts.toIso8601String(),
-                                                                  'namespace':
-                                                                      e.namespace,
-                                                                  'event':
-                                                                      e.event,
-                                                                  'ackId':
-                                                                      e.ackId,
-                                                                  'argsPreview':
-                                                                      e.argsPreview,
-                                                                },
-                                                              )
-                                                              .toList();
+                                                      final details = context
+                                                          .watch<
+                                                            SessionDetailsStore
+                                                          >();
+                                                      final frames = details
+                                                          .frames
+                                                          .map(
+                                                            (f) => {
+                                                              'id': f.id,
+                                                              'ts': f.ts
+                                                                  .toIso8601String(),
+                                                              'direction':
+                                                                  f.direction,
+                                                              'opcode':
+                                                                  f.opcode,
+                                                              'size': f.size,
+                                                              'preview':
+                                                                  f.preview,
+                                                            },
+                                                          )
+                                                          .toList();
+                                                      final events = details
+                                                          .events
+                                                          .map(
+                                                            (e) => {
+                                                              'id': e.id,
+                                                              'ts': e.ts
+                                                                  .toIso8601String(),
+                                                              'namespace':
+                                                                  e.namespace,
+                                                              'event': e.event,
+                                                              'ackId': e.ackId,
+                                                              'argsPreview':
+                                                                  e.argsPreview,
+                                                            },
+                                                          )
+                                                          .toList();
                                                       return DetailsTabs(
                                                         showWs: selIsWs,
                                                         showHttp: selIsHttp,
-                                                        frames:
-                                                            frames
-                                                                .cast<
-                                                                  Map<
-                                                                    String,
-                                                                    dynamic
-                                                                  >
-                                                                >(),
-                                                        events:
-                                                            events
-                                                                .cast<
-                                                                  Map<
-                                                                    String,
-                                                                    dynamic
-                                                                  >
-                                                                >(),
+                                                        frames: frames
+                                                            .cast<
+                                                              Map<
+                                                                String,
+                                                                dynamic
+                                                              >
+                                                            >(),
+                                                        events: events
+                                                            .cast<
+                                                              Map<
+                                                                String,
+                                                                dynamic
+                                                              >
+                                                            >(),
                                                         selectedSessionId:
                                                             sl<HomeUiStore>()
                                                                 .selectedSessionId
@@ -993,9 +1051,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                             sl<HomeUiStore>()
                                                                 .hideHeartbeats
                                                                 .value,
-                                                        onToggleHeartbeats: (
-                                                          v,
-                                                        ) {
+                                                        onToggleHeartbeats: (v) {
                                                           sl<HomeUiStore>()
                                                               .setHideHeartbeats(
                                                                 v,
@@ -1069,6 +1125,73 @@ class _SessionPlaceholder extends StatelessWidget {
   }
 }
 
+/// Helper widget для инициализации внутри MaterialApp context
+class _BootstrapInitializer extends StatefulWidget {
+  final Future<void> Function(BuildContext) onInitialize;
+  final VoidCallback onInitialized;
+
+  const _BootstrapInitializer({
+    required this.onInitialize,
+    required this.onInitialized,
+  });
+
+  @override
+  State<_BootstrapInitializer> createState() => _BootstrapInitializerState();
+}
+
+class _BootstrapInitializerState extends State<_BootstrapInitializer> {
+  @override
+  void initState() {
+    super.initState();
+    // Показываем dialog после первого build когда MaterialApp context доступен
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await widget.onInitialize(context);
+      widget.onInitialized();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(48),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            spreadRadius: 5,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.network_check,
+            size: 64,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Network Debugger',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Initializing...',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Bootstrap приложение для desktop платформ
 /// Показывает startup dialog, запускает Go сервер, затем показывает MyApp
 class BootstrapApp extends StatefulWidget {
@@ -1084,15 +1207,11 @@ class _BootstrapAppState extends State<BootstrapApp> {
   @override
   void initState() {
     super.initState();
-
-    // Инициализация будет происходить после первого build
-    // когда context станет доступен
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initialize();
-    });
+    // Инициализация будет происходить внутри MaterialApp context
+    // через BootstrapInitializer widget
   }
 
-  Future<void> _initialize() async {
+  Future<void> _initialize(BuildContext context) async {
     if (!mounted) return;
 
     final apiPort = await DesktopBootstrap.bootstrap(context);
@@ -1104,21 +1223,20 @@ class _BootstrapAppState extends State<BootstrapApp> {
         // ignore: use_build_context_synchronously
         await showDialog(
           context: context,
-          builder:
-              (ctx) => AlertDialog(
-                title: const Text('Startup Cancelled'),
-                content: const Text('Application will now exit.'),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      // Exit app
-                      exit(0);
-                    },
-                    child: const Text('OK'),
-                  ),
-                ],
+          builder: (ctx) => AlertDialog(
+            title: const Text('Startup Cancelled'),
+            content: const Text('Application will now exit.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  // Exit app
+                  exit(0);
+                },
+                child: const Text('OK'),
               ),
+            ],
+          ),
         );
       }
       return;
@@ -1144,6 +1262,9 @@ class _BootstrapAppState extends State<BootstrapApp> {
       githubRepo: 'flutter_network_debugger',
       currentVersion: packageInfo.version,
     );
+
+    // Initialize custom fonts service
+    await FontService().initialize();
 
     if (mounted) {
       setState(() {
@@ -1235,25 +1356,24 @@ class _BootstrapAppState extends State<BootstrapApp> {
             // ignore: use_build_context_synchronously
             await showDialog(
               context: context,
-              builder:
-                  (ctx) => AlertDialog(
-                    title: const Row(
-                      children: [
-                        Icon(Icons.error_outline, color: Colors.red),
-                        SizedBox(width: 12),
-                        Text('Download Failed'),
-                      ],
-                    ),
-                    content: const Text(
-                      'Failed to download update. Please try again later or download manually from GitHub.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('OK'),
-                      ),
-                    ],
+              builder: (ctx) => AlertDialog(
+                title: const Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Download Failed'),
+                  ],
+                ),
+                content: const Text(
+                  'Failed to download update. Please try again later or download manually from GitHub.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('OK'),
                   ),
+                ],
+              ),
             );
           }
           return;
@@ -1264,69 +1384,68 @@ class _BootstrapAppState extends State<BootstrapApp> {
           // ignore: use_build_context_synchronously
           final shouldInstall = await showDialog<bool>(
             context: context,
-            builder:
-                (ctx) => AlertDialog(
-                  title: const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green),
-                      SizedBox(width: 12),
-                      Text('Download Complete'),
-                    ],
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Update has been downloaded successfully!'),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.blue.withValues(alpha: 0.3),
+            builder: (ctx) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green),
+                  SizedBox(width: 12),
+                  Text('Download Complete'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Update has been downloaded successfully!'),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.blue.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          color: Colors.blue,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Version ${updateInfo.version}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue,
+                            ),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: Colors.blue,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Version ${updateInfo.version}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Would you like to open the installer now?',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('Later'),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      icon: const Icon(Icons.install_desktop),
-                      label: const Text('Install Now'),
-                    ),
-                  ],
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Would you like to open the installer now?',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Later'),
                 ),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  icon: const Icon(Icons.install_desktop),
+                  label: const Text('Install Now'),
+                ),
+              ],
+            ),
           );
 
           if (shouldInstall == true) {
@@ -1340,19 +1459,18 @@ class _BootstrapAppState extends State<BootstrapApp> {
                   // ignore: use_build_context_synchronously
                   await showDialog(
                     context: context,
-                    builder:
-                        (ctx) => AlertDialog(
-                          title: const Text('Installation Instructions'),
-                          content: SingleChildScrollView(
-                            child: Text(installerResult.instructions!),
-                          ),
-                          actions: [
-                            ElevatedButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              child: const Text('OK'),
-                            ),
-                          ],
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Installation Instructions'),
+                      content: SingleChildScrollView(
+                        child: Text(installerResult.instructions!),
+                      ),
+                      actions: [
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text('OK'),
                         ),
+                      ],
+                    ),
                   );
                 }
               } else {
@@ -1360,26 +1478,25 @@ class _BootstrapAppState extends State<BootstrapApp> {
                 // ignore: use_build_context_synchronously
                 await showDialog(
                   context: context,
-                  builder:
-                      (ctx) => AlertDialog(
-                        title: const Row(
-                          children: [
-                            Icon(Icons.error_outline, color: Colors.red),
-                            SizedBox(width: 12),
-                            Text('Installation Error'),
-                          ],
-                        ),
-                        content: Text(
-                          installerResult.errorMessage ??
-                              'Failed to open installer',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('OK'),
-                          ),
-                        ],
+                  builder: (ctx) => AlertDialog(
+                    title: const Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Installation Error'),
+                      ],
+                    ),
+                    content: Text(
+                      installerResult.errorMessage ??
+                          'Failed to open installer',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('OK'),
                       ),
+                    ],
+                  ),
                 );
               }
             }
@@ -1398,17 +1515,16 @@ class _BootstrapAppState extends State<BootstrapApp> {
         // ignore: use_build_context_synchronously
         await showDialog(
           context: context,
-          builder:
-              (ctx) => AlertDialog(
-                title: const Text('Error'),
-                content: Text('Failed to download update: $e'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('OK'),
-                  ),
-                ],
+          builder: (ctx) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to download update: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
               ),
+            ],
+          ),
         );
       }
     } finally {
@@ -1435,25 +1551,31 @@ class _BootstrapAppState extends State<BootstrapApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Всегда оборачиваем в MaterialApp для Material виджетов
     if (!_initialized) {
       // Показываем splash screen пока инициализируемся
       return MaterialApp(
         theme: buildLightTheme(),
         darkTheme: buildDarkTheme(),
-        home: const Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.network_check, size: 64),
-                SizedBox(height: 16),
-                Text(
-                  'Network Debugger',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text('Initializing...'),
-              ],
+        home: Scaffold(
+          body: Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: NetworkImage('https://i.imgur.com/MdXfv74.png'),
+                fit: BoxFit.cover,
+              ),
+            ),
+            child: Center(
+              child: _BootstrapInitializer(
+                onInitialize: _initialize,
+                onInitialized: () {
+                  if (mounted) {
+                    setState(() {
+                      _initialized = true;
+                    });
+                  }
+                },
+              ),
             ),
           ),
         ),
