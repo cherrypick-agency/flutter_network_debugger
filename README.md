@@ -35,9 +35,9 @@
 
 ![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
 
-
 Free tool for debugging HTTP, WebSocket, SOCKS which is MUCH BETTER than the built-in Flutter Netwrok Devtools. 
 
+Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 
 ### Features
