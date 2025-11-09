@@ -110,8 +110,9 @@ class _ComposePageState extends State<ComposePage> {
         'bodyMode': _bodyMode,
         'raw': _rawCtrl.text,
         'json': _jsonCtrl.text,
-        'headers':
-            _headers.map((e) => {'key': e.key, 'value': e.value}).toList(),
+        'headers': _headers
+            .map((e) => {'key': e.key, 'value': e.value})
+            .toList(),
         'query': _query.map((e) => {'key': e.key, 'value': e.value}).toList(),
         'form': _form.map((e) => e.toJson()).toList(),
         'multipart': _multipart.map((e) => e.toJson()).toList(),
@@ -203,23 +204,22 @@ class _ComposePageState extends State<ComposePage> {
       if (raw == null || raw.isEmpty) return;
       final restore = await showDialog<bool>(
         context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: const Text('Восстановить черновик?'),
-              content: const Text(
-                'Для этого шаблона найден черновик. Восстановить изменения?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Ignore'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
-                  child: const Text('Restore'),
-                ),
-              ],
+        builder: (ctx) => AlertDialog(
+          title: const Text('Восстановить черновик?'),
+          content: const Text(
+            'Для этого шаблона найден черновик. Восстановить изменения?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ignore'),
             ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
       );
       if (restore != true) return;
       setState(() {
@@ -470,22 +470,21 @@ class _ComposePageState extends State<ComposePage> {
                               FilledButton.icon(
                                 onPressed: _sending ? null : _onSend,
                                 icon: const Icon(Icons.send),
-                                label:
-                                    _sending
-                                        ? Row(
-                                          children: [
-                                            const SizedBox(
-                                              height: 16,
-                                              width: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
+                                label: _sending
+                                    ? Row(
+                                        children: [
+                                          const SizedBox(
+                                            height: 16,
+                                            width: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
                                             ),
-                                            const SizedBox(width: 8),
-                                            const Text('Sending...'),
-                                          ],
-                                        )
-                                        : const Text('Send'),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text('Sending...'),
+                                        ],
+                                      )
+                                    : const Text('Send'),
                               ),
                             ],
                           ),
@@ -506,134 +505,141 @@ class _ComposePageState extends State<ComposePage> {
                                 builder: (ctx) {
                                   final ctrl = DefaultTabController.of(ctx);
                                   return AnimatedBuilder(
-                                    animation: ctrl!,
+                                    animation: ctrl,
                                     builder: (ctx, _) {
                                       final idx = ctrl.index;
-                                      return IndexedStack(
-                                        index: idx,
-                                        children: [
-                                          // Headers — делаем контент прокручиваемым, а
-                                          // редактор ключ-значение растягиваем по контенту
-                                          SingleChildScrollView(
-                                            padding: EdgeInsets.zero,
-                                            child: Column(
-                                              children: [
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 8,
-                                                      ),
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets.only(
-                                                              top: 8,
-                                                              right: 8,
-                                                            ),
-                                                        child: Text(
-                                                          'Add:',
-                                                          style:
-                                                              Theme.of(context)
-                                                                  .textTheme
-                                                                  .bodySmall,
+                                      return ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxHeight: 600,
+                                        ),
+                                        child: IndexedStack(
+                                          index: idx,
+                                          children: [
+                                            // Headers — делаем контент прокручиваемым, а
+                                            // редактор ключ-значение растягиваем по контенту
+                                            SingleChildScrollView(
+                                              padding: EdgeInsets.zero,
+                                              child: Column(
+                                                children: [
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 8,
                                                         ),
-                                                      ),
-                                                      Expanded(
-                                                        child: Wrap(
-                                                          spacing: 8,
-                                                          runSpacing: 8,
-                                                          children: [
-                                                            _quickHeaderButton(
-                                                              'Content-Type',
-                                                              'application/json',
-                                                            ),
-                                                            _quickHeaderButton(
-                                                              'Authorization',
-                                                              'Bearer ',
-                                                            ),
-                                                            _quickHeaderButton(
-                                                              'Accept',
-                                                              'application/json',
-                                                            ),
-                                                          ],
+                                                    child: Row(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets.only(
+                                                                top: 8,
+                                                                right: 8,
+                                                              ),
+                                                          child: Text(
+                                                            'Add:',
+                                                            style:
+                                                                Theme.of(
+                                                                      context,
+                                                                    )
+                                                                    .textTheme
+                                                                    .bodySmall,
+                                                          ),
                                                         ),
-                                                      ),
-                                                    ],
+                                                        Expanded(
+                                                          child: Wrap(
+                                                            spacing: 8,
+                                                            runSpacing: 8,
+                                                            children: [
+                                                              _quickHeaderButton(
+                                                                'Content-Type',
+                                                                'application/json',
+                                                              ),
+                                                              _quickHeaderButton(
+                                                                'Authorization',
+                                                                'Bearer ',
+                                                              ),
+                                                              _quickHeaderButton(
+                                                                'Accept',
+                                                                'application/json',
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
-                                                ),
-                                                KeyValueEditor(
-                                                  key: const ValueKey(
-                                                    'headers',
+                                                  KeyValueEditor(
+                                                    key: const ValueKey(
+                                                      'headers',
+                                                    ),
+                                                    items: _headers,
+                                                    onChanged: (list) {
+                                                      setState(() {
+                                                        _dirty = true;
+                                                      });
+                                                      _scheduleAutosave();
+                                                    },
+                                                    labelKey: 'Header',
                                                   ),
-                                                  items: _headers,
-                                                  onChanged: (list) {
-                                                    setState(() {
-                                                      _dirty = true;
-                                                    });
-                                                    _scheduleAutosave();
-                                                  },
-                                                  labelKey: 'Header',
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                          SingleChildScrollView(
-                                            padding: EdgeInsets.zero,
-                                            child: KeyValueEditor(
-                                              key: const ValueKey('query'),
-                                              items: _query,
-                                              onChanged: (list) {
+                                            SingleChildScrollView(
+                                              padding: EdgeInsets.zero,
+                                              child: KeyValueEditor(
+                                                key: const ValueKey('query'),
+                                                items: _query,
+                                                onChanged: (list) {
+                                                  setState(() {
+                                                    _dirty = true;
+                                                  });
+                                                  _scheduleAutosave();
+                                                },
+                                                labelKey: 'Param',
+                                              ),
+                                            ),
+                                            BodyEditor(
+                                              mode: _bodyMode,
+                                              onModeChanged: (v) {
+                                                _markDirty();
                                                 setState(() {
-                                                  _dirty = true;
+                                                  _bodyMode = v;
                                                 });
+                                                _ensureContentType();
                                                 _scheduleAutosave();
                                               },
-                                              labelKey: 'Param',
+                                              rawCtrl: _rawCtrl,
+                                              jsonCtrl: _jsonCtrl,
+                                              form: _form,
+                                              multipart: _multipart,
+                                              maxUploadMB: _maxUploadMB,
+                                              onFormChanged: (_) {
+                                                _markDirty();
+                                                _scheduleAutosave();
+                                              },
+                                              onMultipartChanged: (_) {
+                                                _markDirty();
+                                                _scheduleAutosave();
+                                              },
                                             ),
-                                          ),
-                                          BodyEditor(
-                                            mode: _bodyMode,
-                                            onModeChanged: (v) {
-                                              _markDirty();
-                                              setState(() {
-                                                _bodyMode = v;
-                                              });
-                                              _ensureContentType();
-                                              _scheduleAutosave();
-                                            },
-                                            rawCtrl: _rawCtrl,
-                                            jsonCtrl: _jsonCtrl,
-                                            form: _form,
-                                            multipart: _multipart,
-                                            maxUploadMB: _maxUploadMB,
-                                            onFormChanged: (_) {
-                                              _markDirty();
-                                              _scheduleAutosave();
-                                            },
-                                            onMultipartChanged: (_) {
-                                              _markDirty();
-                                              _scheduleAutosave();
-                                            },
-                                          ),
-                                          AuthEditor(
-                                            authType: _authType,
-                                            onAuthTypeChanged: (v) {
-                                              setState(() => _authType = v);
-                                              _markDirty();
-                                              _scheduleAutosave();
-                                            },
-                                            basicUser: _basicUser,
-                                            basicPass: _basicPass,
-                                            bearer: _bearer,
-                                            apiKeyHeader: _apiKeyHeader,
-                                            apiKey: _apiKey,
-                                          ),
-                                        ],
+                                            AuthEditor(
+                                              authType: _authType,
+                                              onAuthTypeChanged: (v) {
+                                                setState(() => _authType = v);
+                                                _markDirty();
+                                                _scheduleAutosave();
+                                              },
+                                              basicUser: _basicUser,
+                                              basicPass: _basicPass,
+                                              bearer: _bearer,
+                                              apiKeyHeader: _apiKeyHeader,
+                                              apiKey: _apiKey,
+                                            ),
+                                          ],
+                                        ),
                                       );
                                     },
                                   );
@@ -642,7 +648,6 @@ class _ComposePageState extends State<ComposePage> {
                               const Divider(height: 1),
                               Builder(
                                 builder: (_) {
-                                  final hasData = _lastResponse != null;
                                   final details = ComposeHttpDetails(
                                     data: _lastResponse,
                                     template: _lastSentTpl,
@@ -656,19 +661,11 @@ class _ComposePageState extends State<ComposePage> {
                                       Navigator.of(context).pop();
                                     },
                                   );
-                                  // Если данных ещё нет — не фиксируем высоту (даём
-                                  // занять столько, сколько нужно), но ограничим максимумом.
-                                  // Если данные есть, панель деталей требует ограниченной
-                                  // высоты, поэтому зададим 500.
-                                  if (hasData) {
-                                    return SizedBox(
-                                      height: 500,
-                                      child: details,
-                                    );
-                                  }
+                                  // Используем ConstrainedBox для динамической высоты
+                                  // с максимумом 600px
                                   return ConstrainedBox(
                                     constraints: const BoxConstraints(
-                                      maxHeight: 500,
+                                      maxHeight: 600,
                                     ),
                                     child: details,
                                   );
@@ -701,9 +698,8 @@ class _ComposePageState extends State<ComposePage> {
                                         }
                                       },
                                       onTapTemplate: (tid) {
-                                        final t =
-                                            sl<ComposeStore>()
-                                                .requestsById[tid];
+                                        final t = sl<ComposeStore>()
+                                            .requestsById[tid];
                                         if (t != null) {
                                           setState(() {
                                             _applyTemplate(t);
@@ -750,14 +746,12 @@ class _ComposePageState extends State<ComposePage> {
         name: 'Untitled',
         method: _method,
         url: _urlCtrl.text.trim(),
-        headers:
-            _headers
-                .map((e) => ComposeHeaderDTO(key: e.key, value: e.value))
-                .toList(),
-        query:
-            _query
-                .map((e) => ComposeQueryDTO(key: e.key, value: e.value))
-                .toList(),
+        headers: _headers
+            .map((e) => ComposeHeaderDTO(key: e.key, value: e.value))
+            .toList(),
+        query: _query
+            .map((e) => ComposeQueryDTO(key: e.key, value: e.value))
+            .toList(),
         body: ComposeBodyDTO(
           mode: _bodyMode,
           raw: _bodyMode == 'raw' ? _rawCtrl.text : null,
@@ -765,17 +759,16 @@ class _ComposePageState extends State<ComposePage> {
           form: _bodyMode == 'form' ? _form : const [],
           multipart: _bodyMode == 'multipart' ? _multipart : const [],
         ),
-        auth:
-            _authType == 'none'
-                ? null
-                : ComposeAuthDTO(
-                  type: _authType,
-                  username: _basicUser.text,
-                  password: _basicPass.text,
-                  bearerToken: _bearer.text,
-                  apiKey: _apiKey.text,
-                  apiKeyHeader: _apiKeyHeader.text,
-                ),
+        auth: _authType == 'none'
+            ? null
+            : ComposeAuthDTO(
+                type: _authType,
+                username: _basicUser.text,
+                password: _basicPass.text,
+                bearerToken: _bearer.text,
+                apiKey: _apiKey.text,
+                apiKeyHeader: _apiKeyHeader.text,
+              ),
       );
       final res = await repo.send(tpl);
       setState(() {
@@ -813,14 +806,12 @@ class _ComposePageState extends State<ComposePage> {
         name: _currentTplName,
         method: _method,
         url: _urlCtrl.text.trim(),
-        headers:
-            _headers
-                .map((e) => ComposeHeaderDTO(key: e.key, value: e.value))
-                .toList(),
-        query:
-            _query
-                .map((e) => ComposeQueryDTO(key: e.key, value: e.value))
-                .toList(),
+        headers: _headers
+            .map((e) => ComposeHeaderDTO(key: e.key, value: e.value))
+            .toList(),
+        query: _query
+            .map((e) => ComposeQueryDTO(key: e.key, value: e.value))
+            .toList(),
         body: ComposeBodyDTO(
           mode: _bodyMode,
           raw: _bodyMode == 'raw' ? _rawCtrl.text : null,
@@ -828,17 +819,16 @@ class _ComposePageState extends State<ComposePage> {
           form: _bodyMode == 'form' ? _form : const [],
           multipart: _bodyMode == 'multipart' ? _multipart : const [],
         ),
-        auth:
-            _authType == 'none'
-                ? null
-                : ComposeAuthDTO(
-                  type: _authType,
-                  username: _basicUser.text,
-                  password: _basicPass.text,
-                  bearerToken: _bearer.text,
-                  apiKey: _apiKey.text,
-                  apiKeyHeader: _apiKeyHeader.text,
-                ),
+        auth: _authType == 'none'
+            ? null
+            : ComposeAuthDTO(
+                type: _authType,
+                username: _basicUser.text,
+                password: _basicPass.text,
+                bearerToken: _bearer.text,
+                apiKey: _apiKey.text,
+                apiKeyHeader: _apiKeyHeader.text,
+              ),
       );
       await repo.upsertRequest(tpl);
       _dirty = false;
@@ -861,10 +851,14 @@ class _ComposePageState extends State<ComposePage> {
     try {
       // 1) Сохраняем запрос без всплывашки
       await _saveTemplate(showToast: false);
-      final store = sl<ComposeStore>();
-      if (store.collections.isEmpty || _currentTplId == null) return;
 
-      // 2) Выбор папки в древовидном виде
+      if (_currentTplId == null) {
+        throw Exception('Не удалось сохранить шаблон');
+      }
+
+      if (!mounted) return;
+
+      // 2) Выбор папки в древовидном виде (диалог поддерживает создание коллекций)
       final pick = await showDialog<FolderSelection>(
         context: context,
         builder: (_) => const FolderPickerDialog(),
@@ -878,13 +872,25 @@ class _ComposePageState extends State<ComposePage> {
         folderId: pick.folderId,
         index: -1,
       );
+
+      final store = sl<ComposeStore>();
       await store.loadLibrary();
+
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Сохранено в коллекцию')));
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка сохранения: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _quickHeaderButton(String key, String valueTemplate) {
@@ -944,25 +950,24 @@ class _ComposePageState extends State<ComposePage> {
     if (_dirty) {
       final act = await showDialog<String>(
         context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: const Text('Сохранить изменения?'),
-              content: const Text('Есть несохранённые изменения. Что сделать?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop('cancel'),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop('discard'),
-                  child: const Text('Discard'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop('save'),
-                  child: const Text('Save'),
-                ),
-              ],
+        builder: (ctx) => AlertDialog(
+          title: const Text('Сохранить изменения?'),
+          content: const Text('Есть несохранённые изменения. Что сделать?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: const Text('Cancel'),
             ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('discard'),
+              child: const Text('Discard'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       );
       if (act == 'save') {
         await _onSave();

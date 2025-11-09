@@ -50,10 +50,9 @@ class _BodyEditorState extends State<BodyEditor> {
         builder: (context, constraints) {
           final hasBoundedHeight = constraints.maxHeight.isFinite;
           Widget editor() {
-            final mode =
-                widget.allowedModes.contains(widget.mode)
-                    ? widget.mode
-                    : widget.allowedModes.first;
+            final mode = widget.allowedModes.contains(widget.mode)
+                ? widget.mode
+                : widget.allowedModes.first;
             switch (mode) {
               case 'json':
                 return JsonCodeEditor(
@@ -89,22 +88,20 @@ class _BodyEditorState extends State<BodyEditor> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DropdownButtonFormField<String>(
-                value:
-                    widget.allowedModes.contains(widget.mode)
-                        ? widget.mode
-                        : widget.allowedModes.first,
-                onChanged:
-                    (v) => setState(() => widget.onModeChanged(v ?? 'raw')),
+                value: widget.allowedModes.contains(widget.mode)
+                    ? widget.mode
+                    : widget.allowedModes.first,
+                onChanged: (v) =>
+                    setState(() => widget.onModeChanged(v ?? 'raw')),
                 isDense: true,
                 isExpanded: true,
                 iconSize: 16,
                 style: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(fontSize: 12),
-                items:
-                    widget.allowedModes
-                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                        .toList(),
+                items: widget.allowedModes
+                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                    .toList(),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -114,13 +111,12 @@ class _BodyEditorState extends State<BodyEditor> {
                   if (widget.mode == 'json')
                     OutlinedButton(
                       onPressed: () {
-                        final sample = const JsonEncoder.withIndent(
-                          '  ',
-                        ).convert({
-                          'name': 'John',
-                          'email': 'john@example.com',
-                          'active': true,
-                        });
+                        final sample = const JsonEncoder.withIndent('  ')
+                            .convert({
+                              'name': 'John',
+                              'email': 'john@example.com',
+                              'active': true,
+                            });
                         widget.jsonCtrl.text = sample;
                         setState(() => _jsonError = null);
                       },
@@ -135,15 +131,20 @@ class _BodyEditorState extends State<BodyEditor> {
           if (hasBoundedHeight) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [header, Expanded(child: editor())],
+              children: [
+                header,
+                Expanded(child: editor()),
+              ],
             );
           }
 
-          // В неблиндированных по высоте местах используем фиксированную высоту редактора,
-          // чтобы не падать по Expanded/expands=true
+          // Используем Flexible для динамической высоты по контенту
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [header, SizedBox(height: 320, child: editor())],
+            children: [
+              header,
+              Flexible(child: editor()),
+            ],
           );
         },
       ),

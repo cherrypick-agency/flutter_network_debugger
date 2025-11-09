@@ -36,10 +36,13 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     for (final c in _store.collections) {
       final colNode = TreeNode<_FolderNode>(
         key: 'col:${c.id}',
-        data: _FolderNode.collection(c.id, c.name),
+        data: _FolderNode.collection(c.id, c.name, c.root.id),
       );
       _root.add(colNode);
-      _buildFolder(colNode, c.id, c.root);
+      // Don't show root as a folder node - add its subfolders directly to collection
+      for (final subfolder in c.root.folders) {
+        _buildFolder(colNode, c.id, subfolder);
+      }
     }
     setState(() {});
   }
@@ -59,6 +62,73 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     }
   }
 
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.folder_off,
+            size: 64,
+            color: Colors.grey.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'У вас нет коллекций',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Создайте первую коллекцию',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onCreateCollection() async {
+    final name = await _promptText(
+      context,
+      title: 'Название коллекции',
+      initial: 'My Collection',
+    );
+
+    if (name == null || name.isEmpty) return;
+
+    final repo = sl<ComposeRepository>();
+    final collectionId = 'col-${DateTime.now().microsecondsSinceEpoch}';
+    final rootFolderId = 'fld-${DateTime.now().microsecondsSinceEpoch}';
+
+    // Создаём коллекцию с корневой папкой
+    await repo.upsertCollection({
+      'id': collectionId,
+      'name': name,
+      'root': {
+        'id': rootFolderId,
+        'name': '',
+        'requests': <String>[],
+        'folders': <Map<String, dynamic>>[],
+      },
+    });
+
+    // Перезагружаем библиотеку и перестраиваем дерево
+    await _store.loadLibrary();
+    _rebuild();
+
+    // Автоматически выбираем созданную коллекцию
+    setState(() {
+      _selected = FolderSelection(
+        collectionId: collectionId,
+        folderId: rootFolderId,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -66,75 +136,27 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
       content: SizedBox(
         width: 420,
         height: 380,
-        child: TreeView.simpleTyped<_FolderNode, TreeNode<_FolderNode>>(
-          tree: _root,
-          builder: (context, node) {
-            final d = node.data!;
-            if (d.isRoot) return const SizedBox.shrink();
-            final isFolder = d.kind == _FolderKind.folder;
-            final selected =
-                _selected?.collectionId == d.collectionId &&
-                _selected?.folderId == d.folderId;
-            return InkWell(
-              onTap:
-                  isFolder
-                      ? () {
-                        setState(() {
-                          _selected = FolderSelection(
-                            collectionId: d.collectionId!,
-                            folderId: d.folderId!,
-                          );
-                        });
-                      }
-                      : null,
-              child: Row(
-                children: [
-                  Icon(
-                    isFolder ? Icons.folder : Icons.folder_copy,
-                    size: 16,
-                    color:
-                        isFolder
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).iconTheme.color,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(d.title)),
-                  if (!isFolder)
-                    IconButton(
-                      tooltip: 'New folder',
-                      icon: const Icon(Icons.add, size: 16),
-                      onPressed: () async {
-                        final name = await _promptText(
-                          context,
-                          title: 'New folder name',
-                        );
-                        if (name == null || name.isEmpty) return;
-                        final repo = sl<ComposeRepository>();
-                        final col = _store.collections.firstWhere(
-                          (c) => c.id == d.collectionId,
-                          orElse: () => _store.collections.first,
-                        );
-                        final root = col.root.toJson();
-                        _folderAdd(root, col.root.id, {
-                          'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
-                          'name': name,
-                          'requests': <String>[],
-                          'folders': <Map<String, dynamic>>[],
-                        });
-                        await repo.upsertCollection({
-                          'id': col.id,
-                          'name': col.name,
-                          'root': root,
-                        });
-                        await _store.loadLibrary();
-                        _rebuild();
-                      },
-                    )
-                  else ...[
-                    Radio<String>(
-                      value: d.folderId!,
-                      groupValue: _selected?.folderId,
-                      onChanged: (_) {
+        child: _store.collections.isEmpty
+            ? _buildEmptyState()
+            : TreeView.simpleTyped<_FolderNode, TreeNode<_FolderNode>>(
+                tree: _root,
+                showRootNode: false,
+                expansionBehavior: ExpansionBehavior.none,
+                builder: (context, node) {
+                  final d = node.data!;
+                  if (d.isRoot) return const SizedBox.shrink();
+                  final isFolder = d.kind == _FolderKind.folder;
+                  final selected =
+                      _selected?.collectionId == d.collectionId &&
+                      _selected?.folderId == d.folderId;
+                  return Container(
+                    color: selected
+                        ? Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                        : null,
+                    child: InkWell(
+                      onTap: () {
                         setState(() {
                           _selected = FolderSelection(
                             collectionId: d.collectionId!,
@@ -142,104 +164,170 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                           );
                         });
                       },
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Folder menu',
-                      itemBuilder:
-                          (ctx) => const [
-                            PopupMenuItem(
-                              value: 'new',
-                              child: Text('New subfolder'),
-                            ),
-                            PopupMenuItem(
-                              value: 'rename',
-                              child: Text('Rename'),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                          ],
-                      onSelected: (v) async {
-                        final repo = sl<ComposeRepository>();
-                        final col = _store.collections.firstWhere(
-                          (c) => c.id == d.collectionId,
-                          orElse: () => _store.collections.first,
-                        );
-                        final root = col.root.toJson();
-                        if (v == 'new') {
-                          final name = await _promptText(
-                            context,
-                            title: 'New folder name',
-                          );
-                          if (name == null || name.isEmpty) return;
-                          _folderAdd(root, d.folderId!, {
-                            'id':
-                                'fld-${DateTime.now().microsecondsSinceEpoch}',
-                            'name': name,
-                            'requests': <String>[],
-                            'folders': <Map<String, dynamic>>[],
-                          });
-                        } else if (v == 'rename') {
-                          final name = await _promptText(
-                            context,
-                            title: 'Rename folder',
-                            initial: d.title,
-                          );
-                          if (name == null || name.isEmpty) return;
-                          _folderRename(root, d.folderId!, name);
-                        } else if (v == 'delete') {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder:
-                                (ctx) => AlertDialog(
-                                  title: const Text('Confirm'),
-                                  content: const Text(
-                                    'Delete folder and its contents?',
+                      child: Row(
+                        children: [
+                          Icon(
+                            isFolder ? Icons.folder : Icons.folder_copy,
+                            size: 16,
+                            color: isFolder
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).iconTheme.color,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(d.title)),
+                          IconButton(
+                            tooltip: 'New folder',
+                            icon: const Icon(Icons.add, size: 16),
+                            onPressed: () async {
+                              final name = await _promptText(
+                                context,
+                                title: 'New folder name',
+                              );
+                              if (name == null || name.isEmpty) return;
+                              final repo = sl<ComposeRepository>();
+                              final col = _store.collections.firstWhere(
+                                (c) => c.id == d.collectionId,
+                                orElse: () => _store.collections.first,
+                              );
+                              final root = col.root.toJson();
+                              // Add to the current folder (for both collection and folder nodes)
+                              _folderAdd(root, d.folderId!, {
+                                'id':
+                                    'fld-${DateTime.now().microsecondsSinceEpoch}',
+                                'name': name,
+                                'requests': <String>[],
+                                'folders': <Map<String, dynamic>>[],
+                              });
+                              await repo.upsertCollection({
+                                'id': col.id,
+                                'name': col.name,
+                                'root': root,
+                              });
+                              await _store.loadLibrary();
+                              _rebuild();
+                            },
+                          ),
+                          Radio<String>(
+                            value: d.folderId!,
+                            groupValue: _selected?.folderId,
+                            onChanged: (_) {
+                              setState(() {
+                                _selected = FolderSelection(
+                                  collectionId: d.collectionId!,
+                                  folderId: d.folderId!,
+                                );
+                              });
+                            },
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: isFolder
+                                ? 'Folder menu'
+                                : 'Collection menu',
+                            itemBuilder: (ctx) => const [
+                              PopupMenuItem(
+                                value: 'rename',
+                                child: Text('Rename'),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                            ],
+                            onSelected: (v) async {
+                              final repo = sl<ComposeRepository>();
+                              final col = _store.collections.firstWhere(
+                                (c) => c.id == d.collectionId,
+                                orElse: () => _store.collections.first,
+                              );
+                              if (v == 'rename') {
+                                final name = await _promptText(
+                                  context,
+                                  title: isFolder
+                                      ? 'Rename folder'
+                                      : 'Rename collection',
+                                  initial: d.title,
+                                );
+                                if (name == null || name.isEmpty) return;
+                                if (isFolder) {
+                                  final root = col.root.toJson();
+                                  _folderRename(root, d.folderId!, name);
+                                  await repo.upsertCollection({
+                                    'id': col.id,
+                                    'name': col.name,
+                                    'root': root,
+                                  });
+                                } else {
+                                  // Rename collection
+                                  await repo.upsertCollection({
+                                    'id': col.id,
+                                    'name': name,
+                                    'root': col.root.toJson(),
+                                  });
+                                }
+                              } else if (v == 'delete') {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Confirm'),
+                                    content: Text(
+                                      isFolder
+                                          ? 'Delete folder and its contents?'
+                                          : 'Delete collection?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(true),
+                                        child: const Text('OK'),
+                                      ),
+                                    ],
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed:
-                                          () => Navigator.of(ctx).pop(false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    FilledButton(
-                                      onPressed:
-                                          () => Navigator.of(ctx).pop(true),
-                                      child: const Text('OK'),
-                                    ),
-                                  ],
-                                ),
-                          );
-                          if (ok != true) return;
-                          _folderDelete(root, d.folderId!);
-                        }
-                        await repo.upsertCollection({
-                          'id': col.id,
-                          'name': col.name,
-                          'root': root,
-                        });
-                        await _store.loadLibrary();
-                        _rebuild();
-                      },
+                                );
+                                if (ok != true) return;
+                                if (isFolder) {
+                                  final root = col.root.toJson();
+                                  _folderDelete(root, d.folderId!);
+                                  await repo.upsertCollection({
+                                    'id': col.id,
+                                    'name': col.name,
+                                    'root': root,
+                                  });
+                                } else {
+                                  // Delete collection
+                                  await repo.deleteCollection(col.id);
+                                }
+                              }
+                              await _store.loadLibrary();
+                              _rebuild();
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ],
+                  );
+                },
               ),
-            );
-          },
-        ),
       ),
       actions: [
+        TextButton.icon(
+          onPressed: _onCreateCollection,
+          icon: const Icon(Icons.create_new_folder, size: 18),
+          label: const Text('Создать коллекцию'),
+        ),
+        const Spacer(),
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed:
-              _selected == null
-                  ? null
-                  : () => Navigator.of(context).pop(_selected),
+          onPressed: _selected == null
+              ? null
+              : () => Navigator.of(context).pop(_selected),
           child: const Text('Save'),
         ),
       ],
@@ -257,8 +345,8 @@ class _FolderNode {
 
   const _FolderNode._(this.kind, this.title, this.collectionId, this.folderId);
   const _FolderNode.root() : this._(_FolderKind.root, 'root', null, null);
-  const _FolderNode.collection(String colId, String title)
-    : this._(_FolderKind.collection, title, colId, null);
+  const _FolderNode.collection(String colId, String title, String folderId)
+    : this._(_FolderKind.collection, title, colId, folderId);
   const _FolderNode.folder(String colId, String folderId, String title)
     : this._(_FolderKind.folder, title, colId, folderId);
 
@@ -273,21 +361,20 @@ Future<String?> _promptText(
   final ctrl = TextEditingController(text: initial ?? '');
   return showDialog<String>(
     context: context,
-    builder:
-        (ctx) => AlertDialog(
-          title: Text(title),
-          content: TextField(controller: ctrl, autofocus: true),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: TextField(controller: ctrl, autofocus: true),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(null),
+          child: const Text('Cancel'),
         ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
   );
 }
 

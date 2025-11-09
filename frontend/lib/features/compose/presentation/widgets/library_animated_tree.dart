@@ -41,7 +41,11 @@ class LibraryAnimatedTree extends StatefulWidget {
 class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
   late final TreeNode<_NodeData> _root;
   void _onStoreChanged() {
-    _rebuildTree();
+    if (mounted) {
+      setState(() {
+        _rebuildTree();
+      });
+    }
   }
 
   @override
@@ -61,11 +65,19 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
     if (oldWidget.store != widget.store) {
       oldWidget.store.removeListener(_onStoreChanged);
       widget.store.addListener(_onStoreChanged);
-      _rebuildTree();
+      if (mounted) {
+        setState(() {
+          _rebuildTree();
+        });
+      }
     }
     if (oldWidget.store == widget.store &&
         (oldWidget.searchQuery ?? '') != (widget.searchQuery ?? '')) {
-      _rebuildTree();
+      if (mounted) {
+        setState(() {
+          _rebuildTree();
+        });
+      }
     }
   }
 
@@ -91,14 +103,47 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
         ),
       );
       _root.add(colNode);
-      _buildFolder(colNode, col.root, store, q, col.id);
+      // Don't show root as a folder node - add its contents directly to collection
+      _buildRootContents(colNode, col.root, store, q, col.id);
     }
-    setState(() {});
   }
 
   bool _matches(String name, String q) {
     if (q.isEmpty) return true;
     return name.toLowerCase().contains(q);
+  }
+
+  void _buildRootContents(
+    TreeNode<_NodeData> colNode,
+    ComposeFolderModel root,
+    ComposeStore store,
+    String q,
+    String collectionId,
+  ) {
+    // Add requests from root directly to collection node
+    for (final rid in root.requests) {
+      final tpl = store.requestsById[rid];
+      if (tpl == null) continue;
+      final title = tpl.name.isNotEmpty ? tpl.name : rid;
+      if (!_matches(title, q)) continue;
+
+      final requestNode = TreeNode<_NodeData>(
+        key: 'req:$rid',
+        data: _NodeData(
+          type: _NodeType.request,
+          id: rid,
+          title: title,
+          parentCollectionId: collectionId,
+          folderId: root.id,
+        ),
+      );
+      colNode.add(requestNode);
+    }
+
+    // Add subfolders from root directly to collection node
+    for (final subfolder in root.folders) {
+      _buildFolder(colNode, subfolder, store, q, collectionId);
+    }
   }
 
   bool _buildFolder(
@@ -161,9 +206,14 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
     if (widget.store.loading) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
+    if (widget.store.collections.isEmpty) {
+      return _buildEmptyState(context);
+    }
     return TreeView.simpleTyped<_NodeData, TreeNode<_NodeData>>(
       tree: _root,
       padding: EdgeInsets.zero,
+      showRootNode: false,
+      expansionBehavior: ExpansionBehavior.none,
       builder: (context, node) {
         final d = node.data!;
         switch (d.type) {
@@ -177,6 +227,64 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
             return _requestTile(context, node);
         }
       },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.folder_off,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Библиотека пуста',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Создайте первую коллекцию',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () async {
+                final name = await _promptText(
+                  context,
+                  title: 'Название коллекции',
+                );
+                if (name == null || name.isEmpty) return;
+                final repo = sl<ComposeRepository>();
+                final collectionId =
+                    'col-${DateTime.now().microsecondsSinceEpoch}';
+                final rootFolderId =
+                    'fld-${DateTime.now().microsecondsSinceEpoch}';
+                await repo.upsertCollection({
+                  'id': collectionId,
+                  'name': name,
+                  'root': {
+                    'id': rootFolderId,
+                    'name': '',
+                    'requests': <String>[],
+                    'folders': <Map<String, dynamic>>[],
+                  },
+                });
+                await widget.store.loadLibrary();
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Создать коллекцию'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -217,11 +325,10 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
         ),
         PopupMenuButton<String>(
           tooltip: 'Collection menu',
-          itemBuilder:
-              (ctx) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
+          itemBuilder: (ctx) => const [
+            PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
           onSelected: (v) async {
             final repo = sl<ComposeRepository>();
             final store = widget.store;
@@ -245,21 +352,20 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
             } else if (v == 'delete') {
               final ok = await showDialog<bool>(
                 context: context,
-                builder:
-                    (ctx) => AlertDialog(
-                      title: const Text('Confirm'),
-                      content: const Text('Delete collection?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('OK'),
-                        ),
-                      ],
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Confirm'),
+                  content: const Text('Delete collection?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancel'),
                     ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
               );
               if (ok == true) {
                 await repo.deleteCollection(col.id);
@@ -309,11 +415,10 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
         ),
         PopupMenuButton<String>(
           tooltip: 'Folder menu',
-          itemBuilder:
-              (ctx) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
+          itemBuilder: (ctx) => const [
+            PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
           onSelected: (v) async {
             final repo = sl<ComposeRepository>();
             final store = widget.store;
@@ -339,21 +444,20 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
             } else if (v == 'delete') {
               final ok = await showDialog<bool>(
                 context: context,
-                builder:
-                    (ctx) => AlertDialog(
-                      title: const Text('Confirm'),
-                      content: const Text('Delete folder and its contents?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('OK'),
-                        ),
-                      ],
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Confirm'),
+                  content: const Text('Delete folder and its contents?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancel'),
                     ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
               );
               if (ok == true) {
                 _folderDelete(root, node.data!.id);
@@ -387,11 +491,10 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
           ),
         ),
         PopupMenuButton<String>(
-          itemBuilder:
-              (ctx) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
+          itemBuilder: (ctx) => const [
+            PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
           onSelected: (v) async {
             final repo = sl<ComposeRepository>();
             final tpl = store.requestsById[node.data!.id];
@@ -434,21 +537,20 @@ Future<String?> _promptText(
   final ctrl = TextEditingController(text: initial ?? '');
   return showDialog<String>(
     context: context,
-    builder:
-        (ctx) => AlertDialog(
-          title: Text(title),
-          content: TextField(controller: ctrl, autofocus: true),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: TextField(controller: ctrl, autofocus: true),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(null),
+          child: const Text('Cancel'),
         ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
   );
 }
 
