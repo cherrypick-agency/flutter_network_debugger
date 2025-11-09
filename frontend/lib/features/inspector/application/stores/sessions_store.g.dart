@@ -51,6 +51,7 @@ mixin _$SessionsStore on _SessionsStore, Store {
   Future<void> load({
     String? q,
     String? target,
+    List<String>? tags,
     Set<String>? types,
     Set<String>? statusGroups,
   }) {
@@ -58,6 +59,7 @@ mixin _$SessionsStore on _SessionsStore, Store {
       () => super.load(
         q: q,
         target: target,
+        tags: tags,
         types: types,
         statusGroups: statusGroups,
       ),

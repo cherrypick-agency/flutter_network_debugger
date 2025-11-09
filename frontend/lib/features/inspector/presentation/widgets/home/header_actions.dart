@@ -24,8 +24,10 @@ class HeaderActions extends StatelessWidget {
     this.timelineVisible = true,
     required this.onToggleTimeline,
     this.onOpenCompose,
+    this.onOpenScripts,
     this.onOpenBreakpoints,
     this.onOpenMapping,
+    // this.onOpenPerformance,
   });
 
   final bool showFilters;
@@ -41,8 +43,10 @@ class HeaderActions extends StatelessWidget {
   final bool timelineVisible;
   final VoidCallback onToggleTimeline;
   final VoidCallback? onOpenCompose;
+  final VoidCallback? onOpenScripts;
   final VoidCallback? onOpenBreakpoints;
   final VoidCallback? onOpenMapping;
+  // final VoidCallback? onOpenPerformance;
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +61,9 @@ class HeaderActions extends StatelessWidget {
               onLongPress: () {
                 controller.isOpen ? controller.close() : controller.open();
               },
-              tooltip:
-                  isRecording
-                      ? 'Stop recording (long press for settings)'
-                      : 'Start recording (long press for settings)',
+              tooltip: isRecording
+                  ? 'Stop recording (long press for settings)'
+                  : 'Start recording (long press for settings)',
               icon: Icon(
                 isRecording ? Icons.stop_circle : Icons.radio_button_checked,
                 color: isRecording ? Colors.red : Colors.grey,
@@ -74,14 +77,17 @@ class HeaderActions extends StatelessWidget {
               onPressed: () async {
                 final applied = await showDialog<bool>(
                   context: context,
-                  builder:
-                      (_) => CaptureSettingsDialog(
-                        initialRecording: isRecording,
-                        initialScope:
-                            context.read<HomeUiStore>().captureScope.value,
-                        initialIncludePaused:
-                            context.read<HomeUiStore>().includePaused.value,
-                      ),
+                  builder: (_) => CaptureSettingsDialog(
+                    initialRecording: isRecording,
+                    initialScope: context
+                        .read<HomeUiStore>()
+                        .captureScope
+                        .value,
+                    initialIncludePaused: context
+                        .read<HomeUiStore>()
+                        .includePaused
+                        .value,
+                  ),
                 );
                 if (applied == true) {
                   try {
@@ -96,10 +102,9 @@ class HeaderActions extends StatelessWidget {
           builder: (_) {
             final hasActive = context.read<SessionsFiltersStore>().hasActive;
             final showFiltersActive = showFilters;
-            final color =
-                showFiltersActive
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant;
+            final color = showFiltersActive
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.onSurfaceVariant;
             return Stack(
               clipBehavior: Clip.none,
               children: [
@@ -131,10 +136,9 @@ class HeaderActions extends StatelessWidget {
           tooltip: 'Timeline',
           icon: Icon(
             Icons.view_timeline,
-            color:
-                timelineVisible
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
+            color: timelineVisible
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         IconButton(
@@ -170,6 +174,12 @@ class HeaderActions extends StatelessWidget {
             tooltip: 'Compose',
             icon: const Icon(Icons.playlist_add),
           ),
+        if (onOpenScripts != null)
+          IconButton(
+            onPressed: onOpenScripts,
+            tooltip: 'Scripts',
+            icon: const Icon(Icons.code),
+          ),
         if (onOpenBreakpoints != null)
           IconButton(
             onPressed: onOpenBreakpoints,
@@ -182,6 +192,12 @@ class HeaderActions extends StatelessWidget {
             tooltip: 'Mapping',
             icon: const Icon(Icons.link),
           ),
+        // if (onOpenPerformance != null)
+        //   IconButton(
+        //     onPressed: onOpenPerformance,
+        //     tooltip: 'Performance Insights',
+        //     icon: const Icon(Icons.analytics),
+        //   ),
         if (onOpenIntegrations != null)
           IconButton(
             onPressed: onOpenIntegrations,

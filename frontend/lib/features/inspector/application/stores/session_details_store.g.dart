@@ -81,6 +81,24 @@ mixin _$SessionDetailsStore on _SessionDetailsStore, Store {
     });
   }
 
+  late final _$loadErrorAtom = Atom(
+    name: '_SessionDetailsStore.loadError',
+    context: context,
+  );
+
+  @override
+  String? get loadError {
+    _$loadErrorAtom.reportRead();
+    return super.loadError;
+  }
+
+  @override
+  set loadError(String? value) {
+    _$loadErrorAtom.reportWrite(value, super.loadError, () {
+      super.loadError = value;
+    });
+  }
+
   late final _$openAsyncAction = AsyncAction(
     '_SessionDetailsStore.open',
     context: context,
@@ -134,7 +152,8 @@ mixin _$SessionDetailsStore on _SessionDetailsStore, Store {
 sessionId: ${sessionId},
 frames: ${frames},
 events: ${events},
-loading: ${loading}
+loading: ${loading},
+loadError: ${loadError}
     ''';
   }
 }

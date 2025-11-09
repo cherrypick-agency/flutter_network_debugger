@@ -35,6 +35,8 @@ class RealtimeInspectorService {
       'includeUnassigned': ui.includePaused.value,
       'limit': 1000,
       'groupBy': 'domain',
+      if (filters.selectedTags.isNotEmpty)
+        'tags': filters.selectedTags.toList(),
     };
     print('[RealtimeInspector] Payload prepared: $payload');
 
@@ -140,9 +142,17 @@ class RealtimeInspectorService {
 
     print('[RealtimeInspector] All handlers registered');
 
-    print('[RealtimeInspector] Emitting sessions:subscribe immediately...');
-    // Если уже подключены, отправляем подписку сразу
-    _sio.emit('sessions:subscribe', payload);
+    // Only emit immediately if already connected, otherwise wait for connect handler
+    if (_sio.connected) {
+      print(
+        '[RealtimeInspector] Already connected, emitting sessions:subscribe immediately...',
+      );
+      _sio.emit('sessions:subscribe', payload);
+    } else {
+      print(
+        '[RealtimeInspector] Not connected yet, will emit when connect handler fires',
+      );
+    }
     print('[RealtimeInspector] resubscribeWithCurrentFilters() completed');
   }
 
@@ -156,6 +166,9 @@ class RealtimeInspectorService {
         .load(
           q: ui.sessionSearchQuery.value.trim(),
           target: filters.target.trim(),
+          tags: filters.selectedTags.isNotEmpty
+              ? filters.selectedTags.toList()
+              : null,
         )
         .whenComplete(() {
           // ignore: discarded_futures
@@ -184,6 +197,47 @@ class RealtimeInspectorService {
       httpMeta: (m['httpMeta'] as Map?)?.cast<String, dynamic>(),
       sizes: (m['sizes'] as Map?)?.cast<String, dynamic>(),
       isSocketIo: false,
+      processInfo: _parseProcessInfo(m['processInfo']),
     );
+  }
+
+  ProcessInfo? _parseProcessInfo(dynamic data) {
+    if (data == null) return null;
+    try {
+      final m = data as Map<String, dynamic>;
+      final pid = m['PID'] as int? ?? m['pid'] as int? ?? 0;
+      final name = m['Name'] as String? ?? m['name'] as String? ?? '';
+
+      if (pid == 0 || name.isEmpty) return null;
+
+      return ProcessInfo(
+        pid: pid,
+        name: name,
+        executablePath:
+            m['ExecutablePath'] as String? ?? m['executablePath'] as String?,
+        bundleId: m['BundleID'] as String? ?? m['bundleId'] as String?,
+        icon: _parseProcessIcon(m['Icon'] ?? m['icon']),
+        detectedAt: m['DetectedAt'] != null || m['detectedAt'] != null
+            ? DateTime.tryParse((m['DetectedAt'] ?? m['detectedAt']).toString())
+            : null,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  ProcessIcon? _parseProcessIcon(dynamic data) {
+    if (data == null) return null;
+    try {
+      final m = data as Map<String, dynamic>;
+      final format = m['Format'] as String? ?? m['format'] as String? ?? '';
+      final dataBase64 = m['Data'] as String? ?? m['data'] as String? ?? '';
+
+      if (format.isEmpty || dataBase64.isEmpty) return null;
+
+      return ProcessIcon(format: format, data: dataBase64);
+    } catch (e) {
+      return null;
+    }
   }
 }

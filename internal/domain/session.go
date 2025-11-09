@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	processdomain "network-debugger/internal/features/process/domain"
+)
 
 type FrameCounters struct {
 	Total   int `json:"total"`
@@ -16,15 +20,16 @@ type EventCounters struct {
 }
 
 type Session struct {
-	ID         string        `json:"id"`
-	Target     string        `json:"target"`
-	ClientAddr string        `json:"clientAddr"`
-	StartedAt  time.Time     `json:"startedAt"`
-	ClosedAt   *time.Time    `json:"closedAt"`
-	Error      *string       `json:"error"`
-	Frames     FrameCounters `json:"frames"`
-	Events     EventCounters `json:"events"`
-	Evicted    bool          `json:"evicted"`
-	Kind       string        `json:"kind"` // "ws" | "http"
-	CaptureID  *int          `json:"captureId,omitempty"`
+	ID          string                     `json:"id"`
+	Target      string                     `json:"target"`
+	ClientAddr  string                     `json:"clientAddr"`
+	StartedAt   time.Time                  `json:"startedAt"`
+	ClosedAt    *time.Time                 `json:"closedAt"`
+	Error       *string                    `json:"error"`
+	Frames      FrameCounters              `json:"frames"`
+	Events      EventCounters              `json:"events"`
+	Evicted     bool                       `json:"evicted"`
+	Kind        string                     `json:"kind"` // "ws" | "http"
+	CaptureID   *int                       `json:"captureId,omitempty"`
+	ProcessInfo *processdomain.ProcessInfo `json:"processInfo,omitempty"`
 }

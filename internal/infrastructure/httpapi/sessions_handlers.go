@@ -39,7 +39,38 @@ func (d *Deps) handleListSessions(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	f := usecase.SessionFilter{Q: q, Target: target, Limit: limit, Offset: offset}
+
+	// Parse tags filter (comma-separated)
+	var sessionIDs []string
+	tagsParam := r.URL.Query().Get("tags")
+	if tagsParam != "" && d.TagsSvc != nil {
+		tagNames := strings.Split(tagsParam, ",")
+		// Trim whitespace from tag names
+		for i := range tagNames {
+			tagNames[i] = strings.TrimSpace(tagNames[i])
+		}
+		// Filter out empty tags
+		filtered := make([]string, 0, len(tagNames))
+		for _, t := range tagNames {
+			if t != "" {
+				filtered = append(filtered, t)
+			}
+		}
+		if len(filtered) > 0 {
+			ids, err := d.TagsSvc.FindSessionIDsByTags(r.Context(), filtered)
+			if err == nil {
+				sessionIDs = ids
+			}
+		}
+	}
+
+	f := usecase.SessionFilter{
+		Q:          q,
+		Target:     target,
+		Limit:      limit,
+		Offset:     offset,
+		SessionIDs: sessionIDs,
+	}
 	items, total, err := d.Svc.List(r.Context(), f)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "SESSIONS_LIST_FAILED", err.Error(), nil)
@@ -311,11 +342,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 	views := make([]sessionV1, 0, len(items))
 	for _, s := range items {
 		view := sessionV1{Session: s}
-		meta, sz := d.computeHTTPMeta(r.Context(), s.ID)
-		if meta == nil && s.Error != nil {
-			code := classifyNetError(*s.Error)
-			meta = &httpMetaV1{Method: "", Status: 0, Mime: "", DurationMs: 0, Streaming: false, Headers: map[string]string{}, ErrorCode: code, ErrorMessage: *s.Error}
-		}
+		meta, sz := d.enrichWithHTTPMeta(r.Context(), s)
 		if meta != nil {
 			view.HttpMeta = meta
 		}
@@ -371,6 +398,13 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 1 {
 		if r.Method == http.MethodDelete {
+			// CASCADE DELETE: Remove tags and annotations before deleting session
+			if d.TagsSvc != nil {
+				// Best effort deletion - ignore errors
+				_ = d.TagsSvc.DeleteAllSessionTags(r.Context(), id)
+				_ = d.TagsSvc.DeleteAllAnnotations(r.Context(), id)
+			}
+
 			_ = d.Svc.Delete(r.Context(), id)
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -432,6 +466,10 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]any{"stored": false, "reason": "not_implemented"})
+	case "tags":
+		d.handleSessionTags(w, r)
+	case "annotations":
+		d.handleSessionAnnotations(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
 	}
@@ -1059,4 +1097,132 @@ func containsFoldSlice(arr []string, val string) bool {
 		}
 	}
 	return false
+}
+
+// computeQuickHTTPMetaFromFrames — быстрый best-effort: вытащим method/status/mime из превью кадров,
+// чтобы фронт видел базовую мету до записи транзакции.
+func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID string) *httpMetaV1 {
+	frames, _, _ := d.Svc.ListFrames(ctx, sessionID, "", 1000)
+	if len(frames) == 0 {
+		return nil
+	}
+	var method string
+	var status int
+	var mime string
+	var reqTs, respTs time.Time
+	// от конца к началу ищем http_response со статусом и типом
+	for i := len(frames) - 1; i >= 0; i-- {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(frames[i].Preview), &m); err != nil {
+			continue
+		}
+		if t, _ := m["type"].(string); t == "http_response" {
+			respTs = frames[i].Ts
+			if st, ok := m["status"].(float64); ok {
+				status = int(st)
+			}
+			if hmap, ok := m["headers"].(map[string]any); ok {
+				if ct, ok2 := headerGetCaseInsensitive(hmap, "content-type"); ok2 {
+					mime = ct
+				}
+			}
+			break
+		}
+	}
+	// вперёд ищем первый http_request с методом
+	for i := 0; i < len(frames); i++ {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(frames[i].Preview), &m); err != nil {
+			continue
+		}
+		if t, _ := m["type"].(string); t == "http_request" {
+			reqTs = frames[i].Ts
+			if meth, ok := m["method"].(string); ok {
+				method = meth
+			}
+			break
+		}
+	}
+	if method == "" && status == 0 && mime == "" {
+		return nil
+	}
+	// Вычисляем длительность из timestamps фреймов
+	var durationMs int64
+	if !reqTs.IsZero() && !respTs.IsZero() {
+		dur := respTs.Sub(reqTs)
+		durationMs = dur.Milliseconds()
+		if durationMs < 0 {
+			durationMs = 0
+		}
+		// Если длительность > 0 но < 1ms, округляем до 1ms (как в durationMs функции)
+		if durationMs == 0 && dur > 0 {
+			durationMs = 1
+		}
+	}
+	out := &httpMetaV1{Method: method, Status: status, Mime: mime, DurationMs: durationMs}
+	return out
+}
+
+// headerGetCaseInsensitive возвращает значение заголовка независимо от регистра ключа.
+func headerGetCaseInsensitive(h map[string]any, lowerName string) (string, bool) {
+	for k, v := range h {
+		if strings.EqualFold(k, lowerName) {
+			switch vv := v.(type) {
+			case string:
+				return vv, true
+			case []any:
+				if len(vv) > 0 {
+					if s, ok := vv[0].(string); ok {
+						return s, true
+					}
+				}
+			case []string:
+				if len(vv) > 0 {
+					return vv[0], true
+				}
+			}
+		}
+	}
+	// быстрые варианты в случае точного совпадения ключа
+	if v, ok := h["content-type"]; ok {
+		if s, ok2 := v.(string); ok2 {
+			return s, true
+		}
+	}
+	if v, ok := h["Content-Type"]; ok {
+		if s, ok2 := v.(string); ok2 {
+			return s, true
+		}
+	}
+	return "", false
+}
+
+// enrichWithHTTPMeta — общая логика enrichment для DRY (используется в REST API и WebSocket).
+// Пытается получить httpMeta из HTTPTransaction, если не удалось — fallback на извлечение из frames.
+func (d *Deps) enrichWithHTTPMeta(ctx context.Context, sess domain.Session) (*httpMetaV1, *sizeInfoV1) {
+	// 1. Попытка получить из HTTPTransaction
+	meta, sz := d.computeHTTPMeta(ctx, sess.ID)
+
+	// 2. Если не получилось и есть ошибка — вернуть error meta
+	if meta == nil && sess.Error != nil {
+		code := classifyNetError(*sess.Error)
+		meta = &httpMetaV1{
+			Method:       "",
+			Status:       0,
+			Mime:         "",
+			DurationMs:   0,
+			Streaming:    false,
+			Headers:      map[string]string{},
+			ErrorCode:    code,
+			ErrorMessage: *sess.Error,
+		}
+		return meta, sz
+	}
+
+	// 3. Если не получилось и нет ошибки — fallback на извлечение из frames
+	if meta == nil {
+		meta = d.computeQuickHTTPMetaFromFrames(ctx, sess.ID)
+	}
+
+	return meta, sz
 }

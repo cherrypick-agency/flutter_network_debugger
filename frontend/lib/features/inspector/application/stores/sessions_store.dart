@@ -48,13 +48,14 @@ abstract class _SessionsStore with Store {
   Future<void> load({
     String? q,
     String? target,
+    List<String>? tags,
     Set<String>? types,
     Set<String>? statusGroups,
   }) async {
     if (loading) return;
     loading = true;
     try {
-      final res = await _listSessions(q: q, target: target);
+      final res = await _listSessions(q: q, target: target, tags: tags);
       items = ObservableList.of(res);
     } catch (e, st) {
       final msg = resolveErrorMessage(e, st);

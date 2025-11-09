@@ -15,6 +15,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
   Future<List<Session>> listSessions({
     String? q,
     String? target,
+    List<String>? tags,
     Set<String>? types,
     Set<String>? statusGroups,
   }) async {
@@ -43,6 +44,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
           'limit': '1000',
           if (q != null && q.isNotEmpty) 'q': q,
           if (target != null && target.isNotEmpty) '_target': target,
+          if (tags != null && tags.isNotEmpty) 'tags': tags.join(','),
           if (scope == 'all') 'captures': 'all',
           if (scope != 'all') 'captureId': 'current',
           if (includePaused) 'includeUnassigned': 'true',
@@ -55,10 +57,9 @@ class InspectorRepositoryImpl implements InspectorRepository {
           if (((types ?? uiTypes).contains('graphql'))) 'scan': 'graphql',
         },
       );
-      final data =
-          (res.data is Map<String, dynamic>)
-              ? (res.data as Map<String, dynamic>)
-              : {};
+      final data = (res.data is Map<String, dynamic>)
+          ? (res.data as Map<String, dynamic>)
+          : {};
       final items = ((data['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList(growable: false);
@@ -68,29 +69,26 @@ class InspectorRepositoryImpl implements InspectorRepository {
               id: m['id'] as String,
               target: m['target'] as String,
               clientAddr: m['clientAddr'] as String?,
-              startedAt:
-                  m['startedAt'] != null
-                      ? DateTime.tryParse(m['startedAt'].toString())
-                      : null,
-              closedAt:
-                  m['closedAt'] != null
-                      ? DateTime.tryParse(m['closedAt'].toString())
-                      : null,
+              startedAt: m['startedAt'] != null
+                  ? DateTime.tryParse(m['startedAt'].toString())
+                  : null,
+              closedAt: m['closedAt'] != null
+                  ? DateTime.tryParse(m['closedAt'].toString())
+                  : null,
               error: m['error']?.toString(),
               kind: m['kind']?.toString(),
               httpMeta: (m['httpMeta'] as Map?)?.cast<String, dynamic>(),
               sizes: (m['sizes'] as Map?)?.cast<String, dynamic>(),
-              isSocketIo:
-                  (() {
-                    try {
-                      final ev = (m['events'] as Map?)?.cast<String, dynamic>();
-                      final sio =
-                          int.tryParse((ev?['sio'] ?? '0').toString()) ?? 0;
-                      return sio > 0;
-                    } catch (_) {
-                      return false;
-                    }
-                  })(),
+              isSocketIo: (() {
+                try {
+                  final ev = (m['events'] as Map?)?.cast<String, dynamic>();
+                  final sio = int.tryParse((ev?['sio'] ?? '0').toString()) ?? 0;
+                  return sio > 0;
+                } catch (_) {
+                  return false;
+                }
+              })(),
+              processInfo: _parseProcessInfo(m['processInfo']),
             ),
           )
           .toList(growable: false);
@@ -114,10 +112,9 @@ class InspectorRepositoryImpl implements InspectorRepository {
           if (from != null && from.isNotEmpty) 'from': from,
         },
       );
-      final data =
-          (res.data is Map<String, dynamic>)
-              ? (res.data as Map<String, dynamic>)
-              : {};
+      final data = (res.data is Map<String, dynamic>)
+          ? (res.data as Map<String, dynamic>)
+          : {};
       final items = ((data['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList(growable: false);
@@ -152,10 +149,9 @@ class InspectorRepositoryImpl implements InspectorRepository {
           if (from != null && from.isNotEmpty) 'from': from,
         },
       );
-      final data =
-          (res.data is Map<String, dynamic>)
-              ? (res.data as Map<String, dynamic>)
-              : {};
+      final data = (res.data is Map<String, dynamic>)
+          ? (res.data as Map<String, dynamic>)
+          : {};
       final items = ((data['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList(growable: false);
@@ -184,13 +180,51 @@ class InspectorRepositoryImpl implements InspectorRepository {
       path: '/_api/v1/sessions/aggregate',
       query: {'groupBy': groupBy},
     );
-    final data =
-        (res.data is Map<String, dynamic>)
-            ? (res.data as Map<String, dynamic>)
-            : {};
-    final groups =
-        (data['groups'] as List<dynamic>? ?? const [])
-            .cast<Map<String, dynamic>>();
+    final data = (res.data is Map<String, dynamic>)
+        ? (res.data as Map<String, dynamic>)
+        : {};
+    final groups = (data['groups'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
     return groups;
+  }
+
+  ProcessInfo? _parseProcessInfo(dynamic data) {
+    if (data == null) return null;
+    try {
+      final m = data as Map<String, dynamic>;
+      final pid = m['PID'] as int? ?? m['pid'] as int? ?? 0;
+      final name = m['Name'] as String? ?? m['name'] as String? ?? '';
+
+      if (pid == 0 || name.isEmpty) return null;
+
+      return ProcessInfo(
+        pid: pid,
+        name: name,
+        executablePath:
+            m['ExecutablePath'] as String? ?? m['executablePath'] as String?,
+        bundleId: m['BundleID'] as String? ?? m['bundleId'] as String?,
+        icon: _parseProcessIcon(m['Icon'] ?? m['icon']),
+        detectedAt: m['DetectedAt'] != null || m['detectedAt'] != null
+            ? DateTime.tryParse((m['DetectedAt'] ?? m['detectedAt']).toString())
+            : null,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  ProcessIcon? _parseProcessIcon(dynamic data) {
+    if (data == null) return null;
+    try {
+      final m = data as Map<String, dynamic>;
+      final format = m['Format'] as String? ?? m['format'] as String? ?? '';
+      final dataBase64 = m['Data'] as String? ?? m['data'] as String? ?? '';
+
+      if (format.isEmpty || dataBase64.isEmpty) return null;
+
+      return ProcessIcon(format: format, data: dataBase64);
+    } catch (e) {
+      return null;
+    }
   }
 }

@@ -31,11 +31,15 @@ abstract class _SessionDetailsStore with Store {
   @observable
   bool loading = false;
 
+  @observable
+  String? loadError;
+
   @action
   Future<void> open(String id) async {
     sessionId = id;
     frames.clear();
     events.clear();
+    loadError = null;
     await Future.wait([loadMoreFrames(), loadMoreEvents()]);
     _subscribeToSession();
   }
@@ -49,12 +53,14 @@ abstract class _SessionDetailsStore with Store {
   Future<void> loadMoreFrames() async {
     if (sessionId == null || loading) return;
     loading = true;
+    loadError = null;
     try {
       final from = frames.isNotEmpty ? frames.last.id : null;
       final res = await _listFrames(sessionId!, from: from, limit: 100);
       frames.addAll(res);
     } catch (e, st) {
       final msg = resolveErrorMessage(e, st);
+      loadError = msg.description;
       sl<NotificationsService>().errorFromResolved(msg);
     } finally {
       loading = false;
@@ -65,12 +71,14 @@ abstract class _SessionDetailsStore with Store {
   Future<void> loadMoreEvents() async {
     if (sessionId == null || loading) return;
     loading = true;
+    loadError = null;
     try {
       final from = events.isNotEmpty ? events.last.id : null;
       final res = await _listEvents(sessionId!, from: from, limit: 100);
       events.addAll(res);
     } catch (e, st) {
       final msg = resolveErrorMessage(e, st);
+      loadError = msg.description;
       sl<NotificationsService>().errorFromResolved(msg);
     } finally {
       loading = false;

@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../core/di/di.dart';
 import '../../application/stores/home_ui_store.dart';
 import 'package:provider/provider.dart';
 import '../../application/stores/aggregate_store.dart';
+import '../../domain/entities/session.dart';
 
 class SessionsColumn extends StatefulWidget {
   const SessionsColumn({
@@ -148,9 +151,8 @@ class _SessionsColumnState extends State<SessionsColumn> {
               counts.putIfAbsent(d, () => 0);
             }
             // Stable sort by domain name
-            final domains =
-                counts.keys.toList()
-                  ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+            final domains = counts.keys.toList()
+              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
             final labels = [for (final d in domains) '$d (${counts[d]})'];
 
             const double spacing = 6.0;
@@ -190,11 +192,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
                   }
                 }
                 final int visibleRows = rows.clamp(0, 3);
-                final double maxHeight =
-                    visibleRows > 0
-                        ? (rowHeight * visibleRows +
-                            runSpacing * (visibleRows - 1))
-                        : 0;
+                final double maxHeight = visibleRows > 0
+                    ? (rowHeight * visibleRows + runSpacing * (visibleRows - 1))
+                    : 0;
 
                 Widget wrap = Wrap(
                   spacing: spacing,
@@ -217,8 +217,8 @@ class _SessionsColumnState extends State<SessionsColumn> {
                             ),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
-                            onSelected:
-                                (_) => widget.onToggleDomain(key, !selected),
+                            onSelected: (_) =>
+                                widget.onToggleDomain(key, !selected),
                           );
                         },
                       ),
@@ -264,22 +264,21 @@ class _SessionsColumnState extends State<SessionsColumn> {
     // Определяем общий домен среди текущих видимых сессий.
     // Если у всех сессий один и тот же host — в списке ниже домен скрываем,
     // чтобы строка была короче и читалась проще.
-    final String? commonHost =
-        (() {
-          String? host;
-          for (final s in widget.sessions) {
-            try {
-              final h = Uri.parse((s.target as String)).host;
-              if (h.isEmpty)
-                return null; // встретилась пустая/битая ссылка — не скрываем
-              host ??= h;
-              if (host != h) return null; // разные домены — показываем как есть
-            } catch (_) {
-              return null;
-            }
-          }
-          return host; // одинаковый host у всех элементов
-        })();
+    final String? commonHost = (() {
+      String? host;
+      for (final s in widget.sessions) {
+        try {
+          final h = Uri.parse((s.target as String)).host;
+          if (h.isEmpty)
+            return null; // встретилась пустая/битая ссылка — не скрываем
+          host ??= h;
+          if (host != h) return null; // разные домены — показываем как есть
+        } catch (_) {
+          return null;
+        }
+      }
+      return host; // одинаковый host у всех элементов
+    })();
 
     return ListView.builder(
       controller: widget.sessionsCtrl,
@@ -319,8 +318,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
         final hasResponse = status > 0;
         final isClosed = s.closedAt != null;
         final hasError = (s.error ?? '').toString().isNotEmpty;
-        final corsOk =
-            hasResponse ? ((meta['cors']?['ok'] ?? true) == true) : true;
+        final corsOk = hasResponse
+            ? ((meta['cors']?['ok'] ?? true) == true)
+            : true;
         final isWs = (s.kind == 'ws') || (method.isEmpty && (s.kind == null));
 
         final idStr = (s.id as String);
@@ -358,51 +358,62 @@ class _SessionsColumnState extends State<SessionsColumn> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color:
-                          widget.selectedSessionId == s.id
-                              ? Theme.of(
-                                context,
-                              ).colorScheme.primary.withOpacity(0.06)
-                              : null,
+                      color: widget.selectedSessionId == s.id
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.primary.withOpacity(0.06)
+                          : null,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // URL
-                        Builder(
-                          builder: (context) {
-                            final errCode =
-                                (meta['errorCode'] ?? '').toString();
-                            final warn =
-                                errCode == 'TIMEOUT' ||
-                                errCode == 'DNS' ||
-                                errCode == 'TLS';
-                            final mark = Theme.of(context).colorScheme.tertiary;
-                            final child = _buildHighlightedUrl(
-                              context,
-                              _formatDisplayUrl(
-                                s.target as String,
-                                suppressHost: commonHost,
+                        // Process icon + URL
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Process icon
+                            _buildProcessIcon(s.processInfo),
+                            // URL
+                            Expanded(
+                              child: Builder(
+                                builder: (context) {
+                                  final errCode = (meta['errorCode'] ?? '')
+                                      .toString();
+                                  final warn =
+                                      errCode == 'TIMEOUT' ||
+                                      errCode == 'DNS' ||
+                                      errCode == 'TLS';
+                                  final mark = Theme.of(
+                                    context,
+                                  ).colorScheme.tertiary;
+                                  final child = _buildHighlightedUrl(
+                                    context,
+                                    _formatDisplayUrl(
+                                      s.target as String,
+                                      suppressHost: commonHost,
+                                    ),
+                                    widget.sessionSearchCtrl.text,
+                                  );
+                                  if (!warn) return child;
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: mark.withOpacity(0.06),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border(
+                                        left: BorderSide(color: mark, width: 2),
+                                      ),
+                                    ),
+                                    child: child,
+                                  );
+                                },
                               ),
-                              widget.sessionSearchCtrl.text,
-                            );
-                            if (!warn) return child;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: mark.withOpacity(0.06),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border(
-                                  left: BorderSide(color: mark, width: 2),
-                                ),
-                              ),
-                              child: child,
-                            );
-                          },
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Row(
@@ -413,41 +424,44 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
+                                  // Process name chip
+                                  if (s.processInfo?.name != null)
+                                    _chip(
+                                      s.processInfo!.name,
+                                      backgroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.primaryContainer,
+                                      foregroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimaryContainer,
+                                    ),
                                   if (isWs)
                                     _chip(
                                       (s.closedAt == null)
                                           ? 'WS open'
                                           : 'WS closed',
-                                      backgroundColor:
-                                          (s.closedAt == null)
-                                              ? Theme.of(context)
-                                                  .colorScheme
-                                                  .secondaryContainer
-                                                  .withOpacity(0.18)
-                                              : Theme.of(context)
-                                                  .colorScheme
-                                                  .error
-                                                  .withOpacity(0.12),
-                                      foregroundColor:
-                                          (s.closedAt == null)
-                                              ? context.appColors.success
-                                              : Theme.of(
-                                                context,
-                                              ).colorScheme.error,
+                                      backgroundColor: (s.closedAt == null)
+                                          ? Theme.of(context)
+                                                .colorScheme
+                                                .secondaryContainer
+                                                .withOpacity(0.18)
+                                          : Theme.of(context).colorScheme.error
+                                                .withOpacity(0.12),
+                                      foregroundColor: (s.closedAt == null)
+                                          ? context.appColors.success
+                                          : Theme.of(context).colorScheme.error,
                                     ),
                                   if (isWs && s.isSocketIo == true)
                                     _chip('socket.io'),
                                   if (!isWs && method.isNotEmpty)
                                     _chip(
                                       method.toUpperCase(),
-                                      backgroundColor:
-                                          Theme.of(
-                                            context,
-                                          ).colorScheme.surfaceVariant,
-                                      foregroundColor:
-                                          Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
+                                      backgroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceVariant,
+                                      foregroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                     ),
                                   if (!isWs && status > 0)
                                     _chip(
@@ -471,16 +485,17 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                         (() {
                                           final m =
                                               (widget.httpMeta[s.id] ??
-                                                  const {});
-                                          final code =
-                                              (m['errorCode'] ?? '').toString();
+                                              const {});
+                                          final code = (m['errorCode'] ?? '')
+                                              .toString();
                                           return code.isNotEmpty ? code : 'ERR';
                                         })(),
                                         backgroundColor: Theme.of(
                                           context,
                                         ).colorScheme.error.withOpacity(0.12),
-                                        foregroundColor:
-                                            Theme.of(context).colorScheme.error,
+                                        foregroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
                                       ),
                                     ),
                                   if (!isWs && !hasResponse && !isClosed)
@@ -506,27 +521,26 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                   if (!isWs && cacheStatus.isNotEmpty)
                                     (cacheStatus.toUpperCase() == 'MISS')
                                         ? _chipStrike(
-                                          'cache',
-                                          backgroundColor:
-                                              Theme.of(
-                                                context,
-                                              ).colorScheme.surfaceVariant,
-                                          foregroundColor:
-                                              Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
-                                        )
+                                            'cache',
+                                            backgroundColor: Theme.of(
+                                              context,
+                                            ).colorScheme.surfaceVariant,
+                                            foregroundColor: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                          )
                                         : _chip(
-                                          'cache: ${cacheStatus.toUpperCase()}',
-                                        ),
+                                            'cache: ${cacheStatus.toUpperCase()}',
+                                          ),
                                   if (!isWs && !corsOk)
                                     _chip(
                                       'CORS',
                                       backgroundColor: Theme.of(
                                         context,
                                       ).colorScheme.error.withOpacity(0.12),
-                                      foregroundColor:
-                                          Theme.of(context).colorScheme.error,
+                                      foregroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
                                     ),
                                 ],
                               ),
@@ -542,18 +556,20 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                 ),
                                 if (s.closedAt != null)
                                   (() {
-                                    final code =
-                                        (meta['errorCode'] ?? '').toString();
+                                    final code = (meta['errorCode'] ?? '')
+                                        .toString();
                                     if (code.isEmpty)
                                       return const SizedBox.shrink();
                                     return Text(
                                       'Closed ($code)',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.labelSmall?.copyWith(
-                                        color:
-                                            Theme.of(context).colorScheme.error,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.error,
+                                          ),
                                     );
                                   })(),
                               ],
@@ -631,8 +647,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
       if (suppressHost != null &&
           suppressHost.isNotEmpty &&
           u.host == suppressHost) {
-        final String path =
-            u.path.startsWith('/') ? u.path.substring(1) : u.path;
+        final String path = u.path.startsWith('/')
+            ? u.path.substring(1)
+            : u.path;
         final String q = u.query.isNotEmpty ? '?${u.query}' : '';
         final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
         return '/$path$q$frag';
@@ -640,8 +657,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
       // Иначе — оставляем как есть, но нормализуем двойное кодирование
       // (например, если пришло messages?%3Flimit=20, восстановим как messages?limit=20).
       // Для этого собираем строку из разобранных компонентов.
-      final String auth =
-          u.hasAuthority ? '${u.host}${u.hasPort ? ':${u.port}' : ''}' : '';
+      final String auth = u.hasAuthority
+          ? '${u.host}${u.hasPort ? ':${u.port}' : ''}'
+          : '';
       final String base = u.scheme.isNotEmpty ? '${u.scheme}://$auth' : auth;
       final String q = u.query.isNotEmpty ? '?${u.query}' : '';
       final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
@@ -749,6 +767,39 @@ class _SessionsColumnState extends State<SessionsColumn> {
     final atBottom = (pos.maxScrollExtent - pos.pixels) <= threshold;
     _stickToBottom = atBottom;
   }
+
+  Widget _buildProcessIcon(ProcessInfo? processInfo) {
+    if (processInfo?.icon == null) {
+      return const SizedBox.shrink();
+    }
+
+    try {
+      final iconData = processInfo!.icon!.data;
+      final bytes = base64Decode(iconData);
+
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: CircleAvatar(
+          radius: 10,
+          backgroundColor: Colors.transparent,
+          child: ClipOval(
+            child: Image.memory(
+              bytes,
+              width: 20,
+              height: 20,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(Icons.apps, size: 14),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      return const Padding(
+        padding: EdgeInsets.only(right: 6),
+        child: CircleAvatar(radius: 10, child: Icon(Icons.apps, size: 14)),
+      );
+    }
+  }
 }
 
 class _Appear extends StatelessWidget {
@@ -780,11 +831,10 @@ class _Appear extends StatelessWidget {
 class ChipStrikePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final p =
-        Paint()
-          ..color = const Color(0xFF9E9E9E)
-          ..strokeWidth = 1.4
-          ..style = PaintingStyle.stroke;
+    final p = Paint()
+      ..color = const Color(0xFF9E9E9E)
+      ..strokeWidth = 1.4
+      ..style = PaintingStyle.stroke;
     final start = const Offset(2, 2);
     final end = Offset(size.width - 2, size.height - 2);
     canvas.drawLine(start, end, p);

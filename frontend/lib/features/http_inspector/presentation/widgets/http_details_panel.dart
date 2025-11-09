@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:app_http_client/application/app_http_client.dart';
 import 'package:highlight_selectable/highlight_selectable.dart';
 import 'package:highlight_selectable/theme_map.dart';
@@ -9,12 +10,14 @@ import '../../../inspector/presentation/utils/graphql_formatter.dart';
 import '../../../inspector/presentation/utils/body_view_mode.dart';
 import '../../../inspector/presentation/utils/body_content_analyzer.dart';
 import '../../../inspector/presentation/widgets/jwt_viewer.dart';
+import '../../../inspector/application/stores/session_details_store.dart';
 import '../../../../core/network/error_utils.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../widgets/json_viewer.dart';
 import '../../../../core/di/di.dart';
 import '../../../../widgets/html_preview.dart';
 import 'form_data_view.dart';
+import 'highlighted_url_text.dart';
 
 enum CurlExportMode { compact, multiline, withOptions }
 
@@ -52,8 +55,9 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     _fetchHighlightThemeFromBackend(isDark: isDark).then((saved) {
       if (!mounted) return;
       setState(() {
-        _highlightThemeKey =
-            (saved != null && themeMap.containsKey(saved)) ? saved : def;
+        _highlightThemeKey = (saved != null && themeMap.containsKey(saved))
+            ? saved
+            : def;
       });
     });
     _highlightThemeKey = def;
@@ -88,13 +92,24 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
 
   String _detectLanguage(String text, String? contentType) {
     final ct = (contentType ?? '').toLowerCase();
-    if (ct.contains('html') || _looksLikeHtml(text)) return 'html';
-    if (ct.contains('xml') || text.trimLeft().startsWith('<?xml')) return 'xml';
-    if (ct.contains('javascript') || ct.contains('ecmascript'))
+    if (ct.contains('html') || _looksLikeHtml(text)) {
+      return 'html';
+    }
+    if (ct.contains('xml') || text.trimLeft().startsWith('<?xml')) {
+      return 'xml';
+    }
+    if (ct.contains('javascript') || ct.contains('ecmascript')) {
       return 'javascript';
-    if (ct.contains('typescript')) return 'typescript';
-    if (ct.contains('css')) return 'css';
-    if (GraphqlLanguageDetector.isLikelyGraphql(text)) return 'graphql';
+    }
+    if (ct.contains('typescript')) {
+      return 'typescript';
+    }
+    if (ct.contains('css')) {
+      return 'css';
+    }
+    if (GraphqlLanguageDetector.isLikelyGraphql(text)) {
+      return 'graphql';
+    }
     return 'plaintext';
   }
 
@@ -131,10 +146,9 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     final resp = _findByType(widget.frames, 'http_response');
     final reqTs = _tsOf(widget.frames, 'http_request');
     final respTs = _tsOf(widget.frames, 'http_response');
-    final durationMs =
-        (reqTs != null && respTs != null)
-            ? respTs.difference(reqTs).inMilliseconds
-            : null;
+    final durationMs = (reqTs != null && respTs != null)
+        ? respTs.difference(reqTs).inMilliseconds
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,10 +188,64 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
 
   Widget _buildRequest(BuildContext context, Map<String, dynamic>? req) {
     if (req == null) {
-      final method =
-          (widget.httpMeta?['method'] ?? '').toString().toUpperCase();
+      final method = (widget.httpMeta?['method'] ?? '')
+          .toString()
+          .toUpperCase();
       if (method == 'CONNECT') return _connectPlaceholder(context);
-      return Text('No data', style: context.appText.body);
+
+      // Check loading/error states from store
+      final details = context.watch<SessionDetailsStore>();
+
+      // Show loading indicator if currently loading and no frames yet
+      if (details.loading && widget.frames.isEmpty) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text('Loading request data...', style: context.appText.body),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // Show error state if there was a load error
+      if (details.loadError != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: context.appColors.danger,
+                ),
+                const SizedBox(height: 16),
+                Text('Failed to load data', style: context.appText.subtitle),
+                const SizedBox(height: 8),
+                Text(
+                  details.loadError!,
+                  style: context.appText.body.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // No data (successful load but no HTTP request found)
+      return Center(
+        child: Text('No request data', style: context.appText.body),
+      );
     }
     final headers =
         (req['headers'] as Map?)?.map(
@@ -190,13 +258,12 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ) ??
         <String, String>{};
     final body = _normalizeMaybeQuotedJson((req['body'] ?? '').toString());
-    final ctHeader =
-        headers.entries
-            .firstWhere(
-              (e) => e.key.toLowerCase() == 'content-type',
-              orElse: () => const MapEntry('', ''),
-            )
-            .value;
+    final ctHeader = headers.entries
+        .firstWhere(
+          (e) => e.key.toLowerCase() == 'content-type',
+          orElse: () => const MapEntry('', ''),
+        )
+        .value;
     final ctLower = ctHeader.toLowerCase();
     final hasFormObj = req['form'] is Map && (req['form'] as Map).isNotEmpty;
     final isFormCt =
@@ -212,33 +279,42 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     // cookies: prefer raw (unmasked) if available
     final cookieHeader =
         headersRaw.entries
-                .firstWhere(
-                  (e) => e.key.toLowerCase() == 'cookie',
-                  orElse: () => const MapEntry('', ''),
-                )
-                .value
-                .isNotEmpty
-            ? headersRaw.entries
-                .firstWhere(
-                  (e) => e.key.toLowerCase() == 'cookie',
-                  orElse: () => const MapEntry('', ''),
-                )
-                .value
-            : headers.entries
-                .firstWhere(
-                  (e) => e.key.toLowerCase() == 'cookie',
-                  orElse: () => const MapEntry('', ''),
-                )
-                .value;
+            .firstWhere(
+              (e) => e.key.toLowerCase() == 'cookie',
+              orElse: () => const MapEntry('', ''),
+            )
+            .value
+            .isNotEmpty
+        ? headersRaw.entries
+              .firstWhere(
+                (e) => e.key.toLowerCase() == 'cookie',
+                orElse: () => const MapEntry('', ''),
+              )
+              .value
+        : headers.entries
+              .firstWhere(
+                (e) => e.key.toLowerCase() == 'cookie',
+                orElse: () => const MapEntry('', ''),
+              )
+              .value;
     final reqCookies = _parseRequestCookies(cookieHeader);
     return ListView(
       children: [
         // Полная строка URL в отдельной строке со скроллом
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: SelectableText(
-            '${(req['method'] ?? '').toString().toUpperCase()}  ${normalizedUrl ?? url}',
-            style: context.appText.subtitle,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelectableText(
+                '${(req['method'] ?? '').toString().toUpperCase()}  ',
+                style: context.appText.subtitle,
+              ),
+              HighlightedUrlText(
+                url: normalizedUrl ?? url,
+                baseStyle: context.appText.subtitle,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 6),
@@ -308,10 +384,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ...qp.entries.map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: SelectableText(
-                '${e.key}: ${e.value.join(', ')}',
-                style: context.appText.monospace,
-              ),
+              child: _KeyValueItem(name: e.key, value: e.value.join(', ')),
             ),
           ),
           const SizedBox(height: 8),
@@ -322,20 +395,16 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ...reqCookies.entries.map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: SelectableText(
-                '${e.key}: ${e.value}',
-                style: context.appText.monospace,
-              ),
+              child: _KeyValueItem(name: e.key, value: e.value),
             ),
           ),
           const SizedBox(height: 8),
         ],
         // Form Data (multipart/urlencoded) – если есть, показываем перед сырым Body
         FormDataView(
-          form:
-              (req['form'] is Map)
-                  ? (req['form'] as Map).cast<String, dynamic>()
-                  : null,
+          form: (req['form'] is Map)
+              ? (req['form'] as Map).cast<String, dynamic>()
+              : null,
           contentType: ctHeader,
           rawBody: body,
         ),
@@ -382,28 +451,80 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         const SizedBox(height: 8),
         Text('Headers', style: context.appText.subtitle),
         const SizedBox(height: 4),
-        ...headers.entries
-            .map(
-              (e) => Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: _HeaderItem(
-                  name: e.key,
-                  value: e.value,
-                  raw: headersRaw[e.key],
-                ),
-              ),
-            )
-            .toList(),
+        ...headers.entries.map(
+          (e) => Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: _HeaderItem(
+              name: e.key,
+              value: e.value,
+              raw: headersRaw[e.key],
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildResponse(BuildContext context, Map<String, dynamic>? resp) {
     if (resp == null) {
-      final method =
-          (widget.httpMeta?['method'] ?? '').toString().toUpperCase();
+      final method = (widget.httpMeta?['method'] ?? '')
+          .toString()
+          .toUpperCase();
       if (method == 'CONNECT') return _connectPlaceholder(context);
-      return Text('No data', style: context.appText.body);
+
+      // Check loading/error states from store
+      final details = context.watch<SessionDetailsStore>();
+
+      // Show loading indicator if currently loading and no frames yet
+      if (details.loading && widget.frames.isEmpty) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text('Loading response data...', style: context.appText.body),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // Show error state if there was a load error
+      if (details.loadError != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: context.appColors.danger,
+                ),
+                const SizedBox(height: 16),
+                Text('Failed to load data', style: context.appText.subtitle),
+                const SizedBox(height: 8),
+                Text(
+                  details.loadError!,
+                  style: context.appText.body.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // No data (successful load but no HTTP response found)
+      return Center(
+        child: Text('No response data', style: context.appText.body),
+      );
     }
     final headers =
         (resp['headers'] as Map?)?.map(
@@ -416,14 +537,13 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ) ??
         <String, String>{};
     final rawBody = (resp['body'] ?? '').toString();
-    final ctHeader =
-        headers.entries
-            .firstWhere(
-              (e) => e.key.toLowerCase() == 'content-type',
-              orElse: () => const MapEntry('', ''),
-            )
-            .value
-            .toLowerCase();
+    final ctHeader = headers.entries
+        .firstWhere(
+          (e) => e.key.toLowerCase() == 'content-type',
+          orElse: () => const MapEntry('', ''),
+        )
+        .value
+        .toLowerCase();
     final isJsonCt = ctHeader.contains('json') || ctHeader.contains('+json');
     final body = _normalizeMaybeQuotedJson(
       (_bodyOverride ?? rawBody).toString(),
@@ -437,10 +557,9 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         <String, String>{};
     final reqTs = _tsOf(widget.frames, 'http_request');
     final respTs = _tsOf(widget.frames, 'http_response');
-    final durationMs =
-        (reqTs != null && respTs != null)
-            ? respTs.difference(reqTs).inMilliseconds
-            : null;
+    final durationMs = (reqTs != null && respTs != null)
+        ? respTs.difference(reqTs).inMilliseconds
+        : null;
     final status = (resp['status'] ?? 0) as int;
     final color = _statusColor(context, status);
     // Cache & CORS quick analysis
@@ -484,11 +603,11 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               spacing: 8,
               children: [
                 if (_respTotalMs != null)
-                  _chip(context, 'Total: ${_respTotalMs} ms')
+                  _chip(context, 'Total: $_respTotalMs ms')
                 else if (durationMs != null)
-                  _chip(context, 'Total: ${durationMs} ms'),
+                  _chip(context, 'Total: $durationMs ms'),
                 if (_respTtfbMs != null)
-                  _chip(context, 'TTFB: ${_respTtfbMs} ms'),
+                  _chip(context, 'TTFB: $_respTtfbMs ms'),
                 if (_respTotalMs != null &&
                     _respTtfbMs != null &&
                     (_respTotalMs! - _respTtfbMs!) >= 0)
@@ -546,17 +665,17 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
                             if (url.isNotEmpty)
                               _loadingFetch
                                   ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
                                   : IconButton(
-                                    onPressed: () => _refetch(context, url),
-                                    icon: const Icon(Icons.refresh, size: 16),
-                                    tooltip: 'Refetch full body',
-                                  ),
+                                      onPressed: () => _refetch(context, url),
+                                      icon: const Icon(Icons.refresh, size: 16),
+                                      tooltip: 'Refetch full body',
+                                    ),
                           ],
                         ),
                       ),
@@ -578,18 +697,16 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         const SizedBox(height: 8),
         Text('Headers', style: context.appText.subtitle),
         const SizedBox(height: 4),
-        ...headers.entries
-            .map(
-              (e) => Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: _HeaderItem(
-                  name: e.key,
-                  value: e.value,
-                  raw: headersRaw[e.key],
-                ),
-              ),
-            )
-            .toList(),
+        ...headers.entries.map(
+          (e) => Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: _HeaderItem(
+              name: e.key,
+              value: e.value,
+              raw: headersRaw[e.key],
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         // Security section (TLS & Cookies)
         Text('Security', style: context.appText.subtitle),
@@ -618,10 +735,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ..._kvList(cache).map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: SelectableText(
-                '${e.key}: ${e.value}',
-                style: context.appText.monospace,
-              ),
+              child: _KeyValueItem(name: e.key, value: e.value),
             ),
           ),
           const SizedBox(height: 8),
@@ -639,10 +753,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         }).map(
           (e) => Padding(
             padding: const EdgeInsets.only(bottom: 2),
-            child: SelectableText(
-              '${e.key}: ${e.value}',
-              style: context.appText.monospace,
-            ),
+            child: _KeyValueItem(name: e.key, value: e.value),
           ),
         ),
       ],
@@ -734,37 +845,41 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     Map<String, String> respHdr,
   ) {
     final out = <String, dynamic>{};
-    final cc =
-        respHdr.entries
-            .firstWhere(
-              (e) => e.key.toLowerCase() == 'cache-control',
-              orElse: () => const MapEntry('', ''),
-            )
-            .value;
-    final etag =
-        respHdr.entries
-            .firstWhere(
-              (e) => e.key.toLowerCase() == 'etag',
-              orElse: () => const MapEntry('', ''),
-            )
-            .value;
-    final ageStr =
-        respHdr.entries
-            .firstWhere(
-              (e) => e.key.toLowerCase() == 'age',
-              orElse: () => const MapEntry('', ''),
-            )
-            .value;
+    final cc = respHdr.entries
+        .firstWhere(
+          (e) => e.key.toLowerCase() == 'cache-control',
+          orElse: () => const MapEntry('', ''),
+        )
+        .value;
+    final etag = respHdr.entries
+        .firstWhere(
+          (e) => e.key.toLowerCase() == 'etag',
+          orElse: () => const MapEntry('', ''),
+        )
+        .value;
+    final ageStr = respHdr.entries
+        .firstWhere(
+          (e) => e.key.toLowerCase() == 'age',
+          orElse: () => const MapEntry('', ''),
+        )
+        .value;
     final age = int.tryParse(ageStr) ?? 0;
     String st = 'MISS';
-    if (status == 304)
+    if (status == 304) {
       st = 'REVALIDATED';
-    else if (age > 0)
+    } else if (age > 0) {
       st = 'HIT';
+    }
     out['status'] = st;
-    if (cc.isNotEmpty) out['cache-control'] = cc;
-    if (etag.isNotEmpty) out['etag'] = etag;
-    if (age > 0) out['age'] = age;
+    if (cc.isNotEmpty) {
+      out['cache-control'] = cc;
+    }
+    if (etag.isNotEmpty) {
+      out['etag'] = etag;
+    }
+    if (age > 0) {
+      out['age'] = age;
+    }
     return out;
   }
 
@@ -790,30 +905,34 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     if (origin.isEmpty) {
       ok = true;
     } else if (isPreflight) {
-      final reqMethod =
-          _getFold(reqHdr, 'Access-Control-Request-Method').toUpperCase();
+      final reqMethod = _getFold(
+        reqHdr,
+        'Access-Control-Request-Method',
+      ).toUpperCase();
       final reqHeaders = _splitCsv(
         _getFold(reqHdr, 'Access-Control-Request-Headers'),
       );
       final originOk = (allowOrigin == '*' || allowOrigin == origin);
-      final methodOk =
-          allowMethods.isEmpty
-              ? true
-              : allowMethods.map((e) => e.toUpperCase()).contains(reqMethod);
+      final methodOk = allowMethods.isEmpty
+          ? true
+          : allowMethods.map((e) => e.toUpperCase()).contains(reqMethod);
       final headersOk = reqHeaders.every(
         (h) => allowHeaders.any((a) => a.toLowerCase() == h.toLowerCase()),
       );
       ok = originOk && methodOk && headersOk;
-      if (!originOk)
+      if (!originOk) {
         reason = 'origin';
-      else if (!methodOk)
+      } else if (!methodOk) {
         reason = 'method';
-      else if (!headersOk)
+      } else if (!headersOk) {
         reason = 'headers';
+      }
     } else {
       final originOk = (allowOrigin == '*' || allowOrigin == origin);
       ok = originOk;
-      if (!originOk) reason = 'origin';
+      if (!originOk) {
+        reason = 'origin';
+      }
     }
     out['ok'] = ok;
     if (reason.isNotEmpty) out['reason'] = reason;
@@ -952,8 +1071,9 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ),
       );
     }
-    if (out.isEmpty)
+    if (out.isEmpty) {
       out.add(SelectableText('—', style: context.appText.monospace));
+    }
     return out;
   }
 
@@ -979,45 +1099,47 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
       );
       final data = res.data?.toString() ?? '';
       // show modal with full body
-      // ignore: use_build_context_synchronously
+      if (!mounted) {
+        return;
+      }
       await showModalBottomSheet(
+        // ignore: use_build_context_synchronously
         context: context,
         isScrollControlled: true,
-        builder:
-            (_) => Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fetched Body',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: SelectableText(
-                        data,
-                        style: context.appText.monospace,
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: data));
-                      },
-                      icon: const Icon(Icons.copy, size: 16),
-                      label: const Text('Copy'),
-                    ),
-                  ),
-                ],
+        builder: (_) => Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Fetched Body',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-            ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SelectableText(data, style: context.appText.monospace),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: data));
+                  },
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy'),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     } catch (e) {
       final msg = resolveErrorMessage(e);
+      if (!mounted) {
+        return;
+      }
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${msg.title}: ${msg.description}')),
@@ -1047,10 +1169,11 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     } catch (_) {
       // тихо игнорируем
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loadingFetch = false;
         });
+      }
     }
   }
 
@@ -1058,7 +1181,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(text, style: Theme.of(context).textTheme.labelSmall),
@@ -1083,10 +1206,9 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         ) ??
         <String, String>{};
     final body = (req['body'] ?? '').toString();
-    final form =
-        req['form'] is Map
-            ? Map<String, dynamic>.from(req['form'] as Map)
-            : null;
+    final form = req['form'] is Map
+        ? Map<String, dynamic>.from(req['form'] as Map)
+        : null;
 
     // Extract cookies from headers
     String? cookieValue;
@@ -1296,6 +1418,34 @@ class _Card extends StatelessWidget {
   }
 }
 
+class _KeyValueItem extends StatelessWidget {
+  const _KeyValueItem({required this.name, required this.value});
+  final String name;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectableText.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$name: ',
+            style: context.appText.monospace.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: context.appText.monospace.copyWith(
+              color: context.appColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HeaderItem extends StatefulWidget {
   const _HeaderItem({required this.name, required this.value, this.raw});
   final String name;
@@ -1315,9 +1465,10 @@ class _HeaderItemState extends State<_HeaderItem> {
       fontFamily: 'monospace',
       fontWeight: FontWeight.w600,
     );
-    final valueStyle = Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace');
+    final valueStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      color: context.appColors.textSecondary,
+    );
     final iconSize = valueStyle?.fontSize ?? 12;
     final iconColor = valueStyle?.color;
     final lname = widget.name.toLowerCase();
@@ -1369,13 +1520,10 @@ class _HeaderItemState extends State<_HeaderItem> {
                                   ),
                                   margin: const EdgeInsets.only(left: 6),
                                   decoration: BoxDecoration(
-                                    color:
-                                        _iconHover
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withOpacity(0.12)
-                                            : Colors.transparent,
+                                    color: _iconHover
+                                        ? Theme.of(context).colorScheme.primary
+                                              .withValues(alpha: 0.12)
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Icon(
@@ -1383,12 +1531,9 @@ class _HeaderItemState extends State<_HeaderItem> {
                                         ? Icons.visibility_off
                                         : Icons.visibility,
                                     size: iconSize,
-                                    color:
-                                        _iconHover
-                                            ? Theme.of(
-                                              context,
-                                            ).colorScheme.primary
-                                            : iconColor,
+                                    color: _iconHover
+                                        ? Theme.of(context).colorScheme.primary
+                                        : iconColor,
                                   ),
                                 ),
                               ),
@@ -1410,24 +1555,18 @@ class _HeaderItemState extends State<_HeaderItem> {
                                 ),
                                 margin: const EdgeInsets.only(left: 6),
                                 decoration: BoxDecoration(
-                                  color:
-                                      _iconHover
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withOpacity(0.12)
-                                          : Colors.transparent,
+                                  color: _iconHover
+                                      ? Theme.of(context).colorScheme.primary
+                                            .withValues(alpha: 0.12)
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
                                   Icons.copy,
                                   size: iconSize,
-                                  color:
-                                      _iconHover
-                                          ? Theme.of(
-                                            context,
-                                          ).colorScheme.primary
-                                          : iconColor,
+                                  color: _iconHover
+                                      ? Theme.of(context).colorScheme.primary
+                                      : iconColor,
                                 ),
                               ),
                             ),

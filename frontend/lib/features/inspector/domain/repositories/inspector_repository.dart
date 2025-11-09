@@ -3,7 +3,11 @@ import '../entities/frame.dart';
 import '../entities/event.dart';
 
 abstract class InspectorRepository {
-  Future<List<Session>> listSessions({String? q, String? target});
+  Future<List<Session>> listSessions({
+    String? q,
+    String? target,
+    List<String>? tags,
+  });
   Future<List<Frame>> listFrames(
     String sessionId, {
     String? from,

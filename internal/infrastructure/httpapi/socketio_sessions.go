@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"context"
-	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
@@ -20,7 +18,8 @@ type sioFilters struct {
 	Target            string
 	Types             []string
 	StatusGroups      []string
-	CaptureScope      string // "current" | "all" | ""
+	Tags              []string // filter by tags
+	CaptureScope      string   // "current" | "all" | ""
 	CaptureIDExplicit *int
 	IncludeUnassigned bool
 	Limit             int
@@ -110,17 +109,12 @@ func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
 	h.d.Logger.Info().Str("session_id", sessionID).Bool("found", ok).Msg("[sioHub] applyEventToSub: session lookup")
 	if ok {
 		view := sessionV1{Session: sess}
-		if meta, sz := h.d.computeHTTPMeta(ctx, sess.ID); meta != nil || sz != nil {
+		meta, sz := h.d.enrichWithHTTPMeta(ctx, sess)
+		if meta != nil {
 			view.HttpMeta = meta
+		}
+		if sz != nil {
 			view.Sizes = sz
-		} else if sess.Error != nil {
-			// Если транзакций ещё нет, но уже есть ошибка — передадим ошибочную мету, чтобы UI видел статус сразу
-			code := classifyNetError(*sess.Error)
-			view.HttpMeta = &httpMetaV1{ErrorCode: code, ErrorMessage: *sess.Error}
-		} else {
-			if quick := h.computeQuickHTTPMetaFromFrames(ctx, sess.ID); quick != nil {
-				view.HttpMeta = quick
-			}
 		}
 		passFilters := h.passQuickFilters(view, s.filters)
 		passCapture := h.passCapture(view, s.filters)
@@ -136,88 +130,6 @@ func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
 	}
 	s.socket.Emit("sessions:remove", map[string]any{"id": sessionID})
 	h.scheduleAggregate(s)
-}
-
-// computeQuickHTTPMetaFromFrames — быстрый best-effort: вытащим method/status/mime из превью кадров,
-// чтобы фронт видел базовую мету до записи транзакции.
-func (h *sioHub) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID string) *httpMetaV1 {
-	frames, _, _ := h.d.Svc.ListFrames(ctx, sessionID, "", 1000)
-	if len(frames) == 0 {
-		return nil
-	}
-	var method string
-	var status int
-	var mime string
-	// от конца к началу ищем http_response со статусом и типом
-	for i := len(frames) - 1; i >= 0; i-- {
-		var m map[string]any
-		if err := json.Unmarshal([]byte(frames[i].Preview), &m); err != nil {
-			continue
-		}
-		if t, _ := m["type"].(string); t == "http_response" {
-			if st, ok := m["status"].(float64); ok {
-				status = int(st)
-			}
-			if hmap, ok := m["headers"].(map[string]any); ok {
-				if ct, ok2 := headerGetCaseInsensitive(hmap, "content-type"); ok2 {
-					mime = ct
-				}
-			}
-			break
-		}
-	}
-	// вперёд ищем первый http_request с методом
-	for i := 0; i < len(frames); i++ {
-		var m map[string]any
-		if err := json.Unmarshal([]byte(frames[i].Preview), &m); err != nil {
-			continue
-		}
-		if t, _ := m["type"].(string); t == "http_request" {
-			if meth, ok := m["method"].(string); ok {
-				method = meth
-			}
-			break
-		}
-	}
-	if method == "" && status == 0 && mime == "" {
-		return nil
-	}
-	out := &httpMetaV1{Method: method, Status: status, Mime: mime}
-	return out
-}
-
-// headerGetCaseInsensitive возвращает значение заголовка независимо от регистра ключа.
-func headerGetCaseInsensitive(h map[string]any, lowerName string) (string, bool) {
-	for k, v := range h {
-		if strings.EqualFold(k, lowerName) {
-			switch vv := v.(type) {
-			case string:
-				return vv, true
-			case []any:
-				if len(vv) > 0 {
-					if s, ok := vv[0].(string); ok {
-						return s, true
-					}
-				}
-			case []string:
-				if len(vv) > 0 {
-					return vv[0], true
-				}
-			}
-		}
-	}
-	// быстрые варианты в случае точного совпадения ключа
-	if v, ok := h["content-type"]; ok {
-		if s, ok2 := v.(string); ok2 {
-			return s, true
-		}
-	}
-	if v, ok := h["Content-Type"]; ok {
-		if s, ok2 := v.(string); ok2 {
-			return s, true
-		}
-	}
-	return "", false
 }
 
 // (раньше игнорировали внутренние пути UI, но по требованиям оставляем полную видимость)
@@ -359,6 +271,17 @@ func (h *sioHub) emitToSessionRoom(evType, sessionID string) {
 func (h *sioHub) sendInit(s *socket.Socket, f sioFilters) {
 	ctx := contextWithNoCancel()
 	uf := toUsecaseFilter(f)
+
+	// Apply tags filter if specified
+	if len(f.Tags) > 0 && h.d.TagsSvc != nil {
+		sessionIDs, err := h.d.TagsSvc.FindSessionIDsByTags(ctx, f.Tags)
+		if err == nil {
+			uf.SessionIDs = sessionIDs
+		} else {
+			h.d.Logger.Warn().Err(err).Strs("tags", f.Tags).Msg("Failed to find sessions by tags")
+		}
+	}
+
 	list, _, _ := h.d.Svc.List(ctx, uf)
 	h.d.Logger.Info().Str("conn_id", string(s.Id())).Int("total_sessions", len(list)).Msg("sendInit: fetched sessions")
 	sort.Slice(list, func(i, j int) bool { return list[i].StartedAt.Before(list[j].StartedAt) })
@@ -563,6 +486,17 @@ func parseSioFilters(m map[string]any) sioFilters {
 	if v, ok := m["captureId"].(float64); ok {
 		n := int(v)
 		f.CaptureIDExplicit = &n
+	}
+	if v, ok := m["tags"].([]any); ok {
+		f.Tags = make([]string, 0, len(v))
+		for _, x := range v {
+			if s, ok2 := x.(string); ok2 {
+				tagName := strings.TrimSpace(s)
+				if tagName != "" {
+					f.Tags = append(f.Tags, tagName)
+				}
+			}
+		}
 	}
 	return f
 }
