@@ -567,7 +567,7 @@ func TestE2E_ScriptValidation(t *testing.T) {
 		{
 			name:      "Valid Rust",
 			language:  "rust",
-			code:      `fn main() { println!("test"); }`,
+			code:      `pub fn test_func() -> i32 { 42 }`,
 			wantError: false,
 		},
 		{
