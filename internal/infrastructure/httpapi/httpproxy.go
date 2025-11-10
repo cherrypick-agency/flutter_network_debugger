@@ -578,17 +578,18 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Standard forwarding headers (optional в stealth-режиме)
 	if !stealth {
-		// Removed X-Forwarded-For and Via headers by default
-		// if ip := clientHost(r.RemoteAddr); ip != "" {
-		// 	r.Header.Set("X-Forwarded-For", ip)
-		// }
+		// X-Forwarded-For — IP клиента
+		if ip := clientHost(r.RemoteAddr); ip != "" {
+			r.Header.Set("X-Forwarded-For", ip)
+		}
 		// X-Forwarded-Proto — как на входе (схема клиента)
 		if r.TLS != nil {
 			r.Header.Set("X-Forwarded-Proto", "https")
 		} else {
 			r.Header.Set("X-Forwarded-Proto", "http")
 		}
-		// r.Header.Set("Via", "network-debugger")
+		// Via — указывает на прокси
+		r.Header.Set("Via", "network-debugger")
 	}
 
 	// Serve

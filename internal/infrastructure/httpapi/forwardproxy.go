@@ -357,11 +357,11 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			req.URL.Host = upstream
 			req.RequestURI = ""
 			removeHopHeaders(req.Header)
-			// Removed X-Forwarded-For and Via headers by default
-			// if ip := clientHost(r.RemoteAddr); ip != "" {
-			// 	req.Header.Set("X-Forwarded-For", ip)
-			// }
-			// req.Header.Set("Via", "network-debugger")
+			// Standard forwarding headers (can be disabled in stealth mode)
+			if ip := clientHost(r.RemoteAddr); ip != "" {
+				req.Header.Set("X-Forwarded-For", ip)
+			}
+			req.Header.Set("Via", "network-debugger")
 
 			// Для превью: аккуратно пикнем тело
 			var reqBodyBuf []byte
@@ -562,16 +562,15 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	// Remove hop headers
 	removeHopHeaders(outReq.Header)
 	// Standard forwarding headers
-	// Removed X-Forwarded-For and Via headers by default
-	// if ip := clientHost(r.RemoteAddr); ip != "" {
-	// 	outReq.Header.Set("X-Forwarded-For", ip)
-	// }
+	if ip := clientHost(r.RemoteAddr); ip != "" {
+		outReq.Header.Set("X-Forwarded-For", ip)
+	}
 	if r.TLS != nil {
 		outReq.Header.Set("X-Forwarded-Proto", "https")
 	} else {
 		outReq.Header.Set("X-Forwarded-Proto", "http")
 	}
-	// outReq.Header.Set("Via", "network-debugger")
+	outReq.Header.Set("Via", "network-debugger")
 
 	// Safely peek a small portion of request body and keep stream intact
 	var reqBodyBuf []byte
