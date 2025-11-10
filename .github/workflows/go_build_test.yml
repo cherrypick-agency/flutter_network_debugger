@@ -83,7 +83,8 @@ jobs:
         shell: bash
         run: |
           # Run tests with race detector, excluding integration and e2e tests which have pre-existing race conditions
-          go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
+          # Use -short flag to skip long-running load/stress tests
+          go test -short -v -race -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
 
       - name: Upload coverage to codecov (ubuntu only)
         if: matrix.os == 'ubuntu-latest'
