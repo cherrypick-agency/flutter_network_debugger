@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -580,6 +581,11 @@ func TestE2E_ScriptValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Skip Rust tests if toolchain is not available
+			if tt.language == "rust" && !isRustAvailable() {
+				t.Skip("Rust toolchain not available (rustc, cargo, or wasm32 target missing)")
+			}
+
 			validateReq := map[string]any{
 				"language":   tt.language,
 				"sourceCode": tt.code,
@@ -601,8 +607,25 @@ func TestE2E_ScriptValidation(t *testing.T) {
 	}
 }
 
-// Helper function to check if Rust is available
+// Helper function to check if Rust is available with full compilation capability
+// Checks for rustc, cargo, and wasm32-unknown-unknown target
 func isRustAvailable() bool {
-	cmd := exec.Command("rustc", "--version")
-	return cmd.Run() == nil
+	// Check if rustc exists
+	if cmd := exec.Command("rustc", "--version"); cmd.Run() != nil {
+		return false
+	}
+
+	// Check if cargo exists
+	if cmd := exec.Command("cargo", "--version"); cmd.Run() != nil {
+		return false
+	}
+
+	// Check if wasm32-unknown-unknown target is installed
+	cmd := exec.Command("rustc", "--print", "target-list")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	return strings.Contains(string(out), "wasm32-unknown-unknown")
 }
