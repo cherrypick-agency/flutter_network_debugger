@@ -320,3 +320,187 @@ func TestProcessPool_Exhaustion(t *testing.T) {
 	}
 	pool.Release(proc2)
 }
+
+// TestDartExecutor_Execute_Disabled tests Execute when executor is disabled
+func TestDartExecutor_Execute_Disabled(t *testing.T) {
+	executor := &DartExecutor{enabled: false}
+	ctx := context.Background()
+
+	req := domain.ExecutionRequest{
+		Script: domain.Script{
+			Name: "test",
+			Code: []byte("void main() { print('test'); }"),
+		},
+		Input: []byte("{}"),
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() should not return error when disabled, got: %v", err)
+	}
+
+	if result.Error == "" {
+		t.Error("Expected error message when executor is disabled")
+	}
+
+	if !contains(result.Error, "Dart runtime not available") {
+		t.Errorf("Expected error message about Dart runtime, got: %s", result.Error)
+	}
+}
+
+// TestDartExecutor_Execute_Timeout tests Execute with timeout
+func TestDartExecutor_Execute_Timeout(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create executor: %v", err)
+	}
+	defer executor.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	req := domain.ExecutionRequest{
+		Script: domain.Script{
+			Name: "test",
+			Code: []byte("void main() { print('test'); }"),
+		},
+		Input: []byte("{}"),
+	}
+
+	time.Sleep(2 * time.Millisecond)
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() should not return error on timeout, got: %v", err)
+	}
+
+	if result.Error != "timeout" {
+		t.Errorf("Expected 'timeout' error, got: %s", result.Error)
+	}
+}
+
+// TestDartProcess_ReadResponse_NoResponse tests readResponse when no response is available
+func TestDartProcess_ReadResponse_NoResponse(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	pool, err := NewProcessPool(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	ctx := context.Background()
+	proc, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get process: %v", err)
+	}
+
+	proc.cmd.Process.Kill()
+	time.Sleep(100 * time.Millisecond)
+
+	_, err = proc.readResponse()
+	if err == nil {
+		t.Error("Expected error when reading from killed process")
+	}
+}
+
+// TestProcessPool_Release_FullPool tests Release when pool is full
+func TestProcessPool_Release_FullPool(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	pool, err := NewProcessPool(2, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	ctx := context.Background()
+
+	procs := make([]*DartProcess, 3)
+	for i := 0; i < 3; i++ {
+		proc, err := pool.Get(ctx)
+		if err != nil {
+			t.Fatalf("Failed to get process %d: %v", i, err)
+		}
+		procs[i] = proc
+	}
+
+	for i := 0; i < 3; i++ {
+		pool.Release(procs[i])
+	}
+
+	pool.mu.Lock()
+	currentCount := pool.currentCount
+	pool.mu.Unlock()
+
+	if currentCount > 2 {
+		t.Errorf("Expected currentCount <= 2 after releasing, got %d", currentCount)
+	}
+}
+
+// TestProcessPool_Close_WithProcesses tests Close with active processes
+func TestProcessPool_Close_WithProcesses(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	pool, err := NewProcessPool(2, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create pool: %v", err)
+	}
+
+	ctx := context.Background()
+	proc, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get process: %v", err)
+	}
+
+	err = pool.Close()
+	if err != nil {
+		t.Errorf("Close() should not return error, got: %v", err)
+	}
+
+	pool.Release(proc)
+}
+
+// Helper function
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
+}
+
+func containsMiddle(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
