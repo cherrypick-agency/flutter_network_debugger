@@ -3,18 +3,24 @@ package downloaders
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/ulikunitz/xz"
+
+	"network-debugger/internal/features/scripting/domain"
 )
 
 // Composer 1.
@@ -668,4 +674,253 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_Success(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	// Создаем тестовый HTTP сервер
+	testData := []byte("test file content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	// Тестируем загрузку
+	var progressCalls []domain.DownloadProgress
+	progressCb := func(progress domain.DownloadProgress) {
+		progressCalls = append(progressCalls, progress)
+	}
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, progressCb)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil", err)
+	}
+
+	// Проверяем что файл создан
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("Downloaded file was not created")
+	}
+
+	// Проверяем содержимое
+	content, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("Failed to read downloaded file: %v", err)
+	}
+
+	if !bytes.Equal(content, testData) {
+		t.Errorf("Downloaded content = %q, want %q", string(content), string(testData))
+	}
+
+	// Проверяем что progress callback вызывался
+	if len(progressCalls) == 0 {
+		t.Error("Progress callback was not called")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_Cancellation(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	// Создаем медленный сервер
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+		w.WriteHeader(http.StatusOK)
+		// Пишем медленно
+		for i := 0; i < 100; i++ {
+			w.Write([]byte("x"))
+			time.Sleep(10 * time.Millisecond)
+		}
+	}))
+	defer server.Close()
+
+	// Отменяем контекст через короткое время
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err == nil {
+		t.Error("DownloadFile() should return error on cancellation")
+	}
+
+	var dlErr *DownloadError
+	if !errors.As(err, &dlErr) {
+		t.Errorf("Expected DownloadError, got %T", err)
+	}
+
+	if dlErr.Type != "cancelled" {
+		t.Errorf("Expected error type 'cancelled', got %q", dlErr.Type)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_RetryOnNetworkError(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	attempts := 0
+	testData := []byte("test content")
+
+	// Сервер падает первые 2 раза, затем работает
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			// Симулируем сетевую ошибку - закрываем соединение
+			hj, ok := w.(http.Hijacker)
+			if ok {
+				conn, _, _ := hj.Hijack()
+				conn.Close()
+			}
+			return
+		}
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil after retries", err)
+	}
+
+	if attempts < 3 {
+		t.Errorf("Expected at least 3 attempts, got %d", attempts)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_Resume(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+	partialPath := destPath + ".partial"
+
+	// Создаем частично загруженный файл
+	partialData := []byte("partial ")
+	if err := os.WriteFile(partialPath, partialData, 0644); err != nil {
+		t.Fatalf("Failed to create partial file: %v", err)
+	}
+
+	testData := []byte("test file content")
+	var rangeHeaderSent string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Проверяем Range header
+		rangeHeaderSent = r.Header.Get("Range")
+		if rangeHeaderSent == "" {
+			// Первый запрос без Range - возвращаем полный файл
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+			w.WriteHeader(http.StatusOK)
+			w.Write(testData)
+			return
+		}
+
+		// Запрос с Range - возвращаем только недостающую часть
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", len(partialData), len(testData)-1, len(testData)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)-len(partialData)))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(testData[len(partialData):])
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil", err)
+	}
+
+	// Проверяем что Range header был отправлен
+	if rangeHeaderSent == "" {
+		t.Error("Expected Range header to be sent for resume")
+	}
+
+	// Проверяем что файл существует
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("Downloaded file was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_InvalidStatusCode(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err == nil {
+		t.Error("DownloadFile() should return error for 404 status")
+	}
+
+	var dlErr *DownloadError
+	if !errors.As(err, &dlErr) {
+		t.Errorf("Expected DownloadError, got %T", err)
+	}
+
+	if dlErr.Type != "network" {
+		t.Errorf("Expected error type 'network', got %q", dlErr.Type)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_ProgressCallback(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	testData := make([]byte, 1024*10) // 10 KB
+	for i := range testData {
+		testData[i] = byte(i % 256)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	var progressCalls []domain.DownloadProgress
+	progressCb := func(progress domain.DownloadProgress) {
+		progressCalls = append(progressCalls, progress)
+	}
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, progressCb)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil", err)
+	}
+
+	// Проверяем что progress callback вызывался несколько раз
+	if len(progressCalls) == 0 {
+		t.Error("Progress callback was not called")
+	}
+
+	// Проверяем последний вызов - должен быть 100%
+	lastProgress := progressCalls[len(progressCalls)-1]
+	if lastProgress.Percentage < 99 {
+		t.Errorf("Expected final percentage >= 99, got %.1f", lastProgress.Percentage)
+	}
+
+	if lastProgress.BytesDownloaded != int64(len(testData)) {
+		t.Errorf("Expected final bytes downloaded = %d, got %d", len(testData), lastProgress.BytesDownloaded)
+	}
 }
