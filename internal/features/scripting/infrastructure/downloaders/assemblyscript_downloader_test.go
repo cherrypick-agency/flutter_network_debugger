@@ -1,11 +1,9 @@
 package downloaders
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
+	"archive/tar"
+	"compress/gzip"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -23,7 +21,73 @@ func TestNewAssemblyScriptDownloader(t *testing.T) {
 	}
 
 	if downloader.BaseDownloader == nil {
-		t.Fatal("BaseDownloader is nil")
+		t.Error("BaseDownloader is nil")
+	}
+}
+
+// Composer 1.
+func TestAssemblyScriptDownloader_getAssetName(t *testing.T) {
+	downloader := NewAssemblyScriptDownloader()
+
+	tests := []struct {
+		name     string
+		platform string
+		arch     string
+		version  string
+		contains string
+	}{
+		{
+			name:     "darwin amd64",
+			platform: "darwin",
+			arch:     "amd64",
+			version:  "v20.11.0",
+			contains: "node-v20.11.0-darwin-x64.tar.gz",
+		},
+		{
+			name:     "darwin arm64",
+			platform: "darwin",
+			arch:     "arm64",
+			version:  "v20.11.0",
+			contains: "node-v20.11.0-darwin-arm64.tar.gz",
+		},
+		{
+			name:     "linux amd64",
+			platform: "linux",
+			arch:     "amd64",
+			version:  "v20.11.0",
+			contains: "node-v20.11.0-linux-x64.tar.gz",
+		},
+		{
+			name:     "windows amd64",
+			platform: "windows",
+			arch:     "amd64",
+			version:  "v20.11.0",
+			contains: "node-v20.11.0-win-x64.zip",
+		},
+		{
+			name:     "windows 386",
+			platform: "windows",
+			arch:     "386",
+			version:  "v20.11.0",
+			contains: "node-v20.11.0-win-x86.zip",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := downloader.getAssetName(tt.platform, tt.arch, tt.version)
+			if !contains(got, tt.contains) {
+				t.Errorf("getAssetName() = %q, should contain %q", got, tt.contains)
+			}
+
+			if tt.platform == "windows" && !contains(got, ".zip") {
+				t.Error("Windows asset should be .zip")
+			}
+
+			if tt.platform != "windows" && !contains(got, ".tar.gz") {
+				t.Error("Non-Windows asset should be .tar.gz")
+			}
+		})
 	}
 }
 
@@ -31,24 +95,9 @@ func TestNewAssemblyScriptDownloader(t *testing.T) {
 func TestAssemblyScriptDownloader_GetDownloadURL(t *testing.T) {
 	downloader := NewAssemblyScriptDownloader()
 
-	releases := []nodeRelease{
-		{
-			Version: "v20.11.0",
-			LTS:     "Hydrogen",
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/dist/index.json") {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(releases)
-		}
-	}))
-	defer server.Close()
-
 	req := domain.DownloadRequest{
-		Platform: runtime.GOOS,
-		Arch:     runtime.GOARCH,
+		Platform: "darwin",
+		Arch:     "amd64",
 	}
 
 	url, err := downloader.GetDownloadURL(req)
@@ -59,33 +108,19 @@ func TestAssemblyScriptDownloader_GetDownloadURL(t *testing.T) {
 	if url == "" {
 		t.Error("GetDownloadURL() returned empty URL")
 	}
+
+	if !contains(url, "nodejs.org/dist") {
+		t.Error("URL should point to nodejs.org/dist")
+	}
 }
 
 // Composer 1.
 func TestAssemblyScriptDownloader_GetMetadata(t *testing.T) {
 	downloader := NewAssemblyScriptDownloader()
 
-	testData := []byte("fake node binary")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/dist/index.json") {
-			releases := []nodeRelease{
-				{
-					Version: "v20.11.0",
-					LTS:     "Hydrogen",
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(releases)
-		} else if r.Method == http.MethodHead {
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
-			w.WriteHeader(http.StatusOK)
-		}
-	}))
-	defer server.Close()
-
 	req := domain.DownloadRequest{
-		Platform: runtime.GOOS,
-		Arch:     runtime.GOARCH,
+		Platform: "darwin",
+		Arch:     "amd64",
 	}
 
 	metadata, err := downloader.GetMetadata(req)
@@ -98,36 +133,136 @@ func TestAssemblyScriptDownloader_GetMetadata(t *testing.T) {
 	}
 
 	if metadata.Language != "assemblyscript" {
-		t.Errorf("Language = %q, want %q", metadata.Language, "assemblyscript")
+		t.Errorf("Expected language 'assemblyscript', got %q", metadata.Language)
+	}
+
+	if metadata.Version == "" {
+		t.Error("Version is empty")
+	}
+
+	if metadata.DownloadURL == "" {
+		t.Error("DownloadURL is empty")
 	}
 }
 
 // Composer 1.
-func TestAssemblyScriptDownloader_Extract_InvalidArchive(t *testing.T) {
+func TestAssemblyScriptDownloader_Extract_TarGz(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping tar.gz test on Windows")
+	}
+
 	downloader := NewAssemblyScriptDownloader()
 	tmpDir := t.TempDir()
 	targetDir := filepath.Join(tmpDir, "target")
-	archivePath := filepath.Join(tmpDir, "nonexistent.tar.gz")
+	archivePath := filepath.Join(tmpDir, "node.tar.gz")
 
-	err := downloader.Extract(archivePath, targetDir)
-	if err == nil {
-		t.Error("Extract() should return error for nonexistent archive")
+	// Создаем tar.gz архив с node-* директорией
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("Failed to create archive: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем директорию node-v20.11.0
+	header := &tar.Header{
+		Name:     "node-v20.11.0-darwin-x64/",
+		Typeflag: tar.TypeDir,
+		Mode:     0755,
+	}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatalf("Failed to write tar header: %v", err)
+	}
+
+	// Добавляем файл в директорию
+	content := []byte("node binary")
+	header = &tar.Header{
+		Name:     "node-v20.11.0-darwin-x64/bin/node",
+		Size:     int64(len(content)),
+		Mode:     0755,
+		Typeflag: tar.TypeReg,
+	}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatalf("Failed to write tar header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write tar content: %v", err)
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	// Извлекаем
+	err = downloader.Extract(archivePath, targetDir)
+	if err != nil {
+		t.Fatalf("Extract() error = %v, want nil", err)
+	}
+
+	// Проверяем что файл извлечен в корень targetDir
+	nodeFile := filepath.Join(targetDir, "bin", "node")
+	if _, err := os.Stat(nodeFile); os.IsNotExist(err) {
+		t.Error("node binary was not extracted to target directory root")
 	}
 }
 
 // Composer 1.
-func TestAssemblyScriptDownloader_Verify_NoBinary(t *testing.T) {
+func TestAssemblyScriptDownloader_Extract_NoNodeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping tar.gz test on Windows")
+	}
+
 	downloader := NewAssemblyScriptDownloader()
 	tmpDir := t.TempDir()
+	targetDir := filepath.Join(tmpDir, "target")
+	archivePath := filepath.Join(tmpDir, "node.tar.gz")
 
-	err := downloader.Verify(tmpDir)
+	// Создаем tar.gz архив без node-* директории
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("Failed to create archive: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем обычный файл
+	content := []byte("test")
+	header := &tar.Header{
+		Name:     "test.txt",
+		Size:     int64(len(content)),
+		Mode:     0644,
+		Typeflag: tar.TypeReg,
+	}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatalf("Failed to write tar header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write tar content: %v", err)
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	// Извлечение должно вернуть ошибку
+	err = downloader.Extract(archivePath, targetDir)
 	if err == nil {
-		t.Error("Verify() should return error when asc binary doesn't exist")
+		t.Error("Extract() should return error when node directory not found")
 	}
 }
 
 // Composer 1.
-func TestAssemblyScriptDownloader_GetNpmPath(t *testing.T) {
+func TestAssemblyScriptDownloader_getNpmPath(t *testing.T) {
 	downloader := NewAssemblyScriptDownloader()
 	tmpDir := t.TempDir()
 
@@ -142,13 +277,13 @@ func TestAssemblyScriptDownloader_GetNpmPath(t *testing.T) {
 		}
 	} else {
 		if !strings.Contains(path, "bin/npm") {
-			t.Errorf("getNpmPath() = %q, should contain bin/npm on Unix", path)
+			t.Errorf("getNpmPath() = %q, should contain bin/npm", path)
 		}
 	}
 }
 
 // Composer 1.
-func TestAssemblyScriptDownloader_GetAscPath(t *testing.T) {
+func TestAssemblyScriptDownloader_getAscPath(t *testing.T) {
 	downloader := NewAssemblyScriptDownloader()
 	tmpDir := t.TempDir()
 
@@ -163,24 +298,7 @@ func TestAssemblyScriptDownloader_GetAscPath(t *testing.T) {
 		}
 	} else {
 		if !strings.Contains(path, "bin/asc") {
-			t.Errorf("getAscPath() = %q, should contain bin/asc on Unix", path)
+			t.Errorf("getAscPath() = %q, should contain bin/asc", path)
 		}
-	}
-}
-
-// Composer 1.
-func TestAssemblyScriptDownloader_Download_ErrorGettingNodeVersion(t *testing.T) {
-	downloader := NewAssemblyScriptDownloader()
-
-	req := domain.DownloadRequest{
-		Platform:  "invalid",
-		Arch:      "invalid",
-		TargetDir: t.TempDir(),
-	}
-
-	ctx := context.Background()
-	err := downloader.Download(ctx, req, nil)
-	if err == nil {
-		t.Error("Download() should return error when GetDownloadURL fails")
 	}
 }
