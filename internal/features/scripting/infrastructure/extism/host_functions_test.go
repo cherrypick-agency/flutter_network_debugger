@@ -120,3 +120,51 @@ func TestIsHostAllowed(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateLogFunction tests createLogFunction
+func TestCreateLogFunction(t *testing.T) {
+	hostFn := createLogFunction()
+	if hostFn.Name == "" {
+		t.Error("createLogFunction() should return function with name")
+	}
+}
+
+// TestCreateHTTPFetchFunction tests createHTTPFetchFunction
+func TestCreateHTTPFetchFunction(t *testing.T) {
+	allowedHosts := []string{"api.example.com"}
+	hostFn := createHTTPFetchFunction(allowedHosts)
+	if hostFn.Name == "" {
+		t.Error("createHTTPFetchFunction() should return function with name")
+	}
+}
+
+// TestCreateHTTPFetchFunction_EmptyAllowedHosts tests createHTTPFetchFunction with empty allowedHosts
+func TestCreateHTTPFetchFunction_EmptyAllowedHosts(t *testing.T) {
+	hostFn := createHTTPFetchFunction(nil)
+	if hostFn.Name == "" {
+		t.Error("createHTTPFetchFunction() should return function with name")
+	}
+}
+
+// TestCreateHostFunctions tests createHostFunctions
+func TestCreateHostFunctions(t *testing.T) {
+	allowedHosts := []string{"api.example.com"}
+	hostFns := createHostFunctions(allowedHosts)
+
+	if len(hostFns) == 0 {
+		t.Error("createHostFunctions() should return at least one function")
+	}
+
+	if len(hostFns) < 2 {
+		t.Error("createHostFunctions() should return log and http_fetch functions")
+	}
+}
+
+// TestCreateHostFunctions_NilAllowedHosts tests createHostFunctions with nil allowedHosts
+func TestCreateHostFunctions_NilAllowedHosts(t *testing.T) {
+	hostFns := createHostFunctions(nil)
+
+	if len(hostFns) == 0 {
+		t.Error("createHostFunctions() should return at least one function")
+	}
+}

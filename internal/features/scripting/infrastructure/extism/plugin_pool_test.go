@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"network-debugger/internal/features/scripting/domain"
 )
 
 // TestBasicPooling verifies basic pool hit/miss behavior
@@ -662,6 +664,115 @@ func TestMetrics(t *testing.T) {
 
 	t.Logf("Metrics test: hits=%d misses=%d evictions=%d hitRate=%.1f%%",
 		metrics.Hits, metrics.Misses, metrics.Evictions, hitRate*100)
+}
+
+// TestPooledPlugin_SafeClose tests safeClose with nil plugin
+func TestPooledPlugin_SafeClose(t *testing.T) {
+	plugin := &pooledPlugin{
+		plugin: nil,
+	}
+
+	ctx := context.Background()
+	err := plugin.safeClose(ctx)
+	if err != nil {
+		t.Errorf("safeClose() with nil plugin error = %v, want nil", err)
+	}
+}
+
+// TestPooledPlugin_SafeClose_DoubleClose tests safeClose double close prevention
+func TestPooledPlugin_SafeClose_DoubleClose(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	ctx := context.Background()
+	script := createSuccessScript(t)
+
+	pool := createTestPool(t, script)
+	instance, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Failed to acquire instance: %v", err)
+	}
+
+	err1 := instance.safeClose(ctx)
+	if err1 != nil {
+		t.Logf("First close error: %v", err1)
+	}
+
+	err2 := instance.safeClose(ctx)
+	if err2 != nil {
+		t.Errorf("Second close should return nil (already closed), got: %v", err2)
+	}
+}
+
+// TestNewPluginPool_NilCreateFunc tests NewPluginPool with nil createFunc
+func TestNewPluginPool_NilCreateFunc(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("NewPluginPool() with nil createFunc should panic")
+		}
+	}()
+
+	script := domain.Script{
+		ID:   "test",
+		Name: "Test",
+	}
+
+	NewPluginPool(script, nil)
+}
+
+// TestPoolManager_GetPool_Concurrent tests GetPool with concurrent access
+func TestPoolManager_GetPool_Concurrent(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	manager := NewPoolManager(executor.createPlugin)
+	defer manager.CloseAll()
+
+	script := createSuccessScript(t)
+
+	var wg sync.WaitGroup
+	concurrency := 10
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pool := manager.GetPool(script)
+			if pool == nil {
+				t.Error("GetPool() should return non-nil pool")
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	pool := manager.GetPool(script)
+	if pool == nil {
+		t.Fatal("GetPool() should return non-nil pool")
+	}
+}
+
+// TestPoolManager_InvalidateScript_NonExistent tests InvalidateScript with non-existent script
+func TestPoolManager_InvalidateScript_NonExistent(t *testing.T) {
+	executor, err := NewExtismExecutor("")
+	if err != nil {
+		t.Fatalf("NewExtismExecutor() error = %v", err)
+	}
+	defer executor.Close()
+
+	manager := executor.poolManager
+	manager.InvalidateScript("non-existent")
+}
+
+// TestPoolManager_CloseAll_Empty tests CloseAll with empty pools
+func TestPoolManager_CloseAll_Empty(t *testing.T) {
+	executor, err := NewExtismExecutor("")
+	if err != nil {
+		t.Fatalf("NewExtismExecutor() error = %v", err)
+	}
+	defer executor.Close()
+
+	manager := executor.poolManager
+	manager.CloseAll()
 }
 
 // Helper function to check if string contains substring
