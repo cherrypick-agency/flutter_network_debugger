@@ -15,6 +15,10 @@ class MobxFileRepository implements FileRepository {
   // Mapping между sanitized ID и оригинальным filename
   final Map<String, String> _idToFilename = {};
 
+  // Хранилище folderId для каждого файла (по sanitized id)
+  // По умолчанию все файлы считаются в 'root'
+  final Map<String, String> _fileIdToFolderId = {};
+
   MobxFileRepository({required this.scriptStore, required this.eventBus});
 
   /// Sanitizes filename to be used as ID (replaces dots with underscores)
@@ -51,6 +55,8 @@ class MobxFileRepository implements FileRepository {
 
       // Регистрируем mapping между ID и filename
       _registerIdMapping(name);
+      // Сохраняем привязку к папке
+      _fileIdToFolderId[_sanitizeId(name)] = folderId;
 
       // Создаём FileDocument entity
       final file = FileDocument(
@@ -125,7 +131,7 @@ class MobxFileRepository implements FileRepository {
         name: filename,
         content: content,
         language: language,
-        folderId: 'root', // все файлы в root folder
+        folderId: _fileIdToFolderId[id] ?? 'root',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -218,10 +224,12 @@ class MobxFileRepository implements FileRepository {
       }
 
       final content = scriptStore.sourceFiles[oldFilename]!;
+      final currentFolderId = _fileIdToFolderId[fileId] ?? 'root';
 
       // Удаляем старый файл и mapping
       scriptStore.removeSourceFile(oldFilename);
       _idToFilename.remove(fileId);
+      _fileIdToFolderId.remove(fileId);
 
       // Создаём новый файл с новым именем
       scriptStore.addSourceFile(newName, content);
@@ -229,13 +237,15 @@ class MobxFileRepository implements FileRepository {
 
       final language = _detectLanguageFromFileName(newName);
       final newId = _sanitizeId(newName);
+      // Переносим привязку к папке на новый id
+      _fileIdToFolderId[newId] = currentFolderId;
 
       final file = FileDocument(
         id: newId,
         name: newName,
         content: content,
         language: language,
-        folderId: 'root',
+        folderId: currentFolderId,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -253,7 +263,8 @@ class MobxFileRepository implements FileRepository {
     required String fileId,
     required String targetFolderId,
   }) async {
-    // В нашем случае все файлы в root, move не поддерживается
+    // Обновляем привязку файла к папке и возвращаем обновлённый документ
+    _fileIdToFolderId[fileId] = targetFolderId;
     return load(fileId);
   }
 
@@ -287,8 +298,17 @@ class MobxFileRepository implements FileRepository {
 
       final content = scriptStore.sourceFiles[filename]!;
       final name = newName ?? '${filename}_copy';
+      final newId = _sanitizeId(name);
+      final folderId = _fileIdToFolderId[fileId] ?? 'root';
 
-      return create(folderId: 'root', name: name, initialContent: content);
+      final created = await create(
+        folderId: folderId,
+        name: name,
+        initialContent: content,
+      );
+      // Подстрахуемся, что маппинг выставлен корректно
+      _fileIdToFolderId[newId] = folderId;
+      return created;
     } catch (e) {
       return Left(
         DomainFailure.unexpected(message: 'Failed to duplicate file: $e'),
@@ -317,12 +337,15 @@ class MobxFileRepository implements FileRepository {
         // Регистрируем mapping если его еще нет
         _registerIdMapping(filename);
 
+        final id = _sanitizeId(filename);
+        final assignedFolderId = _fileIdToFolderId[id] ?? 'root';
+
         return FileDocument(
-          id: _sanitizeId(filename),
+          id: id,
           name: filename,
           content: entry.value,
           language: lang,
-          folderId: 'root',
+          folderId: assignedFolderId,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -342,6 +365,11 @@ class MobxFileRepository implements FileRepository {
       // Фильтруем по языку если указан
       if (language != null && language.isNotEmpty) {
         result = result.where((file) => file.language == language).toList();
+      }
+
+      // Фильтруем по папке если указана
+      if (folderId != null) {
+        result = result.where((file) => file.folderId == folderId).toList();
       }
 
       return Right(result);

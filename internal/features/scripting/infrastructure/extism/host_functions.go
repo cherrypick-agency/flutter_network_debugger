@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	extism "github.com/extism/go-sdk"
@@ -15,11 +17,44 @@ import (
 
 // createHostFunctions creates host functions that scripts can call
 // These functions provide controlled access to system resources from WASM
-func createHostFunctions() []extism.HostFunction {
+// allowedHosts: list of hosts that scripts are allowed to fetch (nil means all hosts allowed)
+func createHostFunctions(allowedHosts []string) []extism.HostFunction {
 	return []extism.HostFunction{
 		createLogFunction(),
-		createHTTPFetchFunction(),
+		createHTTPFetchFunction(allowedHosts),
 	}
+}
+
+// isHostAllowed checks if the target host is in the allowed hosts list
+// Returns true if allowedHosts is nil/empty (all hosts allowed) or host matches
+func isHostAllowed(targetHost string, allowedHosts []string) bool {
+	// If no restrictions, allow all hosts
+	if len(allowedHosts) == 0 {
+		return true
+	}
+
+	// Normalize target host (remove port if present)
+	host := targetHost
+	if h, _, err := net.SplitHostPort(targetHost); err == nil {
+		host = h
+	}
+
+	// Check if host matches any allowed host pattern
+	for _, allowed := range allowedHosts {
+		// Exact match
+		if host == allowed {
+			return true
+		}
+		// Wildcard subdomain match (e.g., "*.example.com" matches "api.example.com")
+		if strings.HasPrefix(allowed, "*.") {
+			domain := allowed[2:] // remove "*."
+			if host == domain || strings.HasSuffix(host, "."+domain) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // createLogFunction allows scripts to log messages
@@ -44,12 +79,13 @@ func createLogFunction() extism.HostFunction {
 
 // createHTTPFetchFunction allows scripts to make HTTP requests
 // Security: Respects AllowedHosts from script config
-func createHTTPFetchFunction() extism.HostFunction {
+// allowedHosts: list of allowed hosts (nil/empty means all hosts allowed)
+func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 	return extism.NewHostFunctionWithStack(
 		"http_fetch",
 		func(ctx context.Context, plugin *extism.CurrentPlugin, stack []uint64) {
 			urlOffset := stack[0]
-			url, err := plugin.ReadString(urlOffset)
+			urlStr, err := plugin.ReadString(urlOffset)
 			if err != nil {
 				errJSON := fmt.Sprintf(`{"error": "Failed to read URL: %v"}`, err)
 				offset, writeErr := plugin.WriteString(errJSON)
@@ -62,11 +98,36 @@ func createHTTPFetchFunction() extism.HostFunction {
 				return
 			}
 
-			// Security: Check allowed hosts (would need to be passed via config)
-			// For now, implement basic fetch
+			// Parse URL to extract host
+			parsedURL, err := url.Parse(urlStr)
+			if err != nil {
+				errJSON := fmt.Sprintf(`{"error": "Invalid URL: %v"}`, err)
+				offset, writeErr := plugin.WriteString(errJSON)
+				if writeErr != nil {
+					log.Printf("[Script Error] Failed to write error response: %v", writeErr)
+					stack[0] = 0
+					return
+				}
+				stack[0] = offset
+				return
+			}
+
+			// Security: Check if host is allowed
+			if !isHostAllowed(parsedURL.Host, allowedHosts) {
+				errJSON := fmt.Sprintf(`{"error": "Host '%s' is not in allowed hosts list"}`, parsedURL.Host)
+				log.Printf("[Script Security] Blocked HTTP fetch to disallowed host: %s", parsedURL.Host)
+				offset, writeErr := plugin.WriteString(errJSON)
+				if writeErr != nil {
+					log.Printf("[Script Error] Failed to write error response: %v", writeErr)
+					stack[0] = 0
+					return
+				}
+				stack[0] = offset
+				return
+			}
 
 			// Create HTTP request with context to respect script timeout
-			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+			req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 			if err != nil {
 				errJSON := fmt.Sprintf(`{"error": "Failed to create request: %v"}`, err)
 				offset, writeErr := plugin.WriteString(errJSON)

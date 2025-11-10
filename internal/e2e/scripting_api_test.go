@@ -485,7 +485,8 @@ pub fn process(Json(ctx): Json<ScriptContext>) -> FnResult<Json<ScriptResult>> {
 	defer deleteScript(t, baseURL, scriptID)
 
 	// Wait for compilation to complete (response scripts are auto-compiled)
-	time.Sleep(12 * time.Second)
+	// Rust compilation can take 20-30 seconds on first run (rustup downloads + cargo build)
+	time.Sleep(30 * time.Second)
 
 	// Test: proxy a request and check response was modified
 	echoSrv := startEchoHTTPServer(t)
@@ -707,4 +708,97 @@ pub fn process(Json(ctx): Json<ScriptContext>) -> FnResult<Json<ScriptResult>> {
 	}
 
 	t.Log("✅ Both triggers test passed!")
+}
+
+// TestE2E_ScriptingAPI_Timeout tests that scripts timeout correctly
+// and that the executor handles timeout gracefully without hanging
+func TestE2E_ScriptingAPI_Timeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping E2E test in short mode")
+	}
+
+	// Start binary
+	bin := buildWsproxyBinary(t)
+	tmpDB := filepath.Join(t.TempDir(), "test.db")
+
+	// Get dynamic port
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to get port: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(),
+		"DEV_MODE=1",
+		"ADDR="+addr,
+		"DB_PATH="+tmpDB,
+	)
+	cmd.Dir = filepath.Join("..", "..")
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start binary: %v", err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		if t.Failed() {
+			t.Logf("Binary stderr:\n%s", stderr.String())
+		}
+	}()
+
+	baseURL := "http://" + addr
+	waitReady(t, baseURL, 10*time.Second)
+
+	// Load timeout WASM fixture (infinite loop)
+	timeoutWASM := loadTestWASM(t, "timeout.wasm")
+	scriptID := createScriptWithOptions(t, baseURL, map[string]any{
+		"name":        "Timeout Test",
+		"runtime":     "extism",
+		"code":        base64.StdEncoding.EncodeToString(timeoutWASM),
+		"language":    "rust",
+		"triggerType": "request",
+		"enabled":     true,
+		"config": map[string]any{
+			"timeoutMs":     2000, // 2 second timeout
+			"memoryLimitMB": 10,
+		},
+	})
+	defer deleteScript(t, baseURL, scriptID)
+
+	// Test: make a request that should timeout
+	echoSrv := startEchoHTTPServer(t)
+	time.Sleep(500 * time.Millisecond)
+
+	proxyURL := fmt.Sprintf("%s/httpproxy/test?_target=%s", baseURL, echoSrv.Addr)
+
+	start := time.Now()
+	resp, err := http.Get(proxyURL)
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("proxy request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Script should timeout and request should continue without modification
+	// Timeout should occur around 2 seconds (configured timeout)
+	if duration < 1*time.Second {
+		t.Errorf("Expected timeout around 2s, but request completed in %v (too fast)", duration)
+	}
+	if duration > 5*time.Second {
+		t.Errorf("Expected timeout around 2s, but took %v (too slow)", duration)
+	}
+
+	// Request should succeed (script timeout doesn't fail the request)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	t.Logf("Script timeout test passed! Duration: %v", duration)
+	t.Log("✅ Timeout handling test passed!")
 }
