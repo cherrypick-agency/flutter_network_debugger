@@ -127,21 +127,15 @@ class DartLanguagePlugin extends LanguagePlugin {
 
   @override
   void onFileOpen(FileDocument file) {
-    if (supportsLanguage(file.language)) {
-      print('[DartPlugin] Dart file opened: ${file.name}');
-
-      // Try to register snippets if not already done (with debouncing)
-      if (!_snippetsRegistered) {
-        _scheduleSnippetRegistration();
-      }
+    // Регистрируем сниппеты при открытии файла; не полагаемся на поля FileDocument
+    if (!_snippetsRegistered) {
+      _scheduleSnippetRegistration();
     }
   }
 
   @override
   void onFileSave(FileDocument file) {
-    if (supportsLanguage(file.language)) {
-      print('[DartPlugin] Dart file saved: ${file.name}');
-    }
+    print('[DartPlugin] File saved');
   }
 
   @override

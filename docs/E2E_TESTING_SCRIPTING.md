@@ -4,7 +4,7 @@
 
 ## Обзор
 
-**Создано E2E тестов**: 9+
+**Создано E2E тестов**: 11
 **Покрытые языки**: Rust (WASM), Dart (subprocess)
 **CI Integration**: GitHub Actions с кэшированием WASM fixtures
 
@@ -20,9 +20,11 @@ internal/e2e/testdata/scripts/
 ├── wasm/                          # Скомпилированные WASM fixtures
 │   ├── add_header.wasm           # Rust: добавляет заголовки
 │   ├── noop.wasm                 # Minimal valid WASM (passthrough)
+│   ├── timeout.wasm              # Rust: infinite loop для тестирования timeout
 │   └── invalid.wasm              # Corrupt WASM для негативных тестов
 ├── wasm-src/                      # Исходники WASM fixtures
-│   └── noop/                     # Rust проект для noop.wasm
+│   ├── noop/                     # Rust проект для noop.wasm
+│   └── timeout/                  # Rust проект для timeout.wasm (infinite loop)
 └── dart/                          # Dart скрипты
     └── simple_logger.dart        # Логирует requests, добавляет заголовки
 ```
@@ -113,6 +115,40 @@ internal/e2e/testdata/scripts/
 - Re-enable script
 - Test 3: Re-enabled script → adds header again
 
+#### 9. `TestE2E_ScriptingAPI_ResponseModification`
+**Что тестирует**: Модификация HTTP response через скрипты
+
+**Сценарий**:
+- Компилирует Rust скрипт из source code (triggerType: response)
+- Делает HTTP запрос через proxy
+- Скрипт модифицирует response headers
+- Проверяет headers: `X-Response-Modified: true`, `X-Test-Response: E2E`
+
+**Note**: Требует Rust SDK, скрипт компилируется inline (~30s)
+
+#### 10. `TestE2E_ScriptingAPI_BothTriggers`
+**Что тестирует**: Скрипты с triggerType: "both" (request + response)
+
+**Сценарий**:
+- Создает скрипт который видит и request, и response
+- Request phase: добавляет `X-Both-Triggers: request-phase`
+- Response phase: проверяет что скрипт видит оба
+- Проверка через echo server
+
+**Note**: Требует Rust SDK
+
+#### 11. `TestE2E_ScriptingAPI_Timeout`
+**Что тестирует**: Timeout handling и graceful degradation
+
+**Сценарий**:
+- Загружает `timeout.wasm` (infinite loop fixture)
+- Настраивает timeout: 2 секунды
+- Делает HTTP запрос
+- Script timeout → request продолжается без модификации
+- Проверяет что request занял ~2s (не висит)
+
+**Fixture**: `timeout.wasm` (Rust infinite loop)
+
 ## Запуск тестов
 
 ### Локально
@@ -176,6 +212,7 @@ waitReady(t, baseURL, timeout) → error
 |---------|----------|------|---------|
 | `add_header.wasm` | Rust | ~204KB | Adds `X-Script-Processed: Rust` header |
 | `noop.wasm` | Rust | ~95KB | Passthrough (returns input unchanged) |
+| `timeout.wasm` | Rust | ~68KB | Infinite loop для тестирования timeout |
 | `invalid.wasm` | - | 19B | Corrupt WASM for negative tests |
 
 ### Dart Scripts
@@ -235,51 +272,34 @@ timeout-minutes: 12
 - Проверьте логи binary (stdout/stderr)
 - Увеличьте timeout в `waitReady(t, baseURL, 10*time.Second)`
 
-### Компиляция падает (Extism SDK compatibility)
-**Известная проблема**: Код executor.go/host_functions.go написан для более старой версии Extism SDK.
-
-**Фиксы требуются** в:
-- `internal/features/scripting/infrastructure/extism/executor.go`
-- `internal/features/scripting/infrastructure/extism/host_functions.go`
-
-**API changes** (v1.7.1):
-- `plugin.Call()` возвращает 3 значения (было 2)
-- `plugin.Close()` требует `context.Context`
-- `extism.Memory`, `extism.Ptr`, `extism.ModuleConfig` - API изменился
-- `plugin.GetConfig()`, `plugin.ReturnString()` - methods removed
-
-**TODO**: Обновить код под текущую версию SDK
+### Extism SDK Compatibility ✅
+Код полностью совместим с Extism SDK v1.7.1. Используется актуальный API:
+- `plugin.Call()` возвращает 3 значения: `exitCode, output, error`
+- `plugin.Close()` принимает `context.Context`
+- Все тесты проходят успешно
 
 ## Метрики
 
-**E2E тесты создано**: 9
+**E2E тесты создано**: 11
 **Языки покрыты**: Rust (WASM), Dart (subprocess)
 **Покрытие функциональности**:
 - ✅ CRUD operations
 - ✅ Request modification
-- ✅ Pattern matching (methods, host, path)
+- ✅ Response modification
+- ✅ Pattern matching (methods, host, path, wildcard, regex)
 - ✅ Priority execution order
 - ✅ Toggle enabled/disabled
 - ✅ WASM validation
 - ✅ Dart subprocess executor
-- ⚠️ Response modification (TODO: требует upstream mock server)
-- ⚠️ Timeout handling (TODO: infinite loop fixture)
+- ✅ Timeout handling
+- ✅ Both triggers (request + response)
 
 ## Следующие шаги
 
-### 1. Fix Extism SDK Compatibility ⚠️ **REQUIRED**
-Обновить executor.go и host_functions.go для v1.7.1 API
-
-### 2. Добавить Response Modification Test
-Создать WASM fixture который модифицирует response body
-
-### 3. Timeout Test
-Создать WASM fixture с infinite loop для проверки timeout handling
-
-### 4. JavaScript (AssemblyScript) Test
+### 1. JavaScript (AssemblyScript) Test
 Добавить JS example и E2E тест
 
-### 5. Integration Tests (in-process)
+### 2. Integration Tests (in-process)
 Создать быстрые integration тесты без binary compilation:
 - `internal/integration/scripting_test.go`
 - Использует `httptest.Server` вместо real binary

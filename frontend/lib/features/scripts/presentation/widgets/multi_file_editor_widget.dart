@@ -14,6 +14,8 @@ class MultiFileEditorWidget extends StatelessWidget {
     return EditorScaffold(
       fileTreeController: editorDI.fileTreeController,
       editorController: editorDI.editorController,
+      pluginManager: editorDI.pluginManager,
+      pluginUIService: editorDI.pluginUIRegistry,
       editorConfig: const EditorConfig(
         fontSize: 14.0,
         fontFamily: 'Consolas, Monaco, monospace',
@@ -25,6 +27,10 @@ class MultiFileEditorWidget extends StatelessWidget {
         autoSave: true,
         autoSaveDelay: 2,
       ),
+      onControllerReady: (controller) {
+        // Регистрируем Monaco controller в MultiEditorService для доступа плагинов
+        editorDI.multiEditorService.setController(controller);
+      },
     );
   }
 }

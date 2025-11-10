@@ -47,24 +47,24 @@ Access the Scripts page via route: `/scripts`
 
 ### Script Creation Modes
 
-For **Extism WASM** runtime, you have three creation modes:
+For **Extism WASM** runtime, you have two creation modes:
 
-#### 1. Upload WASM File (`uploadWasm`)
-- Directly upload a pre-compiled `.wasm` file
-- Drag-n-drop support for easy file selection
-- Best for production-ready WASM modules
-
-#### 2. Write Source Code (`writeSource`)
-- Write source code directly in Monaco editor
+#### 1. Write Source Code (`writeSource`)
+- Write source code directly in multi-file editor
 - Supports multiple languages: Rust, Go, TypeScript, Python, etc.
+- Create multiple files and organize your project structure
 - Click green **Compile** button to generate WASM
 - Requires compiler to be installed (see Compiler Management)
+- **Alternative**: Use "Upload WASM" button in toolbar to upload pre-compiled WASM file
 
-#### 3. Import ZIP Project (`importZip`)
+#### 2. Import ZIP Project (`importZip`)
 - Upload a ZIP file containing your project source files
 - Supports multi-file projects with dependencies
+- Files are automatically extracted into the multi-file editor
 - Click green **Compile** button to build the project
 - Requires compiler to be installed
+
+For **Dart** runtime, you always use the multi-file editor to write your script code.
 
 ### Compilation Process
 

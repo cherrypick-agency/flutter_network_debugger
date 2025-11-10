@@ -3,8 +3,12 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"syscall"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -62,9 +66,10 @@ func (s *CompilerInstallationService) GetStatus(language string) (*domain.Compil
 		status = domain.CompilerStatusNotInstalled
 	}
 
-	// Get compiler path if installed
+	// Get compiler path and version if installed
 	installedPath := ""
 	installedSize := int64(0)
+	version := "latest" // Default for not installed compilers
 	if isInstalled {
 		path, err := s.cacheManager.GetCompilerPath(language)
 		if err == nil {
@@ -75,6 +80,9 @@ func (s *CompilerInstallationService) GetStatus(language string) (*domain.Compil
 			if err == nil {
 				installedSize = size
 			}
+
+			// Get actual installed version from .version file
+			version = getCompilerVersion(path)
 		}
 	}
 
@@ -96,7 +104,7 @@ func (s *CompilerInstallationService) GetStatus(language string) (*domain.Compil
 
 	return &domain.CompilerInfo{
 		Language:      language,
-		Version:       "latest", // TODO: Track actual version
+		Version:       version, // Actual version from .version file or "latest"/"unknown"
 		Status:        status,
 		InstalledPath: installedPath,
 		Size:          installedSize,
@@ -177,6 +185,40 @@ func (s *CompilerInstallationService) Install(
 		return fmt.Errorf("failed to ensure cache directory: %w", err)
 	}
 
+	// Check available disk space before downloading
+	// Minimum required: 1 GB free space (compilers typically 100-500 MB + extraction overhead)
+	const minRequiredSpace = 1 * 1024 * 1024 * 1024 // 1 GB
+	cacheDir := s.cacheManager.GetCacheDir()
+	availableSpace, err := getAvailableDiskSpace(cacheDir)
+	if err != nil {
+		// Log warning but don't fail - disk space check is best-effort
+		if progressCb != nil {
+			progressCb(domain.DownloadProgress{
+				Stage:   "warning",
+				Message: fmt.Sprintf("Warning: Could not check disk space: %v", err),
+			})
+		}
+	} else {
+		if availableSpace < minRequiredSpace {
+			return fmt.Errorf(
+				"insufficient disk space: available %d MB, required minimum %d MB",
+				availableSpace/(1024*1024),
+				minRequiredSpace/(1024*1024),
+			)
+		}
+
+		if progressCb != nil {
+			progressCb(domain.DownloadProgress{
+				Stage: "prepare",
+				Message: fmt.Sprintf(
+					"Disk space check passed: %d MB available (minimum %d MB required)",
+					availableSpace/(1024*1024),
+					minRequiredSpace/(1024*1024),
+				),
+			})
+		}
+	}
+
 	// Get compiler path in cache
 	targetDir, err := s.cacheManager.GetCompilerPath(language)
 	if err != nil {
@@ -198,6 +240,17 @@ func (s *CompilerInstallationService) Install(
 	err = downloader.Download(ctx, req, progressCb)
 	if err != nil {
 		return fmt.Errorf("installation failed: %w", err)
+	}
+
+	// Save compiler version to .version file for future reference
+	if saveErr := saveCompilerVersion(targetDir, version); saveErr != nil {
+		// Log warning but don't fail - version tracking is not critical
+		if progressCb != nil {
+			progressCb(domain.DownloadProgress{
+				Stage:   "warning",
+				Message: fmt.Sprintf("Warning: Failed to save compiler version: %v", saveErr),
+			})
+		}
 	}
 
 	return nil
@@ -263,4 +316,37 @@ func (s *CompilerInstallationService) GetSupportedLanguages() []string {
 	}
 
 	return languages
+}
+
+// saveCompilerVersion saves the compiler version to a .version file in the compiler directory
+func saveCompilerVersion(compilerDir, version string) error {
+	versionFile := filepath.Join(compilerDir, ".version")
+	return os.WriteFile(versionFile, []byte(version), 0644)
+}
+
+// getCompilerVersion reads the saved compiler version from .version file
+// Returns "unknown" if file doesn't exist or cannot be read
+func getCompilerVersion(compilerDir string) string {
+	versionFile := filepath.Join(compilerDir, ".version")
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// getAvailableDiskSpace returns available disk space in bytes for the given path
+// Returns error if unable to determine disk space (platform-specific implementation)
+func getAvailableDiskSpace(path string) (int64, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, fmt.Errorf("failed to stat filesystem: %w", err)
+	}
+
+	// Available space = available blocks * block size
+	// Use Bavail (blocks available to unprivileged users) instead of Bfree
+	availableBytes := int64(stat.Bavail) * int64(stat.Bsize)
+
+	return availableBytes, nil
 }

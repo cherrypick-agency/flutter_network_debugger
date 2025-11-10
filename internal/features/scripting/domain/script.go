@@ -129,16 +129,17 @@ type MatchRules struct {
 	Methods     []string    // ["GET", "POST"] - empty means all
 	HostPattern string      // "api.example.com" - empty means all
 	PathPattern string      // "/users/*" - empty means all
-	PatternType PatternType // exact | prefix | regex
+	PatternType PatternType // exact | prefix | wildcard | regex
 }
 
 // PatternType defines how to match patterns
 type PatternType string
 
 const (
-	PatternExact  PatternType = "exact"  // Exact string match
-	PatternPrefix PatternType = "prefix" // Prefix match
-	PatternRegex  PatternType = "regex"  // Regular expression
+	PatternExact    PatternType = "exact"    // Exact string match
+	PatternPrefix   PatternType = "prefix"   // Prefix match
+	PatternWildcard PatternType = "wildcard" // Wildcard match (supports *)
+	PatternRegex    PatternType = "regex"    // Regular expression
 )
 
 // ScriptConfig holds runtime-specific configuration
