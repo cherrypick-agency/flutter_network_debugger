@@ -7,13 +7,12 @@ import '../../application/stores/script_editor_store.dart';
 import '../../application/stores/scripts_store.dart';
 import '../../domain/entities/script.dart';
 import 'package:file_picker/file_picker.dart';
-import 'monaco_code_editor.dart';
 import 'script_settings_form.dart';
 import 'match_rules_form.dart';
-import 'wasm_upload_zone.dart';
 import 'script_test_tab.dart';
 import 'code_mode_selector.dart';
 import 'multi_file_editor_widget.dart';
+import 'wasm_upload_zone.dart';
 import '../../infrastructure/editor_di.dart';
 import '../../../../core/di/di.dart';
 import '../../../compiler_management/presentation/stores/compiler_list_store.dart';
@@ -346,139 +345,69 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   Widget _buildCodeTab() {
     return Observer(
       builder: (_) {
-        // For Dart runtime, show simple Monaco editor
-        if (_editorStore.runtime == ScriptRuntime.dart) {
-          return _buildDartRuntimeTab();
-        }
-
-        // For Extism runtime, show mode selector and different UIs
         return Column(
           children: [
-            // Compilation status banner
-            if (_editorStore.isEditing) _buildCompilationStatusBanner(),
-            // Mode selector
-            CodeModeSelector(
-              selectedMode: _editorStore.codeCreationMode,
-              onModeChanged: _editorStore.setCodeCreationMode,
-            ),
+            // Compilation status banner for Extism runtime
+            if (_editorStore.runtime == ScriptRuntime.extism &&
+                _editorStore.isEditing)
+              _buildCompilationStatusBanner(),
+            // Mode selector for Extism runtime
+            if (_editorStore.runtime == ScriptRuntime.extism)
+              CodeModeSelector(
+                selectedMode: _editorStore.codeCreationMode,
+                onModeChanged: _editorStore.setCodeCreationMode,
+              ),
+            // Toolbar for Extism runtime (not in uploadWasm mode)
+            if (_editorStore.runtime == ScriptRuntime.extism &&
+                _editorStore.codeCreationMode != CodeCreationMode.uploadWasm)
+              _buildExtismToolbar(),
             // Content based on mode
-            Expanded(child: _buildModeContent()),
+            Expanded(
+              child:
+                  _editorStore.runtime == ScriptRuntime.extism &&
+                      _editorStore.codeCreationMode ==
+                          CodeCreationMode.uploadWasm
+                  ? _buildUploadWasmMode()
+                  : _buildMultiFileEditor(),
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildDartRuntimeTab() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildExtismToolbar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withOpacity(0.2),
+        border: Border(
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
+        ),
+      ),
+      child: Row(
         children: [
-          // Language selector
-          Row(
-            children: [
-              const Text('Language:'),
-              const SizedBox(width: 16),
-              DropdownButton<String>(
-                value: _editorStore.language,
-                items: const [
-                  DropdownMenuItem(value: 'dart', child: Text('🎯 Dart')),
-                  DropdownMenuItem(
-                    value: 'javascript',
-                    child: Text('🟨 JavaScript'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'typescript',
-                    child: Text('🔷 TypeScript'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) _editorStore.setLanguage(value);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Monaco editor
-          Expanded(
-            child: FocusScope(
-              canRequestFocus: true,
-              child: MonacoCodeEditor(
-                code: _editorStore.code,
-                language: _editorStore.language,
-                onChanged: _editorStore.setCode,
+          // Import ZIP button (only in importZip mode)
+          if (_editorStore.codeCreationMode == CodeCreationMode.importZip)
+            OutlinedButton.icon(
+              onPressed: _importProjectFromZip,
+              icon: const Icon(Icons.folder_zip, size: 18),
+              label: const Text('Import ZIP'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildModeContent() {
-    return Observer(
-      builder: (_) {
-        return switch (_editorStore.codeCreationMode) {
-          CodeCreationMode.uploadWasm => _buildUploadWasmMode(),
-          CodeCreationMode.writeSource => _buildWriteSourceMode(),
-          CodeCreationMode.importZip => _buildImportZipMode(),
-        };
-      },
-    );
-  }
-
-  Widget _buildUploadWasmMode() {
-    return Column(
-      children: [
-        // Upload zone
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: WasmUploadZone(
-            onWasmUploaded: (base64) {
-              _editorStore.setCode(base64);
-            },
-            onClear: () {
-              _editorStore.setCode('');
-            },
-          ),
-        ),
-        // OR divider
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              const Expanded(child: Divider()),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'OR paste base64 WASM code below',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ),
-              const Expanded(child: Divider()),
-            ],
-          ),
-        ),
-        // Monaco editor for viewing/editing base64
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: FocusScope(
-              canRequestFocus: true,
-              child: MonacoCodeEditor(
-                code: _editorStore.code,
-                language: 'text',
-                onChanged: _editorStore.setCode,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWriteSourceMode() {
+  Widget _buildMultiFileEditor() {
     return FutureBuilder<void>(
       future: _initEditorDI(),
       builder: (context, snapshot) {
@@ -498,67 +427,16 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     );
   }
 
-  Widget _buildImportZipMode() {
-    return Observer(
-      builder: (_) {
-        if (_editorStore.sourceFiles.isEmpty) {
-          return _buildImportZipUploadZone();
-        }
-
-        // Show multi-file editor (same as writeSource mode)
-        return FutureBuilder<void>(
-          future: _initEditorDI(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting ||
-                _editorDI == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: Text('Failed to initialize editor: ${snapshot.error}'),
-              );
-            }
-
-            return MultiFileEditorWidget(editorDI: _editorDI!);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildImportZipUploadZone() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(48),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.folder_zip, size: 80, color: Colors.grey[400]),
-            const SizedBox(height: 24),
-            Text(
-              'Import Project from ZIP',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Upload a ZIP file containing your source code project',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _importProjectFromZip,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Select ZIP File'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-              ),
-            ),
-          ],
-        ),
+  Widget _buildUploadWasmMode() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: WasmUploadZone(
+        onWasmUploaded: (base64) {
+          _editorStore.setCode(base64);
+        },
+        onClear: () {
+          _editorStore.setCode('');
+        },
       ),
     );
   }

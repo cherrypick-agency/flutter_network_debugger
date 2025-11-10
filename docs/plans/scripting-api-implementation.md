@@ -725,8 +725,9 @@ func (e *ExtismExecutor) Execute(ctx context.Context, req domain.ExecutionReques
     ctx, cancel := context.WithTimeout(ctx, time.Duration(req.Script.Config.TimeoutMs)*time.Millisecond)
     defer cancel()
 
-    // Execute plugin
-    output, err := plugin.Call("process", req.Input)
+    // Execute plugin (Extism v1.7.1+ API returns 3 values)
+    exitCode, output, err := plugin.Call("process", req.Input)
+    _ = exitCode // Exit code not used in this implementation
     duration := time.Since(start)
 
     if err != nil {
@@ -753,8 +754,9 @@ func (e *ExtismExecutor) Validate(ctx context.Context, script domain.Script) err
 }
 
 func (e *ExtismExecutor) Close() error {
+    ctx := context.Background()
     for _, plugin := range e.plugins {
-        plugin.Close()
+        plugin.Close(ctx) // Extism v1.7.1+ requires context
     }
     return nil
 }
@@ -829,7 +831,13 @@ func createHostFunctions() []extism.HostFunction {
                 // TODO: Implement HTTP client with proper security controls
                 response := fmt.Sprintf(`{"status": 200, "body": "Mock response for %s"}`, url)
 
-                plugin.ReturnString(response)
+                // Extism v1.7.1+: Use WriteString and return offset via stack
+                offset, err := plugin.WriteString(response)
+                if err != nil {
+                    stack[0] = 0
+                    return
+                }
+                stack[0] = offset
             },
             []api.ValueType{api.ValueTypeI64},
             []api.ValueType{api.ValueTypeI64},

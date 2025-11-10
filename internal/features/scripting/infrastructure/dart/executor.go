@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -126,7 +127,37 @@ func (e *DartExecutor) Validate(ctx context.Context, script domain.Script) error
 	if !e.enabled {
 		return errors.New("Dart runtime not available")
 	}
-	// TODO: Implement Dart syntax validation
+
+	// Skip validation if source code is empty
+	if script.SourceCode == "" {
+		return nil
+	}
+
+	// Create temporary file for validation
+	tmpFile, err := os.CreateTemp("", "dart-validate-*.dart")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	// Write source code to temp file
+	if _, err := tmpFile.Write([]byte(script.SourceCode)); err != nil {
+		return fmt.Errorf("failed to write source: %w", err)
+	}
+	tmpFile.Close()
+
+	// Run dart analyze with timeout
+	analyzeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(analyzeCtx, "dart", "analyze", tmpFile.Name())
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return fmt.Errorf("dart validation failed: %s", string(output))
+	}
+
 	return nil
 }
 

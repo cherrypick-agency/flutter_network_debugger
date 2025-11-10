@@ -95,3 +95,15 @@ frontend/windows/flutter/ephemeral/
 # Embedded web build for desktop wrapper
 cmd/network-debugger-web/_web/
 
+# ===============
+# Rust / Cargo
+# ===============
+**/target/**/deps/
+**/target/**/build/
+**/target/**/.fingerprint/
+**/target/**/incremental/
+**/target/**/.cargo-lock
+
+# E2E test cache
+internal/e2e/cache/
+
