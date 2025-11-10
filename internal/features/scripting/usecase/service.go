@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
+	"regexp"
+	"strings"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -179,6 +182,10 @@ func (s *ScriptService) ExecuteForResponse(ctx context.Context, req *domain.HTTP
 func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *domain.HTTPRequest) []*domain.Script {
 	var matched []*domain.Script
 
+	// Parse URL once if needed for host/path matching
+	var parsedURL *url.URL
+	var parseErr error
+
 	for _, script := range scripts {
 		// If no match rules defined, script matches everything
 		if len(script.MatchRules.Methods) == 0 &&
@@ -202,9 +209,32 @@ func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *dom
 			}
 		}
 
+		// Parse URL lazily (only if needed for host or path matching)
+		if (script.MatchRules.HostPattern != "" || script.MatchRules.PathPattern != "") && parsedURL == nil {
+			parsedURL, parseErr = url.Parse(req.URL)
+			if parseErr != nil {
+				log.Printf("[ScriptService] Failed to parse URL %s: %v", req.URL, parseErr)
+				// If URL parsing fails, no scripts will match host/path patterns
+				break
+			}
+		}
+
+		// Check host pattern match
+		if script.MatchRules.HostPattern != "" {
+			hostMatched := s.matchPattern(parsedURL.Host, script.MatchRules.HostPattern, script.MatchRules.PatternType)
+			if !hostMatched {
+				continue
+			}
+		}
+
 		// Check path pattern match
 		if script.MatchRules.PathPattern != "" {
-			pathMatched := s.matchPattern(req.URL, script.MatchRules.PathPattern, script.MatchRules.PatternType)
+			// Use Path if available, otherwise fall back to full URL
+			pathToMatch := parsedURL.Path
+			if pathToMatch == "" {
+				pathToMatch = req.URL // Fallback for relative URLs
+			}
+			pathMatched := s.matchPattern(pathToMatch, script.MatchRules.PathPattern, script.MatchRules.PatternType)
 			if !pathMatched {
 				continue
 			}
@@ -218,25 +248,64 @@ func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *dom
 }
 
 // matchPattern performs pattern matching based on PatternType
-func (s *ScriptService) matchPattern(url string, pattern string, patternType domain.PatternType) bool {
+func (s *ScriptService) matchPattern(value string, pattern string, patternType domain.PatternType) bool {
 	switch patternType {
 	case domain.PatternExact:
-		return url == pattern
+		return value == pattern
 	case domain.PatternPrefix:
-		return len(url) >= len(pattern) && url[:len(pattern)] == pattern
-	case "wildcard":
-		// Simple wildcard matching: /api/* matches /api/test, /api/users, etc.
-		if len(pattern) == 0 {
-			return true
+		return strings.HasPrefix(value, pattern)
+	case domain.PatternWildcard:
+		return matchWildcard(value, pattern)
+	case domain.PatternRegex:
+		// Compile and match regex pattern
+		compiled, err := regexp.Compile(pattern)
+		if err != nil {
+			log.Printf("[ScriptService] Invalid regex pattern '%s': %v", pattern, err)
+			return false
 		}
-		if pattern[len(pattern)-1] == '*' {
-			prefix := pattern[:len(pattern)-1]
-			return len(url) >= len(prefix) && url[:len(prefix)] == prefix
-		}
-		return url == pattern
+		return compiled.MatchString(value)
 	default:
-		return url == pattern
+		// Default to exact match for unknown pattern types
+		return value == pattern
 	}
+}
+
+// matchWildcard performs wildcard pattern matching supporting * as wildcard
+// Examples: "/api/*" matches "/api/foo", "/api/bar/baz"
+func matchWildcard(value, pattern string) bool {
+	// Split pattern by * to get literal parts
+	parts := strings.Split(pattern, "*")
+
+	// If no wildcards, do exact match
+	if len(parts) == 1 {
+		return value == pattern
+	}
+
+	// Check if value starts with first part
+	if !strings.HasPrefix(value, parts[0]) {
+		return false
+	}
+	value = value[len(parts[0]):]
+
+	// Check middle parts (must appear in order)
+	for i := 1; i < len(parts)-1; i++ {
+		if parts[i] == "" {
+			continue
+		}
+		idx := strings.Index(value, parts[i])
+		if idx == -1 {
+			return false
+		}
+		value = value[idx+len(parts[i]):]
+	}
+
+	// Check if value ends with last part
+	lastPart := parts[len(parts)-1]
+	if lastPart == "" {
+		// Pattern ends with *, matches anything
+		return true
+	}
+	return strings.HasSuffix(value, lastPart)
 }
 
 // CRUD Operations

@@ -12,6 +12,7 @@ import '../../domain/entities/file_statistics.dart';
 /// - Debounces UI updates (200ms) to avoid excessive rebuilds
 /// - Simplified through updated BaseEditorPlugin
 class FileStatsPlugin extends BaseEditorPlugin with StatefulPlugin {
+  static const String _pluginId = 'plugin.file-stats';
   final Map<String, FileStatistics> _statistics = {};
   final Map<String, DateTime> _lastCalculationTime = {};
   final Map<String, Timer> _updateTimers = {};
@@ -59,11 +60,8 @@ class FileStatsPlugin extends BaseEditorPlugin with StatefulPlugin {
   @override
   void onFileOpen(FileDocument file) {
     safeExecute('Calculate file statistics', () {
-      // Track current file
-      _currentFileId = file.id;
-
-      // Calculate immediately on file open
-      _calculateAndScheduleUpdate(file.id, file.content, immediate: true);
+      // Сбрасываем текущий файл; статистика обновится при первом изменении контента
+      _currentFileId = null;
     });
   }
 
@@ -97,7 +95,7 @@ class FileStatsPlugin extends BaseEditorPlugin with StatefulPlugin {
           uiService?.registerUI(descriptor);
         } else {
           // No files open, unregister UI
-          uiService?.unregisterUI(manifest.id);
+          uiService?.unregisterUI(_pluginId);
         }
       }
     });
@@ -169,7 +167,7 @@ class FileStatsPlugin extends BaseEditorPlugin with StatefulPlugin {
     }
 
     return PluginUIDescriptor(
-      pluginId: manifest.id,
+      pluginId: _pluginId,
       iconCode: MaterialIconCodes.barChart,
       iconFamily: 'MaterialIcons',
       tooltip: 'File Statistics',

@@ -492,21 +492,16 @@ abstract class _ScriptEditorStore with Store {
 
   /// Build Script entity from form data
   Script buildScript() {
-    // For multi-file projects (writeSource/importZip modes), populate dependencies
-    // Backend stores ALL files in Dependencies map, not sourceCode
+    // Using multi-file editor for all runtimes now
+    // Store ALL files in dependencies map
     String? sourceCodeValue;
     Map<String, String>? dependenciesValue;
 
-    if (runtime == ScriptRuntime.extism &&
-        (codeCreationMode == CodeCreationMode.writeSource ||
-            codeCreationMode == CodeCreationMode.importZip)) {
-      // Multi-file project: put ALL files in dependencies
-      if (sourceFiles.isNotEmpty) {
-        dependenciesValue = Map<String, String>.from(sourceFiles);
-        // sourceCode is null for multi-file projects
-        // Backend will use Dependencies map for compilation
-        sourceCodeValue = null;
-      }
+    if (sourceFiles.isNotEmpty) {
+      dependenciesValue = Map<String, String>.from(sourceFiles);
+      // sourceCode is null for multi-file projects
+      // Backend will use Dependencies map for compilation
+      sourceCodeValue = null;
     }
 
     return Script(

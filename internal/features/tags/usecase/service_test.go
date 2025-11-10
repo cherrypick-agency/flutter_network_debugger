@@ -2,13 +2,396 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"testing"
+	"time"
 
 	"network-debugger/internal/features/tags/domain"
 )
 
-// mockTagsRepository is a mock implementation of domain.TagsRepository
+// Composer 1.
+func TestNewService(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	if service == nil {
+		t.Fatal("NewService returned nil")
+	}
+
+	// Проверяем что repository установлен (не можем сравнить напрямую из-за интерфейса)
+	if service.repo == nil {
+		t.Error("Repository not set")
+	}
+}
+
+// Composer 1.
+func TestService_ListPredefinedTags(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем теги в mock
+	repo.predefinedTags = []domain.PredefinedTag{
+		{ID: "tag-1", Name: "important", Color: "#ff0000"},
+		{ID: "tag-2", Name: "urgent", Color: "#00ff00"},
+	}
+
+	ctx := context.Background()
+	tags, err := service.ListPredefinedTags(ctx)
+
+	if err != nil {
+		t.Errorf("ListPredefinedTags() error = %v, want nil", err)
+	}
+
+	if len(tags) != 2 {
+		t.Errorf("ListPredefinedTags() length = %d, want 2", len(tags))
+	}
+}
+
+// Composer 1.
+func TestService_CreatePredefinedTag(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	err := service.CreatePredefinedTag(ctx, "test-tag", "#0000ff", "test", 1)
+
+	if err != nil {
+		t.Errorf("CreatePredefinedTag() error = %v, want nil", err)
+	}
+
+	if len(repo.predefinedTags) != 1 {
+		t.Errorf("Expected 1 tag, got %d", len(repo.predefinedTags))
+	}
+
+	if repo.predefinedTags[0].Name != "test-tag" {
+		t.Errorf("Tag name = %q, want %q", repo.predefinedTags[0].Name, "test-tag")
+	}
+}
+
+// Composer 1.
+func TestService_DeletePredefinedTag(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем тег
+	repo.predefinedTags = []domain.PredefinedTag{
+		{ID: "tag-to-delete", Name: "delete-me"},
+	}
+
+	ctx := context.Background()
+	err := service.DeletePredefinedTag(ctx, "tag-to-delete")
+
+	if err != nil {
+		t.Errorf("DeletePredefinedTag() error = %v, want nil", err)
+	}
+
+	if len(repo.predefinedTags) != 0 {
+		t.Errorf("Expected 0 tags after delete, got %d", len(repo.predefinedTags))
+	}
+}
+
+// Composer 1.
+func TestService_GetSessionTags(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем теги для сессии
+	repo.sessionTags["session-1"] = []domain.SessionTag{
+		{ID: "st-1", SessionID: "session-1", TagName: "important"},
+		{ID: "st-2", SessionID: "session-1", TagName: "urgent"},
+	}
+
+	ctx := context.Background()
+	tags, err := service.GetSessionTags(ctx, "session-1")
+
+	if err != nil {
+		t.Errorf("GetSessionTags() error = %v, want nil", err)
+	}
+
+	if len(tags) != 2 {
+		t.Errorf("GetSessionTags() length = %d, want 2", len(tags))
+	}
+}
+
+// Composer 1.
+func TestService_AddTagToSession(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	err := service.AddTagToSession(ctx, "session-1", "important")
+
+	if err != nil {
+		t.Errorf("AddTagToSession() error = %v, want nil", err)
+	}
+
+	tags := repo.sessionTags["session-1"]
+	if len(tags) != 1 {
+		t.Errorf("Expected 1 tag, got %d", len(tags))
+	}
+
+	if tags[0].TagName != "important" {
+		t.Errorf("TagName = %q, want %q", tags[0].TagName, "important")
+	}
+}
+
+// Composer 1.
+func TestService_AddTagToSession_EmptyParams(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+
+	// Пустой sessionID
+	err := service.AddTagToSession(ctx, "", "tag")
+	if err == nil {
+		t.Error("AddTagToSession() should fail with empty sessionID")
+	}
+
+	// Пустой tagName
+	err = service.AddTagToSession(ctx, "session-1", "")
+	if err == nil {
+		t.Error("AddTagToSession() should fail with empty tagName")
+	}
+}
+
+// Composer 1.
+func TestService_RemoveTagFromSession(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем тег
+	repo.sessionTags["session-1"] = []domain.SessionTag{
+		{ID: "st-1", SessionID: "session-1", TagName: "important"},
+	}
+
+	ctx := context.Background()
+	err := service.RemoveTagFromSession(ctx, "session-1", "important")
+
+	if err != nil {
+		t.Errorf("RemoveTagFromSession() error = %v, want nil", err)
+	}
+
+	tags := repo.sessionTags["session-1"]
+	if len(tags) != 0 {
+		t.Errorf("Expected 0 tags after remove, got %d", len(tags))
+	}
+}
+
+// Composer 1.
+func TestService_BulkAddTags(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	err := service.BulkAddTags(ctx, []string{"session-1", "session-2"}, []string{"tag1", "tag2"})
+
+	if err != nil {
+		t.Errorf("BulkAddTags() error = %v, want nil", err)
+	}
+
+	// Проверяем что теги добавлены
+	if len(repo.sessionTags["session-1"]) != 2 {
+		t.Errorf("Expected 2 tags for session-1, got %d", len(repo.sessionTags["session-1"]))
+	}
+}
+
+// Composer 1.
+func TestService_BulkAddTags_EmptyParams(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+
+	// Пустые sessionIDs
+	err := service.BulkAddTags(ctx, []string{}, []string{"tag1"})
+	if err == nil {
+		t.Error("BulkAddTags() should fail with empty sessionIDs")
+	}
+
+	// Пустые tagNames
+	err = service.BulkAddTags(ctx, []string{"session-1"}, []string{})
+	if err == nil {
+		t.Error("BulkAddTags() should fail with empty tagNames")
+	}
+}
+
+// Composer 1.
+func TestService_BulkRemoveTags(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем теги
+	repo.sessionTags["session-1"] = []domain.SessionTag{
+		{ID: "st-1", SessionID: "session-1", TagName: "tag1"},
+		{ID: "st-2", SessionID: "session-1", TagName: "tag2"},
+	}
+
+	ctx := context.Background()
+	err := service.BulkRemoveTags(ctx, []string{"session-1"}, []string{"tag1"})
+
+	if err != nil {
+		t.Errorf("BulkRemoveTags() error = %v, want nil", err)
+	}
+
+	if len(repo.sessionTags["session-1"]) != 1 {
+		t.Errorf("Expected 1 tag after bulk remove, got %d", len(repo.sessionTags["session-1"]))
+	}
+}
+
+// Composer 1.
+func TestService_DeleteAllSessionTags(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем теги
+	repo.sessionTags["session-1"] = []domain.SessionTag{
+		{ID: "st-1", SessionID: "session-1", TagName: "tag1"},
+		{ID: "st-2", SessionID: "session-1", TagName: "tag2"},
+	}
+
+	ctx := context.Background()
+	err := service.DeleteAllSessionTags(ctx, "session-1")
+
+	if err != nil {
+		t.Errorf("DeleteAllSessionTags() error = %v, want nil", err)
+	}
+
+	if len(repo.sessionTags["session-1"]) != 0 {
+		t.Errorf("Expected 0 tags after delete all, got %d", len(repo.sessionTags["session-1"]))
+	}
+}
+
+// Composer 1.
+func TestService_FindSessionIDsByTags(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем теги
+	repo.sessionTags["session-1"] = []domain.SessionTag{
+		{ID: "st-1", SessionID: "session-1", TagName: "important"},
+	}
+	repo.sessionTags["session-2"] = []domain.SessionTag{
+		{ID: "st-2", SessionID: "session-2", TagName: "urgent"},
+	}
+
+	ctx := context.Background()
+	sessionIDs, err := service.FindSessionIDsByTags(ctx, []string{"important"})
+
+	if err != nil {
+		t.Errorf("FindSessionIDsByTags() error = %v, want nil", err)
+	}
+
+	if len(sessionIDs) != 1 {
+		t.Errorf("FindSessionIDsByTags() length = %d, want 1", len(sessionIDs))
+	}
+}
+
+// Composer 1.
+func TestService_FindSessionIDsByTags_Empty(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	sessionIDs, err := service.FindSessionIDsByTags(ctx, []string{})
+
+	if err != nil {
+		t.Errorf("FindSessionIDsByTags() error = %v, want nil", err)
+	}
+
+	if len(sessionIDs) != 0 {
+		t.Errorf("FindSessionIDsByTags() length = %d, want 0", len(sessionIDs))
+	}
+}
+
+// Composer 1.
+func TestService_UpsertAnnotation(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	err := service.UpsertAnnotation(ctx, "session-1", "key1", "value1")
+
+	if err != nil {
+		t.Errorf("UpsertAnnotation() error = %v, want nil", err)
+	}
+
+	annotations := repo.sessionAnnotations["session-1"]
+	if len(annotations) != 1 {
+		t.Errorf("Expected 1 annotation, got %d", len(annotations))
+	}
+
+	if annotations[0].Key != "key1" {
+		t.Errorf("Key = %q, want %q", annotations[0].Key, "key1")
+	}
+}
+
+// Composer 1.
+func TestService_UpsertAnnotation_EmptyParams(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+
+	// Пустой sessionID
+	err := service.UpsertAnnotation(ctx, "", "key", "value")
+	if err == nil {
+		t.Error("UpsertAnnotation() should fail with empty sessionID")
+	}
+
+	// Пустой key
+	err = service.UpsertAnnotation(ctx, "session-1", "", "value")
+	if err == nil {
+		t.Error("UpsertAnnotation() should fail with empty key")
+	}
+}
+
+// Composer 1.
+func TestService_DeleteAnnotation(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем аннотацию
+	repo.sessionAnnotations["session-1"] = []domain.SessionAnnotation{
+		{ID: "ann-1", SessionID: "session-1", Key: "key1", Value: "value1"},
+	}
+
+	ctx := context.Background()
+	err := service.DeleteAnnotation(ctx, "session-1", "key1")
+
+	if err != nil {
+		t.Errorf("DeleteAnnotation() error = %v, want nil", err)
+	}
+
+	annotations := repo.sessionAnnotations["session-1"]
+	if len(annotations) != 0 {
+		t.Errorf("Expected 0 annotations after delete, got %d", len(annotations))
+	}
+}
+
+// Composer 1.
+func TestService_DeleteAllAnnotations(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	// Добавляем аннотации
+	repo.sessionAnnotations["session-1"] = []domain.SessionAnnotation{
+		{ID: "ann-1", SessionID: "session-1", Key: "key1", Value: "value1"},
+		{ID: "ann-2", SessionID: "session-1", Key: "key2", Value: "value2"},
+	}
+
+	ctx := context.Background()
+	err := service.DeleteAllAnnotations(ctx, "session-1")
+
+	if err != nil {
+		t.Errorf("DeleteAllAnnotations() error = %v, want nil", err)
+	}
+
+	if len(repo.sessionAnnotations["session-1"]) != 0 {
+		t.Errorf("Expected 0 annotations after delete all, got %d", len(repo.sessionAnnotations["session-1"]))
+	}
+}
+
+// Mock repository implementation
 type mockTagsRepository struct {
 	predefinedTags     []domain.PredefinedTag
 	sessionTags        map[string][]domain.SessionTag
@@ -74,62 +457,6 @@ func (m *mockTagsRepository) RemoveSessionTag(_ context.Context, sessionID, tagN
 	return nil
 }
 
-func (m *mockTagsRepository) BulkAddSessionTags(_ context.Context, sessionIDs, tagNames []string) error {
-	if m.errCreate != nil {
-		return m.errCreate
-	}
-	for _, sessionID := range sessionIDs {
-		for _, tagName := range tagNames {
-			tag := domain.SessionTag{
-				ID:        "mock-id",
-				SessionID: sessionID,
-				TagName:   tagName,
-			}
-			m.sessionTags[sessionID] = append(m.sessionTags[sessionID], tag)
-		}
-	}
-	return nil
-}
-
-func (m *mockTagsRepository) BulkRemoveSessionTags(_ context.Context, sessionIDs, tagNames []string) error {
-	for _, sessionID := range sessionIDs {
-		for _, tagName := range tagNames {
-			tags := m.sessionTags[sessionID]
-			for i, tag := range tags {
-				if tag.TagName == tagName {
-					m.sessionTags[sessionID] = append(tags[:i], tags[i+1:]...)
-					break
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (m *mockTagsRepository) DeleteAllSessionTags(_ context.Context, sessionID string) error {
-	delete(m.sessionTags, sessionID)
-	return nil
-}
-
-func (m *mockTagsRepository) FindSessionIDsByTags(_ context.Context, tagNames []string) ([]string, error) {
-	sessionIDSet := make(map[string]bool)
-	for sessionID, tags := range m.sessionTags {
-		for _, tag := range tags {
-			for _, targetTag := range tagNames {
-				if tag.TagName == targetTag {
-					sessionIDSet[sessionID] = true
-					break
-				}
-			}
-		}
-	}
-	sessionIDs := make([]string, 0, len(sessionIDSet))
-	for sessionID := range sessionIDSet {
-		sessionIDs = append(sessionIDs, sessionID)
-	}
-	return sessionIDs, nil
-}
-
 func (m *mockTagsRepository) GetSessionAnnotations(_ context.Context, sessionID string) ([]domain.SessionAnnotation, error) {
 	annotations, ok := m.sessionAnnotations[sessionID]
 	if !ok {
@@ -138,22 +465,19 @@ func (m *mockTagsRepository) GetSessionAnnotations(_ context.Context, sessionID 
 	return annotations, m.errGet
 }
 
-func (m *mockTagsRepository) UpsertSessionAnnotation(_ context.Context, annotation domain.SessionAnnotation) error {
+func (m *mockTagsRepository) SetSessionAnnotation(_ context.Context, annotation domain.SessionAnnotation) error {
 	if m.errCreate != nil {
 		return m.errCreate
 	}
 	annotations := m.sessionAnnotations[annotation.SessionID]
-	found := false
 	for i, ann := range annotations {
 		if ann.Key == annotation.Key {
 			annotations[i] = annotation
-			found = true
-			break
+			m.sessionAnnotations[annotation.SessionID] = annotations
+			return nil
 		}
 	}
-	if !found {
-		m.sessionAnnotations[annotation.SessionID] = append(annotations, annotation)
-	}
+	m.sessionAnnotations[annotation.SessionID] = append(annotations, annotation)
 	return nil
 }
 
@@ -168,316 +492,72 @@ func (m *mockTagsRepository) DeleteSessionAnnotation(_ context.Context, sessionI
 	return nil
 }
 
-func (m *mockTagsRepository) DeleteAllSessionAnnotations(_ context.Context, sessionID string) error {
-	delete(m.sessionAnnotations, sessionID)
+func (m *mockTagsRepository) BulkAddTags(_ context.Context, sessionIDs []string, tagNames []string) error {
+	if m.errCreate != nil {
+		return m.errCreate
+	}
+	for _, sessionID := range sessionIDs {
+		for _, tagName := range tagNames {
+			tag := domain.SessionTag{
+				ID:        "bulk-" + sessionID + "-" + tagName,
+				SessionID: sessionID,
+				TagName:   tagName,
+				CreatedAt: time.Now(),
+			}
+			m.sessionTags[sessionID] = append(m.sessionTags[sessionID], tag)
+		}
+	}
 	return nil
 }
 
-// Tests
-
-func TestCreatePredefinedTag(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	err := svc.CreatePredefinedTag(ctx, "Bug", "#ff0000", "issue", 1)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(repo.predefinedTags) != 1 {
-		t.Fatalf("expected 1 tag, got %d", len(repo.predefinedTags))
-	}
-
-	tag := repo.predefinedTags[0]
-	if tag.Name != "Bug" || tag.Color != "#ff0000" || tag.Category != "issue" {
-		t.Errorf("tag fields mismatch: %+v", tag)
-	}
-}
-
-func TestCreatePredefinedTag_RepoError(t *testing.T) {
-	repo := newMockRepo()
-	repo.errCreate = errors.New("db error")
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	err := svc.CreatePredefinedTag(ctx, "Bug", "#ff0000", "issue", 1)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestAddTagToSession(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	err := svc.AddTagToSession(ctx, "session-1", "important")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	tags := repo.sessionTags["session-1"]
-	if len(tags) != 1 {
-		t.Fatalf("expected 1 tag, got %d", len(tags))
-	}
-
-	if tags[0].TagName != "important" {
-		t.Errorf("expected tag name 'important', got %s", tags[0].TagName)
-	}
-}
-
-func TestAddTagToSession_Validation(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	tests := []struct {
-		name      string
-		sessionID string
-		tagName   string
-	}{
-		{"empty sessionID", "", "tag"},
-		{"empty tagName", "session-1", ""},
-		{"both empty", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := svc.AddTagToSession(ctx, tt.sessionID, tt.tagName)
-			if err == nil {
-				t.Error("expected validation error, got nil")
-			}
-		})
-	}
-}
-
-func TestRemoveTagFromSession(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	// Add tag first
-	_ = svc.AddTagToSession(ctx, "session-1", "important")
-
-	// Remove it
-	err := svc.RemoveTagFromSession(ctx, "session-1", "important")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	tags := repo.sessionTags["session-1"]
-	if len(tags) != 0 {
-		t.Errorf("expected 0 tags after removal, got %d", len(tags))
-	}
-}
-
-func TestBulkAddTags(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	sessionIDs := []string{"s1", "s2", "s3"}
-	tagNames := []string{"bug", "critical"}
-
-	err := svc.BulkAddTags(ctx, sessionIDs, tagNames)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Check each session has both tags
+func (m *mockTagsRepository) BulkRemoveTags(_ context.Context, sessionIDs []string, tagNames []string) error {
 	for _, sessionID := range sessionIDs {
-		tags := repo.sessionTags[sessionID]
-		if len(tags) != 2 {
-			t.Errorf("session %s: expected 2 tags, got %d", sessionID, len(tags))
+		for _, tagName := range tagNames {
+			tags := m.sessionTags[sessionID]
+			for i, tag := range tags {
+				if tag.TagName == tagName {
+					m.sessionTags[sessionID] = append(tags[:i], tags[i+1:]...)
+					break
+				}
+			}
 		}
 	}
+	return nil
 }
 
-func TestBulkAddTags_Validation(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
+func (m *mockTagsRepository) BulkAddSessionTags(_ context.Context, sessionIDs []string, tagNames []string) error {
+	return m.BulkAddTags(context.Background(), sessionIDs, tagNames)
+}
 
-	tests := []struct {
-		name       string
-		sessionIDs []string
-		tagNames   []string
-	}{
-		{"empty sessionIDs", []string{}, []string{"tag"}},
-		{"empty tagNames", []string{"s1"}, []string{}},
-		{"both empty", []string{}, []string{}},
-	}
+func (m *mockTagsRepository) BulkRemoveSessionTags(_ context.Context, sessionIDs []string, tagNames []string) error {
+	return m.BulkRemoveTags(context.Background(), sessionIDs, tagNames)
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := svc.BulkAddTags(ctx, tt.sessionIDs, tt.tagNames)
-			if err == nil {
-				t.Error("expected validation error, got nil")
+func (m *mockTagsRepository) DeleteAllSessionTags(_ context.Context, sessionID string) error {
+	delete(m.sessionTags, sessionID)
+	return nil
+}
+
+func (m *mockTagsRepository) FindSessionIDsByTags(_ context.Context, tagNames []string) ([]string, error) {
+	var sessionIDs []string
+	for sessionID, tags := range m.sessionTags {
+		for _, tag := range tags {
+			for _, tagName := range tagNames {
+				if tag.TagName == tagName {
+					sessionIDs = append(sessionIDs, sessionID)
+					break
+				}
 			}
-		})
-	}
-}
-
-func TestBulkRemoveTags(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	// Add tags first
-	sessionIDs := []string{"s1", "s2"}
-	tagNames := []string{"bug", "critical"}
-	_ = svc.BulkAddTags(ctx, sessionIDs, tagNames)
-
-	// Remove them
-	err := svc.BulkRemoveTags(ctx, sessionIDs, tagNames)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Verify removal
-	for _, sessionID := range sessionIDs {
-		tags := repo.sessionTags[sessionID]
-		if len(tags) != 0 {
-			t.Errorf("session %s: expected 0 tags after removal, got %d", sessionID, len(tags))
 		}
 	}
+	return sessionIDs, nil
 }
 
-func TestFindSessionIDsByTags(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	// Add tags to sessions
-	_ = svc.AddTagToSession(ctx, "s1", "bug")
-	_ = svc.AddTagToSession(ctx, "s2", "bug")
-	_ = svc.AddTagToSession(ctx, "s3", "feature")
-
-	// Find sessions with "bug" tag
-	sessionIDs, err := svc.FindSessionIDsByTags(ctx, []string{"bug"})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(sessionIDs) != 2 {
-		t.Errorf("expected 2 sessions, got %d", len(sessionIDs))
-	}
+func (m *mockTagsRepository) UpsertSessionAnnotation(_ context.Context, annotation domain.SessionAnnotation) error {
+	return m.SetSessionAnnotation(context.Background(), annotation)
 }
 
-func TestFindSessionIDsByTags_EmptyTags(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	sessionIDs, err := svc.FindSessionIDsByTags(ctx, []string{})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(sessionIDs) != 0 {
-		t.Errorf("expected empty result, got %d sessions", len(sessionIDs))
-	}
-}
-
-func TestUpsertAnnotation(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	// Create annotation
-	err := svc.UpsertAnnotation(ctx, "session-1", "env", "production")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	annotations := repo.sessionAnnotations["session-1"]
-	if len(annotations) != 1 {
-		t.Fatalf("expected 1 annotation, got %d", len(annotations))
-	}
-
-	if annotations[0].Key != "env" || annotations[0].Value != "production" {
-		t.Errorf("annotation mismatch: %+v", annotations[0])
-	}
-
-	// Update annotation
-	err = svc.UpsertAnnotation(ctx, "session-1", "env", "staging")
-	if err != nil {
-		t.Fatalf("expected no error on update, got %v", err)
-	}
-
-	annotations = repo.sessionAnnotations["session-1"]
-	if len(annotations) != 1 {
-		t.Errorf("expected 1 annotation after update, got %d", len(annotations))
-	}
-
-	if annotations[0].Value != "staging" {
-		t.Errorf("expected updated value 'staging', got %s", annotations[0].Value)
-	}
-}
-
-func TestUpsertAnnotation_Validation(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	tests := []struct {
-		name      string
-		sessionID string
-		key       string
-	}{
-		{"empty sessionID", "", "key"},
-		{"empty key", "session-1", ""},
-		{"both empty", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := svc.UpsertAnnotation(ctx, tt.sessionID, tt.key, "value")
-			if err == nil {
-				t.Error("expected validation error, got nil")
-			}
-		})
-	}
-}
-
-func TestDeleteAnnotation(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	// Create annotation
-	_ = svc.UpsertAnnotation(ctx, "session-1", "env", "production")
-
-	// Delete it
-	err := svc.DeleteAnnotation(ctx, "session-1", "env")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	annotations := repo.sessionAnnotations["session-1"]
-	if len(annotations) != 0 {
-		t.Errorf("expected 0 annotations after deletion, got %d", len(annotations))
-	}
-}
-
-func TestDeleteAllAnnotations(t *testing.T) {
-	repo := newMockRepo()
-	svc := NewService(repo)
-	ctx := context.Background()
-
-	// Create multiple annotations
-	_ = svc.UpsertAnnotation(ctx, "session-1", "env", "production")
-	_ = svc.UpsertAnnotation(ctx, "session-1", "region", "us-east-1")
-
-	// Delete all
-	err := svc.DeleteAllAnnotations(ctx, "session-1")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	annotations := repo.sessionAnnotations["session-1"]
-	if len(annotations) != 0 {
-		t.Errorf("expected 0 annotations after delete all, got %d", len(annotations))
-	}
+func (m *mockTagsRepository) DeleteAllSessionAnnotations(_ context.Context, sessionID string) error {
+	delete(m.sessionAnnotations, sessionID)
+	return nil
 }

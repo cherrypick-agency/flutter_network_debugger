@@ -17,7 +17,6 @@ import (
 // Supports: Rust, Go (TinyGo), JavaScript (AssemblyScript), C, C++, and more
 type ExtismExecutor struct {
 	poolManager      *PoolManager
-	hostFns          []extism.HostFunction
 	compilationCache wazero.CompilationCache
 
 	// Goroutine leak tracking (cannot cancel plugin.Call() - Extism limitation)
@@ -43,7 +42,6 @@ func NewExtismExecutor(cacheDir string) (*ExtismExecutor, error) {
 	}
 
 	executor := &ExtismExecutor{
-		hostFns:          createHostFunctions(),
 		compilationCache: cache,
 	}
 
@@ -92,8 +90,11 @@ func (e *ExtismExecutor) Execute(ctx context.Context, req domain.ExecutionReques
 	go func() {
 		var callErr error
 		var exitCode uint32
+		// Extism v1.7.1+ API returns 3 values: exitCode, output, error
 		exitCode, output, callErr = instance.plugin.Call("process", req.Input)
-		_ = exitCode // Exit code is not used, but we need to handle it
+		// Exit code from WASM module (0 = success, non-zero = error)
+		// Currently not used - we rely on the error return value instead
+		_ = exitCode
 
 		// If goroutine completes after timeout, decrement runaway counter
 		if timedOut.Load() {
@@ -186,6 +187,9 @@ func (e *ExtismExecutor) Close() error {
 
 // createPlugin creates a new plugin for the given script (used by PluginPool)
 func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script) (*extism.Plugin, error) {
+	// Create host functions with script-specific AllowedHosts
+	hostFns := createHostFunctions(script.Config.AllowedHosts)
+
 	// Create new plugin
 	manifest := extism.Manifest{
 		Wasm: []extism.Wasm{
@@ -208,7 +212,7 @@ func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script)
 		log.Printf("[Extism] Using compilation cache for script %s", script.Name)
 	}
 
-	plugin, err := extism.NewPlugin(ctx, manifest, config, e.hostFns)
+	plugin, err := extism.NewPlugin(ctx, manifest, config, hostFns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin: %w", err)
 	}

@@ -12,6 +12,7 @@ import '../../domain/value_objects/recent_file_entry.dart';
 /// - Debounces state updates (200ms) to avoid excessive UI rebuilds
 /// - Simplified through updated BaseEditorPlugin
 class RecentFilesPlugin extends BaseEditorPlugin with StatefulPlugin {
+  static const String _pluginId = 'plugin.recent-files';
   RecentFilesList _recentFiles = RecentFilesList.create(maxEntries: 10);
   Timer? _stateUpdateDebounce;
 
@@ -81,11 +82,24 @@ class RecentFilesPlugin extends BaseEditorPlugin with StatefulPlugin {
   @override
   void onFileOpen(FileDocument file) {
     safeExecute('Add to recent files', () {
-      print('[RecentFiles] File opened: ${file.name}');
+      // Пытаемся аккуратно получить данные из FileDocument, без жёсткой зависимости
+      String fileId;
+      String fileName;
+      try {
+        fileId = (file as dynamic).id as String;
+      } catch (_) {
+        fileId = DateTime.now().millisecondsSinceEpoch.toString();
+      }
+      try {
+        fileName = (file as dynamic).name as String;
+      } catch (_) {
+        fileName = 'Untitled';
+      }
+      print('[RecentFiles] File opened: $fileName');
       final entry = RecentFileEntry.create(
-        fileId: file.id,
-        fileName: file.name,
-        filePath: file.name,
+        fileId: fileId,
+        fileName: fileName,
+        filePath: fileName,
       );
 
       _recentFiles = _recentFiles.addFile(entry);
@@ -105,7 +119,7 @@ class RecentFilesPlugin extends BaseEditorPlugin with StatefulPlugin {
   @override
   PluginUIDescriptor? getUIDescriptor() {
     return PluginUIDescriptor(
-      pluginId: manifest.id,
+      pluginId: _pluginId,
       iconCode: MaterialIconCodes.copyAll,
       iconFamily: 'MaterialIcons',
       tooltip: 'Recent Files',
