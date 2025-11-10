@@ -14,8 +14,6 @@ import (
 	"network-debugger/internal/usecase"
 )
 
-// Composer 1.
-// Mock session repository для тестирования performance handlers
 type mockSessionRepoForPerformance struct {
 	listFunc func(ctx context.Context, filter usecase.SessionFilter) ([]domain.Session, int, error)
 }
@@ -80,9 +78,6 @@ func setupPerformanceDeps(service *performanceuc.Service) *Deps {
 	}
 }
 
-// Composer 1.
-// Тесты для handlePerformanceOverview
-
 func TestHandlePerformanceOverview_GET_Success(t *testing.T) {
 	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -113,7 +108,6 @@ func TestHandlePerformanceOverview_GET_Success(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	// Проверяем что ответ валидный (с пустым списком сессий все метрики будут нулевыми)
 	if resp.TimeRange.From.IsZero() {
 		t.Error("TimeRange.From should not be zero")
 	}
