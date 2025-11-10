@@ -316,7 +316,14 @@ echo -e "\n${YELLOW}Step 6/6: Creating deb package (optional)...${NC}"
 
 if command -v dpkg-deb &> /dev/null; then
   DEB_DIR="$DIST_DIR/deb"
-  DEB_NAME="network-debugger_${VERSION}_${ARCH}"
+
+  # Normalize version for Debian (must start with a digit)
+  DEB_VERSION="$VERSION"
+  if [[ ! "$VERSION" =~ ^[0-9] ]]; then
+    DEB_VERSION="0.0.0+${VERSION}"
+  fi
+
+  DEB_NAME="network-debugger_${DEB_VERSION}_${ARCH}"
 
   mkdir -p "$DEB_DIR/$DEB_NAME/DEBIAN"
   mkdir -p "$DEB_DIR/$DEB_NAME/opt/network-debugger"
@@ -329,7 +336,7 @@ if command -v dpkg-deb &> /dev/null; then
   # Create control file
   cat > "$DEB_DIR/$DEB_NAME/DEBIAN/control" << CONTROL_EOF
 Package: network-debugger
-Version: $VERSION
+Version: $DEB_VERSION
 Section: devel
 Priority: optional
 Architecture: $ARCH
