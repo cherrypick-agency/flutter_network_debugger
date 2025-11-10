@@ -9,6 +9,8 @@ on:
       - 'go.sum'
       - 'Makefile'
       - '.github/workflows/go_build_test.yml'
+      - 'examples/scripts/**'
+      - 'internal/e2e/testdata/scripts/**'
   pull_request:
     branches: [ main ]
     paths:
@@ -17,6 +19,8 @@ on:
       - 'go.sum'
       - 'Makefile'
       - '.github/workflows/go_build_test.yml'
+      - 'examples/scripts/**'
+      - 'internal/e2e/testdata/scripts/**'
 
 jobs:
   lint:
