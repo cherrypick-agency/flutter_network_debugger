@@ -8,6 +8,7 @@ use std::collections::HashMap;
 #[derive(Deserialize)]
 struct ScriptContext {
     request: Option<HTTPRequest>,
+    #[allow(dead_code)]
     session: Option<SessionInfo>,
 }
 
@@ -20,6 +21,7 @@ struct HTTPRequest {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct SessionInfo {
     id: String,
     client_addr: String,
