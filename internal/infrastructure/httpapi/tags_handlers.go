@@ -174,7 +174,7 @@ func (d *Deps) handleSessionTags(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/_api/v1/sessions/")
 	parts := strings.Split(path, "/")
 
-	if len(parts) < 3 || parts[1] != "tags" {
+	if len(parts) < 2 || parts[1] != "tags" {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "invalid path", nil)
 		return
 	}
@@ -309,7 +309,7 @@ func (d *Deps) handleSessionAnnotations(w http.ResponseWriter, r *http.Request) 
 	path := strings.TrimPrefix(r.URL.Path, "/_api/v1/sessions/")
 	parts := strings.Split(path, "/")
 
-	if len(parts) < 3 || parts[1] != "annotations" {
+	if len(parts) < 2 || parts[1] != "annotations" {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "invalid path", nil)
 		return
 	}
