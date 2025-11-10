@@ -622,12 +622,16 @@ func (e *Executor) ExecutePlugin(pluginID string, event Event) error {
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
-    // 4. Execute WASM function
+    // 4. Execute WASM function (Extism v1.7.1+ API)
     input := serializeEvent(event)
-    output, err := plugin.Call(ctx, "handle_event", input)
+    exitCode, output, err := plugin.Call("handle_event", input)
+    _ = exitCode // Exit code handling optional
     if err != nil {
         return fmt.Errorf("plugin execution failed: %w", err)
     }
+
+    // Note: plugin.Call() cannot be cancelled via context (Extism limitation)
+    // For timeout support, wrap Call() in a goroutine with select on ctx.Done()
 
     // 5. Process output
     return e.processPluginOutput(event, output)

@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -179,6 +180,22 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 			HostPattern: req.MatchRules.HostPattern,
 			PathPattern: req.MatchRules.PathPattern,
 			PatternType: domain.PatternType(req.MatchRules.PatternType),
+		}
+
+		// Validate regex patterns
+		if script.MatchRules.PatternType == domain.PatternRegex {
+			if script.MatchRules.HostPattern != "" {
+				if _, err := regexp.Compile(script.MatchRules.HostPattern); err != nil {
+					http.Error(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+			if script.MatchRules.PathPattern != "" {
+				if _, err := regexp.Compile(script.MatchRules.PathPattern); err != nil {
+					http.Error(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
 		}
 	}
 
