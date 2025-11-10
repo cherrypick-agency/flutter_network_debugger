@@ -4,7 +4,8 @@ set -e
 echo "Running Go tests with coverage..."
 
 # Run tests with coverage (excluding integration and e2e tests)
-go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
+# Use -short flag to skip long-running load/stress tests
+go test -short -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
 
 # Extract coverage percentage
 COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
