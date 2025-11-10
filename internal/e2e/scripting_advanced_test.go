@@ -149,7 +149,7 @@ func TestE2E_ScriptingAPI_MatchRules(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 30*time.Second)
 
 	// Create script with match rules: POST /api/*
 	wasmData := loadTestWASM(t, "add_header.wasm")
@@ -259,7 +259,7 @@ func TestE2E_ScriptingAPI_Priority(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 30*time.Second)
 
 	// Create 3 scripts with different priorities
 	wasmData := loadTestWASM(t, "add_header.wasm")

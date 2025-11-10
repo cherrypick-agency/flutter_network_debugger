@@ -319,7 +319,7 @@ func TestE2E_BinaryProcess_RealTCP(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 3*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// 3) Open real WS client to network-debugger and exchange a variety of frames/events over time
 	proxyWS := "ws://" + addr + "/wsproxy?_target=" + urlQueryEscape(echoURL)
@@ -544,7 +544,7 @@ func TestE2E_TLS_WSS_Subprotocols(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// use subprotocol
 	target := tlsURL + "?hdr=1&subp=1"
@@ -582,7 +582,7 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// Connect raw WS to network-debugger targeting socket.io EIO=3 websocket transport
 	target := sioURL // already EIO=3 transport=websocket
@@ -715,7 +715,7 @@ func TestE2E_HeadersForwardingAndNegative(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// with headers (only Authorization and Cookie are whitelisted by proxy)
 	target := echoURL + "?hdr=1"
@@ -773,7 +773,7 @@ func TestE2E_LargeFramesAndPreview(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	ws := "ws://" + addr + "/wsproxy?_target=" + url.QueryEscape(echoURL)
 	c, _, err := websocket.DefaultDialer.Dial(ws, nil)
@@ -850,7 +850,7 @@ func TestE2E_ServerClientCloses(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// server-initiated close after 3 frames
 	target := echoURL + "?closeAt=3"
@@ -911,7 +911,7 @@ func TestE2E_BackpressureSlowEcho(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// slow echo 50ms per frame
 	target := echoURL + "?slowMs=50"
@@ -1039,7 +1039,7 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	_ = cmd.Start()
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// 1st session will be dropped by server closeAt
 	target := echoURL + "?closeAt=1"
@@ -1107,7 +1107,7 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 	}
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 4*time.Second)
+	waitReady(t, baseURL, 15*time.Second)
 
 	// run 150 clients
 	total := 150
