@@ -18,7 +18,10 @@ import (
 	"github.com/rs/zerolog"
 
 	"network-debugger/internal/adapters/storage/memory"
+	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
+	processp "network-debugger/internal/features/process/infrastructure/persistence"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
+	settingsp "network-debugger/internal/features/settings/infrastructure/persistence"
 	"network-debugger/internal/infrastructure/config"
 	dbpkg "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
@@ -113,7 +116,14 @@ func startAppServer(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	tmp := t.TempDir()
 	dbPath := tmp + "/test.db"
 	if gdb, err := dbpkg.NewSQLite(dbPath); err == nil {
-		_ = gdb.AutoMigrate(&proxyp.ProxyConfigModel{})
+		_ = gdb.AutoMigrate(
+			&proxyp.ProxyConfigModel{},
+			&settingsp.RuntimeSettingsModel{},
+			&settingsp.ThrottleProfileModel{},
+			&mappingp.MapRuleModel{},
+			&processp.ProcessDetectionConfigModel{},
+			&processp.IconCacheModel{},
+		)
 		deps.DB = gdb
 	}
 	srv := httptest.NewServer(httpapi.NewRouterWithDeps(deps))
