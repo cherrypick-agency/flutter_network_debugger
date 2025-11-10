@@ -620,8 +620,14 @@ func isRustAvailable() bool {
 		return false
 	}
 
-	// Check if wasm32-unknown-unknown target is installed
-	cmd := exec.Command("rustc", "--print", "target-list")
+	// Check if rustup exists (needed to query installed targets)
+	if cmd := exec.Command("rustup", "--version"); cmd.Run() != nil {
+		return false
+	}
+
+	// Check if wasm32-unknown-unknown target is INSTALLED (not just supported)
+	// This matches the server's detection logic in rust.go:52
+	cmd := exec.Command("rustup", "target", "list", "--installed")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
