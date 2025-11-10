@@ -1,6 +1,9 @@
 // Пример Go скрипта для создания mock response
 // Компиляция: tinygo build -o mock_response.wasm -target wasi mock_response.go
 
+//go:build tinygo.wasm || wasm
+// +build tinygo.wasm wasm
+
 package main
 
 import (
