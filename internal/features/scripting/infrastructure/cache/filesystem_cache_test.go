@@ -408,3 +408,170 @@ func TestFileSystemCache_GetCompilerBinaryPath(t *testing.T) {
 		})
 	}
 }
+
+func TestFileSystemCache_ClearAll_WithFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewFileSystemCache(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSystemCache failed: %v", err)
+	}
+
+	// Создаем компиляторы с файлами
+	languages := []string{"rust", "go"}
+	for _, lang := range languages {
+		compilerPath := filepath.Join(cache.GetCacheDir(), lang)
+		err = os.MkdirAll(compilerPath, 0755)
+		if err != nil {
+			t.Fatalf("Failed to create compiler directory: %v", err)
+		}
+
+		// Создаем файл внутри
+		testFile := filepath.Join(compilerPath, "test.txt")
+		err = os.WriteFile(testFile, []byte("test"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write test file: %v", err)
+		}
+	}
+
+	// Очищаем все
+	err = cache.ClearAll()
+	if err != nil {
+		t.Fatalf("ClearAll failed: %v", err)
+	}
+
+	// Проверяем что все удалено
+	for _, lang := range languages {
+		compilerPath := filepath.Join(cache.GetCacheDir(), lang)
+		if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
+			t.Errorf("Compiler directory %s was not removed", lang)
+		}
+	}
+}
+
+func TestFileSystemCache_GetCacheSize_WithNestedFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewFileSystemCache(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSystemCache failed: %v", err)
+	}
+
+	// Создаем компилятор с вложенными файлами
+	compilerPath := filepath.Join(cache.GetCacheDir(), "rust")
+	err = os.MkdirAll(compilerPath, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create compiler directory: %v", err)
+	}
+
+	// Создаем файлы на разных уровнях
+	files := []string{
+		filepath.Join(compilerPath, "binary"),
+		filepath.Join(compilerPath, "subdir", "file.txt"),
+	}
+
+	for _, file := range files {
+		err = os.MkdirAll(filepath.Dir(file), 0755)
+		if err != nil {
+			t.Fatalf("Failed to create directory: %v", err)
+		}
+		err = os.WriteFile(file, []byte("test content"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+	}
+
+	size, err := cache.GetCacheSize()
+	if err != nil {
+		t.Fatalf("GetCacheSize failed: %v", err)
+	}
+
+	if size == 0 {
+		t.Error("Expected cache size > 0 with nested files")
+	}
+}
+
+func TestFileSystemCache_GetCompilerSize_WithNestedFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewFileSystemCache(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSystemCache failed: %v", err)
+	}
+
+	language := "rust"
+	compilerPath := filepath.Join(cache.GetCacheDir(), language)
+	err = os.MkdirAll(compilerPath, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create compiler directory: %v", err)
+	}
+
+	// Создаем файлы на разных уровнях
+	files := []string{
+		filepath.Join(compilerPath, "binary"),
+		filepath.Join(compilerPath, "subdir", "file.txt"),
+	}
+
+	for _, file := range files {
+		err = os.MkdirAll(filepath.Dir(file), 0755)
+		if err != nil {
+			t.Fatalf("Failed to create directory: %v", err)
+		}
+		err = os.WriteFile(file, []byte("test content"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+	}
+
+	size, err := cache.GetCompilerSize(language)
+	if err != nil {
+		t.Fatalf("GetCompilerSize failed: %v", err)
+	}
+
+	if size == 0 {
+		t.Error("Expected compiler size > 0 with nested files")
+	}
+}
+
+func TestFileSystemCache_GetCompilerPath_StatError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewFileSystemCache(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSystemCache failed: %v", err)
+	}
+
+	// Создаем файл вместо директории
+	compilerPath := filepath.Join(cache.GetCacheDir(), "rust")
+	err = os.WriteFile(compilerPath, []byte("not a dir"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+
+	_, err = cache.GetCompilerPath("rust")
+	if err == nil {
+		t.Fatal("GetCompilerPath should fail when path is not a directory")
+	}
+}
+
+func TestFileSystemCache_Clear_FileInsteadOfDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewFileSystemCache(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSystemCache failed: %v", err)
+	}
+
+	// Создаем файл вместо директории
+	compilerPath := filepath.Join(cache.GetCacheDir(), "rust")
+	err = os.WriteFile(compilerPath, []byte("not a dir"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+
+	// Clear должен удалить файл через RemoveAll
+	err = cache.Clear("rust")
+	if err != nil {
+		t.Fatalf("Clear should succeed even for file: %v", err)
+	}
+
+	// Проверяем что файл удален
+	if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
+		t.Fatal("File should be removed by Clear")
+	}
+}

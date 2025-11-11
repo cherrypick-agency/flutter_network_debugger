@@ -3,8 +3,12 @@ package usecase
 import (
 	"context"
 	"network-debugger/internal/domain"
+	processdomain "network-debugger/internal/features/process/domain"
+	processuc "network-debugger/internal/features/process/usecase"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 // Mock repository implementations
@@ -511,4 +515,240 @@ func TestSessionService_AddFrame_IncrementsCounters(t *testing.T) {
 	}
 	// IncrementCounters is called but mockSessionRepo doesn't track this
 	// This test at least exercises the code path
+}
+
+func TestSessionService_SetProcessService(t *testing.T) {
+	svc := NewSessionService(&mockSessionRepo{}, &mockFrameRepo{}, &mockEventRepo{})
+
+	if svc.processSvc != nil {
+		t.Error("processSvc should be nil initially")
+	}
+
+	logger := zerolog.Nop()
+	processSvc := processuc.NewService(
+		&mockProcessConfigRepo{},
+		&mockProcessIconCacheRepo{},
+		&mockProcessDetector{},
+		nil,
+		&mockProcessIconExtractor{},
+		nil,
+		"",
+		&logger,
+	)
+	svc.SetProcessService(processSvc)
+
+	if svc.processSvc == nil {
+		t.Error("processSvc should be set after SetProcessService")
+	}
+}
+
+func TestSessionService_Create_WithProcessDetection(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: make(map[string]domain.Session)}
+	svc := NewSessionService(sessRepo, &mockFrameRepo{}, &mockEventRepo{})
+
+	logger := zerolog.Nop()
+	detector := &mockProcessDetectorWithResult{
+		result: &processdomain.ProcessInfo{
+			PID:  1234,
+			Name: "test-process",
+		},
+	}
+	processSvc := processuc.NewService(
+		&mockProcessConfigRepo{},
+		&mockProcessIconCacheRepo{},
+		detector,
+		nil,
+		&mockProcessIconExtractor{},
+		nil,
+		"",
+		&logger,
+	)
+	svc.SetProcessService(processSvc)
+	ctx := context.Background()
+
+	sess := domain.Session{
+		ID:         "test1",
+		Target:     "ws://example.com",
+		ClientAddr: "127.0.0.1:8080",
+	}
+	err := svc.Create(ctx, sess)
+
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	savedSess, ok := sessRepo.sessions["test1"]
+	if !ok {
+		t.Fatal("Session should be saved")
+	}
+	if savedSess.ProcessInfo == nil {
+		t.Error("ProcessInfo should be set after process detection")
+	}
+	if savedSess.ProcessInfo != nil && savedSess.ProcessInfo.PID != 1234 {
+		t.Errorf("ProcessInfo.PID = %d, want 1234", savedSess.ProcessInfo.PID)
+	}
+}
+
+func TestSessionService_Create_WithProcessDetection_NoPort(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: make(map[string]domain.Session)}
+	svc := NewSessionService(sessRepo, &mockFrameRepo{}, &mockEventRepo{})
+
+	logger := zerolog.Nop()
+	processSvc := processuc.NewService(
+		&mockProcessConfigRepo{},
+		&mockProcessIconCacheRepo{},
+		&mockProcessDetector{},
+		nil,
+		&mockProcessIconExtractor{},
+		nil,
+		"",
+		&logger,
+	)
+	svc.SetProcessService(processSvc)
+	ctx := context.Background()
+
+	sess := domain.Session{
+		ID:         "test1",
+		Target:     "ws://example.com",
+		ClientAddr: "127.0.0.1",
+	}
+	err := svc.Create(ctx, sess)
+
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+}
+
+func TestSessionService_Create_WithProcessDetection_AlreadyHasProcessInfo(t *testing.T) {
+	sessRepo := &mockSessionRepo{sessions: make(map[string]domain.Session)}
+	svc := NewSessionService(sessRepo, &mockFrameRepo{}, &mockEventRepo{})
+
+	logger := zerolog.Nop()
+	processSvc := processuc.NewService(
+		&mockProcessConfigRepo{},
+		&mockProcessIconCacheRepo{},
+		&mockProcessDetector{},
+		nil,
+		&mockProcessIconExtractor{},
+		nil,
+		"",
+		&logger,
+	)
+	svc.SetProcessService(processSvc)
+	ctx := context.Background()
+
+	sess := domain.Session{
+		ID:         "test1",
+		Target:     "ws://example.com",
+		ClientAddr: "127.0.0.1:8080",
+		ProcessInfo: &processdomain.ProcessInfo{
+			PID:  9999,
+			Name: "existing-process",
+		},
+	}
+	err := svc.Create(ctx, sess)
+
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if sess.ProcessInfo.PID != 9999 {
+		t.Errorf("ProcessInfo.PID = %d, want 9999", sess.ProcessInfo.PID)
+	}
+}
+
+func TestExtractPortFromAddr(t *testing.T) {
+	tests := []struct {
+		name     string
+		addr     string
+		expected uint32
+	}{
+		{"valid port", "127.0.0.1:8080", 8080},
+		{"valid port large", "192.168.1.1:65535", 65535},
+		{"no port", "127.0.0.1", 0},
+		{"empty string", "", 0},
+		{"port with non-digits", "127.0.0.1:8080abc", 8080},
+		{"multiple colons", "::1:8080", 8080},
+		{"port zero", "127.0.0.1:0", 0},
+		{"port with spaces", "127.0.0.1: 8080", 8080},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractPortFromAddr(tt.addr)
+			if result != tt.expected {
+				t.Errorf("extractPortFromAddr(%q) = %d, want %d", tt.addr, result, tt.expected)
+			}
+		})
+	}
+}
+
+type mockProcessConfigRepo struct{}
+
+func (m *mockProcessConfigRepo) Load(ctx context.Context) (*processdomain.DetectionConfig, error) {
+	return &processdomain.DetectionConfig{
+		Enabled: true,
+	}, nil
+}
+
+func (m *mockProcessConfigRepo) Save(ctx context.Context, cfg *processdomain.DetectionConfig) error {
+	return nil
+}
+
+type mockProcessIconCacheRepo struct{}
+
+func (m *mockProcessIconCacheRepo) Get(key string) (*processdomain.AppIcon, error) {
+	return nil, nil
+}
+
+func (m *mockProcessIconCacheRepo) Set(key string, icon *processdomain.AppIcon, ttl time.Duration) error {
+	return nil
+}
+
+func (m *mockProcessIconCacheRepo) Delete(key string) error {
+	return nil
+}
+
+func (m *mockProcessIconCacheRepo) Clear() error {
+	return nil
+}
+
+func (m *mockProcessIconCacheRepo) CleanupExpired() error {
+	return nil
+}
+
+type mockProcessDetector struct{}
+
+func (m *mockProcessDetector) DetectByPort(ctx context.Context, port uint32) (*processdomain.ProcessInfo, error) {
+	return nil, nil
+}
+
+func (m *mockProcessDetector) DetectByPID(ctx context.Context, pid int32) (*processdomain.ProcessInfo, error) {
+	return nil, nil
+}
+
+func (m *mockProcessDetector) RequiresPrivileges() bool {
+	return false
+}
+
+type mockProcessDetectorWithResult struct {
+	mockProcessDetector
+	result *processdomain.ProcessInfo
+}
+
+func (m *mockProcessDetectorWithResult) DetectByPort(ctx context.Context, port uint32) (*processdomain.ProcessInfo, error) {
+	return m.result, nil
+}
+
+type mockProcessIconExtractor struct{}
+
+func (m *mockProcessIconExtractor) Extract(ctx context.Context, pid int32, path string) (*processdomain.AppIcon, error) {
+	return nil, nil
+}
+
+func (m *mockProcessIconExtractor) ExtractByPID(ctx context.Context, pid int32) (*processdomain.AppIcon, error) {
+	return nil, nil
+}
+
+func (m *mockProcessIconExtractor) ExtractByPath(ctx context.Context, path string) (*processdomain.AppIcon, error) {
+	return nil, nil
 }

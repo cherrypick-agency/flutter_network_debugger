@@ -522,3 +522,594 @@ type mockProcessDetectorWithError struct {
 func (m *mockProcessDetectorWithError) DetectByPort(ctx context.Context, port uint32) (*domain.ProcessInfo, error) {
 	return nil, errors.New("detection failed")
 }
+
+func TestService_DetectForConnection_ConfigLoadError(t *testing.T) {
+	config := &mockConfigRepository{
+		loadFunc: func(ctx context.Context) (*domain.DetectionConfig, error) {
+			return nil, errors.New("config load failed")
+		},
+	}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	info, err := service.DetectForConnection(ctx, 8080)
+
+	if err == nil {
+		t.Error("DetectForConnection() should return error when config load fails")
+	}
+
+	if info != nil {
+		t.Error("DetectForConnection() should return nil info when config load fails")
+	}
+}
+
+func TestService_DetectForConnection_HelperErrorButNoInfo(t *testing.T) {
+	config := &mockConfigRepository{
+		loadFunc: func(ctx context.Context) (*domain.DetectionConfig, error) {
+			return &domain.DetectionConfig{
+				Enabled:       true,
+				UseHelperTool: true,
+			}, nil
+		},
+	}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClientWithError{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	info, err := service.DetectForConnection(ctx, 8080)
+
+	if err != nil {
+		t.Errorf("DetectForConnection() should not return error when helper fails but local succeeds, got: %v", err)
+	}
+
+	if info == nil {
+		t.Error("DetectForConnection() should return info from local detector when helper fails")
+	}
+}
+
+func TestService_DetectForConnection_FallbackDisabled(t *testing.T) {
+	config := &mockConfigRepository{
+		loadFunc: func(ctx context.Context) (*domain.DetectionConfig, error) {
+			return &domain.DetectionConfig{
+				Enabled:         true,
+				UseHelperTool:   false,
+				FallbackEnabled: false,
+			}, nil
+		},
+	}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetectorWithError{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	info, err := service.DetectForConnection(ctx, 8080)
+
+	if err == nil {
+		t.Error("DetectForConnection() should return error when fallback is disabled and detection fails")
+	}
+
+	if info != nil {
+		t.Error("DetectForConnection() should return nil info when fallback is disabled and detection fails")
+	}
+}
+
+func TestService_DetectForConnection_IconError(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractorWithError{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	info, err := service.DetectForConnection(ctx, 8080)
+
+	if err != nil {
+		t.Errorf("DetectForConnection() should not return error when icon extraction fails, got: %v", err)
+	}
+
+	if info == nil {
+		t.Error("DetectForConnection() should return info even when icon extraction fails")
+	}
+
+	if info != nil && info.Icon != nil {
+		t.Error("DetectForConnection() should not set icon when extraction fails")
+	}
+}
+
+type mockHelperClientWithError struct {
+	mockHelperClient
+}
+
+func (m *mockHelperClientWithError) IsRunning() bool {
+	return true
+}
+
+func (m *mockHelperClientWithError) DetectProcess(port uint32) (*domain.ProcessInfo, error) {
+	return nil, errors.New("helper detection failed")
+}
+
+type mockIconExtractorWithError struct {
+	mockIconExtractor
+}
+
+func (m *mockIconExtractorWithError) ExtractByPID(ctx context.Context, pid int32) (*domain.AppIcon, error) {
+	return nil, errors.New("icon extraction failed")
+}
+
+func TestService_getIcon_WithCache(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepositoryWithCache{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	icon, err := service.getIcon(ctx, 1234, "/usr/bin/test")
+
+	if err != nil {
+		t.Errorf("getIcon() error = %v, want nil", err)
+	}
+
+	if icon == nil {
+		t.Error("getIcon() should return cached icon")
+	}
+}
+
+func TestService_getIcon_WithoutCache(t *testing.T) {
+	config := &mockConfigRepository{
+		loadFunc: func(ctx context.Context) (*domain.DetectionConfig, error) {
+			return &domain.DetectionConfig{
+				CacheEnabled: false,
+			}, nil
+		},
+	}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	icon, err := service.getIcon(ctx, 1234, "/usr/bin/test")
+
+	if err != nil {
+		t.Errorf("getIcon() error = %v, want nil", err)
+	}
+
+	if icon == nil {
+		t.Error("getIcon() should return icon")
+	}
+}
+
+func TestService_getIcon_CacheSetError(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepositoryWithSetError{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	icon, err := service.getIcon(ctx, 1234, "/usr/bin/test")
+
+	if err != nil {
+		t.Errorf("getIcon() should not return error even if cache set fails, got: %v", err)
+	}
+
+	if icon == nil {
+		t.Error("getIcon() should return icon even if cache set fails")
+	}
+}
+
+func TestService_extractIcon_WithHelper(t *testing.T) {
+	config := &mockConfigRepository{
+		loadFunc: func(ctx context.Context) (*domain.DetectionConfig, error) {
+			return &domain.DetectionConfig{
+				UseHelperTool: true,
+			}, nil
+		},
+	}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClientWithIcon{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	icon, err := service.extractIcon(ctx, 1234, "/usr/bin/test")
+
+	if err != nil {
+		t.Errorf("extractIcon() error = %v, want nil", err)
+	}
+
+	if icon == nil {
+		t.Error("extractIcon() should return icon from helper")
+	}
+}
+
+func TestService_extractIcon_HelperError(t *testing.T) {
+	config := &mockConfigRepository{
+		loadFunc: func(ctx context.Context) (*domain.DetectionConfig, error) {
+			return &domain.DetectionConfig{
+				UseHelperTool: true,
+			}, nil
+		},
+	}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClientWithIconError{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	icon, err := service.extractIcon(ctx, 1234, "/usr/bin/test")
+
+	if err != nil {
+		t.Errorf("extractIcon() error = %v, want nil (should fallback to local)", err)
+	}
+
+	if icon == nil {
+		t.Error("extractIcon() should return icon from local extractor")
+	}
+}
+
+func TestService_SaveConfig_ValidationError(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	cfg := &domain.DetectionConfig{
+		CacheTTLSeconds: -1,
+	}
+
+	ctx := context.Background()
+	err := service.SaveConfig(ctx, cfg)
+
+	if err == nil {
+		t.Error("SaveConfig() should return error when validation fails")
+	}
+}
+
+func TestService_CheckHelperStatus_WithInstalled(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClientWithRunning{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstallerInstalled{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	status := service.CheckHelperStatus()
+
+	if !status.Installed {
+		t.Error("CheckHelperStatus() should return Installed=true")
+	}
+
+	if !status.Running {
+		t.Error("CheckHelperStatus() should return Running=true")
+	}
+
+	if status.Version == "" {
+		t.Error("CheckHelperStatus() should return Version when installed")
+	}
+}
+
+func TestService_CheckHelperStatus_NilClient(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		nil,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	status := service.CheckHelperStatus()
+
+	if status.Installed {
+		t.Error("CheckHelperStatus() should return Installed=false when client is nil")
+	}
+
+	if status.Running {
+		t.Error("CheckHelperStatus() should return Running=false when client is nil")
+	}
+}
+
+func TestService_InstallHelper_NoInstaller(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		nil,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	err := service.InstallHelper(ctx)
+
+	if err == nil {
+		t.Error("InstallHelper() should return error when installer is nil")
+	}
+}
+
+func TestService_InstallHelper_NoBinaryPath(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstaller{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"",
+		&logger,
+	)
+
+	ctx := context.Background()
+	err := service.InstallHelper(ctx)
+
+	if err == nil {
+		t.Error("InstallHelper() should return error when binary path is empty")
+	}
+}
+
+func TestService_InstallHelper_InstallError(t *testing.T) {
+	config := &mockConfigRepository{}
+	iconCache := &mockIconCacheRepository{}
+	localDetector := &mockProcessDetector{}
+	helperClient := &mockHelperClient{}
+	iconExtractor := &mockIconExtractor{}
+	helperInstaller := &mockHelperInstallerWithError{}
+	logger := zerolog.Nop()
+
+	service := NewService(
+		config,
+		iconCache,
+		localDetector,
+		helperClient,
+		iconExtractor,
+		helperInstaller,
+		"/path/to/helper",
+		&logger,
+	)
+
+	ctx := context.Background()
+	err := service.InstallHelper(ctx)
+
+	if err == nil {
+		t.Error("InstallHelper() should return error when installation fails")
+	}
+}
+
+type mockIconCacheRepositoryWithCache struct {
+	mockIconCacheRepository
+}
+
+func (m *mockIconCacheRepositoryWithCache) Get(key string) (*domain.AppIcon, error) {
+	return &domain.AppIcon{
+		Format: "png",
+		Data:   []byte{1, 2, 3},
+	}, nil
+}
+
+type mockIconCacheRepositoryWithSetError struct {
+	mockIconCacheRepository
+}
+
+func (m *mockIconCacheRepositoryWithSetError) Set(key string, icon *domain.AppIcon, ttl time.Duration) error {
+	return errors.New("cache set failed")
+}
+
+type mockHelperClientWithIcon struct {
+	mockHelperClient
+}
+
+func (m *mockHelperClientWithIcon) IsRunning() bool {
+	return true
+}
+
+func (m *mockHelperClientWithIcon) ExtractIcon(pid int32) (*domain.AppIcon, error) {
+	return &domain.AppIcon{
+		Format: "png",
+		Data:   []byte{4, 5, 6},
+	}, nil
+}
+
+type mockHelperClientWithIconError struct {
+	mockHelperClient
+}
+
+func (m *mockHelperClientWithIconError) IsRunning() bool {
+	return true
+}
+
+func (m *mockHelperClientWithIconError) ExtractIcon(pid int32) (*domain.AppIcon, error) {
+	return nil, errors.New("helper icon extraction failed")
+}
+
+type mockHelperInstallerInstalled struct {
+	mockHelperInstaller
+}
+
+func (m *mockHelperInstallerInstalled) IsInstalled() bool {
+	return true
+}
+
+type mockHelperInstallerWithError struct {
+	mockHelperInstaller
+}
+
+func (m *mockHelperInstallerWithError) Install(helperBinaryPath string) error {
+	return errors.New("installation failed")
+}
