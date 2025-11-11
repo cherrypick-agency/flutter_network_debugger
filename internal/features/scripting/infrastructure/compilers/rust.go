@@ -313,14 +313,17 @@ func (c *RustCompiler) getRustEnv() []string {
 
 // updatePathInEnv updates the PATH environment variable by prepending newPath
 // It removes any existing PATH entry and adds a new one with newPath at the beginning
+// Handles both "PATH=" and "Path=" (Windows is case-insensitive)
 func updatePathInEnv(env []string, newPath string) []string {
 	var existingPath string
 	var result []string
 
 	// Find and extract existing PATH, filter it out
+	// On Windows, PATH can be "Path=" or "PATH=" (case-insensitive)
 	for _, e := range env {
-		if strings.HasPrefix(e, "PATH=") {
-			existingPath = strings.TrimPrefix(e, "PATH=")
+		// Check for PATH= with case-insensitive comparison
+		if len(e) >= 5 && strings.EqualFold(e[:5], "PATH=") {
+			existingPath = e[5:]
 		} else {
 			result = append(result, e)
 		}
