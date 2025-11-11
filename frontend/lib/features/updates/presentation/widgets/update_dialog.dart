@@ -147,9 +147,8 @@ class _UpdateDialog extends StatelessWidget {
       ),
       actions: [
         TextButton.icon(
-          onPressed:
-              () =>
-                  Navigator.of(context).pop(UpdateDialogResult.viewAllReleases),
+          onPressed: () =>
+              Navigator.of(context).pop(UpdateDialogResult.viewAllReleases),
           icon: const Icon(Icons.history, size: 18),
           label: const Text('View All Releases'),
         ),
@@ -159,13 +158,13 @@ class _UpdateDialog extends StatelessWidget {
           child: const Text('Skip This Version'),
         ),
         TextButton(
-          onPressed:
-              () => Navigator.of(context).pop(UpdateDialogResult.remindLater),
+          onPressed: () =>
+              Navigator.of(context).pop(UpdateDialogResult.remindLater),
           child: const Text('Remind Me Later'),
         ),
         ElevatedButton.icon(
-          onPressed:
-              () => Navigator.of(context).pop(UpdateDialogResult.download),
+          onPressed: () =>
+              Navigator.of(context).pop(UpdateDialogResult.download),
           icon: const Icon(Icons.download),
           label: const Text('Download Update'),
         ),

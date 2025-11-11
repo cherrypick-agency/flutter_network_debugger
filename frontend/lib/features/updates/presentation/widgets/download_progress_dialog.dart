@@ -44,11 +44,10 @@ Future<DownloadDialogResult> showDownloadProgressDialog(
   final result = await showDialog<DownloadDialogResult>(
     context: context,
     barrierDismissible: false,
-    builder:
-        (ctx) => _DownloadProgressDialog(
-          progressStream: progressStream,
-          onCancel: onCancel,
-        ),
+    builder: (ctx) => _DownloadProgressDialog(
+      progressStream: progressStream,
+      onCancel: onCancel,
+    ),
   );
 
   return result ?? DownloadDialogResult.cancelled;

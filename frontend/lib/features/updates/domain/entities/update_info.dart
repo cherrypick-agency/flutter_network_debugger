@@ -90,8 +90,15 @@ class UpdateInfo {
     final latest = version.replaceFirst('v', '');
 
     try {
-      final currentParts = current.split('.').map(int.parse).toList();
-      final latestParts = latest.split('.').map(int.parse).toList();
+      // Убираем build number (+4) если есть, оставляем только версию
+      final currentVersionOnly = current.split('+').first;
+      final latestVersionOnly = latest.split('+').first;
+
+      final currentParts = currentVersionOnly
+          .split('.')
+          .map(int.parse)
+          .toList();
+      final latestParts = latestVersionOnly.split('.').map(int.parse).toList();
 
       // Сравниваем major.minor.patch
       for (int i = 0; i < 3; i++) {

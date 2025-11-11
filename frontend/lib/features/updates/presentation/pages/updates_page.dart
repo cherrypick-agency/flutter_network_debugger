@@ -95,46 +95,42 @@ class _UpdatesPageState extends State<UpdatesPage> {
 
                 // Кнопка проверки обновлений
                 Observer(
-                  builder:
-                      (_) => ElevatedButton.icon(
-                        onPressed:
-                            _store.isCheckingForUpdates
-                                ? null
-                                : () async {
-                                  await _store.checkForUpdates();
-                                  if (_store.availableUpdate != null &&
-                                      mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Update available: ${_store.availableUpdate!.version}',
-                                        ),
-                                        backgroundColor: colorScheme.primary,
-                                      ),
-                                    );
-                                  } else if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'You are on the latest version',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
-                        icon:
-                            _store.isCheckingForUpdates
-                                ? SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorScheme.onPrimary,
+                  builder: (_) => ElevatedButton.icon(
+                    onPressed: _store.isCheckingForUpdates
+                        ? null
+                        : () async {
+                            await _store.checkForUpdates();
+                            if (_store.availableUpdate != null && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Update available: ${_store.availableUpdate!.version}',
                                   ),
-                                )
-                                : const Icon(Icons.refresh),
-                        label: const Text('Check for Updates'),
-                      ),
+                                  backgroundColor: colorScheme.primary,
+                                ),
+                              );
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'You are on the latest version',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                    icon: _store.isCheckingForUpdates
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Icon(Icons.refresh),
+                    label: const Text('Check for Updates'),
+                  ),
                 ),
 
                 // Показ доступного обновления
@@ -192,30 +188,29 @@ class _UpdatesPageState extends State<UpdatesPage> {
                 ),
                 const SizedBox(width: 12),
                 Observer(
-                  builder:
-                      (_) => SegmentedButton<ReleaseFilter>(
-                        segments: const [
-                          ButtonSegment(
-                            value: ReleaseFilter.all,
-                            label: Text('All'),
-                            icon: Icon(Icons.list, size: 16),
-                          ),
-                          ButtonSegment(
-                            value: ReleaseFilter.stable,
-                            label: Text('Stable'),
-                            icon: Icon(Icons.verified, size: 16),
-                          ),
-                          ButtonSegment(
-                            value: ReleaseFilter.prerelease,
-                            label: Text('Pre-release'),
-                            icon: Icon(Icons.science, size: 16),
-                          ),
-                        ],
-                        selected: {_store.filter},
-                        onSelectionChanged: (Set<ReleaseFilter> selected) {
-                          _store.setFilter(selected.first);
-                        },
+                  builder: (_) => SegmentedButton<ReleaseFilter>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ReleaseFilter.all,
+                        label: Text('All'),
+                        icon: Icon(Icons.list, size: 16),
                       ),
+                      ButtonSegment(
+                        value: ReleaseFilter.stable,
+                        label: Text('Stable'),
+                        icon: Icon(Icons.verified, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: ReleaseFilter.prerelease,
+                        label: Text('Pre-release'),
+                        icon: Icon(Icons.science, size: 16),
+                      ),
+                    ],
+                    selected: {_store.filter},
+                    onSelectionChanged: (Set<ReleaseFilter> selected) {
+                      _store.setFilter(selected.first);
+                    },
+                  ),
                 ),
               ],
             ),
@@ -300,16 +295,14 @@ class _UpdatesPageState extends State<UpdatesPage> {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Center(
-                          child:
-                              _store.isLoading
-                                  ? const CircularProgressIndicator()
-                                  : OutlinedButton.icon(
-                                    onPressed:
-                                        () =>
-                                            _store.loadReleases(loadMore: true),
-                                    icon: const Icon(Icons.expand_more),
-                                    label: const Text('Load More'),
-                                  ),
+                          child: _store.isLoading
+                              ? const CircularProgressIndicator()
+                              : OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _store.loadReleases(loadMore: true),
+                                  icon: const Icon(Icons.expand_more),
+                                  label: const Text('Load More'),
+                                ),
                         ),
                       );
                     }
@@ -427,25 +420,22 @@ class _ReleaseCardState extends State<_ReleaseCard> {
           // ignore: use_build_context_synchronously
           await showDialog(
             context: context,
-            builder:
-                (ctx) => AlertDialog(
-                  title: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue),
-                      SizedBox(width: 12),
-                      Text('Installation Instructions'),
-                    ],
-                  ),
-                  content: SingleChildScrollView(
-                    child: Text(result.instructions!),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('OK'),
-                    ),
-                  ],
+            builder: (ctx) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue),
+                  SizedBox(width: 12),
+                  Text('Installation Instructions'),
+                ],
+              ),
+              content: SingleChildScrollView(child: Text(result.instructions!)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('OK'),
                 ),
+              ],
+            ),
           );
         } else {
           // ignore: use_build_context_synchronously
@@ -461,25 +451,22 @@ class _ReleaseCardState extends State<_ReleaseCard> {
         // ignore: use_build_context_synchronously
         await showDialog(
           context: context,
-          builder:
-              (ctx) => AlertDialog(
-                title: const Row(
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red),
-                    SizedBox(width: 12),
-                    Text('Installation Error'),
-                  ],
-                ),
-                content: Text(
-                  result.errorMessage ?? 'Failed to open installer',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('OK'),
-                  ),
-                ],
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red),
+                SizedBox(width: 12),
+                Text('Installation Error'),
+              ],
+            ),
+            content: Text(result.errorMessage ?? 'Failed to open installer'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
               ),
+            ],
+          ),
         );
       }
     } catch (e) {
@@ -521,10 +508,9 @@ class _ReleaseCardState extends State<_ReleaseCard> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              widget.release.isPrerelease
-                                  ? colorScheme.secondaryContainer
-                                  : colorScheme.primaryContainer,
+                          color: widget.release.isPrerelease
+                              ? colorScheme.secondaryContainer
+                              : colorScheme.primaryContainer,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -532,10 +518,9 @@ class _ReleaseCardState extends State<_ReleaseCard> {
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             fontFamily: 'monospace',
-                            color:
-                                widget.release.isPrerelease
-                                    ? colorScheme.onSecondaryContainer
-                                    : colorScheme.onPrimaryContainer,
+                            color: widget.release.isPrerelease
+                                ? colorScheme.onSecondaryContainer
+                                : colorScheme.onPrimaryContainer,
                           ),
                         ),
                       ),
@@ -675,48 +660,47 @@ class _ReleaseCardState extends State<_ReleaseCard> {
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child:
-                        widget.release.changelog.isNotEmpty
-                            ? MarkdownBody(
-                              data: widget.release.changelog,
-                              styleSheet: MarkdownStyleSheet(
-                                p: theme.textTheme.bodyMedium,
-                                h1: theme.textTheme.titleLarge,
-                                h2: theme.textTheme.titleMedium,
-                                h3: theme.textTheme.titleSmall,
-                                code: theme.textTheme.bodySmall?.copyWith(
-                                  fontFamily: 'monospace',
-                                  backgroundColor:
-                                      colorScheme.surfaceContainerHighest,
-                                ),
-                                codeblockDecoration: BoxDecoration(
-                                  color: colorScheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                listBullet: theme.textTheme.bodyMedium,
-                                a: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.primary,
-                                  decoration: TextDecoration.underline,
-                                ),
+                    child: widget.release.changelog.isNotEmpty
+                        ? MarkdownBody(
+                            data: widget.release.changelog,
+                            styleSheet: MarkdownStyleSheet(
+                              p: theme.textTheme.bodyMedium,
+                              h1: theme.textTheme.titleLarge,
+                              h2: theme.textTheme.titleMedium,
+                              h3: theme.textTheme.titleSmall,
+                              code: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                backgroundColor:
+                                    colorScheme.surfaceContainerHighest,
                               ),
-                              onTapLink: (text, href, title) async {
-                                if (href != null) {
-                                  final uri = Uri.parse(href);
-                                  if (await canLaunchUrl(uri)) {
-                                    await launchUrl(uri);
-                                  }
-                                }
-                              },
-                            )
-                            : Text(
-                              'No changelog available',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                                fontStyle: FontStyle.italic,
+                              codeblockDecoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              listBullet: theme.textTheme.bodyMedium,
+                              a: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.primary,
+                                decoration: TextDecoration.underline,
                               ),
                             ),
+                            onTapLink: (text, href, title) async {
+                              if (href != null) {
+                                final uri = Uri.parse(href);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri);
+                                }
+                              }
+                            },
+                          )
+                        : Text(
+                            'No changelog available',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 16),
 
@@ -739,8 +723,8 @@ class _ReleaseCardState extends State<_ReleaseCard> {
 
                       // Download button
                       ElevatedButton.icon(
-                        onPressed:
-                            () => _downloadRelease(context, widget.release),
+                        onPressed: () =>
+                            _downloadRelease(context, widget.release),
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Download'),
                       ),

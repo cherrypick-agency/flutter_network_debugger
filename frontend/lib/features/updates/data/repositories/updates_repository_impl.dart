@@ -390,11 +390,42 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
   Map<String, dynamic>? _getPlatformAsset(List assets) {
     if (assets.isEmpty) return null;
 
-    String? platformSuffix;
     if (Platform.isMacOS) {
-      platformSuffix = '.dmg';
+      // Приоритет: .dmg > .tar.gz
+      final dmg = assets.firstWhere(
+        (a) => (a['name'] as String).endsWith('.dmg'),
+        orElse: () => null,
+      );
+      if (dmg != null) {
+        return dmg as Map<String, dynamic>;
+      }
+
+      // Ищем tar.gz для macOS
+      final tarGz = assets.firstWhere((a) {
+        final name = (a['name'] as String).toLowerCase();
+        return name.contains('darwin') && name.endsWith('.tar.gz');
+      }, orElse: () => null);
+      if (tarGz != null) {
+        return tarGz as Map<String, dynamic>;
+      }
     } else if (Platform.isWindows) {
-      platformSuffix = '.msi';
+      // Приоритет: .msi > .zip
+      final msi = assets.firstWhere(
+        (a) => (a['name'] as String).endsWith('.msi'),
+        orElse: () => null,
+      );
+      if (msi != null) {
+        return msi as Map<String, dynamic>;
+      }
+
+      // Ищем zip для Windows
+      final zip = assets.firstWhere((a) {
+        final name = (a['name'] as String).toLowerCase();
+        return name.contains('windows') && name.endsWith('.zip');
+      }, orElse: () => null);
+      if (zip != null) {
+        return zip as Map<String, dynamic>;
+      }
     } else if (Platform.isLinux) {
       // Приоритет: AppImage > deb > tar.gz
       final appImage = assets.firstWhere(
@@ -413,20 +444,18 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return deb as Map<String, dynamic>;
       }
 
-      platformSuffix = '.tar.gz';
+      // Ищем tar.gz для Linux
+      final tarGz = assets.firstWhere((a) {
+        final name = (a['name'] as String).toLowerCase();
+        return name.contains('linux') && name.endsWith('.tar.gz');
+      }, orElse: () => null);
+      if (tarGz != null) {
+        return tarGz as Map<String, dynamic>;
+      }
     }
 
-    if (platformSuffix == null) return null;
-
-    try {
-      final asset = assets.firstWhere(
-        (a) => (a['name'] as String).endsWith(platformSuffix!),
-      );
-      return asset as Map<String, dynamic>;
-    } catch (e) {
-      _log.warning('No asset found with suffix $platformSuffix');
-      return null;
-    }
+    _log.warning('No compatible asset found for current platform');
+    return null;
   }
 
   /// Вычисляет SHA256 хеш файла
