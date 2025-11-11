@@ -307,15 +307,15 @@ func TestWorkspace_ListFiles(t *testing.T) {
 	}
 
 	// Проверяем наличие каждого файла
+	// Нормализуем пути для кроссплатформенного сравнения
+	normalizedListed := make(map[string]bool)
+	for _, listed := range listedFiles {
+		normalizedListed[filepath.ToSlash(listed)] = true
+	}
+
 	for filename := range files {
-		found := false
-		for _, listed := range listedFiles {
-			if listed == filename {
-				found = true
-				break
-			}
-		}
-		if !found {
+		normalizedFilename := filepath.ToSlash(filename)
+		if !normalizedListed[normalizedFilename] {
 			t.Errorf("File %s not found in list", filename)
 		}
 	}

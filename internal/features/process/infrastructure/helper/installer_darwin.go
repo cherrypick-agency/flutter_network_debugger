@@ -4,9 +4,11 @@
 package helper
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 )
 
 const (
@@ -80,9 +82,15 @@ func (i *darwinInstaller) Install(helperBinaryPath string) error {
 		tmpPlist, plistPath, plistPath,
 		plistPath)
 
-	cmd := exec.Command("osascript", "-e", script)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("installation timeout: command took too long")
+		}
 		return fmt.Errorf("installation failed: %w (output: %s)", err, string(output))
 	}
 
