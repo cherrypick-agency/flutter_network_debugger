@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"network-debugger/internal/features/process/domain"
 )
 
 // TestLinuxDetector_DetectByPID tests DetectByPID on Linux

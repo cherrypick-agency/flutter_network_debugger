@@ -156,7 +156,36 @@ func (c *KotlinCompiler) Compile(ctx context.Context, req domain.CompileRequest)
 
 // ValidateSyntax validates Kotlin syntax (implements domain.Compiler)
 func (c *KotlinCompiler) ValidateSyntax(ctx context.Context, req domain.CompileRequest) error {
-	if !c.IsAvailable() {
+	// Check if kotlincPath was explicitly set to empty (indicates compiler should not be available)
+	wasExplicitlyEmpty := c.kotlincPath == ""
+
+	// Try to get kotlinc path from cache or system
+	kotlincPath, javaHome, err := c.getKotlinSetup()
+	if err != nil {
+		// If getKotlinSetup failed, only try system fallback if kotlincPath wasn't explicitly set to empty
+		if wasExplicitlyEmpty {
+			// kotlincPath was explicitly set to empty, don't try system fallback
+			return fmt.Errorf("Kotlin compiler not available")
+		}
+		// Try system kotlinc as fallback
+		cmd := exec.Command("kotlinc", "-version")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("Kotlin compiler not available")
+		}
+		c.kotlincPath = "kotlinc"
+	} else {
+		// Only update kotlincPath if it wasn't explicitly set to empty
+		if !wasExplicitlyEmpty || kotlincPath != "" {
+			c.kotlincPath = kotlincPath
+			c.javaHome = javaHome
+		} else {
+			// kotlincPath was explicitly set to empty, don't use the found path
+			return fmt.Errorf("Kotlin compiler not available")
+		}
+	}
+
+	// Final check: if kotlincPath is still empty, compiler is not available
+	if c.kotlincPath == "" {
 		return fmt.Errorf("Kotlin compiler not available")
 	}
 

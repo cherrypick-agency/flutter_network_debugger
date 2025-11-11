@@ -5,8 +5,6 @@ package helper
 
 import (
 	"testing"
-
-	"network-debugger/internal/features/process/domain"
 )
 
 // Composer 1.
