@@ -95,6 +95,8 @@ func TestDarwinInstaller_Install_BinaryNotFound(t *testing.T) {
 }
 
 // Composer 1.
+// TestDarwinInstaller_Install_BinaryExists is excluded from race detector
+// because it uses os/exec which can have race conditions in test environment
 func TestDarwinInstaller_Install_BinaryExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	binaryPath := filepath.Join(tmpDir, "helper")
