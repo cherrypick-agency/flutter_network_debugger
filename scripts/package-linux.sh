@@ -48,7 +48,8 @@ echo -e "\n${YELLOW}Step 3/6: Building Flutter Linux app...${NC}"
 cd frontend
 flutter clean
 flutter pub get
-flutter build linux --release
+echo "  Building with version: $VERSION"
+flutter build linux --release --build-name="$VERSION" --build-number="1"
 
 BUILD_DIR="build/linux/x64/release/bundle"
 if [ ! -d "$BUILD_DIR" ]; then

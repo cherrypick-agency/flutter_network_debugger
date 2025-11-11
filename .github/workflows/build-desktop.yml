@@ -1,115 +1,3 @@
-name: build-desktop
-
-on:
-  workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  macos:
-    name: Build macOS DMG
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-          cache: true
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: Determine version
-        id: ver
-        shell: bash
-        run: |
-          ref="${GITHUB_REF_NAME}"
-          ver="${ref#v}"
-          if [[ -z "$ver" ]]; then ver="1.0.0"; fi
-          echo "VERSION=$ver" >> "$GITHUB_ENV"
-          echo "version=$ver" >> "$GITHUB_OUTPUT"
-
-      - name: Build macOS DMG
-        env:
-          VERSION: ${{ env.VERSION }}
-        run: |
-          chmod +x scripts/package-macos.sh
-          ./scripts/package-macos.sh
-
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-dmg
-          path: dist/*.dmg
-
-      - name: Upload DMG to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.dmg
-          repository: cherrypick-agency/flutter_network_debugger
-          tag_name: ${{ github.ref_name }}
-          token: ${{ secrets.RELEASE_TOKEN }}
-
-  # Временно отключено: сборка MSI нестабильна, вернём позже
-  windows:
-    name: Build Windows MSI
-    runs-on: windows-latest
-    if: false
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-          cache: true
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: Install WiX Toolset
-        run: choco install wixtoolset -y
-        shell: powershell
-
-      - name: Determine version
-        id: ver
-        shell: bash
-        run: |
-          ref="${GITHUB_REF_NAME}"
-          ver="${ref#v}"
-          if [[ -z "$ver" ]]; then ver="1.0.0"; fi
-          echo "VERSION=$ver" >> "$GITHUB_ENV"
-          echo "version=$ver" >> "$GITHUB_OUTPUT"
-
-      - name: Build Windows MSI
-        run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package-windows-msi.ps1 -Version "${{ env.VERSION }}"
-
-      - name: Upload MSI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-msi
-          path: dist\*.msi
-
-      - name: Upload MSI to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.msi
-          repository: cherrypick-agency/flutter_network_debugger
-          tag_name: ${{ github.ref_name }}
-          token: ${{ secrets.RELEASE_TOKEN }}
-
 name: Desktop Builds
 
 on:
@@ -120,6 +8,7 @@ on:
     paths:
       - 'frontend/**'
       - 'cmd/network-debugger/**'
+      - 'cmd/network-debugger-web/**'
       - 'internal/**'
       - 'scripts/package-*.sh'
       - 'scripts/package-*.ps1'
@@ -128,6 +17,7 @@ on:
     paths:
       - 'frontend/**'
       - 'cmd/network-debugger/**'
+      - 'cmd/network-debugger-web/**'
       - 'internal/**'
       - 'scripts/package-*.sh'
       - 'scripts/package-*.ps1'
@@ -390,9 +280,128 @@ jobs:
           path: dist/*.deb
           retention-days: 7
 
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            frontend/.dart_tool
+          key: ${{ runner.os }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Set version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Flutter web
+        working-directory: frontend
+        run: flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
+
+      - name: Copy web files to embed directory
+        run: |
+          rm -rf cmd/network-debugger-web/_web
+          mkdir -p cmd/network-debugger-web/_web
+          cp -R frontend/build/web/* cmd/network-debugger-web/_web/
+
+      - name: Build Go binaries with embedded web
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          mkdir -p dist
+
+          # Build for all platforms
+          echo "Building for darwin/amd64..."
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_darwin_amd64 ./cmd/network-debugger-web
+
+          echo "Building for darwin/arm64..."
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_darwin_arm64 ./cmd/network-debugger-web
+
+          echo "Building for linux/amd64..."
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_linux_amd64 ./cmd/network-debugger-web
+
+          echo "Building for linux/arm64..."
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_linux_arm64 ./cmd/network-debugger-web
+
+          echo "Building for windows/amd64..."
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_windows_amd64.exe ./cmd/network-debugger-web
+
+          echo "Building for windows/386..."
+          GOOS=windows GOARCH=386 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_windows_386.exe ./cmd/network-debugger-web
+
+          echo "Building for windows/arm64..."
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_windows_arm64.exe ./cmd/network-debugger-web
+
+      - name: Create archives
+        working-directory: dist
+        run: |
+          # Create tar.gz for unix platforms
+          tar -czf network-debugger-web_darwin_amd64.tar.gz network-debugger-web_darwin_amd64
+          tar -czf network-debugger-web_darwin_arm64.tar.gz network-debugger-web_darwin_arm64
+          tar -czf network-debugger-web_linux_amd64.tar.gz network-debugger-web_linux_amd64
+          tar -czf network-debugger-web_linux_arm64.tar.gz network-debugger-web_linux_arm64
+
+          # Create zip for Windows
+          zip network-debugger-web_windows_amd64.zip network-debugger-web_windows_amd64.exe
+          zip network-debugger-web_windows_386.zip network-debugger-web_windows_386.exe
+          zip network-debugger-web_windows_arm64.zip network-debugger-web_windows_arm64.exe
+
+          # List all archives
+          ls -lah *.tar.gz *.zip
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-binaries
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          retention-days: 7
+
   # Release job - only runs on version tags
   release:
-    needs: [build-macos, build-linux]
+    needs: [build-macos, build-linux, build-web]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -435,7 +444,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [build-macos, build-linux]
+    needs: [build-macos, build-linux, build-web]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -445,5 +454,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| macOS    | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Linux    | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS Desktop | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux Desktop | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web Binaries  | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY

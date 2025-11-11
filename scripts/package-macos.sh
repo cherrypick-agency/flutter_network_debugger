@@ -49,7 +49,8 @@ echo -e "\n${YELLOW}Step 3/5: Building Flutter macOS app...${NC}"
 cd frontend
 flutter clean
 flutter pub get
-flutter build macos --release
+echo "  Building with version: $VERSION"
+flutter build macos --release --build-name="$VERSION" --build-number="1"
 
 if [ ! -d "build/macos/Build/Products/Release/$BUNDLE_NAME" ]; then
   echo -e "${RED}Error: Flutter build failed${NC}"

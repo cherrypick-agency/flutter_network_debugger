@@ -38,8 +38,11 @@ class _UpdatesPageState extends State<UpdatesPage> {
         _currentVersion = packageInfo.version;
       });
     } catch (e) {
+      // Log error for debugging
+      debugPrint('Failed to get PackageInfo: $e');
       setState(() {
-        _currentVersion = '1.0.0';
+        // Fallback to version from pubspec.yaml instead of hardcoded 1.0.0
+        _currentVersion = '0.1.4';
       });
     }
   }
