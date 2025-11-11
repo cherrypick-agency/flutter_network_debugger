@@ -57,9 +57,11 @@ jobs:
           tag_name: ${{ github.ref_name }}
           token: ${{ secrets.RELEASE_TOKEN }}
 
+  # Временно отключено: сборка MSI нестабильна, вернём позже
   windows:
     name: Build Windows MSI
     runs-on: windows-latest
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -230,8 +232,10 @@ jobs:
           path: dist/*.dmg
           retention-days: 7
 
+  # Временно отключили windows-сборку
   build-windows:
     runs-on: windows-latest
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -388,7 +392,7 @@ jobs:
 
   # Release job - only runs on version tags
   release:
-    needs: [build-macos, build-windows, build-linux]
+    needs: [build-macos, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -431,7 +435,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [build-macos, build-windows, build-linux]
+    needs: [build-macos, build-linux]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -442,5 +446,4 @@ jobs:
           echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| macOS    | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Windows  | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux    | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
