@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"network-debugger/internal/adapters/storage/memory"
+	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
+	processp "network-debugger/internal/features/process/infrastructure/persistence"
+	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	setp "network-debugger/internal/features/settings/infrastructure/persistence"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
@@ -25,7 +28,14 @@ func newTestServer(t *testing.T) (*httptest.Server, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("db open: %v", err)
 	}
-	if err := gdb.AutoMigrate(&setp.RuntimeSettingsModel{}, &setp.ThrottleProfileModel{}); err != nil {
+	if err := gdb.AutoMigrate(
+		&setp.RuntimeSettingsModel{},
+		&setp.ThrottleProfileModel{},
+		&proxyp.ProxyConfigModel{},
+		&mappingp.MapRuleModel{},
+		&processp.ProcessDetectionConfigModel{},
+		&processp.IconCacheModel{},
+	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	cfg := cfgpkg.Config{Addr: ":0", CORSAllowOrigin: "*", DevMode: true}

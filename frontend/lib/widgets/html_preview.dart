@@ -19,10 +19,24 @@ class _HtmlPreviewState extends State<HtmlPreview> {
   @override
   void initState() {
     super.initState();
-    _controller =
-        WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..loadHtmlString(widget.html, baseUrl: widget.baseUrl);
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadHtmlString(widget.html, baseUrl: widget.baseUrl);
+  }
+
+  @override
+  void didUpdateWidget(HtmlPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload HTML if content or baseUrl changed
+    if (oldWidget.html != widget.html || oldWidget.baseUrl != widget.baseUrl) {
+      _controller.loadHtmlString(widget.html, baseUrl: widget.baseUrl);
+    }
+  }
+
+  @override
+  void dispose() {
+    // WebViewController doesn't require explicit disposal in webview_flutter 4.x
+    super.dispose();
   }
 
   @override

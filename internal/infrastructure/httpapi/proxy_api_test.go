@@ -7,8 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
+	processp "network-debugger/internal/features/process/infrastructure/persistence"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	proxyuc "network-debugger/internal/features/proxy/usecase"
+	settingsp "network-debugger/internal/features/settings/infrastructure/persistence"
 	dbinfra "network-debugger/internal/infrastructure/db"
 	obs "network-debugger/internal/infrastructure/observability"
 	pruntime "network-debugger/internal/infrastructure/proxyruntime"
@@ -20,7 +23,14 @@ func setupProxyDeps(t *testing.T) *Deps {
 	if err != nil {
 		t.Fatalf("db: %v", err)
 	}
-	if err := gdb.AutoMigrate(&proxyp.ProxyConfigModel{}); err != nil {
+	if err := gdb.AutoMigrate(
+		&proxyp.ProxyConfigModel{},
+		&settingsp.RuntimeSettingsModel{},
+		&settingsp.ThrottleProfileModel{},
+		&mappingp.MapRuleModel{},
+		&processp.ProcessDetectionConfigModel{},
+		&processp.IconCacheModel{},
+	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
