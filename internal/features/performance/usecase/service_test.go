@@ -1,11 +1,14 @@
 package usecase
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"network-debugger/internal/domain"
 	perf_domain "network-debugger/internal/features/performance/domain"
+	"network-debugger/internal/usecase"
 )
 
 func TestCalculateResponseTimeStats(t *testing.T) {
@@ -313,6 +316,254 @@ func TestAverage_EmptySlice(t *testing.T) {
 	}
 }
 
+func TestNewService(t *testing.T) {
+	mockRepo := &mockSessionRepoForPerformance{}
+	sessionSvc := usecase.NewSessionService(mockRepo, &mockFrameRepoForPerformance{}, &mockEventRepoForPerformance{})
+	svc := NewService(sessionSvc)
+
+	if svc == nil {
+		t.Fatal("NewService returned nil")
+	}
+
+	if svc.sessionSvc != sessionSvc {
+		t.Error("SessionService not set correctly")
+	}
+}
+
+func TestGetPerformanceOverview(t *testing.T) {
+	now := time.Now()
+	sessions := []domain.Session{
+		{
+			ID:        "sess1",
+			Kind:      "http",
+			Target:    "http://api.example.com/users",
+			StartedAt: now.Add(-100 * time.Millisecond),
+			ClosedAt:  ptrTime(now),
+		},
+		{
+			ID:        "sess2",
+			Kind:      "http",
+			Target:    "http://api.example.com/posts",
+			StartedAt: now.Add(-200 * time.Millisecond),
+			ClosedAt:  ptrTime(now),
+		},
+		{
+			ID:        "sess3",
+			Kind:      "websocket",
+			Target:    "ws://api.example.com/chat",
+			StartedAt: now.Add(-300 * time.Millisecond),
+			ClosedAt:  ptrTime(now),
+		},
+	}
+
+	mockRepo := &mockSessionRepoForPerformance{
+		sessions: sessions,
+	}
+	sessionSvc := usecase.NewSessionService(mockRepo, &mockFrameRepoForPerformance{}, &mockEventRepoForPerformance{})
+	svc := NewService(sessionSvc)
+
+	ctx := context.Background()
+	from := now.Add(-1 * time.Hour)
+	to := now
+
+	overview, err := svc.GetPerformanceOverview(ctx, from, to)
+
+	if err != nil {
+		t.Fatalf("GetPerformanceOverview() error = %v, want nil", err)
+	}
+
+	if overview == nil {
+		t.Fatal("GetPerformanceOverview() returned nil overview")
+	}
+
+	if overview.TimeRange.From != from {
+		t.Errorf("TimeRange.From = %v, want %v", overview.TimeRange.From, from)
+	}
+
+	if overview.TimeRange.To != to {
+		t.Errorf("TimeRange.To = %v, want %v", overview.TimeRange.To, to)
+	}
+
+	if overview.ResponseTimeStats.Count != 2 {
+		t.Errorf("ResponseTimeStats.Count = %d, want 2 (only HTTP sessions)", overview.ResponseTimeStats.Count)
+	}
+
+	if overview.ThroughputStats.TotalRequests != 2 {
+		t.Errorf("ThroughputStats.TotalRequests = %d, want 2", overview.ThroughputStats.TotalRequests)
+	}
+
+	if len(overview.TopSlowEndpoints) != 2 {
+		t.Errorf("TopSlowEndpoints length = %d, want 2", len(overview.TopSlowEndpoints))
+	}
+}
+
+func TestGetPerformanceOverview_Error(t *testing.T) {
+	mockRepo := &mockSessionRepoForPerformance{
+		listError: errors.New("database error"),
+	}
+	sessionSvc := usecase.NewSessionService(mockRepo, &mockFrameRepoForPerformance{}, &mockEventRepoForPerformance{})
+	svc := NewService(sessionSvc)
+
+	ctx := context.Background()
+	from := time.Now().Add(-1 * time.Hour)
+	to := time.Now()
+
+	_, err := svc.GetPerformanceOverview(ctx, from, to)
+
+	if err == nil {
+		t.Error("GetPerformanceOverview() should return error when session service fails")
+	}
+}
+
+func TestGetHTTPSessionsInRange(t *testing.T) {
+	now := time.Now()
+	sessions := []domain.Session{
+		{
+			ID:        "sess1",
+			Kind:      "http",
+			StartedAt: now.Add(-30 * time.Minute),
+		},
+		{
+			ID:        "sess2",
+			Kind:      "http",
+			StartedAt: now.Add(-2 * time.Hour),
+		},
+		{
+			ID:        "sess3",
+			Kind:      "websocket",
+			StartedAt: now.Add(-30 * time.Minute),
+		},
+	}
+
+	mockRepo := &mockSessionRepoForPerformance{
+		sessions: sessions,
+	}
+	sessionSvc := usecase.NewSessionService(mockRepo, &mockFrameRepoForPerformance{}, &mockEventRepoForPerformance{})
+	svc := NewService(sessionSvc)
+
+	ctx := context.Background()
+	from := now.Add(-1 * time.Hour)
+	to := now
+
+	result, err := svc.getHTTPSessionsInRange(ctx, from, to)
+
+	if err != nil {
+		t.Fatalf("getHTTPSessionsInRange() error = %v, want nil", err)
+	}
+
+	if len(result) != 1 {
+		t.Errorf("getHTTPSessionsInRange() returned %d sessions, want 1", len(result))
+	}
+
+	if result[0].ID != "sess1" {
+		t.Errorf("getHTTPSessionsInRange() returned session %s, want sess1", result[0].ID)
+	}
+}
+
+func TestGetHTTPSessionsInRange_EmptyResult(t *testing.T) {
+	mockRepo := &mockSessionRepoForPerformance{
+		sessions: []domain.Session{},
+	}
+	sessionSvc := usecase.NewSessionService(mockRepo, &mockFrameRepoForPerformance{}, &mockEventRepoForPerformance{})
+	svc := NewService(sessionSvc)
+
+	ctx := context.Background()
+	from := time.Now().Add(-1 * time.Hour)
+	to := time.Now()
+
+	result, err := svc.getHTTPSessionsInRange(ctx, from, to)
+
+	if err != nil {
+		t.Fatalf("getHTTPSessionsInRange() error = %v, want nil", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("getHTTPSessionsInRange() returned %d sessions, want 0", len(result))
+	}
+}
+
+func TestCalculateBandwidthStats(t *testing.T) {
+	svc := &Service{}
+	now := time.Now()
+
+	sessions := []domain.Session{
+		{
+			Kind:      "http",
+			StartedAt: now.Add(-100 * time.Millisecond),
+			ClosedAt:  ptrTime(now),
+		},
+	}
+
+	timeRange := perf_domain.TimeRange{
+		From: now.Add(-1 * time.Hour),
+		To:   now,
+	}
+
+	stats := svc.calculateBandwidthStats(sessions, timeRange)
+
+	if stats.TimeRange.From != timeRange.From {
+		t.Errorf("TimeRange.From = %v, want %v", stats.TimeRange.From, timeRange.From)
+	}
+
+	if stats.TimeRange.To != timeRange.To {
+		t.Errorf("TimeRange.To = %v, want %v", stats.TimeRange.To, timeRange.To)
+	}
+}
+
+func TestGetTopSlowEndpoints_EmptySessions(t *testing.T) {
+	svc := &Service{}
+
+	endpoints := svc.getTopSlowEndpoints([]domain.Session{}, 10)
+
+	if len(endpoints) != 0 {
+		t.Errorf("getTopSlowEndpoints() returned %d endpoints, want 0", len(endpoints))
+	}
+}
+
+func TestGetTopSlowEndpoints_SessionsWithoutClosedAt(t *testing.T) {
+	svc := &Service{}
+	now := time.Now()
+
+	sessions := []domain.Session{
+		{
+			Target:    "http://api.example.com/test",
+			StartedAt: now.Add(-100 * time.Millisecond),
+			ClosedAt:  nil,
+		},
+		{
+			Target:    "http://api.example.com/test2",
+			StartedAt: now.Add(-100 * time.Millisecond),
+			ClosedAt:  nil,
+		},
+	}
+
+	endpoints := svc.getTopSlowEndpoints(sessions, 10)
+
+	if len(endpoints) != 0 {
+		t.Errorf("getTopSlowEndpoints() returned %d endpoints, want 0 (sessions without ClosedAt should be skipped)", len(endpoints))
+	}
+}
+
+func TestCalculateThroughputStats_ZeroDuration(t *testing.T) {
+	svc := &Service{}
+	now := time.Now()
+
+	sessions := []domain.Session{
+		{Kind: "http", StartedAt: now},
+	}
+
+	timeRange := perf_domain.TimeRange{
+		From: now,
+		To:   now,
+	}
+
+	stats := svc.calculateThroughputStats(sessions, timeRange)
+
+	if stats.RequestsPerSecond == 0 {
+		t.Error("RequestsPerSecond should not be 0 even with zero duration (should default to 1 second)")
+	}
+}
+
 // Helper functions
 
 func ptrTime(t time.Time) *time.Time {
@@ -321,4 +572,74 @@ func ptrTime(t time.Time) *time.Time {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+// Mock implementations
+
+type mockSessionRepoForPerformance struct {
+	sessions  []domain.Session
+	listError error
+}
+
+func (m *mockSessionRepoForPerformance) CreateSession(ctx context.Context, s domain.Session) error {
+	return nil
+}
+
+func (m *mockSessionRepoForPerformance) GetSession(ctx context.Context, id string) (domain.Session, bool, error) {
+	return domain.Session{}, false, nil
+}
+
+func (m *mockSessionRepoForPerformance) DeleteSession(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *mockSessionRepoForPerformance) ListSessions(ctx context.Context, f usecase.SessionFilter) ([]domain.Session, int, error) {
+	if m.listError != nil {
+		return nil, 0, m.listError
+	}
+
+	var filtered []domain.Session
+	for _, sess := range m.sessions {
+		if f.TimeFrom != nil && sess.StartedAt.Before(*f.TimeFrom) {
+			continue
+		}
+		if f.TimeTo != nil && sess.StartedAt.After(*f.TimeTo) {
+			continue
+		}
+		filtered = append(filtered, sess)
+	}
+
+	return filtered, len(filtered), nil
+}
+
+func (m *mockSessionRepoForPerformance) IncrementCounters(ctx context.Context, id string, frame domain.Frame) error {
+	return nil
+}
+
+func (m *mockSessionRepoForPerformance) SetClosed(ctx context.Context, id string, closedAt time.Time, errMsg *string) error {
+	return nil
+}
+
+func (m *mockSessionRepoForPerformance) ClearAllSessions(ctx context.Context) error {
+	return nil
+}
+
+type mockFrameRepoForPerformance struct{}
+
+func (m *mockFrameRepoForPerformance) AppendFrame(ctx context.Context, sessionID string, f domain.Frame) error {
+	return nil
+}
+
+func (m *mockFrameRepoForPerformance) ListFrames(ctx context.Context, sessionID string, from string, limit int) ([]domain.Frame, string, error) {
+	return nil, "", nil
+}
+
+type mockEventRepoForPerformance struct{}
+
+func (m *mockEventRepoForPerformance) AppendEvent(ctx context.Context, sessionID string, e domain.Event) error {
+	return nil
+}
+
+func (m *mockEventRepoForPerformance) ListEvents(ctx context.Context, sessionID string, from string, limit int) ([]domain.Event, string, error) {
+	return nil, "", nil
 }

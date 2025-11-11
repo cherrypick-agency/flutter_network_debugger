@@ -577,11 +577,15 @@ func TestScriptService_TestScript_NoExecutor(t *testing.T) {
 
 // Mock implementations for testing
 type mockScriptRepository struct {
-	scripts  map[string]*domain.Script
-	listFunc func(ctx context.Context, filter domain.ScriptFilter) ([]*domain.Script, error)
+	scripts   map[string]*domain.Script
+	listFunc  func(ctx context.Context, filter domain.ScriptFilter) ([]*domain.Script, error)
+	saveError error
 }
 
 func (m *mockScriptRepository) Save(ctx context.Context, script *domain.Script) error {
+	if m.saveError != nil {
+		return m.saveError
+	}
 	if m.scripts == nil {
 		m.scripts = make(map[string]*domain.Script)
 	}

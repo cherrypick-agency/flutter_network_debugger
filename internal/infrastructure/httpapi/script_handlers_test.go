@@ -7,9 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,6 +278,268 @@ func TestScriptHandlers_CreateScript_CompilationFailure(t *testing.T) {
 		"sourceCode": "invalid rust code",
 		"language":   "rust",
 		"runtime":    "extism",
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_WithDependencies(t *testing.T) {
+	scripts := make(map[string]*domain.Script)
+	repo := &mockScriptRepository{
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			scripts[script.ID] = script
+			return nil
+		},
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			if script, ok := scripts[id]; ok {
+				return script, nil
+			}
+			return nil, errors.New("not found")
+		},
+		deleteFunc: func(ctx context.Context, id string) error {
+			delete(scripts, id)
+			return nil
+		},
+	}
+	compiler := &mockCompiler{
+		language:    "rust",
+		isAvailable: true,
+		compileFunc: func(ctx context.Context, req domain.CompileRequest) (*domain.CompileResult, error) {
+			return &domain.CompileResult{
+				WASMBinary: []byte("wasm"),
+				WASMSize:   100,
+				Duration:   time.Second,
+				Logs:       []string{"Compiled"},
+			}, nil
+		},
+	}
+	compilationService := usecase.NewCompilationService(repo)
+	compilationService.RegisterCompiler(compiler)
+	handlers := setupScriptHandlers(repo, compilationService)
+
+	reqBody := map[string]interface{}{
+		"name": "Test Script",
+		"dependencies": map[string]string{
+			"main.rs":    "fn main() {}",
+			"Cargo.toml": "[package]\nname = \"test\"",
+		},
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+		"priority":    10,
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status %d, got %d", http.StatusCreated, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_NoLanguageWithSourceCode(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	reqBody := map[string]interface{}{
+		"name":       "Test Script",
+		"sourceCode": "fn main() {}",
+		"runtime":    "extism",
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_NoCompilationService(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	reqBody := map[string]interface{}{
+		"name":       "Test Script",
+		"sourceCode": "fn main() {}",
+		"language":   "rust",
+		"runtime":    "extism",
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_NoCodeSourceOrDependencies(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	reqBody := map[string]interface{}{
+		"name":     "Test Script",
+		"language": "rust",
+		"runtime":  "extism",
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_WithConfig(t *testing.T) {
+	repo := &mockScriptRepository{
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			if script.Config.TimeoutMs != 10000 {
+				t.Errorf("Expected TimeoutMs 10000, got %d", script.Config.TimeoutMs)
+			}
+			if script.Config.MemoryLimitMB != 20 {
+				t.Errorf("Expected MemoryLimitMB 20, got %d", script.Config.MemoryLimitMB)
+			}
+			if len(script.Config.AllowedHosts) != 1 || script.Config.AllowedHosts[0] != "example.com" {
+				t.Errorf("Expected AllowedHosts [example.com], got %v", script.Config.AllowedHosts)
+			}
+			return nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"name":        "Test Script",
+		"code":        codeBase64,
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+		"priority":    10,
+		"config": map[string]interface{}{
+			"timeoutMs":     10000,
+			"memoryLimitMB": 20,
+			"allowedHosts":  []string{"example.com"},
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status %d, got %d", http.StatusCreated, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_InvalidRegexHostPattern(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"name":        "Test Script",
+		"code":        codeBase64,
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+		"priority":    10,
+		"matchRules": map[string]interface{}{
+			"hostPattern": "[invalid regex",
+			"patternType": "regex",
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_InvalidRegexPathPattern(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"name":        "Test Script",
+		"code":        codeBase64,
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+		"priority":    10,
+		"matchRules": map[string]interface{}{
+			"pathPattern": "[invalid regex",
+			"patternType": "regex",
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.CreateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_CreateScript_ServiceError(t *testing.T) {
+	repo := &mockScriptRepository{
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			return errors.New("service error")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"name":        "Test Script",
+		"code":        codeBase64,
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+		"priority":    10,
 	}
 
 	body, _ := json.Marshal(reqBody)
@@ -597,6 +861,200 @@ func TestScriptHandlers_UpdateScript_WithSourceCode(t *testing.T) {
 	}
 }
 
+func TestScriptHandlers_UpdateScript_EmptyID(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	reqBody := map[string]interface{}{
+		"name": "New Name",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_UpdateScript_InvalidJSON(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{ID: scriptID}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/"+scriptID, bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_UpdateScript_WithConfig(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{
+		ID:          scriptID,
+		Name:        "Test Script",
+		Runtime:     domain.RuntimeExtism,
+		Code:        []byte("wasm"),
+		Language:    "rust",
+		TriggerType: domain.TriggerRequest,
+		Priority:    10,
+		Config: domain.ScriptConfig{
+			TimeoutMs:     5000,
+			MemoryLimitMB: 10,
+		},
+	}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			if script.Config.TimeoutMs != 15000 {
+				t.Errorf("Expected TimeoutMs 15000, got %d", script.Config.TimeoutMs)
+			}
+			if script.Config.MemoryLimitMB != 30 {
+				t.Errorf("Expected MemoryLimitMB 30, got %d", script.Config.MemoryLimitMB)
+			}
+			return nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"config": map[string]interface{}{
+			"timeoutMs":     15000,
+			"memoryLimitMB": 30,
+			"allowedHosts":  []string{"example.com"},
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/"+scriptID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
+
+func TestScriptHandlers_UpdateScript_ServiceError(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{
+		ID:          scriptID,
+		Name:        "Test Script",
+		Runtime:     domain.RuntimeExtism,
+		Code:        []byte("wasm"),
+		Language:    "rust",
+		TriggerType: domain.TriggerRequest,
+		Priority:    10,
+	}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			return errors.New("update failed")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"name": "New Name",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/"+scriptID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_UpdateScript_WithAllFields(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{
+		ID:          scriptID,
+		Name:        "Old Name",
+		Description: "Old Description",
+		Runtime:     domain.RuntimeExtism,
+		Code:        []byte("wasm"),
+		Language:    "rust",
+		TriggerType: domain.TriggerRequest,
+		Priority:    5,
+		Config: domain.ScriptConfig{
+			TimeoutMs:     5000,
+			MemoryLimitMB: 10,
+		},
+	}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			if script.Name != "New Name" {
+				t.Errorf("Expected name 'New Name', got '%s'", script.Name)
+			}
+			if script.Description != "New Description" {
+				t.Errorf("Expected description 'New Description', got '%s'", script.Description)
+			}
+			if script.Language != "go" {
+				t.Errorf("Expected language 'go', got '%s'", script.Language)
+			}
+			if script.TriggerType != domain.TriggerResponse {
+				t.Errorf("Expected triggerType response, got %v", script.TriggerType)
+			}
+			if script.Priority != 20 {
+				t.Errorf("Expected priority 20, got %d", script.Priority)
+			}
+			return nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	codeBytes := []byte("new wasm")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"name":        "New Name",
+		"description": "New Description",
+		"code":        codeBase64,
+		"language":    "go",
+		"triggerType": "response",
+		"priority":    20,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/"+scriptID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
+
 func TestScriptHandlers_DeleteScript_Success(t *testing.T) {
 	scriptID := "test-id"
 	repo := &mockScriptRepository{
@@ -694,6 +1152,40 @@ func TestScriptHandlers_ToggleScript_ServiceError(t *testing.T) {
 	}
 }
 
+func TestScriptHandlers_ToggleScript_EmptyID(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	reqBody := map[string]interface{}{
+		"enabled": true,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/_api/v1/scripts//toggle", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+
+	handlers.ToggleScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ToggleScript_InvalidJSON(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodPatch, "/_api/v1/scripts/test-id/toggle", bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.ToggleScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
 func TestScriptHandlers_TestScript_Success(t *testing.T) {
 	repo := &mockScriptRepository{}
 	executor := &mockScriptExecutor{
@@ -759,6 +1251,308 @@ func TestScriptHandlers_TestScript_InvalidBase64(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_TestScript_InvalidJSON(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test", bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.TestScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_TestScript_ExecutionError(t *testing.T) {
+	repo := &mockScriptRepository{}
+	executor := &mockScriptExecutor{
+		runtime: domain.RuntimeExtism,
+		executeFunc: func(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			return domain.ExecutionResult{}, errors.New("execution failed")
+		},
+	}
+	service := usecase.NewScriptService(repo)
+	service.RegisterExecutor(executor)
+	handlers := NewScriptHandlers(service)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"script": map[string]interface{}{
+			"name":        "Test Script",
+			"runtime":     "extism",
+			"code":        codeBase64,
+			"language":    "rust",
+			"triggerType": "request",
+			"priority":    10,
+		},
+		"testRequest": map[string]interface{}{
+			"method": "GET",
+			"url":    "https://example.com",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.TestScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if success, ok := response["success"].(bool); !ok || success {
+		t.Errorf("Expected success=false, got %v", response["success"])
+	}
+}
+
+func TestScriptHandlers_TestScript_WithMatchRulesAndConfig(t *testing.T) {
+	repo := &mockScriptRepository{}
+	executor := &mockScriptExecutor{
+		runtime: domain.RuntimeExtism,
+		executeFunc: func(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			return domain.ExecutionResult{}, nil
+		},
+	}
+	service := usecase.NewScriptService(repo)
+	service.RegisterExecutor(executor)
+	handlers := NewScriptHandlers(service)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"script": map[string]interface{}{
+			"name":        "Test Script",
+			"runtime":     "extism",
+			"code":        codeBase64,
+			"language":    "rust",
+			"triggerType": "request",
+			"priority":    10,
+			"matchRules": map[string]interface{}{
+				"methods":     []string{"GET", "POST"},
+				"hostPattern": "example.com",
+				"pathPattern": "/api/*",
+				"patternType": "wildcard",
+			},
+			"config": map[string]interface{}{
+				"timeoutMs":     10000,
+				"memoryLimitMB": 20,
+				"allowedHosts":  []string{"example.com"},
+			},
+		},
+		"testRequest": map[string]interface{}{
+			"method": "GET",
+			"url":    "https://example.com/api/test",
+			"headers": map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+			"body": "test body",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.TestScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
+
+func TestScriptHandlers_TestScript_WithModifiedRequest(t *testing.T) {
+	repo := &mockScriptRepository{}
+	executor := &mockScriptExecutor{
+		runtime: domain.RuntimeExtism,
+		executeFunc: func(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			scriptResult := domain.ScriptResult{
+				Modified: true,
+				ModifiedRequest: &domain.HTTPRequest{
+					Method: "POST",
+					URL:    "https://example.com/modified",
+					Headers: map[string][]string{
+						"X-Modified": {"true"},
+					},
+					Body: []byte("modified body"),
+				},
+			}
+			output, _ := json.Marshal(scriptResult)
+			result := domain.ExecutionResult{
+				Output: output,
+			}
+			return result, nil
+		},
+	}
+	service := usecase.NewScriptService(repo)
+	service.RegisterExecutor(executor)
+	handlers := NewScriptHandlers(service)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"script": map[string]interface{}{
+			"name":        "Test Script",
+			"runtime":     "extism",
+			"code":        codeBase64,
+			"language":    "rust",
+			"triggerType": "request",
+		},
+		"testRequest": map[string]interface{}{
+			"method": "GET",
+			"url":    "https://example.com",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.TestScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["modifiedRequest"]; !ok {
+		t.Error("Expected modifiedRequest in response")
+	}
+}
+
+func TestScriptHandlers_TestScript_WithModifiedResponse(t *testing.T) {
+	repo := &mockScriptRepository{}
+	executor := &mockScriptExecutor{
+		runtime: domain.RuntimeExtism,
+		executeFunc: func(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			scriptResult := domain.ScriptResult{
+				Modified: true,
+				ModifiedResponse: &domain.HTTPResponse{
+					Status: 201,
+					Headers: map[string][]string{
+						"X-Modified": {"true"},
+					},
+					Body: []byte("modified response"),
+				},
+			}
+			output, _ := json.Marshal(scriptResult)
+			result := domain.ExecutionResult{
+				Output: output,
+			}
+			return result, nil
+		},
+	}
+	service := usecase.NewScriptService(repo)
+	service.RegisterExecutor(executor)
+	handlers := NewScriptHandlers(service)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"script": map[string]interface{}{
+			"name":        "Test Script",
+			"runtime":     "extism",
+			"code":        codeBase64,
+			"language":    "rust",
+			"triggerType": "response",
+		},
+		"testRequest": map[string]interface{}{
+			"method": "GET",
+			"url":    "https://example.com",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.TestScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["modifiedResponse"]; !ok {
+		t.Error("Expected modifiedResponse in response")
+	}
+}
+
+func TestScriptHandlers_TestScript_WithResultError(t *testing.T) {
+	repo := &mockScriptRepository{}
+	executor := &mockScriptExecutor{
+		runtime: domain.RuntimeExtism,
+		executeFunc: func(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			result := domain.ExecutionResult{
+				Output: []byte(`{"error":"script execution failed"}`),
+			}
+			return result, nil
+		},
+	}
+	service := usecase.NewScriptService(repo)
+	service.RegisterExecutor(executor)
+	handlers := NewScriptHandlers(service)
+
+	codeBytes := []byte("test wasm code")
+	codeBase64 := base64.StdEncoding.EncodeToString(codeBytes)
+
+	reqBody := map[string]interface{}{
+		"script": map[string]interface{}{
+			"name":        "Test Script",
+			"runtime":     "extism",
+			"code":        codeBase64,
+			"language":    "rust",
+			"triggerType": "request",
+		},
+		"testRequest": map[string]interface{}{
+			"method": "GET",
+			"url":    "https://example.com",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handlers.TestScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if success, ok := response["success"].(bool); !ok || success {
+		t.Errorf("Expected success=false, got %v", response["success"])
+	}
+	if _, ok := response["error"]; !ok {
+		t.Error("Expected error in response")
 	}
 }
 
@@ -1076,6 +1870,658 @@ func TestScriptHandlers_ImportScriptFromZip_InvalidZIP(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("file", "script.zip")
 	part.Write([]byte("not a zip"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_UploadProject_EmptyID(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts//upload-project", nil)
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_UploadProject_ScriptNotFound(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return nil, errors.New("not found")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test-id/upload-project", nil)
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestScriptHandlers_UploadProject_NoFile(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{ID: scriptID}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", nil)
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_DownloadProject_EmptyID(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts//download-project", nil)
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+
+	handlers.DownloadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_DownloadProject_ScriptNotFound(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return nil, errors.New("not found")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts/test-id/download-project", nil)
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.DownloadProject(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestScriptHandlers_ListProjectFiles_EmptyID(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts//files", nil)
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+
+	handlers.ListProjectFiles(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ExportScriptAsZip_EmptyID(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts//export-zip", nil)
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+
+	handlers.ExportScriptAsZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ExportScriptAsZip_ScriptNotFound(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return nil, errors.New("not found")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts/test-id/export-zip", nil)
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.ExportScriptAsZip(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestGetMainFilename(t *testing.T) {
+	tests := []struct {
+		language string
+		expected string
+	}{
+		{"rust", "src/lib.rs"},
+		{"go", "main.go"},
+		{"javascript", "index.ts"},
+		{"typescript", "index.ts"},
+		{"dart", "main.dart"},
+		{"python", "main.py"},
+		{"zig", "main.zig"},
+		{"kotlin", "Main.kt"},
+		{"swift", "main.swift"},
+		{"c", "main.c"},
+		{"cpp", "main.cpp"},
+		{"c++", "main.cpp"},
+		{"unknown", "main.txt"},
+		{"RUST", "src/lib.rs"},
+		{"Go", "main.go"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.language, func(t *testing.T) {
+			result := getMainFilename(tt.language)
+			if result != tt.expected {
+				t.Errorf("getMainFilename(%q) = %q, want %q", tt.language, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetDependencyType(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected string
+	}{
+		{"Cargo.toml", "config"},
+		{"package.json", "config"},
+		{"go.mod", "config"},
+		{"go.sum", "config"},
+		{"main.rs", "source"},
+		{"lib.go", "source"},
+		{"index.ts", "source"},
+		{"app.js", "source"},
+		{"main.dart", "source"},
+		{"script.py", "source"},
+		{"main.zig", "source"},
+		{"Main.kt", "source"},
+		{"app.swift", "source"},
+		{"main.c", "source"},
+		{"app.cpp", "source"},
+		{"header.h", "source"},
+		{"header.hpp", "source"},
+		{"README.md", "other"},
+		{"LICENSE", "other"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := getDependencyType(tt.filename)
+			if result != tt.expected {
+				t.Errorf("getDependencyType(%q) = %q, want %q", tt.filename, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateScriptData(t *testing.T) {
+	tests := []struct {
+		name    string
+		script  *domain.Script
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid script",
+			script: &domain.Script{
+				Name:     "Test Script",
+				Language: "rust",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing name",
+			script: &domain.Script{
+				Language: "rust",
+			},
+			wantErr: true,
+			errMsg:  "name is required",
+		},
+		{
+			name: "missing language",
+			script: &domain.Script{
+				Name: "Test Script",
+			},
+			wantErr: true,
+			errMsg:  "language is required",
+		},
+		{
+			name: "invalid language",
+			script: &domain.Script{
+				Name:     "Test Script",
+				Language: "invalid",
+			},
+			wantErr: true,
+			errMsg:  "invalid language",
+		},
+		{
+			name: "source code too large",
+			script: &domain.Script{
+				Name:       "Test Script",
+				Language:   "rust",
+				SourceCode: string(make([]byte, 500_001)),
+			},
+			wantErr: true,
+			errMsg:  "source code too large",
+		},
+		{
+			name: "dependency file too large",
+			script: &domain.Script{
+				Name:     "Test Script",
+				Language: "rust",
+				Dependencies: map[string]string{
+					"file.rs": string(make([]byte, 500_001)),
+				},
+			},
+			wantErr: true,
+			errMsg:  "dependency file too large",
+		},
+		{
+			name: "total project size too large",
+			script: &domain.Script{
+				Name:       "Test Script",
+				Language:   "rust",
+				SourceCode: string(make([]byte, 400_000)),
+				Dependencies: map[string]string{
+					"file1.rs":  string(make([]byte, 400_000)),
+					"file2.rs":  string(make([]byte, 400_000)),
+					"file3.rs":  string(make([]byte, 400_000)),
+					"file4.rs":  string(make([]byte, 400_000)),
+					"file5.rs":  string(make([]byte, 400_000)),
+					"file6.rs":  string(make([]byte, 400_000)),
+					"file7.rs":  string(make([]byte, 400_000)),
+					"file8.rs":  string(make([]byte, 400_000)),
+					"file9.rs":  string(make([]byte, 400_000)),
+					"file10.rs": string(make([]byte, 400_000)),
+					"file11.rs": string(make([]byte, 400_000)),
+					"file12.rs": string(make([]byte, 400_000)),
+					"file13.rs": string(make([]byte, 400_000)),
+				},
+			},
+			wantErr: true,
+			errMsg:  "total project size too large",
+		},
+		{
+			name: "valid language case insensitive",
+			script: &domain.Script{
+				Name:     "Test Script",
+				Language: "RUST",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid language go",
+			script: &domain.Script{
+				Name:     "Test Script",
+				Language: "go",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid language javascript",
+			script: &domain.Script{
+				Name:     "Test Script",
+				Language: "javascript",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateScriptData(tt.script)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("validateScriptData() expected error, got nil")
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("validateScriptData() error = %v, want error containing %q", err, tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("validateScriptData() unexpected error = %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_ValidationError(t *testing.T) {
+	repo := &mockScriptRepository{}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+
+	metadata := map[string]interface{}{
+		"name":        "",
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+	}
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	json.NewEncoder(metadataFile).Encode(metadata)
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_InvalidLanguage(t *testing.T) {
+	repo := &mockScriptRepository{}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+
+	metadata := map[string]interface{}{
+		"name":        "Test Script",
+		"language":    "invalid",
+		"runtime":     "extism",
+		"triggerType": "request",
+	}
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	json.NewEncoder(metadataFile).Encode(metadata)
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_NoFile(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", nil)
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_ServiceError(t *testing.T) {
+	repo := &mockScriptRepository{
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			return errors.New("service error")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+
+	metadata := map[string]interface{}{
+		"name":        "Test Script",
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+		"sourceCode":  "fn main() {}",
+	}
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	json.NewEncoder(metadataFile).Encode(metadata)
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+func TestScriptHandlers_UploadProject_UpdateScriptError(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{ID: scriptID}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			return errors.New("update failed")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	fw, _ := zipWriter.Create("main.rs")
+	fw.Write([]byte("fn main() {}"))
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+func TestScriptHandlers_UploadProject_FileTooLarge(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{ID: scriptID}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	fw, _ := zipWriter.Create("large.rs")
+	largeContent := make([]byte, 501*1024)
+	fw.Write(largeContent)
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_UploadProject_TotalSizeExceedsLimit(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{ID: scriptID}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	for i := 0; i < 20; i++ {
+		fw, _ := zipWriter.Create(fmt.Sprintf("file%d.rs", i))
+		content := make([]byte, 300*1024)
+		fw.Write(content)
+	}
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_InvalidMetadataJSON(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	metadataFile.Write([]byte("{invalid json}"))
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_MissingName(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+
+	metadata := map[string]interface{}{
+		"language":    "rust",
+		"runtime":     "extism",
+		"triggerType": "request",
+	}
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	json.NewEncoder(metadataFile).Encode(metadata)
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_MissingLanguage(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+
+	metadata := map[string]interface{}{
+		"name":        "Test Script",
+		"runtime":     "extism",
+		"triggerType": "request",
+	}
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	json.NewEncoder(metadataFile).Encode(metadata)
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)

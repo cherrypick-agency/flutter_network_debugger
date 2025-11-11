@@ -461,3 +461,300 @@ func TestHandleInterceptPending_WithLimit(t *testing.T) {
 		t.Errorf("Status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
+
+func TestHandleInterceptItem_Unauthorized(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "secret123"
+	h := NewRouterWithoutForwardProxy(d)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/intercept/items/test-id", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleInterceptItem_InvalidMethod(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = ""
+	h := NewRouterWithoutForwardProxy(d)
+
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/intercept/items/test-id", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleInterceptItem_POST_ContinueResponse(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", []InterceptRule{{Enabled: true, Priority: 1, Action: "response", When: InterceptWhen{Method: []string{"GET"}}}}, "t")
+
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     make(http.Header),
+	}
+	done := make(chan *HTTPResponseDecision, 1)
+	go func() {
+		dec, _ := d.Interceptor.InterceptResponse(context.Background(), "sess4", resp, "", nil, "")
+		done <- dec
+	}()
+
+	var id string
+	for i := 0; i < 50; i++ {
+		w := doReq(t, h, http.MethodGet, "/_api/v1/intercept/pending", nil, "t")
+		if w.Code == http.StatusOK {
+			var items []InterceptItem
+			_ = json.Unmarshal(w.Body.Bytes(), &items)
+			if len(items) > 0 {
+				id = items[0].ID
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if id == "" {
+		t.Fatal("No pending item")
+	}
+
+	modifiedBody := base64.StdEncoding.EncodeToString([]byte("modified response"))
+	payload := map[string]any{
+		"action":     "continue",
+		"status":     201,
+		"headers":    map[string][]string{"X-Custom": {"value"}},
+		"bodyBase64": modifiedBody,
+	}
+
+	w := doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload, "t")
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Continue status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+
+	select {
+	case dec := <-done:
+		if dec == nil {
+			t.Fatal("Expected non-nil decision")
+		}
+		if dec.Status != 201 {
+			t.Errorf("Status = %d, want 201", dec.Status)
+		}
+		if string(dec.Body) != "modified response" {
+			t.Errorf("Body = %q, want 'modified response'", string(dec.Body))
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("Timeout")
+	}
+}
+
+func TestHandleInterceptItem_POST_ContinueResponse_BadJSON(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", []InterceptRule{{Enabled: true, Priority: 1, Action: "response", When: InterceptWhen{Method: []string{"GET"}}}}, "t")
+
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     make(http.Header),
+	}
+	go func() {
+		d.Interceptor.InterceptResponse(context.Background(), "sess5", resp, "", nil, "")
+	}()
+
+	var id string
+	for i := 0; i < 50; i++ {
+		w := doReq(t, h, http.MethodGet, "/_api/v1/intercept/pending", nil, "t")
+		if w.Code == http.StatusOK {
+			var items []InterceptItem
+			_ = json.Unmarshal(w.Body.Bytes(), &items)
+			if len(items) > 0 {
+				id = items[0].ID
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if id != "" {
+		badReq := httptest.NewRequest(http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", bytes.NewReader([]byte("bad json")))
+		badReq.Header.Set("X-Admin-Token", "t")
+		badReq.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, badReq)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+		}
+	}
+}
+
+func TestHandleInterceptItem_POST_ContinueResponse_InvalidBase64(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", []InterceptRule{{Enabled: true, Priority: 1, Action: "response", When: InterceptWhen{Method: []string{"GET"}}}}, "t")
+
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     make(http.Header),
+	}
+	go func() {
+		d.Interceptor.InterceptResponse(context.Background(), "sess6", resp, "", nil, "")
+	}()
+
+	var id string
+	for i := 0; i < 50; i++ {
+		w := doReq(t, h, http.MethodGet, "/_api/v1/intercept/pending", nil, "t")
+		if w.Code == http.StatusOK {
+			var items []InterceptItem
+			_ = json.Unmarshal(w.Body.Bytes(), &items)
+			if len(items) > 0 {
+				id = items[0].ID
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if id != "" {
+		payload := map[string]any{
+			"action":     "continue",
+			"status":     200,
+			"bodyBase64": "invalid base64!!!",
+		}
+
+		w := doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload, "t")
+		if w.Code != http.StatusNoContent {
+			t.Errorf("Continue status = %d, want %d (invalid base64 should be ignored)", w.Code, http.StatusNoContent)
+		}
+	}
+}
+
+func TestHandleInterceptItem_POST_ContinueRequest_AlreadyFinalized(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", []InterceptRule{{Enabled: true, Priority: 1, Action: "request", When: InterceptWhen{Method: []string{"GET"}}}}, "t")
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com/", nil)
+	go func() {
+		d.Interceptor.InterceptRequest(context.Background(), "sess7", req, "", nil, "")
+	}()
+
+	var id string
+	for i := 0; i < 50; i++ {
+		w := doReq(t, h, http.MethodGet, "/_api/v1/intercept/pending", nil, "t")
+		if w.Code == http.StatusOK {
+			var items []InterceptItem
+			_ = json.Unmarshal(w.Body.Bytes(), &items)
+			if len(items) > 0 {
+				id = items[0].ID
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if id != "" {
+		payload1 := map[string]any{"action": "continue", "method": "PUT"}
+		doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload1, "t")
+
+		payload2 := map[string]any{"action": "continue", "method": "POST"}
+		resp := doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload2, "t")
+
+		if resp.Code != http.StatusConflict {
+			t.Errorf("Status = %d, want %d", resp.Code, http.StatusConflict)
+		}
+	}
+}
+
+func TestHandleInterceptItem_POST_ContinueResponse_AlreadyFinalized(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", []InterceptRule{{Enabled: true, Priority: 1, Action: "response", When: InterceptWhen{Method: []string{"GET"}}}}, "t")
+
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     make(http.Header),
+	}
+	go func() {
+		d.Interceptor.InterceptResponse(context.Background(), "sess8", resp, "", nil, "")
+	}()
+
+	var id string
+	for i := 0; i < 50; i++ {
+		w := doReq(t, h, http.MethodGet, "/_api/v1/intercept/pending", nil, "t")
+		if w.Code == http.StatusOK {
+			var items []InterceptItem
+			_ = json.Unmarshal(w.Body.Bytes(), &items)
+			if len(items) > 0 {
+				id = items[0].ID
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if id != "" {
+		payload1 := map[string]any{"action": "continue", "status": 200}
+		doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload1, "t")
+
+		payload2 := map[string]any{"action": "continue", "status": 201}
+		w := doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload2, "t")
+
+		if w.Code != http.StatusConflict {
+			t.Errorf("Status = %d, want %d", w.Code, http.StatusConflict)
+		}
+	}
+}
+
+func TestHandleInterceptItem_POST_Cancel_AlreadyFinalized(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", []InterceptRule{{Enabled: true, Priority: 1, Action: "request", When: InterceptWhen{Method: []string{"GET"}}}}, "t")
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com/", nil)
+	go func() {
+		d.Interceptor.InterceptRequest(context.Background(), "sess9", req, "", nil, "")
+	}()
+
+	var id string
+	for i := 0; i < 50; i++ {
+		w := doReq(t, h, http.MethodGet, "/_api/v1/intercept/pending", nil, "t")
+		if w.Code == http.StatusOK {
+			var items []InterceptItem
+			_ = json.Unmarshal(w.Body.Bytes(), &items)
+			if len(items) > 0 {
+				id = items[0].ID
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if id != "" {
+		doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/cancel", nil, "t")
+
+		w := doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/cancel", nil, "t")
+
+		if w.Code != http.StatusConflict {
+			t.Errorf("Status = %d, want %d", w.Code, http.StatusConflict)
+		}
+	}
+}

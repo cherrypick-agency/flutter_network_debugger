@@ -133,3 +133,103 @@ func TestParseLsofOutput_Invalid(t *testing.T) {
 		t.Error("Expected error for output without PID")
 	}
 }
+
+// TestDarwinDetector_DetectByPort_InvalidPort tests DetectByPort with invalid port
+func TestDarwinDetector_DetectByPort_InvalidPort(t *testing.T) {
+	detector := &darwinDetector{}
+	ctx := context.Background()
+
+	// Use a very large port number
+	invalidPort := uint32(99999)
+
+	_, err := detector.DetectByPort(ctx, invalidPort)
+	if err == nil {
+		t.Error("Expected error for invalid port")
+	}
+
+	if err != nil && !strings.Contains(err.Error(), "lsof failed") && !strings.Contains(err.Error(), "no process found") {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+// TestDarwinDetector_DetectByPort_ContextCancellation tests DetectByPort with cancelled context
+func TestDarwinDetector_DetectByPort_ContextCancellation(t *testing.T) {
+	detector := &darwinDetector{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	port := uint32(8080)
+
+	_, err := detector.DetectByPort(ctx, port)
+	if err == nil {
+		t.Error("Expected error for cancelled context")
+	}
+
+	if err != nil && !strings.Contains(err.Error(), "context canceled") && !strings.Contains(err.Error(), "lsof failed") {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+// TestParseLsofOutput_MultipleEntries tests parseLsofOutput with multiple entries
+func TestParseLsofOutput_MultipleEntries(t *testing.T) {
+	output := `p12345
+cmyapp
+n127.0.0.1:8080
+p67890
+canotherapp
+n127.0.0.1:8081`
+
+	info, err := parseLsofOutput(output)
+	if err != nil {
+		t.Fatalf("parseLsofOutput failed: %v", err)
+	}
+
+	if info == nil {
+		t.Fatal("Expected non-nil ProcessInfo")
+	}
+
+	// Функция перезаписывает pid при каждом найденном 'p', поэтому возвращается последний
+	if info.PID != 67890 {
+		t.Errorf("Expected PID 67890 (last PID found), got %d", info.PID)
+	}
+
+	// Проверяем что команда и имя тоже соответствуют последней записи
+	if info.Name != "anotherapp" {
+		t.Errorf("Expected name 'anotherapp', got '%s'", info.Name)
+	}
+}
+
+// TestParseLsofOutput_InvalidPID tests parseLsofOutput with invalid PID
+func TestParseLsofOutput_InvalidPID(t *testing.T) {
+	output := `pnotanumber
+cmyapp
+n127.0.0.1:8080`
+
+	_, err := parseLsofOutput(output)
+	if err == nil {
+		t.Error("Expected error for invalid PID")
+	}
+}
+
+// TestParseLsofOutput_EmptyLines tests parseLsofOutput with empty lines
+func TestParseLsofOutput_EmptyLines(t *testing.T) {
+	output := `p12345
+
+cmyapp
+
+n127.0.0.1:8080
+`
+
+	info, err := parseLsofOutput(output)
+	if err != nil {
+		t.Fatalf("parseLsofOutput failed: %v", err)
+	}
+
+	if info == nil {
+		t.Fatal("Expected non-nil ProcessInfo")
+	}
+
+	if info.PID != 12345 {
+		t.Errorf("Expected PID 12345, got %d", info.PID)
+	}
+}

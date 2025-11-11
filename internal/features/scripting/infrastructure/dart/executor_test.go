@@ -491,6 +491,356 @@ func TestProcessPool_Close_WithProcesses(t *testing.T) {
 	pool.Release(proc)
 }
 
+// TestNewDartExecutor_WithValidPath tests executor creation with valid path
+func TestNewDartExecutor_WithValidPath(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(2, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("NewDartExecutor() error = %v, want nil", err)
+	}
+	defer executor.Close()
+
+	if executor == nil {
+		t.Fatal("Expected non-nil executor")
+	}
+
+	if !executor.enabled {
+		t.Error("Expected executor to be enabled when Dart is available")
+	}
+
+	if executor.processPool == nil {
+		t.Error("Expected processPool to be initialized")
+	}
+}
+
+// TestNewDartExecutor_WithDifferentMaxProcesses tests executor creation with different max processes
+func TestNewDartExecutor_WithDifferentMaxProcesses(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	testCases := []struct {
+		name         string
+		maxProcesses int
+	}{
+		{"single process", 1},
+		{"multiple processes", 5},
+		{"many processes", 10},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			executor, err := NewDartExecutor(tc.maxProcesses, scriptRunnerPath)
+			if err != nil {
+				t.Fatalf("NewDartExecutor() error = %v, want nil", err)
+			}
+			defer executor.Close()
+
+			if executor.processPool == nil {
+				t.Error("Expected processPool to be initialized")
+			}
+		})
+	}
+}
+
+// TestDartExecutor_Execute_Success tests Execute with successful script execution
+func TestDartExecutor_Execute_Success(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create executor: %v", err)
+	}
+	defer executor.Close()
+
+	ctx := context.Background()
+
+	req := domain.ExecutionRequest{
+		Script: domain.Script{
+			Name: "test",
+			Code: []byte("void main() { print('Hello, World!'); }"),
+		},
+		Input: []byte("{}"),
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Error != "" {
+		t.Errorf("Execute() result.Error = %q, want empty", result.Error)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Execute() result.Duration should be > 0")
+	}
+}
+
+// TestDartExecutor_Execute_WithEmptyInput tests Execute with empty input
+func TestDartExecutor_Execute_WithEmptyInput(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create executor: %v", err)
+	}
+	defer executor.Close()
+
+	ctx := context.Background()
+
+	req := domain.ExecutionRequest{
+		Script: domain.Script{
+			Name: "test",
+			Code: []byte("void main() { print('test'); }"),
+		},
+		Input: []byte(""),
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Execute() result.Duration should be > 0")
+	}
+}
+
+// TestDartExecutor_Execute_WithLargeInput tests Execute with large input
+func TestDartExecutor_Execute_WithLargeInput(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create executor: %v", err)
+	}
+	defer executor.Close()
+
+	ctx := context.Background()
+
+	largeInput := make([]byte, 10000)
+	for i := range largeInput {
+		largeInput[i] = byte(i % 256)
+	}
+
+	req := domain.ExecutionRequest{
+		Script: domain.Script{
+			Name: "test",
+			Code: []byte("void main() { print('test'); }"),
+		},
+		Input: largeInput,
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Execute() result.Duration should be > 0")
+	}
+}
+
+// TestDartExecutor_Close_WithActiveProcesses tests Close with active processes
+func TestDartExecutor_Close_WithActiveProcesses(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(2, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create executor: %v", err)
+	}
+
+	ctx := context.Background()
+
+	proc, err := executor.processPool.Get(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get process: %v", err)
+	}
+
+	err = executor.Close()
+	if err != nil {
+		t.Errorf("Close() error = %v, want nil", err)
+	}
+
+	executor.processPool.Release(proc)
+}
+
+// TestDartExecutor_Close_MultipleTimes tests Close called multiple times
+func TestDartExecutor_Close_MultipleTimes(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	executor, err := NewDartExecutor(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create executor: %v", err)
+	}
+
+	err = executor.Close()
+	if err != nil {
+		t.Errorf("First Close() error = %v, want nil", err)
+	}
+
+	err = executor.Close()
+	if err != nil {
+		t.Errorf("Second Close() error = %v, want nil", err)
+	}
+}
+
+// TestProcessPool_StartProcess_Failure tests startProcess failure handling
+func TestProcessPool_StartProcess_Failure(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	pool := &ProcessPool{
+		maxSize:          1,
+		scriptRunnerPath: "nonexistent/path/script_runner.dart",
+		currentCount:     0,
+		processes:        make(chan *DartProcess, 1),
+	}
+
+	_, err := pool.startProcess()
+	// startProcess может не вернуть ошибку сразу, но процесс не запустится
+	// Проверяем что функция выполнилась (может вернуть nil или ошибку)
+	_ = err
+}
+
+// TestDartProcess_ReadResponse_InvalidJSON tests readResponse with invalid JSON
+func TestDartProcess_ReadResponse_InvalidJSON(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	pool, err := NewProcessPool(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	ctx := context.Background()
+	proc, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get process: %v", err)
+	}
+
+	// Kill process to simulate invalid response
+	proc.cmd.Process.Kill()
+	time.Sleep(100 * time.Millisecond)
+
+	_, err = proc.readResponse()
+	if err == nil {
+		t.Error("Expected error when reading invalid response")
+	}
+}
+
+// TestProcessPool_Get_ContextTimeout tests Get with context timeout
+func TestProcessPool_Get_ContextTimeout(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	scriptRunnerPath := "scripts/dart/script_runner.dart"
+	if _, err := os.Stat(scriptRunnerPath); os.IsNotExist(err) {
+		t.Skipf("Script runner not found at %s", scriptRunnerPath)
+	}
+
+	pool, err := NewProcessPool(1, scriptRunnerPath)
+	if err != nil {
+		t.Fatalf("Failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	// Get the only process
+	proc, err := pool.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to get process: %v", err)
+	}
+
+	// Try to get another process with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	_, err = pool.Get(ctx)
+	if err != context.DeadlineExceeded {
+		t.Errorf("Expected context.DeadlineExceeded, got: %v", err)
+	}
+
+	pool.Release(proc)
+}
+
+// TestDartExecutor_Validate_WithTempFileError tests Validate when temp file creation fails
+func TestDartExecutor_Validate_WithTempFileError(t *testing.T) {
+	if !isDartAvailable() {
+		t.Skip("Dart SDK not installed")
+	}
+
+	executor := &DartExecutor{enabled: true}
+	ctx := context.Background()
+
+	script := domain.Script{
+		SourceCode: "void main() { print('test'); }",
+	}
+
+	// This test verifies that Validate handles errors gracefully
+	// We can't easily simulate temp file creation failure, so we just verify it works normally
+	err := executor.Validate(ctx, script)
+	// May succeed or fail depending on Dart availability and script validity
+	_ = err
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))

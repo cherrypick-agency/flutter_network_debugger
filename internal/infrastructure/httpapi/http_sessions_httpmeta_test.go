@@ -70,3 +70,98 @@ func TestV1Session_ViewEnrichment_CORSMethodReason(t *testing.T) {
 		t.Fatalf("v1 get enriched cors")
 	}
 }
+
+func TestEnrichWithHTTPMeta_WithError(t *testing.T) {
+	store := mem.NewStore(100, 100, 0)
+	s := uc.NewSessionService(store, store, store)
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+
+	sid := "s-error"
+	errMsg := "connection refused"
+	_ = s.Create(contextWithNoCancel(), domain.Session{
+		ID:        sid,
+		StartedAt: time.Now().UTC(),
+		Error:     &errMsg,
+	})
+
+	meta, sz := d.enrichWithHTTPMeta(contextWithNoCancel(), domain.Session{
+		ID:        sid,
+		StartedAt: time.Now().UTC(),
+		Error:     &errMsg,
+	})
+
+	if meta == nil {
+		t.Fatal("Expected error meta, got nil")
+	}
+	if meta.ErrorCode == "" {
+		t.Error("Expected ErrorCode to be set")
+	}
+	if meta.ErrorMessage != errMsg {
+		t.Errorf("ErrorMessage = %q, want %q", meta.ErrorMessage, errMsg)
+	}
+	if sz != nil {
+		t.Error("Expected nil sizeInfo when error")
+	}
+}
+
+func TestEnrichWithHTTPMeta_FallbackToFrames(t *testing.T) {
+	store := mem.NewStore(100, 100, 0)
+	s := uc.NewSessionService(store, store, store)
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+
+	sid := "s-fallback"
+	_ = s.Create(contextWithNoCancel(), domain.Session{ID: sid, StartedAt: time.Now().UTC()})
+
+	reqTs := time.Now().UTC()
+	respTs := reqTs.Add(100 * time.Millisecond)
+
+	reqPrev := `{"type":"http_request","method":"POST"}`
+	respPrev := `{"type":"http_response","status":201,"headers":{"Content-Type":"application/json"}}`
+	_ = s.AddFrame(contextWithNoCancel(), sid, domain.Frame{ID: "fr1", Ts: reqTs, Direction: "upstream->client", Opcode: domain.OpcodeText, Preview: reqPrev})
+	_ = s.AddFrame(contextWithNoCancel(), sid, domain.Frame{ID: "fr2", Ts: respTs, Direction: "upstream->client", Opcode: domain.OpcodeText, Preview: respPrev})
+
+	meta, sz := d.enrichWithHTTPMeta(contextWithNoCancel(), domain.Session{
+		ID:        sid,
+		StartedAt: time.Now().UTC(),
+	})
+
+	if meta == nil {
+		t.Fatal("Expected meta from frames, got nil")
+	}
+	if meta.Method != "POST" {
+		t.Errorf("Method = %q, want POST", meta.Method)
+	}
+	if meta.Status != 201 {
+		t.Errorf("Status = %d, want 201", meta.Status)
+	}
+	if meta.Mime != "application/json" {
+		t.Errorf("Mime = %q, want application/json", meta.Mime)
+	}
+	if sz != nil {
+		t.Error("Expected nil sizeInfo when using frames fallback")
+	}
+}
+
+func TestEnrichWithHTTPMeta_FallbackToFrames_NoFrames(t *testing.T) {
+	store := mem.NewStore(100, 100, 0)
+	s := uc.NewSessionService(store, store, store)
+	logger := zerolog.New(io.Discard)
+	d := &Deps{Logger: &logger, Cfg: cfgpkg.Config{CORSAllowOrigin: "*"}, Metrics: obs.NewMetrics(), Monitor: NewMonitorHub(), Live: NewLiveSessions(), Svc: s}
+
+	sid := "s-no-frames"
+	_ = s.Create(contextWithNoCancel(), domain.Session{ID: sid, StartedAt: time.Now().UTC()})
+
+	meta, sz := d.enrichWithHTTPMeta(contextWithNoCancel(), domain.Session{
+		ID:        sid,
+		StartedAt: time.Now().UTC(),
+	})
+
+	if meta != nil {
+		t.Errorf("Expected nil meta when no transactions and no frames, got %+v", meta)
+	}
+	if sz != nil {
+		t.Error("Expected nil sizeInfo")
+	}
+}
