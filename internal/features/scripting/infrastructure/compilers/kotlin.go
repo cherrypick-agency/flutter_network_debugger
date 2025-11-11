@@ -175,13 +175,12 @@ func (c *KotlinCompiler) ValidateSyntax(ctx context.Context, req domain.CompileR
 		c.kotlincPath = "kotlinc"
 	} else {
 		// Only update kotlincPath if it wasn't explicitly set to empty
-		if !wasExplicitlyEmpty || kotlincPath != "" {
-			c.kotlincPath = kotlincPath
-			c.javaHome = javaHome
-		} else {
+		if wasExplicitlyEmpty {
 			// kotlincPath was explicitly set to empty, don't use the found path
 			return fmt.Errorf("Kotlin compiler not available")
 		}
+		c.kotlincPath = kotlincPath
+		c.javaHome = javaHome
 	}
 
 	// Final check: if kotlincPath is still empty, compiler is not available

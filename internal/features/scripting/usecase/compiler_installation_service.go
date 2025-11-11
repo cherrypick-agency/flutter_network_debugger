@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -335,18 +334,5 @@ func getCompilerVersion(compilerDir string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// getAvailableDiskSpace returns available disk space in bytes for the given path
-// Returns error if unable to determine disk space (platform-specific implementation)
-func getAvailableDiskSpace(path string) (int64, error) {
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(path, &stat)
-	if err != nil {
-		return 0, fmt.Errorf("failed to stat filesystem: %w", err)
-	}
-
-	// Available space = available blocks * block size
-	// Use Bavail (blocks available to unprivileged users) instead of Bfree
-	availableBytes := int64(stat.Bavail) * int64(stat.Bsize)
-
-	return availableBytes, nil
-}
+// platform-specific implementation for getAvailableDiskSpace moved to
+// diskspace_unix.go and diskspace_windows.go via build tags
