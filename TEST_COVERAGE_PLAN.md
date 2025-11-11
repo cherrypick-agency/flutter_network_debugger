@@ -180,7 +180,8 @@
 
 ```bash
 # Запустить тесты и получить покрытие
-go test -short -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
+PACKAGES=$(go list ./... | grep -v -E "(internal/integration|internal/e2e)")
+go test -short -covermode=atomic -coverprofile=coverage.out $PACKAGES
 
 # Проверить общее покрытие
 go tool cover -func=coverage.out | grep "total:" | awk '{print $3}'

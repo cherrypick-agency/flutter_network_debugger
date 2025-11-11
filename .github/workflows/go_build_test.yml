@@ -50,7 +50,9 @@ jobs:
           touch cmd/network-debugger-web/_web/.gitkeep cmd/wsapp/_web/.gitkeep
 
       - name: Run go vet
-        run: go vet $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
+        run: |
+          PACKAGES=$(go list ./... | grep -v -E "(internal/integration|internal/e2e)")
+          go vet $PACKAGES
 
   test:
     name: Test
@@ -88,7 +90,9 @@ jobs:
         run: |
           # Run tests with race detector, excluding integration and e2e tests which have pre-existing race conditions
           # Use -short flag to skip long-running load/stress tests
-          go test -short -v -race -coverprofile=coverage.out $(go list ./... | grep -v /internal/integration | grep -v /internal/e2e)
+          PACKAGES=$(go list ./... | grep -v -E "(internal/integration|internal/e2e)")
+          echo "Testing packages: $PACKAGES"
+          go test -short -race -coverprofile=coverage.out $PACKAGES
 
       - name: Upload coverage to codecov (ubuntu only)
         if: matrix.os == 'ubuntu-latest'
