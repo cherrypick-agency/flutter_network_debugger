@@ -382,19 +382,14 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
                 selectedMode: _editorStore.codeCreationMode,
                 onModeChanged: _editorStore.setCodeCreationMode,
               ),
-            // Toolbar for Extism runtime (not in uploadWasm mode)
+            // Toolbar for Extism runtime (NOT in uploadWasm mode, NOT in empty importZip)
             if (_editorStore.runtime == ScriptRuntime.extism &&
-                _editorStore.codeCreationMode != CodeCreationMode.uploadWasm)
+                _editorStore.codeCreationMode != CodeCreationMode.uploadWasm &&
+                !(_editorStore.codeCreationMode == CodeCreationMode.importZip &&
+                    _editorStore.sourceFiles.isEmpty))
               _buildExtismToolbar(),
             // Content based on mode
-            Expanded(
-              child:
-                  _editorStore.runtime == ScriptRuntime.extism &&
-                      _editorStore.codeCreationMode ==
-                          CodeCreationMode.uploadWasm
-                  ? _buildUploadWasmMode()
-                  : _buildMultiFileEditor(),
-            ),
+            Expanded(child: _buildModeContent()),
           ],
         );
       },
@@ -414,12 +409,15 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
       ),
       child: Row(
         children: [
-          // Import ZIP button (only in importZip mode)
-          if (_editorStore.codeCreationMode == CodeCreationMode.importZip)
+          // Re-import ZIP button (only when files are loaded in importZip mode)
+          if (_editorStore.codeCreationMode == CodeCreationMode.importZip &&
+              _editorStore.sourceFiles.isNotEmpty)
             OutlinedButton.icon(
-              onPressed: _importProjectFromZip,
-              icon: const Icon(Icons.folder_zip, size: 18),
-              label: const Text('Import ZIP'),
+              onPressed: () {
+                _editorStore.clearSourceFiles();
+              },
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Re-import ZIP'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -430,6 +428,23 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
         ],
       ),
     );
+  }
+
+  Widget _buildModeContent() {
+    // Upload WASM mode
+    if (_editorStore.runtime == ScriptRuntime.extism &&
+        _editorStore.codeCreationMode == CodeCreationMode.uploadWasm) {
+      return _buildUploadWasmMode();
+    }
+
+    // Import ZIP mode - empty files
+    if (_editorStore.codeCreationMode == CodeCreationMode.importZip &&
+        _editorStore.sourceFiles.isEmpty) {
+      return _buildImportZipMode();
+    }
+
+    // Default: Multi-file editor
+    return _buildMultiFileEditor();
   }
 
   Widget _buildMultiFileEditor() {
@@ -462,6 +477,174 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
         onClear: () {
           _editorStore.setCode('');
         },
+      ),
+    );
+  }
+
+  Widget _buildImportZipMode() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ZIP Icon
+                  const Icon(Icons.folder_zip, size: 80, color: Colors.blue),
+                  const SizedBox(height: 24),
+
+                  // Title
+                  Text(
+                    'Import Project from ZIP',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Description
+                  Text(
+                    'Upload a ZIP archive containing your source code files',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Main button
+                  ElevatedButton.icon(
+                    onPressed: _importProjectFromZip,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Select ZIP File'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Divider with "or"
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'or',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Drag-drop hint
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline,
+                        width: 2,
+                        style: BorderStyle.solid,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.cloud_upload_outlined,
+                          size: 48,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.4),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Drag and drop ZIP file here',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Info section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Supported formats:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '.rs .go .ts .js .c .cpp .h .toml .json .yaml .md .txt',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Max file size: 10 MB',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
