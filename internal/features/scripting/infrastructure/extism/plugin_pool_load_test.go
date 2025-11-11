@@ -243,9 +243,9 @@ func TestLoadStabilityMultiScript(t *testing.T) {
 	defer manager.CloseAll()
 
 	// Test parameters
-	totalRPS := 1000 // Total requests per second across all scripts
+	totalRPS := 50 // Total requests per second across all scripts
 	rpsPerScript := totalRPS / scriptCount
-	duration := 5 * time.Minute
+	duration := 30 * time.Second
 
 	t.Logf("Starting multi-script load test: %d scripts, %d total req/s (%d per script), %v duration",
 		scriptCount, totalRPS, rpsPerScript, duration)

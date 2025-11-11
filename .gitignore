@@ -108,3 +108,5 @@ cmd/network-debugger-web/_web/
 internal/e2e/cache/
 
 service_coverage.out
+
+network_debugger.db
