@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 import '../../application/stores/mapping_store.dart';
 import '../../data/mapping_api.dart';
@@ -11,6 +12,7 @@ import '../../domain/mapping_rule.dart';
 import '../../../../core/di/di.dart';
 import 'package:app_http_client/application/app_http_client.dart' as app_http;
 import '../../../../core/notifications/notifications_service.dart';
+import '../../../../theme/context_ext.dart';
 
 class MappingRuleEditor extends StatefulWidget {
   const MappingRuleEditor({super.key, this.initial});
@@ -97,7 +99,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                     widget.initial == null
                         ? 'New Mapping Rule'
                         : 'Edit Mapping Rule',
-                    style: tt.titleLarge,
+                    style: context.appText.title,
                   ),
                 ),
                 IconButton(
@@ -135,6 +137,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                     enabled: !_saving,
                     decoration: const InputDecoration(labelText: 'Priority'),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     initialValue: _priority.toString(),
                     onChanged: (v) {
                       final n = int.tryParse(v.trim());
@@ -316,6 +319,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
                 controller: _statusOverride,
                 enabled: !_saving,
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
                   labelText: 'HTTP status override (optional)',
                 ),

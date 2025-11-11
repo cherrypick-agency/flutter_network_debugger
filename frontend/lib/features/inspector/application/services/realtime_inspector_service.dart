@@ -39,6 +39,13 @@ class RealtimeInspectorService {
         'tags': filters.selectedTags.toList(),
     };
     print('[RealtimeInspector] Payload prepared: $payload');
+    // Если запись выключена и «в паузе не показывать», то отбрасываем все
+    // сессии без captureId на клиенте (доп. защита на случай гонок/дефолтов сервера)
+    final bool dropUnassignedWhilePaused =
+        !ui.isRecording.value && !ui.includePaused.value;
+    final DateTime? pausedSince = ui.pausedSince.value;
+    final bool dropStartedAfterPaused =
+        pausedSince != null && !ui.includePaused.value;
 
     // ВАЖНО: Сначала создаем socket (если еще нет), ПОТОМ регистрируем handlers
     print('[RealtimeInspector] Calling init() to ensure socket exists...');
@@ -61,11 +68,27 @@ class RealtimeInspectorService {
         '[RealtimeInspector] 📥 sessions:init handler CALLED with data: $data',
       );
       try {
-        final list = (data['items'] as List? ?? const [])
+        final rawItems = (data['items'] as List? ?? const [])
             .whereType<Map>()
-            .cast<Map<String, dynamic>>()
-            .map(_mapSession)
-            .toList(growable: false);
+            .cast<Map<String, dynamic>>();
+        Iterable<Map<String, dynamic>> filteredRaw = rawItems;
+        if (dropUnassignedWhilePaused) {
+          filteredRaw = filteredRaw.where((m) => m['captureId'] != null);
+        }
+        if (dropStartedAfterPaused) {
+          filteredRaw = filteredRaw.where((m) {
+            final ts = m['startedAt'];
+            if (ts == null) return true;
+            try {
+              final t = DateTime.tryParse(ts.toString());
+              if (t == null) return true;
+              return !t.isAfter(pausedSince);
+            } catch (_) {
+              return true;
+            }
+          });
+        }
+        final list = filteredRaw.map(_mapSession).toList(growable: false);
         print(
           '[RealtimeInspector] sessions:init parsed ${list.length} sessions',
         );
@@ -87,6 +110,24 @@ class RealtimeInspectorService {
       print('[RealtimeInspector] 📥 sessions:upsert handler CALLED');
       try {
         if (data is Map) {
+          if (dropUnassignedWhilePaused) {
+            final cap = data['captureId'];
+            if (cap == null) {
+              // пропускаем «непривязанные» во время паузы
+              return;
+            }
+          }
+          if (dropStartedAfterPaused) {
+            final ts = data['startedAt'];
+            if (ts != null) {
+              try {
+                final t = DateTime.tryParse(ts.toString());
+                if (t != null && t.isAfter(pausedSince)) {
+                  return;
+                }
+              } catch (_) {}
+            }
+          }
           sl<SessionsStore>().upsert(_mapSession(data.cast<String, dynamic>()));
           print('[RealtimeInspector] sessions:upsert processed');
         }

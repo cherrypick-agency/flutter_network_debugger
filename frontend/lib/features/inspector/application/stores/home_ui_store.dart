@@ -49,6 +49,9 @@ class HomeUiStore {
   late final mobx.Observable<bool> includePaused;
   late final mobx.Observable<bool> recentWindowEnabled;
   late final mobx.Observable<int> recentWindowMinutes;
+  // метка времени, когда поставили на паузу (чтобы отсекать новые сессии)
+  late final mobx.Observable<DateTime?> pausedSince =
+      mobx.Observable<DateTime?>(null);
   // Быстрые фильтры: типы контента/протокола и группы статусов
   late final mobx.ObservableSet<String>
   quickTypes; // http, https, ws, json, form, ...
@@ -85,7 +88,13 @@ class HomeUiStore {
       mobx.runInAction(() => sessionTabById[sessionId] = tab);
   void setSessionSearchQuery(String v) =>
       mobx.runInAction(() => sessionSearchQuery.value = v);
-  void setIsRecording(bool v) => mobx.runInAction(() => isRecording.value = v);
+  void setIsRecording(bool v) {
+    // debug log
+    // ignore: avoid_print
+    print('[HomeUiStore] setIsRecording -> $v (was ${isRecording.value})');
+    mobx.runInAction(() => isRecording.value = v);
+  }
+
   void toggleRecording() =>
       mobx.runInAction(() => isRecording.value = !isRecording.value);
 
@@ -93,6 +102,8 @@ class HomeUiStore {
       mobx.runInAction(() => captureScope.value = v);
   void setIncludePaused(bool v) =>
       mobx.runInAction(() => includePaused.value = v);
+  void setPausedSince(DateTime? v) =>
+      mobx.runInAction(() => pausedSince.value = v);
   void setRecentWindowEnabled(bool v) =>
       mobx.runInAction(() => recentWindowEnabled.value = v);
   void setRecentWindowMinutes(int v) =>

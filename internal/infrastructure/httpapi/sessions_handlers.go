@@ -298,6 +298,25 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 	rawStatus := r.URL.Query().Get("status")
 	types := splitCSV(rawTypes)
 	statusGroups := splitCSV(rawStatus)
+	// Tags filter (comma-separated)
+	var sessionIDs []string
+	if raw := strings.TrimSpace(r.URL.Query().Get("tags")); raw != "" && d.TagsSvc != nil {
+		names := strings.Split(raw, ",")
+		for i := range names {
+			names[i] = strings.TrimSpace(names[i])
+		}
+		filtered := make([]string, 0, len(names))
+		for _, t := range names {
+			if t != "" {
+				filtered = append(filtered, t)
+			}
+		}
+		if len(filtered) > 0 {
+			if ids, err := d.TagsSvc.FindSessionIDsByTags(r.Context(), filtered); err == nil {
+				sessionIDs = ids
+			}
+		}
+	}
 	// включение глубокой проверки GraphQL по телу только если явно запрошено
 	rawScan := r.URL.Query().Get("scan")
 	scan := splitCSV(rawScan)
@@ -315,7 +334,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 	// For MVP we reuse offset-based List and synthesize a cursor as last id.
 	// A real cursor would be a stable token (e.g., startedAt+id).
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	f := usecase.SessionFilter{Q: q, Target: target, Limit: limit, Offset: offset}
+	f := usecase.SessionFilter{Q: q, Target: target, Limit: limit, Offset: offset, SessionIDs: sessionIDs}
 	// capture filters
 	capStr := r.URL.Query().Get("captureId")
 	if capStr != "" {
@@ -751,6 +770,7 @@ func (d *Deps) handleV1Capture(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rec, cur := mem.RecordingState()
+		d.Logger.Info().Bool("recording", rec).Int("current", cur).Msg("capture GET")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp{Recording: rec, Current: cur})
 	case http.MethodPost:
@@ -759,13 +779,26 @@ func (d *Deps) handleV1Capture(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		act := strings.ToLower(body.Action)
+		d.Logger.Info().Str("action", act).Msg("capture POST")
 		switch act {
 		case "start":
+			beforeRec, beforeCur := mem.RecordingState()
 			cur := mem.StartCapture()
+			afterRec, afterCur := mem.RecordingState()
+			d.Logger.Info().
+				Bool("before_recording", beforeRec).Int("before_current", beforeCur).
+				Bool("after_recording", afterRec).Int("after_current", afterCur).
+				Msg("capture START applied")
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp{Recording: true, Current: cur})
 		case "stop":
+			beforeRec, beforeCur := mem.RecordingState()
 			cur := mem.StopCapture()
+			afterRec, afterCur := mem.RecordingState()
+			d.Logger.Info().
+				Bool("before_recording", beforeRec).Int("before_current", beforeCur).
+				Bool("after_recording", afterRec).Int("after_current", afterCur).
+				Msg("capture STOP applied")
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp{Recording: false, Current: cur})
 		default:

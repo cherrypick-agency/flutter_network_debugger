@@ -24,6 +24,7 @@ import (
 	"bufio"
 	"mime/multipart"
 	"network-debugger/internal/domain"
+	processdomain "network-debugger/internal/features/process/domain"
 	scriptdomain "network-debugger/internal/features/scripting/domain"
 	"network-debugger/pkg/shared/id"
 	"network-debugger/pkg/shared/redact"
@@ -153,6 +154,9 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		ClientAddr: r.RemoteAddr,
 		StartedAt:  time.Now().UTC(),
 		Kind:       "http",
+		// Для reverse‑proxy сессий не запускаем детекцию локального процесса.
+		// Иначе будет отображаться приложение UI (например, "Runner"), что сбивает с толку.
+		ProcessInfo: &processdomain.ProcessInfo{Name: "Reverse Proxy"},
 	}
 	// Always create session regardless of shouldMonitor
 	d.Logger.Info().Str("session_id", sessionID).Str("target", upstream.String()).Msg("[HTTPPROXY] Creating session")

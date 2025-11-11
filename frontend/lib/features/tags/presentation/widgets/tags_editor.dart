@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 
 import '../../../../core/di/di.dart';
+import '../../../../core/network/error_utils.dart';
 import '../../application/stores/tags_store.dart';
 import '../../domain/entities/predefined_tag.dart';
 import 'tag_chip.dart';
@@ -19,6 +20,7 @@ class _TagsEditorState extends State<TagsEditor> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   List<PredefinedTag> _filteredTags = [];
+  String? _errorText;
 
   @override
   void initState() {
@@ -34,6 +36,11 @@ class _TagsEditorState extends State<TagsEditor> {
     store.loadSessionTags(widget.sessionId);
 
     _controller.addListener(_onSearchChanged);
+    _focusNode.addListener(() {
+      // Перерисуем подсказки при смене фокуса
+      _onSearchChanged();
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -49,7 +56,12 @@ class _TagsEditorState extends State<TagsEditor> {
 
     if (query.isEmpty) {
       setState(() {
-        _filteredTags = [];
+        // Если поле в фокусе — показываем весь список предустановленных тегов,
+        // иначе скрываем подсказки.
+        _filteredTags = _focusNode.hasFocus
+            ? store.predefinedTags.toList()
+            : [];
+        _errorText = null;
       });
       return;
     }
@@ -58,18 +70,38 @@ class _TagsEditorState extends State<TagsEditor> {
       _filteredTags = store.predefinedTags
           .where((tag) => tag.name.toLowerCase().contains(query))
           .toList();
+      _errorText = null;
     });
   }
 
   Future<void> _addTag(String tagName) async {
-    if (tagName.trim().isEmpty) return;
+    if (tagName.trim().isEmpty) {
+      setState(() {
+        _errorText = 'Введите имя тега';
+      });
+      _focusNode.requestFocus();
+      return;
+    }
 
     final store = sl<TagsStore>();
     try {
+      // Если такого тега нет в базе предопределённых — добавим его для переиспользования
+      final exists = store.predefinedTags.any(
+        (t) => t.name.toLowerCase() == tagName.trim().toLowerCase(),
+      );
+      if (!exists) {
+        await store.createPredefinedTag(
+          name: tagName.trim(),
+          color: '#808080',
+          category: 'custom',
+          displayOrder: 999,
+        );
+      }
       await store.addSessionTag(widget.sessionId, tagName.trim());
       _controller.clear();
       setState(() {
         _filteredTags = [];
+        _errorText = null;
       });
       if (mounted) {
         ScaffoldMessenger.of(
@@ -78,10 +110,22 @@ class _TagsEditorState extends State<TagsEditor> {
       }
     } catch (e) {
       if (mounted) {
+        final msg = resolveErrorMessage(e);
+        final status = msg.details?['statusCode'];
+        final method = (msg.details?['method'] ?? '').toString();
+        final url = (msg.details?['url'] ?? '').toString();
+        String shortUrl = url;
+        try {
+          final u = Uri.parse(url);
+          shortUrl = u.path.isNotEmpty ? u.path : url;
+        } catch (_) {}
+        final text = (status != null || method.isNotEmpty || url.isNotEmpty)
+            ? 'HTTP ${status ?? ''} $method $shortUrl'
+            : '${msg.title}: ${msg.description}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add tag: $e'),
-            backgroundColor: Colors.red,
+            content: Text(text),
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -99,10 +143,22 @@ class _TagsEditorState extends State<TagsEditor> {
       }
     } catch (e) {
       if (mounted) {
+        final msg = resolveErrorMessage(e);
+        final status = msg.details?['statusCode'];
+        final method = (msg.details?['method'] ?? '').toString();
+        final url = (msg.details?['url'] ?? '').toString();
+        String shortUrl = url;
+        try {
+          final u = Uri.parse(url);
+          shortUrl = u.path.isNotEmpty ? u.path : url;
+        } catch (_) {}
+        final text = (status != null || method.isNotEmpty || url.isNotEmpty)
+            ? 'HTTP ${status ?? ''} $method $shortUrl'
+            : '${msg.title}: ${msg.description}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to remove tag: $e'),
-            backgroundColor: Colors.red,
+            content: Text(text),
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -138,6 +194,7 @@ class _TagsEditorState extends State<TagsEditor> {
               decoration: InputDecoration(
                 labelText: 'Add tag',
                 hintText: 'Type to search or add custom tag',
+                errorText: _errorText,
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () => _addTag(_controller.text),
@@ -147,8 +204,8 @@ class _TagsEditorState extends State<TagsEditor> {
               onSubmitted: _addTag,
             ),
 
-            // Autocomplete suggestions
-            if (_filteredTags.isNotEmpty) ...[
+            // Autocomplete suggestions (только когда в фокусе)
+            if (_focusNode.hasFocus && _filteredTags.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
                 constraints: const BoxConstraints(maxHeight: 150),

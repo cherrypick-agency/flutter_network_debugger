@@ -88,6 +88,19 @@ class ScriptsApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  /// GET /_api/v1/scripts/compilers
+  /// Доступность компиляторов (из системы или кэша) для разблокировки компиляции
+  /// Возвращает карту language -> canCompile
+  Future<Map<String, bool>> getCompilersAvailability() async {
+    final response = await _httpClient.get(path: '$_basePath/compilers');
+    final data = response.data;
+    if (data is Map<String, dynamic>) {
+      final all = (data['all'] as Map?)?.cast<String, dynamic>() ?? const {};
+      return all.map((k, v) => MapEntry(k.toLowerCase(), v == true));
+    }
+    return {};
+  }
+
   /// GET /_api/v1/scripts/{id}/export-zip
   /// Export script as ZIP file (metadata + source + dependencies + WASM)
   /// Returns the download URL for the ZIP file

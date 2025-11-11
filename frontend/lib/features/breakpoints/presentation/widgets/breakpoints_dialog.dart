@@ -34,11 +34,20 @@ class _BreakpointsDialogState extends State<BreakpointsDialog>
     Future.microtask(() async {
       await sl<BreakpointsStore>().load();
       await sl<InterceptQueueStore>().init();
+      // если очередь пуста — открываем Rules по умолчанию
+      final q = sl<InterceptQueueStore>();
+      if (mounted && q.items.isEmpty) {
+        _tabs.index = 2;
+      }
     });
   }
 
   @override
   void dispose() {
+    // снимаем подписку очереди на монитор при закрытии диалога
+    try {
+      sl<InterceptQueueStore>().detach();
+    } catch (_) {}
     _tabs.dispose();
     super.dispose();
   }
@@ -49,62 +58,71 @@ class _BreakpointsDialogState extends State<BreakpointsDialog>
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1200, maxHeight: 800),
-        child: Material(
-          elevation: 12,
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          child: MultiProvider(
-            providers: [
-              ChangeNotifierProvider.value(value: sl<BreakpointsStore>()),
-              ChangeNotifierProvider.value(value: sl<InterceptQueueStore>()),
-              ChangeNotifierProvider.value(value: sl<InterceptEditorStore>()),
-            ],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+        child: ScaffoldMessenger(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Material(
+              elevation: 12,
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: MultiProvider(
+                providers: [
+                  ChangeNotifierProvider.value(value: sl<BreakpointsStore>()),
+                  ChangeNotifierProvider.value(
+                    value: sl<InterceptQueueStore>(),
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Breakpoints',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: Icon(Icons.close, color: cs.onSurfaceVariant),
-                      ),
-                    ],
+                  ChangeNotifierProvider.value(
+                    value: sl<InterceptEditorStore>(),
                   ),
-                ),
-                const Divider(height: 1),
-                // Tabs
-                TabBar(
-                  controller: _tabs,
-                  tabs: const [
-                    Tab(text: 'Queue'),
-                    Tab(text: 'Editor'),
-                    Tab(text: 'Rules'),
+                ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Breakpoints',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: Icon(Icons.close, color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // Tabs
+                    TabBar(
+                      controller: _tabs,
+                      tabs: const [
+                        Tab(text: 'Queue'),
+                        Tab(text: 'Editor'),
+                        Tab(text: 'Rules'),
+                      ],
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabs,
+                        children: const [
+                          _QueuePanel(),
+                          _EditorPanel(),
+                          _RulesPanel(),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                const Divider(height: 1),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabs,
-                    children: const [
-                      _QueuePanel(),
-                      _EditorPanel(),
-                      _RulesPanel(),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -119,55 +137,78 @@ class _QueuePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<InterceptQueueStore>();
     final items = store.items;
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) {
-        final it = items[i];
-        final ttlMs =
-            it.deadline.millisecondsSinceEpoch -
-            DateTime.now().toUtc().millisecondsSinceEpoch;
-        final totalMs = it.deadline.difference(it.createdAt).inMilliseconds;
-        final pct =
-            totalMs > 0 ? (1 - (ttlMs.clamp(0, totalMs) / totalMs)) : 0.0;
-        return ListTile(
-          title: Text(
-            '${it.direction == 'request' ? it.req?.method ?? '' : it.res?.status ?? ''} • ${it.direction}',
+    final cs = Theme.of(context).colorScheme;
+    final descriptionStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Text(
+            'Pending intercepted requests and responses waiting for action.',
+            style: descriptionStyle,
           ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                it.direction == 'request'
-                    ? (it.req?.url ?? '')
-                    : (it.res?.contentType ?? ''),
-              ),
-              const SizedBox(height: 4),
-              LinearProgressIndicator(value: pct),
-            ],
-          ),
-          onTap: () {
-            store.select(it.id);
-            context.read<InterceptEditorStore>().setItem(it);
-          },
-          trailing: Wrap(
-            spacing: 4,
-            children: [
-              IconButton(
-                tooltip: 'Continue',
-                onPressed: () => store.quickContinue(it.id),
-                icon: const Icon(Icons.play_arrow),
-              ),
-              IconButton(
-                tooltip: 'Cancel',
-                onPressed: () => store.quickCancel(it.id),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-        );
-      },
+        ),
+        Expanded(
+          child: items.isEmpty
+              ? const Center(child: Text('Queue is empty'))
+              : ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final it = items[i];
+                    final ttlMs =
+                        it.deadline.millisecondsSinceEpoch -
+                        DateTime.now().toUtc().millisecondsSinceEpoch;
+                    final totalMs = it.deadline
+                        .difference(it.createdAt)
+                        .inMilliseconds;
+                    final pct = totalMs > 0
+                        ? (1 - (ttlMs.clamp(0, totalMs) / totalMs))
+                        : 0.0;
+                    return ListTile(
+                      title: Text(
+                        '${it.direction == 'request' ? it.req?.method ?? '' : it.res?.status ?? ''} • ${it.direction}',
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            it.direction == 'request'
+                                ? (it.req?.url ?? '')
+                                : (it.res?.contentType ?? ''),
+                          ),
+                          const SizedBox(height: 4),
+                          LinearProgressIndicator(value: pct),
+                        ],
+                      ),
+                      onTap: () {
+                        store.select(it.id);
+                        context.read<InterceptEditorStore>().setItem(it);
+                      },
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Continue',
+                            onPressed: () => store.quickContinue(it.id),
+                            icon: const Icon(Icons.play_arrow),
+                          ),
+                          IconButton(
+                            tooltip: 'Cancel',
+                            onPressed: () => store.quickCancel(it.id),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
@@ -200,13 +241,9 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
   bool _viewDecompressed = true;
   bool _submitting = false;
   String? _contentType;
+  String? _lastItemId;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final ed = context.read<InterceptEditorStore>();
-    final it = ed.item;
-    if (it == null) return;
+  void _populateFromItem(InterceptItem it) {
     final isReq = it.direction == 'request';
     if (isReq) {
       _methodCtrl.text = it.req?.method ?? '';
@@ -220,8 +257,8 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
       _mode = _looksLikeJson(bodyStr) ? 'json' : 'raw';
       _isBinary =
           (it.req?.bodyBase64 != null &&
-              it.req!.bodyBase64!.isNotEmpty &&
-              bodyStr.isEmpty);
+          it.req!.bodyBase64!.isNotEmpty &&
+          bodyStr.isEmpty);
       _isTruncated = it.req?.bodyTruncated == true;
     } else {
       _statusCtrl.text = (it.res?.status ?? 0).toString();
@@ -234,8 +271,8 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
       _mode = _looksLikeJson(bodyStr) ? 'json' : 'raw';
       _isBinary =
           (it.res?.bodyBase64 != null &&
-              it.res!.bodyBase64!.isNotEmpty &&
-              bodyStr.isEmpty);
+          it.res!.bodyBase64!.isNotEmpty &&
+          bodyStr.isEmpty);
       _isTruncated = it.res?.bodyTruncated == true;
     }
   }
@@ -245,7 +282,11 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
     final ed = context.watch<InterceptEditorStore>();
     final it = ed.item;
     if (it == null) {
-      return const Center(child: Text('Очередь пуста'));
+      return const Center(child: Text('Queue is empty'));
+    }
+    if (_lastItemId != it.id) {
+      _populateFromItem(it);
+      _lastItemId = it.id;
     }
     final isReq = it.direction == 'request';
     final hk = sl<HotkeysService>();
@@ -300,8 +341,8 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
                   ],
                   const SizedBox(width: 12),
                   TextButton(
-                    onPressed:
-                        () => _addOrUpdateHeader('Authorization', 'Bearer '),
+                    onPressed: () =>
+                        _addOrUpdateHeader('Authorization', 'Bearer '),
                     child: const Text('+Auth'),
                   ),
                   const SizedBox(width: 4),
@@ -321,8 +362,9 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed:
-                        _submitting ? null : () => _applyAndContinue(ed, it),
+                    onPressed: _submitting
+                        ? null
+                        : () => _applyAndContinue(ed, it),
                     child: const Text('Continue'),
                   ),
                 ],
@@ -443,25 +485,24 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
                                 ),
                               ),
                             Expanded(
-                              child:
-                                  _isBinary
-                                      ? const Center(
-                                        child: Text(
-                                          'Body is binary, not displayed',
-                                        ),
-                                      )
-                                      : BodyEditor(
-                                        mode: _mode,
-                                        onModeChanged: (m) {
-                                          setState(() => _mode = m);
-                                          _ensureContentTypeForMode();
-                                        },
-                                        rawCtrl: _rawCtrl,
-                                        jsonCtrl: _jsonCtrl,
-                                        form: const [],
-                                        multipart: const [],
-                                        allowedModes: const ['raw', 'json'],
+                              child: _isBinary
+                                  ? const Center(
+                                      child: Text(
+                                        'Body is binary, not displayed',
                                       ),
+                                    )
+                                  : BodyEditor(
+                                      mode: _mode,
+                                      onModeChanged: (m) {
+                                        setState(() => _mode = m);
+                                        _ensureContentTypeForMode();
+                                      },
+                                      rawCtrl: _rawCtrl,
+                                      jsonCtrl: _jsonCtrl,
+                                      form: const [],
+                                      multipart: const [],
+                                      allowedModes: const ['raw', 'json'],
+                                    ),
                             ),
                           ],
                         ),
@@ -500,8 +541,9 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
     try {
       if (isReq) {
         await ed.continueRequest(
-          method:
-              _methodCtrl.text.trim().isEmpty ? null : _methodCtrl.text.trim(),
+          method: _methodCtrl.text.trim().isEmpty
+              ? null
+              : _methodCtrl.text.trim(),
           url: _urlCtrl.text.trim().isEmpty ? null : _urlCtrl.text.trim(),
           headers: hdrs.isEmpty ? null : hdrs,
           bodyBase64: bodyB64,
@@ -655,8 +697,9 @@ class _EditorPanelStatefulState extends State<_EditorPanelStateful> {
 
   void _reloadBodyFromSnapshot(InterceptItem? it) {
     if (it == null) return;
-    final b64 =
-        it.direction == 'request' ? it.req?.bodyBase64 : it.res?.bodyBase64;
+    final b64 = it.direction == 'request'
+        ? it.req?.bodyBase64
+        : it.res?.bodyBase64;
     final bodyStr = _safeB64Decode(b64);
     setState(() {
       _jsonCtrl.text = _looksLikeJson(bodyStr) ? _prettyJson(bodyStr) : '';
@@ -715,6 +758,28 @@ class _RulesEditorState extends State<_RulesEditor> {
   Widget build(BuildContext context) {
     final bp = context.watch<BreakpointsStore>();
     final cfg = _cfg ?? bp.config;
+    // если правила ещё не подхвачены (например, пришли после async load) — синхронизируем
+    if (_rules.isEmpty && bp.rules.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _rules = bp.rules
+              .map(
+                (e) => InterceptRule(
+                  id: e.id,
+                  enabled: e.enabled,
+                  priority: e.priority,
+                  action: e.action,
+                  once: e.once,
+                  stopProcessing: e.stopProcessing,
+                  when: e.when,
+                ),
+              )
+              .toList(growable: true);
+          _cfg ??= bp.config;
+        });
+      });
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -727,17 +792,25 @@ class _RulesEditorState extends State<_RulesEditor> {
           Row(
             children: [
               ElevatedButton(
-                onPressed:
-                    _savingCfg || cfg == null
-                        ? null
-                        : () async {
-                          setState(() => _savingCfg = true);
-                          try {
-                            await bp.saveConfig(cfg);
-                          } finally {
-                            setState(() => _savingCfg = false);
-                          }
-                        },
+                onPressed: _savingCfg || cfg == null
+                    ? null
+                    : () async {
+                        setState(() => _savingCfg = true);
+                        try {
+                          await bp.saveConfig(cfg);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Config saved')),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to save config: $e'),
+                            ),
+                          );
+                        } finally {
+                          setState(() => _savingCfg = false);
+                        }
+                      },
                 child: Text(_savingCfg ? 'Saving…' : 'Save Config'),
               ),
             ],
@@ -762,17 +835,39 @@ class _RulesEditorState extends State<_RulesEditor> {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed:
-                    _savingRules
-                        ? null
-                        : () async {
-                          setState(() => _savingRules = true);
-                          try {
-                            await bp.replaceRules(_rules);
-                          } finally {
-                            setState(() => _savingRules = false);
-                          }
-                        },
+                onPressed: _savingRules
+                    ? null
+                    : () async {
+                        setState(() => _savingRules = true);
+                        try {
+                          await bp.replaceRules(_rules);
+                          await bp.load();
+                          setState(() {
+                            _rules = bp.rules
+                                .map(
+                                  (e) => InterceptRule(
+                                    id: e.id,
+                                    enabled: e.enabled,
+                                    priority: e.priority,
+                                    action: e.action,
+                                    once: e.once,
+                                    stopProcessing: e.stopProcessing,
+                                    when: e.when,
+                                  ),
+                                )
+                                .toList(growable: true);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Rules saved')),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to save rules: $e')),
+                          );
+                        } finally {
+                          setState(() => _savingRules = false);
+                        }
+                      },
                 child: Text(_savingRules ? 'Saving…' : 'Save Rules'),
               ),
             ],
@@ -808,14 +903,12 @@ class _RulesEditorState extends State<_RulesEditor> {
             initialValue: cfg.timeoutMs.toString(),
             decoration: const InputDecoration(labelText: 'Timeout (ms)'),
             keyboardType: TextInputType.number,
-            onChanged:
-                (v) => setState(
-                  () =>
-                      _cfg = _copyCfg(
-                        cfg,
-                        timeoutMs: int.tryParse(v) ?? cfg.timeoutMs,
-                      ),
-                ),
+            onChanged: (v) => setState(
+              () => _cfg = _copyCfg(
+                cfg,
+                timeoutMs: int.tryParse(v) ?? cfg.timeoutMs,
+              ),
+            ),
           ),
         ),
         SizedBox(
@@ -824,14 +917,12 @@ class _RulesEditorState extends State<_RulesEditor> {
             initialValue: cfg.queueMax.toString(),
             decoration: const InputDecoration(labelText: 'Queue max'),
             keyboardType: TextInputType.number,
-            onChanged:
-                (v) => setState(
-                  () =>
-                      _cfg = _copyCfg(
-                        cfg,
-                        queueMax: int.tryParse(v) ?? cfg.queueMax,
-                      ),
-                ),
+            onChanged: (v) => setState(
+              () => _cfg = _copyCfg(
+                cfg,
+                queueMax: int.tryParse(v) ?? cfg.queueMax,
+              ),
+            ),
           ),
         ),
         SizedBox(
@@ -840,14 +931,12 @@ class _RulesEditorState extends State<_RulesEditor> {
             initialValue: cfg.bodyMaxBytes.toString(),
             decoration: const InputDecoration(labelText: 'Body max bytes'),
             keyboardType: TextInputType.number,
-            onChanged:
-                (v) => setState(
-                  () =>
-                      _cfg = _copyCfg(
-                        cfg,
-                        bodyMaxBytes: int.tryParse(v) ?? cfg.bodyMaxBytes,
-                      ),
-                ),
+            onChanged: (v) => setState(
+              () => _cfg = _copyCfg(
+                cfg,
+                bodyMaxBytes: int.tryParse(v) ?? cfg.bodyMaxBytes,
+              ),
+            ),
           ),
         ),
         FilterChip(
@@ -860,14 +949,13 @@ class _RulesEditorState extends State<_RulesEditor> {
           child: DropdownButtonFormField<String>(
             value: cfg.overflow,
             decoration: const InputDecoration(labelText: 'Overflow policy'),
-            onChanged:
-                (v) => setState(
-                  () => _cfg = _copyCfg(cfg, overflow: v ?? cfg.overflow),
-                ),
-            items:
-                const ['auto-continue-oldest', 'drop-new']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
+            onChanged: (v) => setState(
+              () => _cfg = _copyCfg(cfg, overflow: v ?? cfg.overflow),
+            ),
+            items: const [
+              'auto-continue-oldest',
+              'drop-new',
+            ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           ),
         ),
       ],
@@ -882,10 +970,9 @@ class _RulesEditorState extends State<_RulesEditor> {
         children: [
           Checkbox(
             value: r.enabled,
-            onChanged:
-                (v) => setState(
-                  () => _rules[i] = _copyRule(r, enabled: v ?? r.enabled),
-                ),
+            onChanged: (v) => setState(
+              () => _rules[i] = _copyRule(r, enabled: v ?? r.enabled),
+            ),
           ),
           SizedBox(
             width: 90,
@@ -893,14 +980,12 @@ class _RulesEditorState extends State<_RulesEditor> {
               initialValue: r.priority.toString(),
               decoration: const InputDecoration(labelText: 'Priority'),
               keyboardType: TextInputType.number,
-              onChanged:
-                  (v) => setState(
-                    () =>
-                        _rules[i] = _copyRule(
-                          r,
-                          priority: int.tryParse(v) ?? r.priority,
-                        ),
-                  ),
+              onChanged: (v) => setState(
+                () => _rules[i] = _copyRule(
+                  r,
+                  priority: int.tryParse(v) ?? r.priority,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -909,30 +994,29 @@ class _RulesEditorState extends State<_RulesEditor> {
             child: DropdownButtonFormField<String>(
               value: r.action,
               decoration: const InputDecoration(labelText: 'Action'),
-              onChanged:
-                  (v) => setState(
-                    () => _rules[i] = _copyRule(r, action: v ?? r.action),
-                  ),
-              items:
-                  const ['request', 'response', 'both']
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
+              onChanged: (v) => setState(
+                () => _rules[i] = _copyRule(r, action: v ?? r.action),
+              ),
+              items: const [
+                'request',
+                'response',
+                'both',
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
             ),
           ),
           const SizedBox(width: 8),
           FilterChip(
             selected: r.once,
             label: const Text('Once'),
-            onSelected:
-                (v) => setState(() => _rules[i] = _copyRule(r, once: v)),
+            onSelected: (v) =>
+                setState(() => _rules[i] = _copyRule(r, once: v)),
           ),
           const SizedBox(width: 8),
           FilterChip(
             selected: r.stopProcessing,
             label: const Text('Stop'),
-            onSelected:
-                (v) =>
-                    setState(() => _rules[i] = _copyRule(r, stopProcessing: v)),
+            onSelected: (v) =>
+                setState(() => _rules[i] = _copyRule(r, stopProcessing: v)),
           ),
           const Spacer(),
           IconButton(
@@ -951,13 +1035,10 @@ class _RulesEditorState extends State<_RulesEditor> {
         InterceptRule(
           id: '',
           enabled: true,
-          priority:
-              (_rules.isEmpty
-                  ? 0
-                  : (_rules
-                          .map((e) => e.priority)
-                          .reduce((a, b) => a > b ? a : b) +
-                      1)),
+          priority: (_rules.isEmpty
+              ? 0
+              : (_rules.map((e) => e.priority).reduce((a, b) => a > b ? a : b) +
+                    1)),
           action: 'both',
           once: false,
           stopProcessing: true,

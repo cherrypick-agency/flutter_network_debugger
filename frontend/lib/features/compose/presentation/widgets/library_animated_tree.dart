@@ -244,12 +244,12 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Библиотека пуста',
+              'Library is empty',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             Text(
-              'Создайте первую коллекцию',
+              'Create your first collection',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -259,7 +259,7 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
               onPressed: () async {
                 final name = await _promptText(
                   context,
-                  title: 'Название коллекции',
+                  title: 'Collection name',
                 );
                 if (name == null || name.isEmpty) return;
                 final repo = sl<ComposeRepository>();
@@ -280,7 +280,7 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
                 await widget.store.loadLibrary();
               },
               icon: const Icon(Icons.add),
-              label: const Text('Создать коллекцию'),
+              label: const Text('Create collection'),
             ),
           ],
         ),
@@ -290,241 +290,250 @@ class _LibraryAnimatedTreeState extends State<LibraryAnimatedTree> {
 
   Widget _collectionTile(BuildContext context, TreeNode<_NodeData> node) {
     final vd = const VisualDensity(horizontal: -4, vertical: -4);
-    return Row(
-      children: [
-        const Icon(Icons.folder_copy, size: 16),
-        const SizedBox(width: 6),
-        Expanded(child: Text(node.data!.title)),
-        IconButton(
-          tooltip: 'New folder',
-          icon: const Icon(Icons.add, size: 18),
-          visualDensity: vd,
-          onPressed: () async {
-            final name = await _promptText(context, title: 'New folder name');
-            if (name == null || name.isEmpty) return;
-            final repo = sl<ComposeRepository>();
-            final store = widget.store;
-            final col = store.collections.firstWhere(
-              (c) => c.id == node.data!.id,
-              orElse: () => store.collections.first,
-            );
-            final root = col.root.toJson();
-            _folderAdd(root, col.root.id, {
-              'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
-              'name': name,
-              'requests': <String>[],
-              'folders': <Map<String, dynamic>>[],
-            });
-            await repo.upsertCollection({
-              'id': col.id,
-              'name': col.name,
-              'root': root,
-            });
-            await store.loadLibrary();
-          },
-        ),
-        PopupMenuButton<String>(
-          tooltip: 'Collection menu',
-          itemBuilder: (ctx) => const [
-            PopupMenuItem(value: 'rename', child: Text('Rename')),
-            PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-          onSelected: (v) async {
-            final repo = sl<ComposeRepository>();
-            final store = widget.store;
-            final col = store.collections.firstWhere(
-              (c) => c.id == node.data!.id,
-              orElse: () => store.collections.first,
-            );
-            if (v == 'rename') {
-              final name = await _promptText(
-                context,
-                title: 'Rename collection',
-                initial: col.name,
-              );
+    return Padding(
+      padding: const EdgeInsets.only(right: 24),
+      child: Row(
+        children: [
+          const Icon(Icons.folder_copy, size: 16),
+          const SizedBox(width: 6),
+          Expanded(child: Text(node.data!.title)),
+          IconButton(
+            tooltip: 'New folder',
+            icon: const Icon(Icons.add, size: 18),
+            visualDensity: vd,
+            onPressed: () async {
+              final name = await _promptText(context, title: 'New folder name');
               if (name == null || name.isEmpty) return;
-              await repo.upsertCollection({
-                'id': col.id,
+              final repo = sl<ComposeRepository>();
+              final store = widget.store;
+              final col = store.collections.firstWhere(
+                (c) => c.id == node.data!.id,
+                orElse: () => store.collections.first,
+              );
+              final root = col.root.toJson();
+              _folderAdd(root, col.root.id, {
+                'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
                 'name': name,
-                'root': col.root.toJson(),
+                'requests': <String>[],
+                'folders': <Map<String, dynamic>>[],
               });
-              await store.loadLibrary();
-            } else if (v == 'delete') {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Confirm'),
-                  content: const Text('Delete collection?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('OK'),
-                    ),
-                  ],
-                ),
-              );
-              if (ok == true) {
-                await repo.deleteCollection(col.id);
-                await store.loadLibrary();
-              }
-            }
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _folderTile(BuildContext context, TreeNode<_NodeData> node) {
-    final vd = const VisualDensity(horizontal: -4, vertical: -4);
-    return Row(
-      children: [
-        const Icon(Icons.folder, size: 16),
-        const SizedBox(width: 6),
-        Expanded(child: Text(node.data!.title)),
-        IconButton(
-          tooltip: 'New subfolder',
-          icon: const Icon(Icons.add, size: 18),
-          visualDensity: vd,
-          onPressed: () async {
-            final name = await _promptText(context, title: 'New folder name');
-            if (name == null || name.isEmpty) return;
-            final repo = sl<ComposeRepository>();
-            final store = widget.store;
-            final col = store.collections.firstWhere(
-              (c) => c.id == node.data!.parentCollectionId,
-              orElse: () => store.collections.first,
-            );
-            final root = col.root.toJson();
-            _folderAdd(root, node.data!.id, {
-              'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
-              'name': name,
-              'requests': <String>[],
-              'folders': <Map<String, dynamic>>[],
-            });
-            await repo.upsertCollection({
-              'id': col.id,
-              'name': col.name,
-              'root': root,
-            });
-            await store.loadLibrary();
-          },
-        ),
-        PopupMenuButton<String>(
-          tooltip: 'Folder menu',
-          itemBuilder: (ctx) => const [
-            PopupMenuItem(value: 'rename', child: Text('Rename')),
-            PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-          onSelected: (v) async {
-            final repo = sl<ComposeRepository>();
-            final store = widget.store;
-            final col = store.collections.firstWhere(
-              (c) => c.id == node.data!.parentCollectionId,
-              orElse: () => store.collections.first,
-            );
-            final root = col.root.toJson();
-            if (v == 'rename') {
-              final name = await _promptText(
-                context,
-                title: 'Rename folder',
-                initial: node.data!.title,
-              );
-              if (name == null || name.isEmpty) return;
-              _folderRename(root, node.data!.id, name);
               await repo.upsertCollection({
                 'id': col.id,
                 'name': col.name,
                 'root': root,
               });
               await store.loadLibrary();
-            } else if (v == 'delete') {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Confirm'),
-                  content: const Text('Delete folder and its contents?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('OK'),
-                    ),
-                  ],
-                ),
+            },
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Collection menu',
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'rename', child: Text('Rename')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+            onSelected: (v) async {
+              final repo = sl<ComposeRepository>();
+              final store = widget.store;
+              final col = store.collections.firstWhere(
+                (c) => c.id == node.data!.id,
+                orElse: () => store.collections.first,
               );
-              if (ok == true) {
-                _folderDelete(root, node.data!.id);
+              if (v == 'rename') {
+                final name = await _promptText(
+                  context,
+                  title: 'Rename collection',
+                  initial: col.name,
+                );
+                if (name == null || name.isEmpty) return;
+                await repo.upsertCollection({
+                  'id': col.id,
+                  'name': name,
+                  'root': col.root.toJson(),
+                });
+                await store.loadLibrary();
+              } else if (v == 'delete') {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Confirm'),
+                    content: const Text('Delete collection?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok == true) {
+                  await repo.deleteCollection(col.id);
+                  await store.loadLibrary();
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _folderTile(BuildContext context, TreeNode<_NodeData> node) {
+    final vd = const VisualDensity(horizontal: -4, vertical: -4);
+    return Padding(
+      padding: const EdgeInsets.only(right: 24),
+      child: Row(
+        children: [
+          const Icon(Icons.folder, size: 16),
+          const SizedBox(width: 6),
+          Expanded(child: Text(node.data!.title)),
+          IconButton(
+            tooltip: 'New subfolder',
+            icon: const Icon(Icons.add, size: 18),
+            visualDensity: vd,
+            onPressed: () async {
+              final name = await _promptText(context, title: 'New folder name');
+              if (name == null || name.isEmpty) return;
+              final repo = sl<ComposeRepository>();
+              final store = widget.store;
+              final col = store.collections.firstWhere(
+                (c) => c.id == node.data!.parentCollectionId,
+                orElse: () => store.collections.first,
+              );
+              final root = col.root.toJson();
+              _folderAdd(root, node.data!.id, {
+                'id': 'fld-${DateTime.now().microsecondsSinceEpoch}',
+                'name': name,
+                'requests': <String>[],
+                'folders': <Map<String, dynamic>>[],
+              });
+              await repo.upsertCollection({
+                'id': col.id,
+                'name': col.name,
+                'root': root,
+              });
+              await store.loadLibrary();
+            },
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Folder menu',
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'rename', child: Text('Rename')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+            onSelected: (v) async {
+              final repo = sl<ComposeRepository>();
+              final store = widget.store;
+              final col = store.collections.firstWhere(
+                (c) => c.id == node.data!.parentCollectionId,
+                orElse: () => store.collections.first,
+              );
+              final root = col.root.toJson();
+              if (v == 'rename') {
+                final name = await _promptText(
+                  context,
+                  title: 'Rename folder',
+                  initial: node.data!.title,
+                );
+                if (name == null || name.isEmpty) return;
+                _folderRename(root, node.data!.id, name);
                 await repo.upsertCollection({
                   'id': col.id,
                   'name': col.name,
                   'root': root,
                 });
                 await store.loadLibrary();
+              } else if (v == 'delete') {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Confirm'),
+                    content: const Text('Delete folder and its contents?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok == true) {
+                  _folderDelete(root, node.data!.id);
+                  await repo.upsertCollection({
+                    'id': col.id,
+                    'name': col.name,
+                    'root': root,
+                  });
+                  await store.loadLibrary();
+                }
               }
-            }
-          },
-        ),
-      ],
+            },
+          ),
+        ],
+      ),
     );
   }
 
   Widget _requestTile(BuildContext context, TreeNode<_NodeData> node) {
     final store = widget.store;
-    return Row(
-      children: [
-        const Icon(Icons.http, size: 16),
-        const SizedBox(width: 6),
-        Expanded(
-          child: InkWell(
-            onTap: () {
-              final tpl = store.requestsById[node.data!.id];
-              if (tpl != null) widget.onSelect(tpl);
-            },
-            child: Text(node.data!.title),
+    return Padding(
+      padding: const EdgeInsets.only(right: 24),
+      child: Row(
+        children: [
+          const Icon(Icons.http, size: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                final tpl = store.requestsById[node.data!.id];
+                if (tpl != null) widget.onSelect(tpl);
+              },
+              child: Text(node.data!.title),
+            ),
           ),
-        ),
-        PopupMenuButton<String>(
-          itemBuilder: (ctx) => const [
-            PopupMenuItem(value: 'rename', child: Text('Rename')),
-            PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-          onSelected: (v) async {
-            final repo = sl<ComposeRepository>();
-            final tpl = store.requestsById[node.data!.id];
-            if (tpl == null) return;
-            if (v == 'rename') {
-              final name = await _promptText(
-                context,
-                title: 'Rename request',
-                initial: tpl.name,
-              );
-              if (name == null || name.isEmpty) return;
-              await repo.upsertRequest(
-                ComposeTemplateDTO(
-                  id: tpl.id,
-                  name: name,
-                  method: tpl.method,
-                  url: tpl.url,
-                  headers: tpl.headers,
-                  query: tpl.query,
-                  body: tpl.body,
-                  auth: tpl.auth,
-                ),
-              );
-              await store.loadLibrary();
-            } else if (v == 'delete') {
-              await store.deleteTemplate(tpl.id);
-            }
-          },
-        ),
-      ],
+          PopupMenuButton<String>(
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'rename', child: Text('Rename')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+            onSelected: (v) async {
+              final repo = sl<ComposeRepository>();
+              final tpl = store.requestsById[node.data!.id];
+              if (tpl == null) return;
+              if (v == 'rename') {
+                final name = await _promptText(
+                  context,
+                  title: 'Rename request',
+                  initial: tpl.name,
+                );
+                if (name == null || name.isEmpty) return;
+                await repo.upsertRequest(
+                  ComposeTemplateDTO(
+                    id: tpl.id,
+                    name: name,
+                    method: tpl.method,
+                    url: tpl.url,
+                    headers: tpl.headers,
+                    query: tpl.query,
+                    body: tpl.body,
+                    auth: tpl.auth,
+                  ),
+                );
+                await store.loadLibrary();
+              } else if (v == 'delete') {
+                await store.deleteTemplate(tpl.id);
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 }

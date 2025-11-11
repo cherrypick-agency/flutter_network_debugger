@@ -1,3 +1,5 @@
+import 'package:app_http_client/application/app_http_client.dart'
+    as http_client;
 import 'package:flutter/material.dart';
 import '../../../application/stores/home_ui_store.dart';
 import '../../../../../core/di/di.dart';
@@ -72,8 +74,8 @@ class _CaptureSettingsDialogState extends State<CaptureSettingsDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Include paused'),
             value: _includePaused,
-            onChanged:
-                (v) => setState(() => _includePaused = v ?? _includePaused),
+            onChanged: (v) =>
+                setState(() => _includePaused = v ?? _includePaused),
           ),
           const SizedBox(height: 8),
           // Captures list placeholder (MVP)
@@ -111,21 +113,19 @@ class _CaptureSettingsDialogState extends State<CaptureSettingsDialog> {
 
   Future<Map<String, dynamic>> _loadCaptures() async {
     try {
-      final client = sl.get<Object>() as dynamic;
+      final client = sl<http_client.AppHttpClient>();
       final res = await client.get(path: '/_api/v1/captures');
-      Map<String, dynamic> data =
-          (res.data is Map<String, dynamic>)
-              ? (res.data as Map<String, dynamic>)
-              : <String, dynamic>{'items': []};
+      Map<String, dynamic> data = (res.data is Map<String, dynamic>)
+          ? (res.data as Map<String, dynamic>)
+          : <String, dynamic>{'items': []};
       final items = (data['items'] as List?) ?? const [];
       if (items.isEmpty) {
         // fallback to current capture
         try {
           final res2 = await client.get(path: '/_api/v1/capture');
-          final d2 =
-              (res2.data is Map<String, dynamic>)
-                  ? (res2.data as Map<String, dynamic>)
-                  : const <String, dynamic>{};
+          final d2 = (res2.data is Map<String, dynamic>)
+              ? (res2.data as Map<String, dynamic>)
+              : const <String, dynamic>{};
           final cur = d2['current'];
           if (cur is int) {
             data = {
@@ -140,12 +140,11 @@ class _CaptureSettingsDialogState extends State<CaptureSettingsDialog> {
     } catch (_) {
       // On error also try direct fallback to current capture
       try {
-        final client = sl.get<Object>() as dynamic;
+        final client = sl<http_client.AppHttpClient>();
         final res2 = await client.get(path: '/_api/v1/capture');
-        final d2 =
-            (res2.data is Map<String, dynamic>)
-                ? (res2.data as Map<String, dynamic>)
-                : const <String, dynamic>{};
+        final d2 = (res2.data is Map<String, dynamic>)
+            ? (res2.data as Map<String, dynamic>)
+            : const <String, dynamic>{};
         final cur = d2['current'];
         if (cur is int) {
           return {
@@ -160,20 +159,37 @@ class _CaptureSettingsDialogState extends State<CaptureSettingsDialog> {
   }
 
   Future<void> _apply() async {
-    // Persist recording toggle via backend
+    // Persist recording toggle via backend and trust backend state
+    bool? backendRecording;
     try {
-      final client = sl.get<Object>() as dynamic;
-      await client.post(
+      final client = sl<http_client.AppHttpClient>();
+      final res = await client.post<Map<String, dynamic>>(
         path: '/_api/v1/capture',
         body: {'action': _recording ? 'start' : 'stop'},
       );
+      final data = (res.data is Map<String, dynamic>)
+          ? res.data as Map<String, dynamic>
+          : null;
+      if (data != null && data['recording'] is bool) {
+        backendRecording = data['recording'] as bool;
+      }
     } catch (_) {}
 
-    // Update UI store
+    // Update UI store (fallback to previous local choice only if backend silent)
     final ui = sl<HomeUiStore>();
-    ui.setIsRecording(_recording);
+    if (backendRecording != null) {
+      ui.setIsRecording(backendRecording);
+    } else {
+      ui.setIsRecording(_recording);
+    }
     ui.setCaptureScope(_scope);
-    ui.setIncludePaused(_includePaused);
+    // Если запись выключена — по умолчанию не показываем «в паузе»
+    if (ui.isRecording.value) {
+      ui.setIncludePaused(_includePaused);
+    } else {
+      ui.setIncludePaused(false);
+      ui.setPausedSince(DateTime.now().toUtc());
+    }
 
     if (mounted) Navigator.of(context).pop(true);
   }

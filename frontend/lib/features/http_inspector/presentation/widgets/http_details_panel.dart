@@ -18,6 +18,7 @@ import '../../../../core/di/di.dart';
 import '../../../../widgets/html_preview.dart';
 import 'form_data_view.dart';
 import 'highlighted_url_text.dart';
+import '../../../tags/presentation/widgets/tags_editor.dart';
 
 enum CurlExportMode { compact, multiline, withOptions }
 
@@ -47,6 +48,29 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
   int? _respTotalMs;
   String? _bodyOverride;
   String? _highlightThemeKey;
+
+  Future<void> _openTagsDialog() async {
+    final sid = widget.sessionId;
+    if (sid == null || sid.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Tags'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(child: TagsEditor(sessionId: sid)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   void _ensureHighlightThemeInitialized(BuildContext context) {
     if (_highlightThemeKey != null) return;
@@ -153,13 +177,27 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        Row(
           children: [
-            SizedBox(width: 4),
-            Text('HTTP Details', style: context.appText.title),
-            if (durationMs != null) _chip(context, '$durationMs ms'),
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(width: 4),
+                  Text('HTTP Details', style: context.appText.title),
+                  if (durationMs != null) _chip(context, '$durationMs ms'),
+                ],
+              ),
+            ),
+            TextButton.icon(
+              onPressed:
+                  (widget.sessionId == null || (widget.sessionId ?? '').isEmpty)
+                  ? null
+                  : _openTagsDialog,
+              icon: const Icon(Icons.label_outline, size: 16),
+              label: const Text('Tags'),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -1091,12 +1129,8 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
       _loadingFetch = true;
     });
     try {
-      // ignore: invalid_use_of_protected_member
-      final client = sl.get<Object>();
-      final res = await (client as dynamic).get(
-        path: '/httpproxy',
-        query: {'_target': url},
-      );
+      final client = sl<AppHttpClient>();
+      final res = await client.get(path: '/httpproxy', query: {'_target': url});
       final data = res.data?.toString() ?? '';
       // show modal with full body
       if (!mounted) {
@@ -1156,12 +1190,8 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
       _loadingFetch = true;
     });
     try {
-      // ignore: invalid_use_of_protected_member
-      final client = sl.get<Object>();
-      final res = await (client as dynamic).get(
-        path: '/httpproxy',
-        query: {'_target': url},
-      );
+      final client = sl<AppHttpClient>();
+      final res = await client.get(path: '/httpproxy', query: {'_target': url});
       final data = res.data?.toString() ?? '';
       setState(() {
         _bodyOverride = data;

@@ -205,9 +205,9 @@ class _ComposePageState extends State<ComposePage> {
       final restore = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Восстановить черновик?'),
+          title: const Text('Restore draft?'),
           content: const Text(
-            'Для этого шаблона найден черновик. Восстановить изменения?',
+            'A draft was found for this template. Restore changes?',
           ),
           actions: [
             TextButton(
@@ -508,137 +508,169 @@ class _ComposePageState extends State<ComposePage> {
                                     animation: ctrl,
                                     builder: (ctx, _) {
                                       final idx = ctrl.index;
-                                      return ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxHeight: 600,
+                                      return AnimatedSize(
+                                        duration: const Duration(
+                                          milliseconds: 180,
                                         ),
-                                        child: IndexedStack(
-                                          index: idx,
-                                          children: [
-                                            // Headers — делаем контент прокручиваемым, а
-                                            // редактор ключ-значение растягиваем по контенту
-                                            SingleChildScrollView(
-                                              padding: EdgeInsets.zero,
-                                              child: Column(
-                                                children: [
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 8,
-                                                        ),
-                                                    child: Row(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
+                                        curve: Curves.easeInOut,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxHeight: 600,
+                                          ),
+                                          child: Stack(
+                                            children: [
+                                              // Headers
+                                              Offstage(
+                                                offstage: idx != 0,
+                                                child: TickerMode(
+                                                  enabled: idx == 0,
+                                                  child: SingleChildScrollView(
+                                                    padding: EdgeInsets.zero,
+                                                    child: Column(
                                                       children: [
                                                         Padding(
                                                           padding:
-                                                              const EdgeInsets.only(
-                                                                top: 8,
-                                                                right: 8,
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 8,
                                                               ),
-                                                          child: Text(
-                                                            'Add:',
-                                                            style:
-                                                                Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .textTheme
-                                                                    .bodySmall,
-                                                          ),
-                                                        ),
-                                                        Expanded(
-                                                          child: Wrap(
-                                                            spacing: 8,
-                                                            runSpacing: 8,
+                                                          child: Row(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
                                                             children: [
-                                                              _quickHeaderButton(
-                                                                'Content-Type',
-                                                                'application/json',
+                                                              Padding(
+                                                                padding:
+                                                                    const EdgeInsets.only(
+                                                                      top: 8,
+                                                                      right: 8,
+                                                                    ),
+                                                                child: Text(
+                                                                  'Add:',
+                                                                  style: Theme.of(
+                                                                    context,
+                                                                  ).textTheme.bodySmall,
+                                                                ),
                                                               ),
-                                                              _quickHeaderButton(
-                                                                'Authorization',
-                                                                'Bearer ',
-                                                              ),
-                                                              _quickHeaderButton(
-                                                                'Accept',
-                                                                'application/json',
+                                                              Expanded(
+                                                                child: Wrap(
+                                                                  spacing: 8,
+                                                                  runSpacing: 8,
+                                                                  children: [
+                                                                    _quickHeaderButton(
+                                                                      'Content-Type',
+                                                                      'application/json',
+                                                                    ),
+                                                                    _quickHeaderButton(
+                                                                      'Authorization',
+                                                                      'Bearer ',
+                                                                    ),
+                                                                    _quickHeaderButton(
+                                                                      'Accept',
+                                                                      'application/json',
+                                                                    ),
+                                                                  ],
+                                                                ),
                                                               ),
                                                             ],
                                                           ),
                                                         ),
+                                                        KeyValueEditor(
+                                                          key: const ValueKey(
+                                                            'headers',
+                                                          ),
+                                                          items: _headers,
+                                                          onChanged: (list) {
+                                                            setState(() {
+                                                              _dirty = true;
+                                                            });
+                                                            _scheduleAutosave();
+                                                          },
+                                                          labelKey: 'Header',
+                                                        ),
                                                       ],
                                                     ),
                                                   ),
-                                                  KeyValueEditor(
-                                                    key: const ValueKey(
-                                                      'headers',
+                                                ),
+                                              ),
+                                              // Query
+                                              Offstage(
+                                                offstage: idx != 1,
+                                                child: TickerMode(
+                                                  enabled: idx == 1,
+                                                  child: SingleChildScrollView(
+                                                    padding: EdgeInsets.zero,
+                                                    child: KeyValueEditor(
+                                                      key: const ValueKey(
+                                                        'query',
+                                                      ),
+                                                      items: _query,
+                                                      onChanged: (list) {
+                                                        setState(() {
+                                                          _dirty = true;
+                                                        });
+                                                        _scheduleAutosave();
+                                                      },
+                                                      labelKey: 'Param',
                                                     ),
-                                                    items: _headers,
-                                                    onChanged: (list) {
+                                                  ),
+                                                ),
+                                              ),
+                                              // Body
+                                              Offstage(
+                                                offstage: idx != 2,
+                                                child: TickerMode(
+                                                  enabled: idx == 2,
+                                                  child: BodyEditor(
+                                                    mode: _bodyMode,
+                                                    onModeChanged: (v) {
+                                                      _markDirty();
                                                       setState(() {
-                                                        _dirty = true;
+                                                        _bodyMode = v;
                                                       });
+                                                      _ensureContentType();
                                                       _scheduleAutosave();
                                                     },
-                                                    labelKey: 'Header',
+                                                    rawCtrl: _rawCtrl,
+                                                    jsonCtrl: _jsonCtrl,
+                                                    form: _form,
+                                                    multipart: _multipart,
+                                                    maxUploadMB: _maxUploadMB,
+                                                    onFormChanged: (_) {
+                                                      _markDirty();
+                                                      _scheduleAutosave();
+                                                    },
+                                                    onMultipartChanged: (_) {
+                                                      _markDirty();
+                                                      _scheduleAutosave();
+                                                    },
                                                   ),
-                                                ],
+                                                ),
                                               ),
-                                            ),
-                                            SingleChildScrollView(
-                                              padding: EdgeInsets.zero,
-                                              child: KeyValueEditor(
-                                                key: const ValueKey('query'),
-                                                items: _query,
-                                                onChanged: (list) {
-                                                  setState(() {
-                                                    _dirty = true;
-                                                  });
-                                                  _scheduleAutosave();
-                                                },
-                                                labelKey: 'Param',
+                                              // Auth
+                                              Offstage(
+                                                offstage: idx != 3,
+                                                child: TickerMode(
+                                                  enabled: idx == 3,
+                                                  child: AuthEditor(
+                                                    authType: _authType,
+                                                    onAuthTypeChanged: (v) {
+                                                      setState(
+                                                        () => _authType = v,
+                                                      );
+                                                      _markDirty();
+                                                      _scheduleAutosave();
+                                                    },
+                                                    basicUser: _basicUser,
+                                                    basicPass: _basicPass,
+                                                    bearer: _bearer,
+                                                    apiKeyHeader: _apiKeyHeader,
+                                                    apiKey: _apiKey,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                            BodyEditor(
-                                              mode: _bodyMode,
-                                              onModeChanged: (v) {
-                                                _markDirty();
-                                                setState(() {
-                                                  _bodyMode = v;
-                                                });
-                                                _ensureContentType();
-                                                _scheduleAutosave();
-                                              },
-                                              rawCtrl: _rawCtrl,
-                                              jsonCtrl: _jsonCtrl,
-                                              form: _form,
-                                              multipart: _multipart,
-                                              maxUploadMB: _maxUploadMB,
-                                              onFormChanged: (_) {
-                                                _markDirty();
-                                                _scheduleAutosave();
-                                              },
-                                              onMultipartChanged: (_) {
-                                                _markDirty();
-                                                _scheduleAutosave();
-                                              },
-                                            ),
-                                            AuthEditor(
-                                              authType: _authType,
-                                              onAuthTypeChanged: (v) {
-                                                setState(() => _authType = v);
-                                                _markDirty();
-                                                _scheduleAutosave();
-                                              },
-                                              basicUser: _basicUser,
-                                              basicPass: _basicPass,
-                                              bearer: _bearer,
-                                              apiKeyHeader: _apiKeyHeader,
-                                              apiKey: _apiKey,
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       );
                                     },
@@ -734,7 +766,7 @@ class _ComposePageState extends State<ComposePage> {
         } catch (e) {
           setState(() => _sending = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Невалидный JSON: ${e.toString()}')),
+            SnackBar(content: Text('Invalid JSON: ${e.toString()}')),
           );
           return;
         }
@@ -835,7 +867,7 @@ class _ComposePageState extends State<ComposePage> {
       if (mounted && showToast) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Сохранено в библиотеку')));
+        ).showSnackBar(const SnackBar(content: Text('Saved to library')));
       }
       try {
         if (_currentTplId != null) {
@@ -849,21 +881,24 @@ class _ComposePageState extends State<ComposePage> {
 
   Future<void> _onSaveToCollection() async {
     try {
-      // 1) Сохраняем запрос без всплывашки
+      if (!mounted) return;
+
+      // 1) Выбор папки и имени запроса (диалог поддерживает создание коллекций)
+      final pick = await showDialog<FolderSelection>(
+        context: context,
+        builder: (_) => FolderPickerDialog(initialRequestName: _currentTplName),
+      );
+      if (pick == null) return;
+
+      // 2) Сохраняем шаблон с введённым именем (если задано)
+      if ((pick.requestName ?? '').trim().isNotEmpty) {
+        _currentTplName = pick.requestName!.trim();
+      }
       await _saveTemplate(showToast: false);
 
       if (_currentTplId == null) {
-        throw Exception('Не удалось сохранить шаблон');
+        throw Exception('Failed to save the template');
       }
-
-      if (!mounted) return;
-
-      // 2) Выбор папки в древовидном виде (диалог поддерживает создание коллекций)
-      final pick = await showDialog<FolderSelection>(
-        context: context,
-        builder: (_) => const FolderPickerDialog(),
-      );
-      if (pick == null) return;
 
       // 3) Перемещаем в выбранную папку
       await sl<ComposeRepository>().moveRequest(
@@ -879,13 +914,13 @@ class _ComposePageState extends State<ComposePage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Сохранено в коллекцию')));
+        ).showSnackBar(const SnackBar(content: Text('Saved to collection')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка сохранения: $e'),
+            content: Text('Save error: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -937,7 +972,7 @@ class _ComposePageState extends State<ComposePage> {
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('cURL скопирован')));
+      ).showSnackBar(const SnackBar(content: Text('cURL copied')));
     }
   }
 
@@ -951,8 +986,10 @@ class _ComposePageState extends State<ComposePage> {
       final act = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Сохранить изменения?'),
-          content: const Text('Есть несохранённые изменения. Что сделать?'),
+          title: const Text('Save changes?'),
+          content: const Text(
+            'You have unsaved changes. What would you like to do?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop('cancel'),
@@ -1020,20 +1057,20 @@ class _ComposePageState extends State<ComposePage> {
   }
 
   Map<String, dynamic> _friendlyError(Object e) {
-    String msg = 'Не удалось выполнить запрос';
+    String msg = 'Request failed';
     try {
       if (e is AppHttpException) {
         switch (e.type) {
           case AppHttpErrorType.connectionTimeout:
           case AppHttpErrorType.sendTimeout:
           case AppHttpErrorType.receiveTimeout:
-            msg = 'Таймаут запроса';
+            msg = 'Request timeout';
             break;
           case AppHttpErrorType.badCertificate:
-            msg = 'Ошибка сертификата TLS';
+            msg = 'TLS certificate error';
             break;
           case AppHttpErrorType.connectionError:
-            msg = 'Ошибка сети/соединения (DNS/сокет)';
+            msg = 'Network/connection error (DNS/socket)';
             break;
           default:
             msg = e.message.isNotEmpty ? e.message : msg;
@@ -1046,19 +1083,6 @@ class _ComposePageState extends State<ComposePage> {
       }
     } catch (_) {}
     return {'error': true, 'message': msg};
-  }
-
-  List<ComposeFolderModel> _flattenFolders(ComposeFolderModel root) {
-    final out = <ComposeFolderModel>[];
-    void walk(ComposeFolderModel f) {
-      out.add(f);
-      for (final c in f.folders) {
-        walk(c);
-      }
-    }
-
-    walk(root);
-    return out;
   }
 }
 

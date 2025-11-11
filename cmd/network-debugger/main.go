@@ -31,6 +31,7 @@ import (
 	sessionscli "network-debugger/internal/features/sessions_cli"
 	cliopts "network-debugger/internal/features/sessions_cli/domain"
 	setp "network-debugger/internal/features/settings/infrastructure/persistence"
+	tagsp "network-debugger/internal/features/tags/infrastructure/persistence"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	dbinfra "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
@@ -123,9 +124,21 @@ func main() {
 					&mappingp.MapRuleModel{},
 					&processp.ProcessDetectionConfigModel{},
 					&processp.IconCacheModel{},
+					// Tags & Annotations
+					&tagsp.PredefinedTagModel{},
+					&tagsp.SessionTagModel{},
+					&tagsp.SessionAnnotationModel{},
 					&scriptingp.ScriptModel{},
 				); err != nil {
 					logger.Error().Err(err).Msg("db automigrate failed")
+				}
+				// Дополнительные индексы/ограничения, которых нет в моделях GORM (композитные UNIQUE)
+				// Это устраняет ошибку SQLite: "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint".
+				if err := gdb.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_tags_unique ON session_tags(session_id, tag_name)`).Error; err != nil {
+					logger.Warn().Err(err).Msg("failed to ensure idx_session_tags_unique")
+				}
+				if err := gdb.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_annotations_unique ON session_annotations(session_id, key)`).Error; err != nil {
+					logger.Warn().Err(err).Msg("failed to ensure idx_session_annotations_unique")
 				}
 			} else {
 				logger.Info().Msg("auto-migrate disabled (non-dev). Apply SQL migrations via goose/migrate in CI/CD")

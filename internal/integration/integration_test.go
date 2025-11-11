@@ -885,9 +885,11 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 	defer mon.Close()
 	var monFrames int32
 	var monEvents int32
-	monCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	var monWg sync.WaitGroup
+	monWg.Add(1)
+	monDone := make(chan struct{})
 	go func() {
+		defer monWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				// Silently handle websocket panic during cleanup
@@ -895,7 +897,7 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 		}()
 		for {
 			select {
-			case <-monCtx.Done():
+			case <-monDone:
 				return
 			default:
 			}
@@ -945,8 +947,20 @@ func TestHighLoadConcurrentSessions(t *testing.T) {
 		}(s)
 	}
 	wg.Wait()
-	time.Sleep(200 * time.Millisecond)
-	cancel()
+	// Даем время на обработку всех событий и фреймов
+	time.Sleep(1 * time.Second)
+	// Проверяем, что счетчики обновились, даем дополнительное время если нужно
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&monFrames) > 0 && atomic.LoadInt32(&monEvents) > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	close(monDone)
+	// Даем время мониторингу завершить чтение
+	time.Sleep(300 * time.Millisecond)
+	monWg.Wait()
 
 	// list sessions filtered by target
 	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&_target=" + url.QueryEscape(echoWS))
@@ -1025,28 +1039,40 @@ func TestRichServerManyEvents(t *testing.T) {
 		t.Fatalf("monitor dial: %v", err)
 	}
 	defer mon.Close()
-	hasEvent := false
-	hasFrame := false
+	var hasEvent int32
+	var hasFrame int32
+	var monWg sync.WaitGroup
+	monWg.Add(1)
+	monCtx, monCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer monCancel()
 	go func() {
+		defer monWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				// Silently handle websocket panic during cleanup
 			}
 		}()
-		deadline := time.Now().Add(1 * time.Second)
-		for time.Now().Before(deadline) {
-			_ = mon.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+		for {
+			select {
+			case <-monCtx.Done():
+				return
+			default:
+			}
+			_ = mon.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 			_, data, err := mon.ReadMessage()
 			if err != nil {
-				break
+				if !isTimeoutError(err) {
+					return
+				}
+				continue
 			}
 			var ev monitorEvent
 			_ = json.Unmarshal(data, &ev)
 			if ev.Type == "event_added" {
-				hasEvent = true
+				atomic.StoreInt32(&hasEvent, 1)
 			}
 			if ev.Type == "frame_added" {
-				hasFrame = true
+				atomic.StoreInt32(&hasFrame, 1)
 			}
 		}
 	}()
@@ -1061,9 +1087,24 @@ func TestRichServerManyEvents(t *testing.T) {
 	// send a couple of client frames too
 	_ = c.WriteMessage(websocket.TextMessage, []byte("client-hello"))
 	_ = c.WriteMessage(websocket.TextMessage, []byte("42/chat,[\"cli_event\",{}]"))
-	time.Sleep(800 * time.Millisecond) // increased from 600ms to ensure all server frames are sent
+	// Сервер отправляет события каждые 80ms в течение 5 тиков (400ms), плюс нужно время на обработку
+	time.Sleep(1 * time.Second)
 	_ = c.Close()
-	time.Sleep(200 * time.Millisecond) // additional wait for frame persistence
+	// Даем время на обработку всех событий и фреймов
+	time.Sleep(1 * time.Second)
+	// Проверяем, что счетчики обновились, даем дополнительное время если нужно
+	// При параллельном выполнении тестов может потребоваться больше времени
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&hasEvent) > 0 && atomic.LoadInt32(&hasFrame) > 0 {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	// Даем еще немного времени мониторингу на завершение чтения
+	time.Sleep(500 * time.Millisecond)
+	monCancel()
+	monWg.Wait()
 
 	// validate via REST
 	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
@@ -1141,8 +1182,8 @@ func TestRichServerManyEvents(t *testing.T) {
 		t.Fatalf("expected parsed srv_event in events list")
 	}
 
-	if !(hasEvent && hasFrame) {
-		t.Fatalf("monitor did not signal event/frame: event=%v frame=%v", hasEvent, hasFrame)
+	if atomic.LoadInt32(&hasEvent) == 0 || atomic.LoadInt32(&hasFrame) == 0 {
+		t.Fatalf("monitor did not signal event/frame: event=%v frame=%v", atomic.LoadInt32(&hasEvent), atomic.LoadInt32(&hasFrame))
 	}
 }
 

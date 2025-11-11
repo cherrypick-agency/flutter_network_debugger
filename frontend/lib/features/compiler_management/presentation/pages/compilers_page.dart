@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
+import '../../../../core/di/di.dart';
+import '../../../scripts/data/services/scripts_api_service.dart';
 import '../stores/compiler_list_store.dart';
 import '../stores/installation_progress_store.dart';
 import '../widgets/compiler_card.dart';
@@ -19,16 +21,42 @@ class CompilersPage extends StatefulWidget {
 }
 
 class _CompilersPageState extends State<CompilersPage> {
+  Map<String, bool>?
+  _systemAvailability; // language -> available via system/cache
+
   @override
   void initState() {
     super.initState();
-    widget.store.loadCompilers();
+    _loadAll();
   }
 
   @override
   void dispose() {
     widget.progressStore.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadAll() async {
+    await Future.wait([
+      widget.store.loadCompilers(),
+      _loadSystemAvailability(),
+    ]);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadSystemAvailability() async {
+    try {
+      final api = sl<ScriptsApiService>();
+      final map = await api.getCompilersAvailability();
+      _systemAvailability = map.map((k, v) => MapEntry(k.toLowerCase(), v));
+    } catch (_) {
+      _systemAvailability = null;
+    }
+  }
+
+  bool _isSystemAvailable(String language) {
+    final v = _systemAvailability?[language.toLowerCase()];
+    return v == true;
   }
 
   @override
@@ -111,7 +139,11 @@ class _CompilersPageState extends State<CompilersPage> {
           }
 
           return RefreshIndicator(
-            onRefresh: widget.store.loadCompilers,
+            onRefresh: () async {
+              await widget.store.loadCompilers();
+              await _loadSystemAvailability();
+              if (mounted) setState(() {});
+            },
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -130,6 +162,9 @@ class _CompilersPageState extends State<CompilersPage> {
                         builder: (_) => CompilerCard(
                           compiler: compiler,
                           progress: widget.progressStore.getProgress(
+                            compiler.language,
+                          ),
+                          systemAvailable: _isSystemAvailable(
                             compiler.language,
                           ),
                           onUninstall: () {
@@ -156,6 +191,9 @@ class _CompilersPageState extends State<CompilersPage> {
                         builder: (_) => CompilerCard(
                           compiler: compiler,
                           progress: widget.progressStore.getProgress(
+                            compiler.language,
+                          ),
+                          systemAvailable: _isSystemAvailable(
                             compiler.language,
                           ),
                           onInstall: () {

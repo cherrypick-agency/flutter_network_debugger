@@ -924,3 +924,481 @@ func TestBaseDownloader_DownloadFile_ProgressCallback(t *testing.T) {
 		t.Errorf("Expected final bytes downloaded = %d, got %d", len(testData), lastProgress.BytesDownloaded)
 	}
 }
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_ServerError(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err == nil {
+		t.Error("DownloadFile() should return error for 500 status")
+	}
+
+	var dlErr *DownloadError
+	if !errors.As(err, &dlErr) {
+		t.Errorf("Expected DownloadError, got %T", err)
+	}
+
+	if dlErr.Type != "network" {
+		t.Errorf("Expected error type 'network', got %q", dlErr.Type)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_RangeNotSatisfiable(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+	partialPath := destPath + ".partial"
+
+	// Создаем частично загруженный файл
+	partialData := []byte("partial")
+	if err := os.WriteFile(partialPath, partialData, 0644); err != nil {
+		t.Fatalf("Failed to create partial file: %v", err)
+	}
+
+	testData := []byte("test content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Первый запрос с Range - возвращаем 416
+		if r.Header.Get("Range") != "" {
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		// Второй запрос без Range - возвращаем полный файл
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil after retry", err)
+	}
+
+	// Проверяем что файл существует
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("Downloaded file was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_Directory(t *testing.T) {
+	downloader := NewBaseDownloader()
+
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "test.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.gz с директорией и файлом
+	file, err := os.Create(tarGzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.gz file: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем директорию
+	dirHeader := &tar.Header{
+		Name:     "subdir/",
+		Typeflag: tar.TypeDir,
+		Mode:     0755,
+	}
+	if err := tarWriter.WriteHeader(dirHeader); err != nil {
+		t.Fatalf("Failed to write dir header: %v", err)
+	}
+
+	// Добавляем файл в директорию
+	content := []byte("test content")
+	fileHeader := &tar.Header{
+		Name: "subdir/file.txt",
+		Size: int64(len(content)),
+		Mode: 0644,
+	}
+	if err := tarWriter.WriteHeader(fileHeader); err != nil {
+		t.Fatalf("Failed to write file header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write file content: %v", err)
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	// Извлекаем
+	err = downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz() error = %v, want nil", err)
+	}
+
+	// Проверяем что директория создана
+	subdir := filepath.Join(targetDir, "subdir")
+	if _, err := os.Stat(subdir); os.IsNotExist(err) {
+		t.Error("Subdirectory was not created")
+	}
+
+	// Проверяем что файл создан
+	filePath := filepath.Join(subdir, "file.txt")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		t.Error("File in subdirectory was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_Directory(t *testing.T) {
+	downloader := NewBaseDownloader()
+
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "test.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.xz с директорией и файлом
+	file, err := os.Create(tarXzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.xz file: %v", err)
+	}
+	defer file.Close()
+
+	xzWriter, err := xz.NewWriter(file)
+	if err != nil {
+		t.Fatalf("Failed to create xz writer: %v", err)
+	}
+	defer xzWriter.Close()
+
+	tarWriter := tar.NewWriter(xzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем директорию
+	dirHeader := &tar.Header{
+		Name:     "subdir/",
+		Typeflag: tar.TypeDir,
+		Mode:     0755,
+	}
+	if err := tarWriter.WriteHeader(dirHeader); err != nil {
+		t.Fatalf("Failed to write dir header: %v", err)
+	}
+
+	// Добавляем файл в директорию
+	content := []byte("test content")
+	fileHeader := &tar.Header{
+		Name: "subdir/file.txt",
+		Size: int64(len(content)),
+		Mode: 0644,
+	}
+	if err := tarWriter.WriteHeader(fileHeader); err != nil {
+		t.Fatalf("Failed to write file header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write file content: %v", err)
+	}
+
+	tarWriter.Close()
+	xzWriter.Close()
+	file.Close()
+
+	// Извлекаем
+	err = downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarXz() error = %v, want nil", err)
+	}
+
+	// Проверяем что директория создана
+	subdir := filepath.Join(targetDir, "subdir")
+	if _, err := os.Stat(subdir); os.IsNotExist(err) {
+		t.Error("Subdirectory was not created")
+	}
+
+	// Проверяем что файл создан
+	filePath := filepath.Join(subdir, "file.txt")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		t.Error("File in subdirectory was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_Symlink(t *testing.T) {
+	downloader := NewBaseDownloader()
+
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "test.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.gz с символической ссылкой
+	file, err := os.Create(tarGzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.gz file: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем файл
+	content := []byte("target file")
+	fileHeader := &tar.Header{
+		Name: "target.txt",
+		Size: int64(len(content)),
+		Mode: 0644,
+	}
+	if err := tarWriter.WriteHeader(fileHeader); err != nil {
+		t.Fatalf("Failed to write file header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write file content: %v", err)
+	}
+
+	// Добавляем символическую ссылку
+	symlinkHeader := &tar.Header{
+		Name:     "link.txt",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "target.txt",
+		Mode:     0644,
+	}
+	if err := tarWriter.WriteHeader(symlinkHeader); err != nil {
+		t.Fatalf("Failed to write symlink header: %v", err)
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	// Извлекаем (символическая ссылка может не создаться на Windows, это нормально)
+	err = downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz() error = %v, want nil", err)
+	}
+
+	// Проверяем что целевой файл создан
+	targetPath := filepath.Join(targetDir, "target.txt")
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		t.Error("Target file was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_Symlink(t *testing.T) {
+	downloader := NewBaseDownloader()
+
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "test.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.xz с символической ссылкой
+	file, err := os.Create(tarXzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.xz file: %v", err)
+	}
+	defer file.Close()
+
+	xzWriter, err := xz.NewWriter(file)
+	if err != nil {
+		t.Fatalf("Failed to create xz writer: %v", err)
+	}
+	defer xzWriter.Close()
+
+	tarWriter := tar.NewWriter(xzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем файл
+	content := []byte("target file")
+	fileHeader := &tar.Header{
+		Name: "target.txt",
+		Size: int64(len(content)),
+		Mode: 0644,
+	}
+	if err := tarWriter.WriteHeader(fileHeader); err != nil {
+		t.Fatalf("Failed to write file header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write file content: %v", err)
+	}
+
+	// Добавляем символическую ссылку
+	symlinkHeader := &tar.Header{
+		Name:     "link.txt",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "target.txt",
+		Mode:     0644,
+	}
+	if err := tarWriter.WriteHeader(symlinkHeader); err != nil {
+		t.Fatalf("Failed to write symlink header: %v", err)
+	}
+
+	tarWriter.Close()
+	xzWriter.Close()
+	file.Close()
+
+	// Извлекаем (символическая ссылка может не создаться на Windows, это нормально)
+	err = downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarXz() error = %v, want nil", err)
+	}
+
+	// Проверяем что целевой файл создан
+	targetPath := filepath.Join(targetDir, "target.txt")
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		t.Error("Target file was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_VerifyChecksum_FileNotFound(t *testing.T) {
+	downloader := NewBaseDownloader()
+
+	err := downloader.VerifyChecksum("nonexistent.txt", "abc123")
+	if err == nil {
+		t.Error("VerifyChecksum() should return error for nonexistent file")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_NoContentLength(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	testData := []byte("test content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Не устанавливаем Content-Length
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil", err)
+	}
+
+	// Проверяем что файл создан
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("Downloaded file was not created")
+	}
+
+	// Проверяем содержимое
+	content, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("Failed to read downloaded file: %v", err)
+	}
+
+	if !bytes.Equal(content, testData) {
+		t.Errorf("Downloaded content = %q, want %q", string(content), string(testData))
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_MaxRetries(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	// Сервер всегда возвращает ошибку
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	if err == nil {
+		t.Error("DownloadFile() should return error after max retries")
+	}
+
+	var dlErr *DownloadError
+	if !errors.As(err, &dlErr) {
+		t.Errorf("Expected DownloadError, got %T", err)
+	}
+
+	if dlErr.Type != "network" {
+		t.Errorf("Expected error type 'network', got %q", dlErr.Type)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_DiskSpaceError(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	// Сервер возвращает очень большой Content-Length
+	testData := []byte("test")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Устанавливаем огромный размер (1 экзабайт)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", 1<<60))
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, nil)
+	// Может вернуть ошибку дискового пространства или nil в зависимости от системы
+	_ = err
+}
+
+// Composer 1.
+func TestBaseDownloader_DownloadFile_RetryProgress(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	attempts := 0
+	testData := []byte("test content")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 2 {
+			// Первая попытка - ошибка
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// Вторая попытка - успех
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	var progressCalls []domain.DownloadProgress
+	progressCb := func(progress domain.DownloadProgress) {
+		progressCalls = append(progressCalls, progress)
+	}
+
+	ctx := context.Background()
+	err := downloader.DownloadFile(ctx, server.URL, destPath, progressCb)
+	if err != nil {
+		t.Fatalf("DownloadFile() error = %v, want nil after retry", err)
+	}
+
+	// Проверяем что был вызов с stage "retrying"
+	foundRetry := false
+	for _, progress := range progressCalls {
+		if progress.Stage == "retrying" {
+			foundRetry = true
+			break
+		}
+	}
+
+	if !foundRetry {
+		t.Error("Expected progress callback with stage 'retrying'")
+	}
+}

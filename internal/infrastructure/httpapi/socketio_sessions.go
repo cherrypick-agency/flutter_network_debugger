@@ -117,6 +117,12 @@ func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
 			view.Sizes = sz
 		}
 		passFilters := h.passQuickFilters(view, s.filters)
+		// Дополнительная проверка по тегам (если заданы в фильтре)
+		if passFilters && len(s.filters.Tags) > 0 && h.d.TagsSvc != nil {
+			if !h.sessionHasAnyTag(sessionID, s.filters.Tags) {
+				passFilters = false
+			}
+		}
 		passCapture := h.passCapture(view, s.filters)
 		h.d.Logger.Info().Str("session_id", sessionID).Bool("pass_filters", passFilters).Bool("pass_capture", passCapture).Msg("[sioHub] applyEventToSub: filter check")
 		if !passFilters || !passCapture {
@@ -132,6 +138,25 @@ func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
 	h.scheduleAggregate(s)
 }
 
+// sessionHasAnyTag возвращает true, если у сессии есть хотя бы один из указанных тегов
+func (h *sioHub) sessionHasAnyTag(sessionID string, want []string) bool {
+	ctx := contextWithNoCancel()
+	tags, err := h.d.TagsSvc.GetSessionTags(ctx, sessionID)
+	if err != nil || len(tags) == 0 {
+		return false
+	}
+	set := make(map[string]struct{}, len(tags))
+	for _, t := range tags {
+		set[strings.ToLower(strings.TrimSpace(t.TagName))] = struct{}{}
+	}
+	for _, w := range want {
+		if _, ok := set[strings.ToLower(strings.TrimSpace(w))]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // (раньше игнорировали внутренние пути UI, но по требованиям оставляем полную видимость)
 
 func (h *sioHub) passCapture(v sessionV1, f sioFilters) bool {
@@ -145,12 +170,18 @@ func (h *sioHub) passCapture(v sessionV1, f sioFilters) bool {
 		}
 		return true
 	case "current", "":
-		// If includeUnassigned is true, show all sessions including those without CaptureID
-		// This allows new sessions (with CaptureID == nil) to appear in real-time
+		// Если включён показ «в паузе», пропускаем все (в т.ч. без CaptureID)
 		if f.IncludeUnassigned {
 			return true
 		}
-		return v.CaptureID != nil
+		// Для "current" пропускаем ТОЛЬКО сессии текущего capture
+		cur := -1
+		if repo := sessionsRepoOf(h.d.Svc); repo != nil {
+			if rs, ok := repo.(interface{ RecordingState() (bool, int) }); ok {
+				_, cur = rs.RecordingState()
+			}
+		}
+		return v.CaptureID != nil && *v.CaptureID == cur
 	default:
 		return true
 	}
@@ -579,7 +610,10 @@ func toUsecaseFilter(f sioFilters) usecase.SessionFilter {
 		switch strings.ToLower(strings.TrimSpace(f.CaptureScope)) {
 		case "all":
 			out.CaptureID = nil
-			out.IncludeUnassigned = true
+			// Уважать includeUnassigned из фильтра (не принуждать к true)
+			if f.IncludeUnassigned {
+				out.IncludeUnassigned = true
+			}
 		case "current", "":
 			v := -1
 			out.CaptureID = &v

@@ -22,6 +22,7 @@ import (
 	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	setp "network-debugger/internal/features/settings/infrastructure/persistence"
+	tagsp "network-debugger/internal/features/tags/infrastructure/persistence"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	dbinfra "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
@@ -57,8 +58,26 @@ func main() {
 		} else {
 			deps.DB = gdb
 			if cfg.DevMode {
-				if err := gdb.AutoMigrate(&setp.RuntimeSettingsModel{}, &setp.ThrottleProfileModel{}, &compp.ComposeLibraryModel{}, &compp.ComposeHistoryEntryModel{}, &proxyp.ProxyConfigModel{}, &mappingp.MapRuleModel{}); err != nil {
+				if err := gdb.AutoMigrate(
+					&setp.RuntimeSettingsModel{},
+					&setp.ThrottleProfileModel{},
+					&compp.ComposeLibraryModel{},
+					&compp.ComposeHistoryEntryModel{},
+					&proxyp.ProxyConfigModel{},
+					&mappingp.MapRuleModel{},
+					// Tags & Annotations
+					&tagsp.PredefinedTagModel{},
+					&tagsp.SessionTagModel{},
+					&tagsp.SessionAnnotationModel{},
+				); err != nil {
 					logger.Error().Err(err).Msg("db automigrate failed")
+				}
+				// Ensure composite UNIQUE indexes for conflict handling
+				if err := gdb.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_tags_unique ON session_tags(session_id, tag_name)`).Error; err != nil {
+					logger.Warn().Err(err).Msg("failed to ensure idx_session_tags_unique")
+				}
+				if err := gdb.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_annotations_unique ON session_annotations(session_id, key)`).Error; err != nil {
+					logger.Warn().Err(err).Msg("failed to ensure idx_session_annotations_unique")
 				}
 			} else {
 				logger.Info().Msg("auto-migrate disabled (non-dev). Apply SQL migrations via goose/migrate in CI/CD")

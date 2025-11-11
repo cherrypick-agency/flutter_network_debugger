@@ -425,7 +425,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                 runSpacing: 4,
                                 children: [
                                   // Process name chip
-                                  if (s.processInfo?.name != null)
+                                  if (_shouldShowProcessName(
+                                    s.processInfo?.name,
+                                  ))
                                     _chip(
                                       s.processInfo!.name,
                                       backgroundColor: Theme.of(
@@ -739,6 +741,14 @@ class _SessionsColumnState extends State<SessionsColumn> {
     if (ms < 300) return Colors.green;
     if (ms < 1000) return cs.tertiary;
     return cs.error;
+  }
+
+  bool _shouldShowProcessName(String? name) {
+    final n = (name ?? '').trim().toLowerCase();
+    if (n.isEmpty) return false;
+    // Скрываем технические имена процессов UI/прокси
+    if (n == 'reverse proxy' || n == 'runner') return false;
+    return true;
   }
 
   String _groupKey(dynamic s) {

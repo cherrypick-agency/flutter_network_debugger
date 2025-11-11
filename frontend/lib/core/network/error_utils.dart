@@ -35,10 +35,9 @@ ResolvedErrorMessage resolveErrorMessage(Object e, [StackTrace? stackTrace]) {
   }
   if (e is AppHttpServerException) {
     final c = e.code;
-    final msg =
-        e.messageFromServer.isNotEmpty
-            ? e.messageFromServer
-            : _defaultMessageForCode(c);
+    final msg = e.messageFromServer.isNotEmpty
+        ? e.messageFromServer
+        : _defaultMessageForCode(c);
     final req = e.requestOptions;
     final resp = e.response;
     final mergedDetails = <String, dynamic>{
@@ -66,9 +65,37 @@ ResolvedErrorMessage resolveErrorMessage(Object e, [StackTrace? stackTrace]) {
   if (e is AppHttpException) {
     final req = e.requestOptions;
     final resp = e.response;
+    // Сформируем более понятное краткое описание:
+    // "HTTP 404 POST /_api/v1/sessions/{id}/tags - Not Found"
+    String makeDescription() {
+      final method = req.method;
+      final url = req.uri.toString();
+      String pathOrUrl = url;
+      try {
+        final u = Uri.parse(url);
+        pathOrUrl = u.path.isNotEmpty ? u.path : url;
+      } catch (_) {}
+      final statusCode = resp?.statusCode;
+      final statusMsg = resp?.statusMessage ?? '';
+      final baseMsg = e.message.trim();
+      final parts = <String>[];
+      if (statusCode != null) {
+        parts.add(
+          'HTTP $statusCode${statusMsg.isNotEmpty ? ' $statusMsg' : ''}',
+        );
+      }
+      parts.add('$method $pathOrUrl');
+      if (baseMsg.isNotEmpty) {
+        parts.add('- $baseMsg');
+      }
+      return parts.join(' ');
+    }
+
     return ResolvedErrorMessage(
       title: 'Network error',
-      description: e.message.isNotEmpty ? e.message : 'Request failed.',
+      description: makeDescription().isNotEmpty
+          ? makeDescription()
+          : (e.message.isNotEmpty ? e.message : 'Request failed.'),
       code: ServerErrorCode.unknown,
       details: {
         'method': req.method,

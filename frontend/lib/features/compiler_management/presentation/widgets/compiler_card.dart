@@ -7,6 +7,7 @@ class CompilerCard extends StatelessWidget {
   final DownloadProgress? progress;
   final VoidCallback? onInstall;
   final VoidCallback? onUninstall;
+  final bool systemAvailable;
 
   const CompilerCard({
     super.key,
@@ -14,6 +15,7 @@ class CompilerCard extends StatelessWidget {
     this.progress,
     this.onInstall,
     this.onUninstall,
+    this.systemAvailable = false,
   });
 
   @override
@@ -131,6 +133,10 @@ class CompilerCard extends StatelessWidget {
       backgroundColor = colorScheme.primary.withOpacity(0.1);
       textColor = colorScheme.primary;
       text = 'Installed';
+    } else if (systemAvailable) {
+      backgroundColor = colorScheme.secondary.withOpacity(0.12);
+      textColor = colorScheme.secondary;
+      text = 'Available (system)';
     } else {
       backgroundColor = colorScheme.surfaceVariant;
       textColor = colorScheme.onSurfaceVariant;

@@ -277,7 +277,9 @@ class _MyHomePageState extends State<MyHomePage> {
     // This ensures widget tree is fully built before accessing context
     // Prevents deadlock between setState() and context.read()
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _restorePrefs().then((_) {
+      _restorePrefs().then((_) async {
+        // Синхронизируем реальное состояние записи с бэкендом (перезапишет префы при расхождении)
+        await _syncRecordingStateFromBackend();
         // Setup search controller listener AFTER preferences are restored
         // This prevents cascade of resubscribe calls during initialization
         _sessionSearchCtrl.addListener(() {
@@ -332,6 +334,26 @@ class _MyHomePageState extends State<MyHomePage> {
         );
       });
     });
+  }
+
+  Future<void> _syncRecordingStateFromBackend() async {
+    try {
+      final ui = sl<HomeUiStore>();
+      final client = sl<http_client.AppHttpClient>();
+      final res = await client.get<Map<String, dynamic>>(
+        path: '/_api/v1/capture',
+      );
+      final data = (res.data is Map<String, dynamic>)
+          ? res.data as Map<String, dynamic>
+          : null;
+      final rec = data?['recording'];
+      if (rec is bool) {
+        ui.setIsRecording(rec);
+        try {
+          await PrefsService().saveIsRecording(rec);
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   @override
@@ -463,16 +485,15 @@ class _MyHomePageState extends State<MyHomePage> {
     );
     if (ok != true) return;
     try {
-      // ignore: invalid_use_of_protected_member
-      final client = sl.get<Object>();
+      final client = sl<http_client.AppHttpClient>();
       bool cleared = false;
       try {
-        await (client as dynamic).delete(path: '/_api/v1/sessions');
+        await client.delete(path: '/_api/v1/sessions');
         cleared = true;
       } catch (_) {}
       if (!cleared) {
         try {
-          await (client as dynamic).delete(path: '/api/sessions');
+          await client.delete(path: '/api/sessions');
           cleared = true;
         } catch (_) {}
       }
@@ -481,10 +502,10 @@ class _MyHomePageState extends State<MyHomePage> {
         final items = context.read<SessionsStore>().items.toList();
         for (final s in items) {
           try {
-            await (client as dynamic).delete(path: '/_api/v1/sessions/${s.id}');
+            await client.delete(path: '/_api/v1/sessions/${s.id}');
           } catch (_) {}
           try {
-            await (client as dynamic).delete(path: '/api/sessions/${s.id}');
+            await client.delete(path: '/api/sessions/${s.id}');
           } catch (_) {}
         }
       }
@@ -623,10 +644,9 @@ class _MyHomePageState extends State<MyHomePage> {
     final ui = sl<HomeUiStore>();
     if (ui.selectedSessionId.value == null) return;
     final id = ui.selectedSessionId.value!;
-    // ignore: invalid_use_of_protected_member
-    final client = sl.get<Object>();
+    final client = sl<http_client.AppHttpClient>();
     try {
-      await (client as dynamic).delete(path: '/_api/v1/sessions/$id');
+      await client.delete(path: '/_api/v1/sessions/$id');
     } catch (_) {}
     ui.setSelectedSessionId(null);
     await _loadSessions();
@@ -760,22 +780,83 @@ class _MyHomePageState extends State<MyHomePage> {
                                   onToggleRecording: () async {
                                     // Toggle on backend via capture API
                                     final newVal = !ui.isRecording.value;
+                                    // ignore: avoid_print
+                                    print(
+                                      '[ToggleRecording] click; current=${ui.isRecording.value} -> newVal=$newVal',
+                                    );
+                                    bool? backendRec;
+                                    final client =
+                                        sl<http_client.AppHttpClient>();
                                     try {
-                                      final client =
-                                          sl.get<Object>() as dynamic;
+                                      // ignore: avoid_print
+                                      print(
+                                        '[ToggleRecording] POST /_api/v1/capture action=${newVal ? 'start' : 'stop'}',
+                                      );
                                       await client.post(
                                         path: '/_api/v1/capture',
                                         body: {
                                           'action': newVal ? 'start' : 'stop',
                                         },
                                       );
-                                    } catch (_) {}
-                                    ui.setIsRecording(newVal);
+                                    } catch (e) {
+                                      // ignore: avoid_print
+                                      print(
+                                        '[ToggleRecording] POST failed: $e',
+                                      );
+                                    }
+                                    // Verify actual state from backend
+                                    try {
+                                      // ignore: avoid_print
+                                      print(
+                                        '[ToggleRecording] GET /_api/v1/capture ...',
+                                      );
+                                      final res = await client
+                                          .get<Map<String, dynamic>>(
+                                            path: '/_api/v1/capture',
+                                          );
+                                      final data =
+                                          (res.data is Map<String, dynamic>)
+                                          ? res.data as Map<String, dynamic>
+                                          : null;
+                                      // ignore: avoid_print
+                                      print(
+                                        '[ToggleRecording] GET data: $data (type=${res.data.runtimeType})',
+                                      );
+                                      final rec = data?['recording'];
+                                      if (rec is bool) {
+                                        backendRec = rec;
+                                      }
+                                    } catch (e) {
+                                      // ignore: avoid_print
+                                      print('[ToggleRecording] GET failed: $e');
+                                    }
+                                    final effectiveRec = backendRec ?? newVal;
+                                    // ignore: avoid_print
+                                    print(
+                                      '[ToggleRecording] effectiveRec=$effectiveRec (backendRec=$backendRec)',
+                                    );
+                                    ui.setIsRecording(effectiveRec);
+                                    // При остановке записи скрываем «непривязанные» (новые) сессии
+                                    if (!ui.isRecording.value) {
+                                      ui.setIncludePaused(false);
+                                      ui.setPausedSince(DateTime.now().toUtc());
+                                    } else {
+                                      ui.setPausedSince(null);
+                                    }
                                     try {
                                       await PrefsService().saveIsRecording(
-                                        newVal,
+                                        ui.isRecording.value,
                                       );
-                                    } catch (_) {}
+                                    } catch (e) {
+                                      // ignore: avoid_print
+                                      print(
+                                        '[ToggleRecording] saveIsRecording failed: $e',
+                                      );
+                                    }
+                                    // ignore: avoid_print
+                                    print(
+                                      '[ToggleRecording] done; ui.isRecording=${ui.isRecording.value}',
+                                    );
                                     await _loadSessions();
                                   },
                                   themeMode:

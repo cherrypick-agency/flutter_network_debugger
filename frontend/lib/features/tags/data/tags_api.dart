@@ -1,4 +1,6 @@
 import 'package:app_http_client/application/app_http_client.dart';
+import 'package:app_http_client/application/app_http_exception.dart';
+import 'package:app_http_client/application/server_error.dart';
 
 import '../../../services/prefs.dart';
 
@@ -45,18 +47,63 @@ class TagsApi {
   }
 
   Future<void> addSessionTag(String sessionId, String tagName) async {
-    await _http.post<void>(
-      path: '/_api/v1/sessions/$sessionId/tags',
-      body: {'tagName': tagName},
-      headers: await _hdrs(),
-    );
+    try {
+      await _http.post<void>(
+        path: '/_api/v1/sessions/$sessionId/tags',
+        body: {'tagName': tagName},
+        headers: await _hdrs(),
+      );
+    } on AppHttpServerException catch (e) {
+      // Fallback для окружений без session‑endpoint: используем bulk API
+      if (e.code == ServerErrorCode.notFound) {
+        await bulkTags({
+          'operation': 'add',
+          'sessionIds': [sessionId],
+          'tagNames': [tagName],
+        });
+        return;
+      }
+      rethrow;
+    } on AppHttpException catch (e) {
+      if ((e.response?.statusCode ?? 0) == 404) {
+        await bulkTags({
+          'operation': 'add',
+          'sessionIds': [sessionId],
+          'tagNames': [tagName],
+        });
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> removeSessionTag(String sessionId, String tagName) async {
-    await _http.delete(
-      path: '/_api/v1/sessions/$sessionId/tags/$tagName',
-      headers: await _hdrs(),
-    );
+    try {
+      await _http.delete(
+        path: '/_api/v1/sessions/$sessionId/tags/$tagName',
+        headers: await _hdrs(),
+      );
+    } on AppHttpServerException catch (e) {
+      if (e.code == ServerErrorCode.notFound) {
+        await bulkTags({
+          'operation': 'remove',
+          'sessionIds': [sessionId],
+          'tagNames': [tagName],
+        });
+        return;
+      }
+      rethrow;
+    } on AppHttpException catch (e) {
+      if ((e.response?.statusCode ?? 0) == 404) {
+        await bulkTags({
+          'operation': 'remove',
+          'sessionIds': [sessionId],
+          'tagNames': [tagName],
+        });
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> bulkTags(Map<String, dynamic> body) async {

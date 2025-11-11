@@ -63,7 +63,7 @@ Suitable for local development and test environments. Has crossplatform interfac
 - Mapping (Map Local / Map Remote)
 - Throttling with profiles
 - Tags & Annotations: Tag and annotate sessions for better organization
-- Performance Insights Dashboard: Real-time performance metrics and analytics
+- Performance Insights dashboard: real-time latency, throughput, error rates, and endpoint hotspots (beta)
 - Privacy first. Works offline.
 - Scriping (language agnostic! Go, Rust, JS/TS, C/C++, even Swift, Kotlin, Dart and more) Currently in beta.
 - Settings

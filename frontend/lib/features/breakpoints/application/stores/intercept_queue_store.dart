@@ -19,6 +19,10 @@ class InterceptQueueStore extends ChangeNotifier {
 
   Future<void> init() async {
     await refresh();
+    // если уже подписаны — повторно не подписываемся
+    if (_listener != null) {
+      return;
+    }
     final monitor = sl<MonitorService>();
     _listener = (Map<String, dynamic> ev) {
       try {
@@ -29,6 +33,15 @@ class InterceptQueueStore extends ChangeNotifier {
       } catch (_) {}
     };
     monitor.addListener(_listener!);
+  }
+
+  void detach() {
+    if (_listener != null) {
+      try {
+        sl<MonitorService>().removeListener(_listener!);
+      } catch (_) {}
+      _listener = null;
+    }
   }
 
   Future<void> refresh() async {
@@ -77,11 +90,7 @@ class InterceptQueueStore extends ChangeNotifier {
 
   @override
   void dispose() {
-    if (_listener != null) {
-      try {
-        sl<MonitorService>().removeListener(_listener!);
-      } catch (_) {}
-    }
+    detach();
     super.dispose();
   }
 }

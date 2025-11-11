@@ -107,3 +107,4 @@ cmd/network-debugger-web/_web/
 # E2E test cache
 internal/e2e/cache/
 
+service_coverage.out

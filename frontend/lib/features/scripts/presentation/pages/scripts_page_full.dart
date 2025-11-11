@@ -81,22 +81,61 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Observer(
-        builder: (_) {
-          if (widget.store.isLoading && widget.store.scripts.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Column(
+        children: [
+          // Предупреждение: раздел ещё не завершён, экраны демонстрационные
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber,
+                      color: Theme.of(context).colorScheme.tertiary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Scripts is a work-in-progress — these screens are primarily for demonstration. Functionality and behavior may change.',
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Coming soon: write scripts and install plugins in multiple languages (Rust, Go, TypeScript, Python, Dart).',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Observer(
+              builder: (_) {
+                if (widget.store.isLoading && widget.store.scripts.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          if (widget.store.errorMessage != null) {
-            return _buildError(widget.store.errorMessage!);
-          }
+                if (widget.store.errorMessage != null) {
+                  return _buildError(widget.store.errorMessage!);
+                }
 
-          if (widget.store.filteredScripts.isEmpty) {
-            return _buildEmpty();
-          }
+                if (widget.store.filteredScripts.isEmpty) {
+                  return _buildEmpty();
+                }
 
-          return _buildList();
-        },
+                return _buildList();
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createScript,

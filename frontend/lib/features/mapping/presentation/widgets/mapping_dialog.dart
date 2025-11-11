@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../domain/mapping_rule.dart';
 import '../../data/mapping_api.dart';
@@ -10,6 +11,7 @@ import '../../../../core/di/di.dart';
 import 'package:app_http_client/application/app_http_client.dart' as app_http;
 import '../../../../core/notifications/notifications_service.dart';
 import 'mapping_rule_editor.dart';
+import '../../../../theme/context_ext.dart';
 
 class MappingDialog extends StatefulWidget {
   const MappingDialog({super.key});
@@ -58,10 +60,7 @@ class _MappingDialogState extends State<MappingDialog>
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'Mapping',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
+                        child: Text('Mapping', style: context.appText.title),
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
@@ -139,32 +138,59 @@ class _RulesPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: ReorderableListView.builder(
-              itemCount: rows.length,
-              onReorder: (oldIndex, newIndex) async {
-                try {
-                  var ni = newIndex;
-                  if (ni > oldIndex) ni -= 1;
-                  final list = rows.toList();
-                  final item = list.removeAt(oldIndex);
-                  list.insert(ni, item);
-                  final ids = list.map((e) => e.id).toList();
-                  await context.read<MappingStore>().reorder(ids);
-                } catch (e) {
-                  sl<NotificationsService>().error(
-                    'Reorder failed',
-                    e.toString(),
-                  );
-                }
-              },
-              itemBuilder: (_, i) {
-                final r = rows[i];
-                return Column(
-                  key: ValueKey(r.id),
-                  children: [_RuleTile(r), const Divider(height: 1)],
-                );
-              },
-            ),
+            child: rows.isEmpty
+                ? Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.rule,
+                            size: 36,
+                            color: context.appColors.textSecondary,
+                          ),
+                          const SizedBox(height: 8),
+                          Text('No rules yet', style: context.appText.subtitle),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Mapping rules let you rewrite or stub HTTP requests.\n'
+                            'Add a Local rule to serve a file/blob (optionally set status/content-type),\n'
+                            'or a Remote rule to proxy to a URL template. Patterns support glob/regex.',
+                            style: context.appText.body,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ReorderableListView.builder(
+                    itemCount: rows.length,
+                    onReorder: (oldIndex, newIndex) async {
+                      try {
+                        var ni = newIndex;
+                        if (ni > oldIndex) ni -= 1;
+                        final list = rows.toList();
+                        final item = list.removeAt(oldIndex);
+                        list.insert(ni, item);
+                        final ids = list.map((e) => e.id).toList();
+                        await context.read<MappingStore>().reorder(ids);
+                      } catch (e) {
+                        sl<NotificationsService>().error(
+                          'Reorder failed',
+                          e.toString(),
+                        );
+                      }
+                    },
+                    itemBuilder: (_, i) {
+                      final r = rows[i];
+                      return Column(
+                        key: ValueKey(r.id),
+                        children: [_RuleTile(r), const Divider(height: 1)],
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -235,21 +261,20 @@ class _RuleTile extends StatelessWidget {
             onPressed: () async {
               final ok = await showDialog<bool>(
                 context: context,
-                builder:
-                    (ctx) => AlertDialog(
-                      title: const Text('Delete rule?'),
-                      content: Text('This will remove "${r.id}"'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('Delete'),
-                        ),
-                      ],
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete rule?'),
+                  content: Text('This will remove "${r.id}"'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancel'),
                     ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
               );
               if (ok != true) return;
               try {
@@ -301,18 +326,28 @@ class _ConfigPanelState extends State<_ConfigPanel> {
         children: [
           Row(
             children: [
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Enabled'),
-                value: cfg?.enabled ?? true,
-                onChanged: (v) {
-                  final c = MappingConfig(
-                    enabled: v,
-                    uploadMaxMB: int.tryParse(_uploadCtrl.text) ?? 20,
-                  );
-                  store.save(c);
-                },
+              SizedBox(
+                width: 220,
+                child: SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enabled'),
+                  value: cfg?.enabled ?? true,
+                  onChanged: (v) async {
+                    try {
+                      final c = MappingConfig(
+                        enabled: v,
+                        uploadMaxMB: int.tryParse(_uploadCtrl.text) ?? 20,
+                      );
+                      await store.save(c);
+                    } catch (e) {
+                      sl<NotificationsService>().error(
+                        'Save failed',
+                        e.toString(),
+                      );
+                    }
+                  },
+                ),
               ),
               const Spacer(),
               IconButton(
@@ -336,6 +371,20 @@ class _ConfigPanelState extends State<_ConfigPanel> {
             child: TextField(
               controller: _uploadCtrl,
               keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onSubmitted: (_) async {
+                try {
+                  final val = int.tryParse(_uploadCtrl.text.trim()) ?? 20;
+                  final c = MappingConfig(
+                    enabled: cfg?.enabled ?? true,
+                    uploadMaxMB: val,
+                  );
+                  await store.save(c);
+                } catch (e) {
+                  sl<NotificationsService>().error('Save failed', e.toString());
+                }
+              },
               decoration: const InputDecoration(labelText: 'Upload max (MB)'),
             ),
           ),
@@ -366,6 +415,21 @@ class _ActivityPanel extends StatelessWidget {
   const _ActivityPanel();
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Activity (MVP placeholder)'));
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.history, size: 40, color: context.appColors.textSecondary),
+          const SizedBox(height: 8),
+          Text('No activity yet', style: context.appText.subtitle),
+          const SizedBox(height: 4),
+          Text(
+            'Recent mapping hits and changes will appear here.',
+            style: context.appText.body,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 }

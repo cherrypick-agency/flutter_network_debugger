@@ -14,6 +14,7 @@ import 'code_mode_selector.dart';
 import 'multi_file_editor_widget.dart';
 import 'wasm_upload_zone.dart';
 import '../../infrastructure/editor_di.dart';
+import '../../data/services/scripts_api_service.dart';
 import '../../../../core/di/di.dart';
 import '../../../compiler_management/presentation/stores/compiler_list_store.dart';
 
@@ -70,6 +71,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   EditorDI? _editorDI; // Multi-file editor DI (lazy init)
   bool _isSaving = false;
   bool _loadingCompilers = true;
+  Map<String, bool>? _canCompileByLanguage; // доступность компиляции по языкам
 
   @override
   void initState() {
@@ -95,11 +97,29 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
 
   /// Load compilers list from backend
   Future<void> _loadCompilersAsync() async {
+    // Загружаем два источника:
+    // 1) статусы кэша (страница менеджера) через CompilerListStore
+    // 2) доступность компиляции (из системы или кэша) через /_api/v1/scripts/compilers
+    final futures = <Future<void>>[];
     if (_compilerStore.compilers.isEmpty) {
-      await _compilerStore.loadCompilers();
+      futures.add(_compilerStore.loadCompilers());
     }
+    futures.add(_loadCompilersAvailability());
+    await Future.wait(futures);
     if (mounted) {
       setState(() => _loadingCompilers = false);
+    }
+  }
+
+  Future<void> _loadCompilersAvailability() async {
+    try {
+      final api = sl<ScriptsApiService>();
+      final map = await api.getCompilersAvailability();
+      // нормализуем ключи в нижний регистр для удобства
+      _canCompileByLanguage = map.map((k, v) => MapEntry(k.toLowerCase(), v));
+    } catch (_) {
+      // молча игнорируем — не блокируем UI, просто останемся без подсказки
+      _canCompileByLanguage = null;
     }
   }
 
@@ -117,8 +137,13 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   /// Returns true optimistically while loading to avoid false negatives
   bool _isCompilerInstalled(String language) {
     if (_loadingCompilers) return true; // Optimistic check while loading
+    final lang = language.toLowerCase();
+    // Если бэкенд говорит, что компиляция доступна (система или кэш) — ок.
+    final canCompile = _canCompileByLanguage?[lang];
+    if (canCompile == true) return true;
+    // Иначе — fallback к кэшу (как раньше).
     return _compilerStore.installedCompilers.any(
-      (c) => c.language.toLowerCase() == language.toLowerCase(),
+      (c) => c.language.toLowerCase() == lang,
     );
   }
 
