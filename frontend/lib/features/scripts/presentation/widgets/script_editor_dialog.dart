@@ -130,6 +130,11 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     _editorDI = EditorDI(scriptStore: _editorStore);
     await _editorDI!.init();
 
+    // Auto-open selected file if exists
+    if (_editorStore.selectedFile != null) {
+      await _editorDI!.editorController.loadFile(_editorStore.selectedFile!);
+    }
+
     if (mounted) setState(() {});
   }
 
@@ -468,15 +473,20 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   }
 
   Widget _buildUploadWasmMode() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: WasmUploadZone(
-        onWasmUploaded: (base64) {
-          _editorStore.setCode(base64);
-        },
-        onClear: () {
-          _editorStore.setCode('');
-        },
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: WasmUploadZone(
+            onWasmUploaded: (base64) {
+              _editorStore.setCode(base64);
+            },
+            onClear: () {
+              _editorStore.setCode('');
+            },
+          ),
+        ),
       ),
     );
   }

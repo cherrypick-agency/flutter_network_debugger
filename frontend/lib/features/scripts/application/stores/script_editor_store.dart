@@ -44,7 +44,7 @@ abstract class _ScriptEditorStore with Store {
   String language = 'rust';
 
   @observable
-  CodeCreationMode codeCreationMode = CodeCreationMode.uploadWasm;
+  CodeCreationMode codeCreationMode = CodeCreationMode.writeSource;
 
   // Multi-file support (for writeSource and importZip modes)
   @observable
@@ -151,6 +151,10 @@ abstract class _ScriptEditorStore with Store {
   void initForNewScript() {
     reset();
     editingScriptId = null;
+    // Create starter file and auto-select it
+    final starterFileName = _getStarterFileName();
+    final starterCode = _getStarterCode();
+    addSourceFile(starterFileName, starterCode);
   }
 
   @action
@@ -200,7 +204,7 @@ abstract class _ScriptEditorStore with Store {
     runtime = ScriptRuntime.extism;
     code = '';
     language = 'rust';
-    codeCreationMode = CodeCreationMode.uploadWasm;
+    codeCreationMode = CodeCreationMode.writeSource;
     sourceFiles.clear();
     selectedFile = null;
     triggerType = TriggerType.request;
@@ -261,6 +265,11 @@ abstract class _ScriptEditorStore with Store {
     if (mode != codeCreationMode) {
       if (mode == CodeCreationMode.uploadWasm) {
         // Switching TO uploadWasm: clear sourceFiles
+        sourceFiles.clear();
+        selectedFile = null;
+        sourceFilesError = null;
+      } else if (mode == CodeCreationMode.importZip) {
+        // Switching TO importZip: clear sourceFiles to show upload zone
         sourceFiles.clear();
         selectedFile = null;
         sourceFilesError = null;
