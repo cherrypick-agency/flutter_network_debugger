@@ -107,9 +107,15 @@ func (i *darwinInstaller) Uninstall() error {
 	script := fmt.Sprintf(`do shell script "rm -f '%s' '%s'" with administrator privileges`,
 		plistPath, helperInstallPath)
 
-	cmd = exec.Command("osascript", "-e", script)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd = exec.CommandContext(ctx, "osascript", "-e", script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("uninstallation timeout: command took too long")
+		}
 		return fmt.Errorf("uninstallation failed: %w (output: %s)", err, string(output))
 	}
 
