@@ -411,3 +411,208 @@ func TestExtismExecutor_CreatePlugin_WithMemoryLimit(t *testing.T) {
 
 	plugin.Close(ctx)
 }
+
+// TestExtismExecutor_Execute_WithEmptyInput tests Execute with empty input
+func TestExtismExecutor_Execute_WithEmptyInput(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	ctx := context.Background()
+
+	script := createSuccessScript(t)
+	req := domain.ExecutionRequest{
+		Script: script,
+		Input:  []byte(""),
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Execute() result.Duration should be > 0")
+	}
+}
+
+// TestExtismExecutor_Execute_WithLargeInput tests Execute with large input
+func TestExtismExecutor_Execute_WithLargeInput(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	ctx := context.Background()
+
+	script := createSuccessScript(t)
+	largeInput := make([]byte, 100000)
+	for i := range largeInput {
+		largeInput[i] = byte(i % 256)
+	}
+
+	req := domain.ExecutionRequest{
+		Script: script,
+		Input:  largeInput,
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Execute() result.Duration should be > 0")
+	}
+}
+
+// TestExtismExecutor_Execute_WithDifferentScripts tests Execute with different scripts
+func TestExtismExecutor_Execute_WithDifferentScripts(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	ctx := context.Background()
+
+	scripts := []domain.Script{
+		createSuccessScript(t),
+		createSuccessScript(t),
+	}
+
+	for i, script := range scripts {
+		req := domain.ExecutionRequest{
+			Script: script,
+			Input:  []byte(`{"test": "data"}`),
+		}
+
+		result, err := executor.Execute(ctx, req)
+		if err != nil {
+			t.Fatalf("Execute() for script %d error = %v, want nil", i, err)
+		}
+
+		if result.Duration == 0 {
+			t.Errorf("Execute() for script %d result.Duration should be > 0", i)
+		}
+	}
+}
+
+// TestExtismExecutor_Execute_WithZeroTimeout tests Execute with zero timeout
+func TestExtismExecutor_Execute_WithZeroTimeout(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	ctx := context.Background()
+
+	script := createSuccessScript(t)
+	script.Config.TimeoutMs = 0
+
+	req := domain.ExecutionRequest{
+		Script: script,
+		Input:  []byte(`{"test": "data"}`),
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Execute() result.Duration should be > 0")
+	}
+}
+
+// TestExtismExecutor_Execute_WithVeryShortTimeout tests Execute with very short timeout
+func TestExtismExecutor_Execute_WithVeryShortTimeout(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+
+	script := createSuccessScript(t)
+	script.Config.TimeoutMs = 1
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	req := domain.ExecutionRequest{
+		Script: script,
+		Input:  []byte(`{"test": "data"}`),
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		if !contains(err.Error(), "deadline exceeded") && !contains(err.Error(), "timeout") {
+			t.Errorf("Execute() error = %v, expected timeout-related error", err)
+		}
+		return
+	}
+
+	if result.Error == "" {
+		t.Error("Execute() with very short timeout should return error in result or as error")
+	}
+}
+
+// TestExtismExecutor_Execute_WithFailingScript tests Execute with failing script
+func TestExtismExecutor_Execute_WithFailingScript(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	ctx := context.Background()
+
+	script := createFailingScript(t)
+	req := domain.ExecutionRequest{
+		Script: script,
+		Input:  []byte(`{"test": "data"}`),
+	}
+
+	result, err := executor.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if result.Error == "" {
+		t.Error("Execute() with failing script should return error in result")
+	}
+}
+
+// TestExtismExecutor_Execute_ConcurrentExecutions tests concurrent executions
+func TestExtismExecutor_Execute_ConcurrentExecutions(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	ctx := context.Background()
+
+	script := createSuccessScript(t)
+	numConcurrent := 5
+
+	results := make(chan domain.ExecutionResult, numConcurrent)
+	errors := make(chan error, numConcurrent)
+
+	for i := 0; i < numConcurrent; i++ {
+		go func() {
+			req := domain.ExecutionRequest{
+				Script: script,
+				Input:  []byte(`{"test": "data"}`),
+			}
+
+			result, err := executor.Execute(ctx, req)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}()
+	}
+
+	successCount := 0
+	for i := 0; i < numConcurrent; i++ {
+		select {
+		case result := <-results:
+			if result.Error == "" {
+				successCount++
+			}
+		case <-errors:
+		}
+	}
+
+	if successCount == 0 {
+		t.Error("Expected at least one successful execution")
+	}
+}
