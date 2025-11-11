@@ -177,6 +177,23 @@ func TestService_RemoveTagFromSession(t *testing.T) {
 	}
 }
 
+func TestService_RemoveTagFromSession_EmptyParams(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+
+	err := service.RemoveTagFromSession(ctx, "", "tag")
+	if err == nil {
+		t.Error("RemoveTagFromSession() should fail with empty sessionID")
+	}
+
+	err = service.RemoveTagFromSession(ctx, "session-1", "")
+	if err == nil {
+		t.Error("RemoveTagFromSession() should fail with empty tagName")
+	}
+}
+
 // Composer 1.
 func TestService_BulkAddTags(t *testing.T) {
 	repo := newMockRepo()
@@ -238,6 +255,23 @@ func TestService_BulkRemoveTags(t *testing.T) {
 	}
 }
 
+func TestService_BulkRemoveTags_EmptyParams(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+
+	err := service.BulkRemoveTags(ctx, []string{}, []string{"tag1"})
+	if err == nil {
+		t.Error("BulkRemoveTags() should fail with empty sessionIDs")
+	}
+
+	err = service.BulkRemoveTags(ctx, []string{"session-1"}, []string{})
+	if err == nil {
+		t.Error("BulkRemoveTags() should fail with empty tagNames")
+	}
+}
+
 // Composer 1.
 func TestService_DeleteAllSessionTags(t *testing.T) {
 	repo := newMockRepo()
@@ -258,6 +292,18 @@ func TestService_DeleteAllSessionTags(t *testing.T) {
 
 	if len(repo.sessionTags["session-1"]) != 0 {
 		t.Errorf("Expected 0 tags after delete all, got %d", len(repo.sessionTags["session-1"]))
+	}
+}
+
+func TestService_DeleteAllSessionTags_EmptySessionID(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	err := service.DeleteAllSessionTags(ctx, "")
+
+	if err == nil {
+		t.Error("DeleteAllSessionTags() should fail with empty sessionID")
 	}
 }
 
@@ -368,6 +414,23 @@ func TestService_DeleteAnnotation(t *testing.T) {
 	}
 }
 
+func TestService_DeleteAnnotation_EmptyParams(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+
+	err := service.DeleteAnnotation(ctx, "", "key")
+	if err == nil {
+		t.Error("DeleteAnnotation() should fail with empty sessionID")
+	}
+
+	err = service.DeleteAnnotation(ctx, "session-1", "")
+	if err == nil {
+		t.Error("DeleteAnnotation() should fail with empty key")
+	}
+}
+
 // Composer 1.
 func TestService_DeleteAllAnnotations(t *testing.T) {
 	repo := newMockRepo()
@@ -388,6 +451,39 @@ func TestService_DeleteAllAnnotations(t *testing.T) {
 
 	if len(repo.sessionAnnotations["session-1"]) != 0 {
 		t.Errorf("Expected 0 annotations after delete all, got %d", len(repo.sessionAnnotations["session-1"]))
+	}
+}
+
+func TestService_DeleteAllAnnotations_EmptySessionID(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	ctx := context.Background()
+	err := service.DeleteAllAnnotations(ctx, "")
+
+	if err == nil {
+		t.Error("DeleteAllAnnotations() should fail with empty sessionID")
+	}
+}
+
+func TestService_GetSessionAnnotations(t *testing.T) {
+	repo := newMockRepo()
+	service := NewService(repo)
+
+	repo.sessionAnnotations["session-1"] = []domain.SessionAnnotation{
+		{ID: "ann-1", SessionID: "session-1", Key: "key1", Value: "value1"},
+		{ID: "ann-2", SessionID: "session-1", Key: "key2", Value: "value2"},
+	}
+
+	ctx := context.Background()
+	annotations, err := service.GetSessionAnnotations(ctx, "session-1")
+
+	if err != nil {
+		t.Errorf("GetSessionAnnotations() error = %v, want nil", err)
+	}
+
+	if len(annotations) != 2 {
+		t.Errorf("GetSessionAnnotations() length = %d, want 2", len(annotations))
 	}
 }
 

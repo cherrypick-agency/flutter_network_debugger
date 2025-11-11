@@ -101,6 +101,115 @@ func Test_computeCORSMeta_preflight_and_simple(t *testing.T) {
 	}
 }
 
+func Test_headerGetCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		headers map[string]any
+		key     string
+		wantVal string
+		wantOk  bool
+	}{
+		{
+			name:    "string value",
+			headers: map[string]any{"Content-Type": "application/json"},
+			key:     "content-type",
+			wantVal: "application/json",
+			wantOk:  true,
+		},
+		{
+			name:    "case insensitive match",
+			headers: map[string]any{"CONTENT-TYPE": "text/html"},
+			key:     "content-type",
+			wantVal: "text/html",
+			wantOk:  true,
+		},
+		{
+			name:    "array of any with string",
+			headers: map[string]any{"Content-Type": []any{"application/json"}},
+			key:     "content-type",
+			wantVal: "application/json",
+			wantOk:  true,
+		},
+		{
+			name:    "array of any with non-string",
+			headers: map[string]any{"Content-Type": []any{123}},
+			key:     "content-type",
+			wantVal: "",
+			wantOk:  false,
+		},
+		{
+			name:    "array of any empty",
+			headers: map[string]any{"Content-Type": []any{}},
+			key:     "content-type",
+			wantVal: "",
+			wantOk:  false,
+		},
+		{
+			name:    "array of string",
+			headers: map[string]any{"Content-Type": []string{"text/plain"}},
+			key:     "content-type",
+			wantVal: "text/plain",
+			wantOk:  true,
+		},
+		{
+			name:    "array of string empty",
+			headers: map[string]any{"Content-Type": []string{}},
+			key:     "content-type",
+			wantVal: "",
+			wantOk:  false,
+		},
+		{
+			name:    "exact match lowercase",
+			headers: map[string]any{"content-type": "application/xml"},
+			key:     "content-type",
+			wantVal: "application/xml",
+			wantOk:  true,
+		},
+		{
+			name:    "exact match mixed case",
+			headers: map[string]any{"Content-Type": "text/plain"},
+			key:     "content-type",
+			wantVal: "text/plain",
+			wantOk:  true,
+		},
+		{
+			name:    "exact match non-string value",
+			headers: map[string]any{"content-type": 123},
+			key:     "content-type",
+			wantVal: "",
+			wantOk:  false,
+		},
+		{
+			name:    "not found",
+			headers: map[string]any{"Other-Header": "value"},
+			key:     "content-type",
+			wantVal: "",
+			wantOk:  false,
+		},
+		{
+			name:    "empty map",
+			headers: map[string]any{},
+			key:     "content-type",
+			wantVal: "",
+			wantOk:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotVal, gotOk := headerGetCaseInsensitive(tt.headers, tt.key)
+			if gotOk != tt.wantOk {
+				t.Errorf("headerGetCaseInsensitive() ok = %v, want %v", gotOk, tt.wantOk)
+			}
+			if gotVal != tt.wantVal {
+				t.Errorf("headerGetCaseInsensitive() val = %q, want %q", gotVal, tt.wantVal)
+			}
+		})
+	}
+}
+
 func Test_classifyNetError(t *testing.T) {
 	t.Parallel()
 

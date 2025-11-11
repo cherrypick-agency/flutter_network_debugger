@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1400,5 +1401,632 @@ func TestBaseDownloader_DownloadFile_RetryProgress(t *testing.T) {
 
 	if !foundRetry {
 		t.Error("Expected progress callback with stage 'retrying'")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_AttemptDownload_NetworkError(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+
+	// Сервер закрывает соединение сразу
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if ok {
+			conn, _, _ := hj.Hijack()
+			conn.Close()
+		}
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.attemptDownload(ctx, server.URL, destPath, nil)
+	if err == nil {
+		t.Error("attemptDownload() should return error on network failure")
+	}
+
+	var dlErr *DownloadError
+	if !errors.As(err, &dlErr) {
+		t.Errorf("Expected DownloadError, got %T", err)
+	}
+
+	if dlErr.Type != "network" {
+		t.Errorf("Expected error type 'network', got %q", dlErr.Type)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_AttemptDownload_ResumeSupport(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.bin")
+	partialPath := destPath + ".partial"
+
+	// Создаем частично загруженный файл
+	partialData := []byte("partial ")
+	if err := os.WriteFile(partialPath, partialData, 0644); err != nil {
+		t.Fatalf("Failed to create partial file: %v", err)
+	}
+
+	testData := []byte("test file content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rangeHeader := r.Header.Get("Range")
+		if rangeHeader != "" {
+			// Поддерживаем resume - возвращаем только недостающую часть
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", len(partialData), len(testData)-1, len(testData)))
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)-len(partialData)))
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(testData[len(partialData):])
+		} else {
+			// Полный запрос
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testData)))
+			w.WriteHeader(http.StatusOK)
+			w.Write(testData)
+		}
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	err := downloader.attemptDownload(ctx, server.URL, destPath, nil)
+	if err != nil {
+		t.Fatalf("attemptDownload() error = %v, want nil", err)
+	}
+
+	// Проверяем что файл создан
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("Downloaded file was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_CorruptedArchive(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "corrupted.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем поврежденный архив (просто случайные байты)
+	if err := os.WriteFile(tarXzFile, []byte("corrupted data"), 0644); err != nil {
+		t.Fatalf("Failed to create corrupted archive: %v", err)
+	}
+
+	err := downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err == nil {
+		t.Error("ExtractTarXz() should return error for corrupted archive")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_CorruptedArchive(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "corrupted.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем поврежденный архив (просто случайные байты)
+	if err := os.WriteFile(tarGzFile, []byte("corrupted data"), 0644); err != nil {
+		t.Fatalf("Failed to create corrupted archive: %v", err)
+	}
+
+	err := downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err == nil {
+		t.Error("ExtractTarGz() should return error for corrupted archive")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractZip_CorruptedArchive(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	zipFile := filepath.Join(tmpDir, "corrupted.zip")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем поврежденный архив (просто случайные байты)
+	if err := os.WriteFile(zipFile, []byte("corrupted data"), 0644); err != nil {
+		t.Fatalf("Failed to create corrupted archive: %v", err)
+	}
+
+	err := downloader.ExtractZip(zipFile, targetDir)
+	if err == nil {
+		t.Error("ExtractZip() should return error for corrupted archive")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_EmptyArchive(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "empty.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем пустой tar.xz архив
+	file, err := os.Create(tarXzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.xz file: %v", err)
+	}
+	defer file.Close()
+
+	xzWriter, err := xz.NewWriter(file)
+	if err != nil {
+		t.Fatalf("Failed to create xz writer: %v", err)
+	}
+	defer xzWriter.Close()
+
+	tarWriter := tar.NewWriter(xzWriter)
+	defer tarWriter.Close()
+
+	// Не добавляем файлы - пустой архив
+	tarWriter.Close()
+	xzWriter.Close()
+	file.Close()
+
+	// Извлечение пустого архива должно пройти успешно
+	err = downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarXz() error = %v, want nil for empty archive", err)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_EmptyArchive(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "empty.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем пустой tar.gz архив
+	file, err := os.Create(tarGzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.gz file: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Не добавляем файлы - пустой архив
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	// Извлечение пустого архива должно пройти успешно
+	err = downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz() error = %v, want nil for empty archive", err)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractZip_EmptyArchive(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	zipFile := filepath.Join(tmpDir, "empty.zip")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем пустой zip архив
+	zipWriter, err := os.Create(zipFile)
+	if err != nil {
+		t.Fatalf("Failed to create zip file: %v", err)
+	}
+	defer zipWriter.Close()
+
+	zw := zip.NewWriter(zipWriter)
+	defer zw.Close()
+
+	// Не добавляем файлы - пустой архив
+	zw.Close()
+	zipWriter.Close()
+
+	// Извлечение пустого архива должно пройти успешно
+	err = downloader.ExtractZip(zipFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractZip() error = %v, want nil for empty archive", err)
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_MultipleFiles(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "multi.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.xz архив с несколькими файлами
+	file, err := os.Create(tarXzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.xz file: %v", err)
+	}
+	defer file.Close()
+
+	xzWriter, err := xz.NewWriter(file)
+	if err != nil {
+		t.Fatalf("Failed to create xz writer: %v", err)
+	}
+	defer xzWriter.Close()
+
+	tarWriter := tar.NewWriter(xzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем несколько файлов
+	files := map[string][]byte{
+		"file1.txt":        []byte("content1"),
+		"file2.txt":        []byte("content2"),
+		"subdir/file3.txt": []byte("content3"),
+	}
+
+	for filename, content := range files {
+		header := &tar.Header{
+			Name: filename,
+			Size: int64(len(content)),
+			Mode: 0644,
+		}
+		if strings.Contains(filename, "subdir") {
+			// Создаем директорию сначала
+			dirHeader := &tar.Header{
+				Name:     "subdir/",
+				Typeflag: tar.TypeDir,
+				Mode:     0755,
+			}
+			if err := tarWriter.WriteHeader(dirHeader); err != nil {
+				t.Fatalf("Failed to write dir header: %v", err)
+			}
+		}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatalf("Failed to write tar header: %v", err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatalf("Failed to write tar content: %v", err)
+		}
+	}
+
+	tarWriter.Close()
+	xzWriter.Close()
+	file.Close()
+
+	// Извлекаем
+	err = downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarXz() error = %v, want nil", err)
+	}
+
+	// Проверяем что все файлы извлечены
+	for filename, expectedContent := range files {
+		extractedFile := filepath.Join(targetDir, filename)
+		if _, err := os.Stat(extractedFile); os.IsNotExist(err) {
+			t.Errorf("File %s was not extracted", filename)
+			continue
+		}
+
+		content, err := os.ReadFile(extractedFile)
+		if err != nil {
+			t.Fatalf("Failed to read extracted file %s: %v", filename, err)
+		}
+
+		if !bytes.Equal(content, expectedContent) {
+			t.Errorf("File %s content = %q, want %q", filename, string(content), string(expectedContent))
+		}
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_MultipleFiles(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "multi.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.gz архив с несколькими файлами
+	file, err := os.Create(tarGzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.gz file: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Добавляем несколько файлов
+	files := map[string][]byte{
+		"file1.txt":        []byte("content1"),
+		"file2.txt":        []byte("content2"),
+		"subdir/file3.txt": []byte("content3"),
+	}
+
+	for filename, content := range files {
+		if strings.Contains(filename, "subdir") {
+			// Создаем директорию сначала
+			dirHeader := &tar.Header{
+				Name:     "subdir/",
+				Typeflag: tar.TypeDir,
+				Mode:     0755,
+			}
+			if err := tarWriter.WriteHeader(dirHeader); err != nil {
+				t.Fatalf("Failed to write dir header: %v", err)
+			}
+		}
+		header := &tar.Header{
+			Name: filename,
+			Size: int64(len(content)),
+			Mode: 0644,
+		}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatalf("Failed to write tar header: %v", err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatalf("Failed to write tar content: %v", err)
+		}
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	// Извлекаем
+	err = downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz() error = %v, want nil", err)
+	}
+
+	// Проверяем что все файлы извлечены
+	for filename, expectedContent := range files {
+		extractedFile := filepath.Join(targetDir, filename)
+		if _, err := os.Stat(extractedFile); os.IsNotExist(err) {
+			t.Errorf("File %s was not extracted", filename)
+			continue
+		}
+
+		content, err := os.ReadFile(extractedFile)
+		if err != nil {
+			t.Fatalf("Failed to read extracted file %s: %v", filename, err)
+		}
+
+		if !bytes.Equal(content, expectedContent) {
+			t.Errorf("File %s content = %q, want %q", filename, string(content), string(expectedContent))
+		}
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractZip_MultipleFiles(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	zipFile := filepath.Join(tmpDir, "multi.zip")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем zip архив с несколькими файлами
+	zipWriter, err := os.Create(zipFile)
+	if err != nil {
+		t.Fatalf("Failed to create zip file: %v", err)
+	}
+	defer zipWriter.Close()
+
+	zw := zip.NewWriter(zipWriter)
+	defer zw.Close()
+
+	// Добавляем несколько файлов
+	files := map[string][]byte{
+		"file1.txt":        []byte("content1"),
+		"file2.txt":        []byte("content2"),
+		"subdir/file3.txt": []byte("content3"),
+	}
+
+	for filename, content := range files {
+		f, err := zw.Create(filename)
+		if err != nil {
+			t.Fatalf("Failed to create file in zip: %v", err)
+		}
+		_, err = f.Write(content)
+		if err != nil {
+			t.Fatalf("Failed to write to zip: %v", err)
+		}
+	}
+
+	zw.Close()
+	zipWriter.Close()
+
+	// Извлекаем
+	err = downloader.ExtractZip(zipFile, targetDir)
+	if err != nil {
+		t.Fatalf("ExtractZip() error = %v, want nil", err)
+	}
+
+	// Проверяем что все файлы извлечены
+	for filename, expectedContent := range files {
+		extractedFile := filepath.Join(targetDir, filename)
+		if _, err := os.Stat(extractedFile); os.IsNotExist(err) {
+			t.Errorf("File %s was not extracted", filename)
+			continue
+		}
+
+		content, err := os.ReadFile(extractedFile)
+		if err != nil {
+			t.Fatalf("Failed to read extracted file %s: %v", filename, err)
+		}
+
+		if !bytes.Equal(content, expectedContent) {
+			t.Errorf("File %s content = %q, want %q", filename, string(content), string(expectedContent))
+		}
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_VerifyChecksum_EmptyFile(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "empty.txt")
+
+	// Создаем пустой файл
+	if err := os.WriteFile(testFile, []byte{}, 0644); err != nil {
+		t.Fatalf("Failed to create empty file: %v", err)
+	}
+
+	// Вычисляем правильный checksum для пустого файла
+	hasher := sha256.New()
+	hasher.Write([]byte{})
+	expectedChecksum := hex.EncodeToString(hasher.Sum(nil))
+
+	if err := downloader.VerifyChecksum(testFile, expectedChecksum); err != nil {
+		t.Errorf("VerifyChecksum() with correct checksum for empty file error = %v, want nil", err)
+	}
+
+	// Проверяем с неправильным checksum
+	wrongChecksum := "0000000000000000000000000000000000000000000000000000000000000000"
+	if err := downloader.VerifyChecksum(testFile, wrongChecksum); err == nil {
+		t.Error("VerifyChecksum() with wrong checksum should return error")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_VerifyChecksum_LargeFile(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "large.bin")
+
+	// Создаем большой файл (100KB)
+	largeContent := make([]byte, 100*1024)
+	for i := range largeContent {
+		largeContent[i] = byte(i % 256)
+	}
+
+	if err := os.WriteFile(testFile, largeContent, 0644); err != nil {
+		t.Fatalf("Failed to create large file: %v", err)
+	}
+
+	// Вычисляем правильный checksum
+	hasher := sha256.New()
+	hasher.Write(largeContent)
+	expectedChecksum := hex.EncodeToString(hasher.Sum(nil))
+
+	if err := downloader.VerifyChecksum(testFile, expectedChecksum); err != nil {
+		t.Errorf("VerifyChecksum() with correct checksum for large file error = %v, want nil", err)
+	}
+}
+
+// Composer 1.
+func TestProgressReader_Read_MultipleReads(t *testing.T) {
+	data := []byte("test data for multiple reads")
+	var progressCalls []int64
+
+	reader := &progressReader{
+		reader: &testReader{data: data},
+		total:  int64(len(data)),
+		read:   0,
+		onProgress: func(br int64) {
+			progressCalls = append(progressCalls, br)
+		},
+	}
+
+	// Читаем по частям
+	buf1 := make([]byte, 5)
+	buf2 := make([]byte, 5)
+	buf3 := make([]byte, 100)
+
+	_, _ = reader.Read(buf1)
+	_, _ = reader.Read(buf2)
+	_, _ = reader.Read(buf3)
+
+	// Проверяем что callback вызывался
+	if len(progressCalls) == 0 {
+		t.Error("onProgress callback was not called")
+	}
+
+	// Проверяем что последний вызов содержит полное количество прочитанных байт
+	if len(progressCalls) > 0 {
+		lastCall := progressCalls[len(progressCalls)-1]
+		if lastCall != int64(len(data)) {
+			t.Errorf("Last progress call = %d, want %d", lastCall, len(data))
+		}
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_InvalidTarHeader(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "invalid.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем архив с невалидным tar header
+	file, err := os.Create(tarXzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.xz file: %v", err)
+	}
+	defer file.Close()
+
+	xzWriter, err := xz.NewWriter(file)
+	if err != nil {
+		t.Fatalf("Failed to create xz writer: %v", err)
+	}
+	defer xzWriter.Close()
+
+	// Пишем мусор вместо валидного tar header
+	_, err = xzWriter.Write([]byte("invalid tar data"))
+	if err != nil {
+		t.Fatalf("Failed to write invalid data: %v", err)
+	}
+
+	xzWriter.Close()
+	file.Close()
+
+	err = downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err == nil {
+		t.Error("ExtractTarXz() should return error for invalid tar header")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_InvalidTarHeader(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "invalid.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем архив с невалидным tar header
+	file, err := os.Create(tarGzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.gz file: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	// Пишем мусор вместо валидного tar header
+	_, err = gzWriter.Write([]byte("invalid tar data"))
+	if err != nil {
+		t.Fatalf("Failed to write invalid data: %v", err)
+	}
+
+	gzWriter.Close()
+	file.Close()
+
+	err = downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err == nil {
+		t.Error("ExtractTarGz() should return error for invalid tar header")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractZip_InvalidZipHeader(t *testing.T) {
+	downloader := NewBaseDownloader()
+	tmpDir := t.TempDir()
+	zipFile := filepath.Join(tmpDir, "invalid.zip")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем файл с невалидным zip header
+	if err := os.WriteFile(zipFile, []byte("invalid zip data"), 0644); err != nil {
+		t.Fatalf("Failed to create invalid zip file: %v", err)
+	}
+
+	err := downloader.ExtractZip(zipFile, targetDir)
+	if err == nil {
+		t.Error("ExtractZip() should return error for invalid zip header")
 	}
 }

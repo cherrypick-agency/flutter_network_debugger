@@ -320,3 +320,220 @@ func TestWorkspace_ListFiles(t *testing.T) {
 		}
 	}
 }
+
+// Composer 1.
+func TestWorkspace_ExecuteCommandSeparate_Error(t *testing.T) {
+	ws, err := NewWorkspace("test-exec-separate-error")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	ctx := context.Background()
+
+	// Тест с несуществующей командой
+	_, _, err = ws.ExecuteCommandSeparate(ctx, "nonexistent-command-12345", "arg1")
+	if err == nil {
+		t.Fatal("ExecuteCommandSeparate should fail for nonexistent command")
+	}
+}
+
+// Composer 1.
+func TestWorkspace_ExecuteCommandSeparate_CommandFails(t *testing.T) {
+	ws, err := NewWorkspace("test-exec-separate-fail")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	ctx := context.Background()
+
+	// Команда которая завершается с ошибкой
+	stdout, stderr, err := ws.ExecuteCommandSeparate(ctx, "sh", "-c", "echo stdout; echo stderr >&2; exit 1")
+	if err == nil {
+		t.Fatal("ExecuteCommandSeparate should return error for failing command")
+	}
+
+	// Проверяем что вывод все равно получен
+	if len(stdout) == 0 {
+		t.Error("Stdout should not be empty even if command fails")
+	}
+	if len(stderr) == 0 {
+		t.Error("Stderr should not be empty even if command fails")
+	}
+}
+
+// Composer 1.
+func TestWorkspace_WriteFile_LongPath(t *testing.T) {
+	ws, err := NewWorkspace("test-long-path")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	// Создаем очень длинный путь
+	longPath := "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.txt"
+	content := []byte("test content")
+
+	err = ws.WriteFile(longPath, content)
+	if err != nil {
+		t.Fatalf("WriteFile failed for long path: %v", err)
+	}
+
+	// Проверяем что файл создан
+	if !ws.FileExists(longPath) {
+		t.Fatal("File with long path was not created")
+	}
+
+	// Проверяем содержимое
+	readContent, err := ws.ReadFile(longPath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+
+	if string(readContent) != string(content) {
+		t.Errorf("Content mismatch: expected %q, got %q", string(content), string(readContent))
+	}
+}
+
+// Composer 1.
+func TestWorkspace_WriteFile_EmptyContent(t *testing.T) {
+	ws, err := NewWorkspace("test-empty-content")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	// Записываем пустой файл
+	err = ws.WriteFile("empty.txt", []byte{})
+	if err != nil {
+		t.Fatalf("WriteFile failed for empty content: %v", err)
+	}
+
+	// Проверяем что файл создан
+	if !ws.FileExists("empty.txt") {
+		t.Fatal("Empty file was not created")
+	}
+
+	// Проверяем содержимое
+	readContent, err := ws.ReadFile("empty.txt")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+
+	if len(readContent) != 0 {
+		t.Errorf("Expected empty file, got %d bytes", len(readContent))
+	}
+}
+
+// Composer 1.
+func TestWorkspace_ReadFile_LargeFile(t *testing.T) {
+	ws, err := NewWorkspace("test-large-file")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	// Создаем большой файл (1MB)
+	largeContent := make([]byte, 1024*1024)
+	for i := range largeContent {
+		largeContent[i] = byte(i % 256)
+	}
+
+	err = ws.WriteFile("large.bin", largeContent)
+	if err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Читаем большой файл
+	readContent, err := ws.ReadFile("large.bin")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+
+	if len(readContent) != len(largeContent) {
+		t.Errorf("Expected %d bytes, got %d", len(largeContent), len(readContent))
+	}
+
+	// Проверяем первые и последние байты
+	if readContent[0] != largeContent[0] {
+		t.Error("First byte mismatch")
+	}
+	if readContent[len(readContent)-1] != largeContent[len(largeContent)-1] {
+		t.Error("Last byte mismatch")
+	}
+}
+
+// Composer 1.
+func TestWorkspace_ListFiles_WithErrors(t *testing.T) {
+	ws, err := NewWorkspace("test-list-errors")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	// Создаем файлы
+	err = ws.WriteFile("file1.txt", []byte("content1"))
+	if err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	err = ws.WriteFile("subdir/file2.txt", []byte("content2"))
+	if err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Получаем список файлов
+	files, err := ws.ListFiles()
+	if err != nil {
+		t.Fatalf("ListFiles failed: %v", err)
+	}
+
+	// Проверяем что файлы найдены
+	if len(files) < 2 {
+		t.Errorf("Expected at least 2 files, got %d", len(files))
+	}
+}
+
+// Composer 1.
+func TestWorkspace_ExecuteCommand_EmptyOutput(t *testing.T) {
+	ws, err := NewWorkspace("test-exec-empty")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	ctx := context.Background()
+
+	// Команда которая не выводит ничего
+	output, err := ws.ExecuteCommand(ctx, "true")
+	if err != nil {
+		t.Fatalf("ExecuteCommand failed: %v", err)
+	}
+
+	// Вывод может быть пустым или содержать перевод строки
+	_ = output
+}
+
+// Composer 1.
+func TestWorkspace_ExecuteCommand_WithErrorOutput(t *testing.T) {
+	ws, err := NewWorkspace("test-exec-error-output")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	ctx := context.Background()
+
+	// Команда которая выводит в stderr
+	output, err := ws.ExecuteCommand(ctx, "sh", "-c", "echo 'error message' >&2; exit 1")
+	if err == nil {
+		t.Fatal("ExecuteCommand should return error for failing command")
+	}
+
+	// Проверяем что вывод содержит сообщение об ошибке
+	outputStr := string(output)
+	if outputStr == "" {
+		t.Error("Command output should not be empty")
+	}
+}

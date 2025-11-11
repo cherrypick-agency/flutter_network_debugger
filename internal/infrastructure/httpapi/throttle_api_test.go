@@ -2,13 +2,53 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	sdomain "network-debugger/internal/features/settings/domain"
+	settingsuc "network-debugger/internal/features/settings/usecase"
 	"network-debugger/internal/infrastructure/config"
 )
+
+type mockSettingsRepoForThrottle struct{}
+
+func (m *mockSettingsRepoForThrottle) Load(ctx context.Context) (sdomain.RuntimeSettings, error) {
+	return sdomain.RuntimeSettings{}, nil
+}
+
+func (m *mockSettingsRepoForThrottle) Save(ctx context.Context, s sdomain.RuntimeSettings) error {
+	return nil
+}
+
+type mockThrottleProfilesRepo struct {
+	listFunc   func(ctx context.Context) ([]sdomain.ThrottleProfile, error)
+	upsertFunc func(ctx context.Context, p sdomain.ThrottleProfile) (sdomain.ThrottleProfile, error)
+	deleteFunc func(ctx context.Context, id string) error
+}
+
+func (m *mockThrottleProfilesRepo) List(ctx context.Context) ([]sdomain.ThrottleProfile, error) {
+	if m.listFunc != nil {
+		return m.listFunc(ctx)
+	}
+	return []sdomain.ThrottleProfile{}, nil
+}
+
+func (m *mockThrottleProfilesRepo) Upsert(ctx context.Context, p sdomain.ThrottleProfile) (sdomain.ThrottleProfile, error) {
+	if m.upsertFunc != nil {
+		return m.upsertFunc(ctx, p)
+	}
+	return p, nil
+}
+
+func (m *mockThrottleProfilesRepo) Delete(ctx context.Context, id string) error {
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, id)
+	}
+	return nil
+}
 
 func TestHandleV1Throttle_GET(t *testing.T) {
 	d := &Deps{
@@ -151,5 +191,120 @@ func TestHandleV1ThrottleProfiles_GET_NoSettings(t *testing.T) {
 
 	if len(resp) != 0 {
 		t.Error("Expected empty array when Settings is nil")
+	}
+}
+
+func TestHandleV1ThrottleProfiles_POST_Success(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{}
+	mockProfilesRepo := &mockThrottleProfilesRepo{
+		upsertFunc: func(ctx context.Context, p sdomain.ThrottleProfile) (sdomain.ThrottleProfile, error) {
+			return p, nil
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, mockProfilesRepo)
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: settingsSvc,
+	}
+
+	payload := map[string]any{
+		"id":            "profile-1",
+		"name":          "Test Profile",
+		"downKbps":      1000,
+		"upKbps":        500,
+		"packetLossPct": 2,
+		"latencyMs":     50,
+		"latencyJitter": 10,
+		"offline":       false,
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/throttle/profiles", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestHandleV1ThrottleProfiles_POST_BadJSON(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{}
+	mockProfilesRepo := &mockThrottleProfilesRepo{}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, mockProfilesRepo)
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/throttle/profiles", bytes.NewReader([]byte("{invalid json")))
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleV1ThrottleProfiles_DELETE_Success(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{}
+	mockProfilesRepo := &mockThrottleProfilesRepo{
+		deleteFunc: func(ctx context.Context, id string) error {
+			return nil
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, mockProfilesRepo)
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/throttle/profiles/profile-1", nil)
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestHandleV1ThrottleProfiles_DELETE_EmptyID(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{}
+	mockProfilesRepo := &mockThrottleProfilesRepo{}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, mockProfilesRepo)
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/throttle/profiles/", nil)
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleV1ThrottleProfiles_MethodNotAllowed(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{}
+	mockProfilesRepo := &mockThrottleProfilesRepo{}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, mockProfilesRepo)
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/throttle/profiles/profile-1", nil)
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
 	}
 }

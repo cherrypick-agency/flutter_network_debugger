@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"network-debugger/internal/features/scripting/domain"
@@ -518,6 +519,267 @@ func TestGetCompilerVersion_FileNotExists(t *testing.T) {
 	}
 }
 
+func TestCompilerInstallationService_GetStatus_Installing(t *testing.T) {
+	cacheManager := &mockCacheManager{
+		cached: make(map[string]bool),
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{language: "zig"}
+	service.RegisterDownloader("zig", downloader)
+
+	service.mutex.Lock()
+	service.installing["zig"] = true
+	service.mutex.Unlock()
+
+	info, err := service.GetStatus("zig")
+
+	if err != nil {
+		t.Errorf("GetStatus() error = %v, want nil", err)
+	}
+
+	if info.Status != domain.CompilerStatusInstalling {
+		t.Errorf("Status = %v, want %v", info.Status, domain.CompilerStatusInstalling)
+	}
+}
+
+func TestCompilerInstallationService_GetStatus_GetCompilerPathError(t *testing.T) {
+	cacheManager := &mockCacheManager{
+		cached: map[string]bool{
+			"zig": true,
+		},
+		errors: map[string]error{
+			"GetCompilerPath": errors.New("path error"),
+		},
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{language: "zig"}
+	service.RegisterDownloader("zig", downloader)
+
+	info, err := service.GetStatus("zig")
+
+	if err != nil {
+		t.Errorf("GetStatus() error = %v, want nil", err)
+	}
+
+	if info.InstalledPath != "" {
+		t.Errorf("InstalledPath = %q, want empty", info.InstalledPath)
+	}
+}
+
+func TestCompilerInstallationService_GetStatus_GetCompilerSizeError(t *testing.T) {
+	cacheManager := &mockCacheManager{
+		cached: map[string]bool{
+			"zig": true,
+		},
+		paths: map[string]string{
+			"zig": "/cache/zig",
+		},
+		errors: map[string]error{
+			"GetCompilerSize": errors.New("size error"),
+		},
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{language: "zig"}
+	service.RegisterDownloader("zig", downloader)
+
+	info, err := service.GetStatus("zig")
+
+	if err != nil {
+		t.Errorf("GetStatus() error = %v, want nil", err)
+	}
+
+	if info.Size != 0 {
+		t.Errorf("Size = %d, want 0", info.Size)
+	}
+}
+
+func TestCompilerInstallationService_GetStatus_GetMetadataError(t *testing.T) {
+	cacheManager := &mockCacheManager{
+		cached: make(map[string]bool),
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{
+		language:      "zig",
+		metadataError: errors.New("metadata error"),
+	}
+	service.RegisterDownloader("zig", downloader)
+
+	info, err := service.GetStatus("zig")
+
+	if err != nil {
+		t.Errorf("GetStatus() error = %v, want nil", err)
+	}
+
+	if info.DownloadSize != 0 {
+		t.Errorf("DownloadSize = %d, want 0", info.DownloadSize)
+	}
+}
+
+func TestCompilerInstallationService_GetStatus_WithVersionFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	compilerDir := filepath.Join(tmpDir, "zig")
+	err := os.MkdirAll(compilerDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create compiler dir: %v", err)
+	}
+
+	versionFile := filepath.Join(compilerDir, ".version")
+	err = os.WriteFile(versionFile, []byte("0.14.0"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write version file: %v", err)
+	}
+
+	cacheManager := &mockCacheManager{
+		cached: map[string]bool{
+			"zig": true,
+		},
+		paths: map[string]string{
+			"zig": compilerDir,
+		},
+		sizes: map[string]int64{
+			"zig": 50 * 1024 * 1024,
+		},
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{language: "zig"}
+	service.RegisterDownloader("zig", downloader)
+
+	info, err := service.GetStatus("zig")
+
+	if err != nil {
+		t.Errorf("GetStatus() error = %v, want nil", err)
+	}
+
+	if info.Version != "0.14.0" {
+		t.Errorf("Version = %q, want %q", info.Version, "0.14.0")
+	}
+}
+
+func TestCompilerInstallationService_ListAll_WithError(t *testing.T) {
+	cacheManager := &mockCacheManager{}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader1 := &mockCompilerDownloader{language: "zig"}
+	downloader2 := &mockCompilerDownloader{
+		language:      "kotlin",
+		metadataError: errors.New("metadata error"),
+	}
+
+	service.RegisterDownloader("zig", downloader1)
+	service.RegisterDownloader("kotlin", downloader2)
+
+	list, err := service.ListAll()
+
+	if err != nil {
+		t.Errorf("ListAll() error = %v, want nil", err)
+	}
+
+	if len(list) != 2 {
+		t.Errorf("ListAll() returned %d compilers, want 2", len(list))
+	}
+
+	var zigInfo, kotlinInfo *domain.CompilerInfo
+	for _, info := range list {
+		if info.Language == "zig" {
+			zigInfo = info
+		}
+		if info.Language == "kotlin" {
+			kotlinInfo = info
+		}
+	}
+
+	if zigInfo == nil {
+		t.Error("ListAll() should include zig")
+	}
+
+	if kotlinInfo == nil {
+		t.Error("ListAll() should include kotlin")
+	}
+
+	if kotlinInfo.DownloadSize != 0 {
+		t.Errorf("kotlin DownloadSize = %d, want 0 (metadata error should result in 0)", kotlinInfo.DownloadSize)
+	}
+}
+
+func TestCompilerInstallationService_Install_EnsureCacheDirError(t *testing.T) {
+	cacheManager := &mockCacheManager{
+		cached: make(map[string]bool),
+		errors: map[string]error{
+			"EnsureCacheDir": errors.New("cache dir error"),
+		},
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{language: "zig"}
+	service.RegisterDownloader("zig", downloader)
+
+	ctx := context.Background()
+	err := service.Install(ctx, "zig", "latest", nil)
+
+	if err == nil {
+		t.Error("Install() should return error when EnsureCacheDir fails")
+	}
+
+	if !strings.Contains(err.Error(), "cache directory") {
+		t.Errorf("Error message should mention cache directory, got: %v", err)
+	}
+}
+
+func TestCompilerInstallationService_Install_GetCompilerPathError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheManager := &mockCacheManager{
+		cacheDir: tmpDir,
+		cached:   make(map[string]bool),
+		errors: map[string]error{
+			"GetCompilerPath": errors.New("path error"),
+		},
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{
+		language:      "zig",
+		downloadError: nil,
+	}
+	service.RegisterDownloader("zig", downloader)
+
+	ctx := context.Background()
+	err := service.Install(ctx, "zig", "latest", nil)
+
+	if err != nil {
+		t.Errorf("Install() error = %v, want nil (should create new path)", err)
+	}
+}
+
+func TestCompilerInstallationService_Uninstall_ClearError(t *testing.T) {
+	cacheManager := &mockCacheManager{
+		cached: map[string]bool{
+			"zig": true,
+		},
+		errors: map[string]error{
+			"Clear": errors.New("clear error"),
+		},
+	}
+	service := NewCompilerInstallationService(cacheManager)
+
+	downloader := &mockCompilerDownloader{language: "zig"}
+	service.RegisterDownloader("zig", downloader)
+
+	err := service.Uninstall("zig")
+
+	if err == nil {
+		t.Error("Uninstall() should return error when Clear fails")
+	}
+
+	if !strings.Contains(err.Error(), "uninstall") {
+		t.Errorf("Error message should mention uninstall, got: %v", err)
+	}
+}
+
 // Mock implementations
 type mockCacheManager struct {
 	cacheDir  string
@@ -602,6 +864,7 @@ type mockCompilerDownloader struct {
 	language      string
 	metadata      *domain.CompilerMetadata
 	downloadError error
+	metadataError error
 }
 
 func (m *mockCompilerDownloader) GetDownloadURL(req domain.DownloadRequest) (string, error) {
@@ -633,6 +896,9 @@ func (m *mockCompilerDownloader) Verify(installPath string) error {
 }
 
 func (m *mockCompilerDownloader) GetMetadata(req domain.DownloadRequest) (*domain.CompilerMetadata, error) {
+	if m.metadataError != nil {
+		return nil, m.metadataError
+	}
 	if m.metadata != nil {
 		return m.metadata, nil
 	}

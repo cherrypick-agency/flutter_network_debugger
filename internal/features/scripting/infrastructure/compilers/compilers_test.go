@@ -743,3 +743,16 @@ func TestPythonCompiler_ValidateSyntax_BalancedBrackets(t *testing.T) {
 		t.Error("ValidateSyntax() should return error for unbalanced brackets")
 	}
 }
+
+// ========== Rust Compiler Additional Tests ==========
+
+func TestRustCompiler_OptimizeWASM_InvalidPath(t *testing.T) {
+	cache := &mockCacheManager{}
+	compiler := NewRustCompiler(cache)
+
+	ctx := context.Background()
+	err := compiler.OptimizeWASM(ctx, "nonexistent.wasm")
+	// Если wasm-opt не найден, вернется nil
+	// Если найден, вернется ошибка о несуществующем файле
+	_ = err
+}

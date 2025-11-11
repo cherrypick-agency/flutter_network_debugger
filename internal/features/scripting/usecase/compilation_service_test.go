@@ -469,6 +469,122 @@ func TestCompilationService_IsCompilerAvailable(t *testing.T) {
 	}
 }
 
+// Composer 1.
+func TestCompilationService_CompileScript_SaveErrorOnMarkCompiling(t *testing.T) {
+	repo := &mockScriptRepository{
+		saveError: errors.New("save failed"),
+	}
+	service := NewCompilationService(repo)
+
+	script := &domain.Script{
+		ID:         "test-script",
+		Name:       "Test Script",
+		Language:   "rust",
+		SourceCode: "fn main() {}",
+	}
+
+	repo.scripts = map[string]*domain.Script{
+		"test-script": script,
+	}
+
+	compiler := &mockCompiler{
+		language:  "rust",
+		available: true,
+		compileResult: &domain.CompileResult{
+			WASMBinary: []byte{1, 2, 3},
+			WASMSize:   3,
+			Duration:   100 * time.Millisecond,
+		},
+	}
+
+	service.RegisterCompiler(compiler)
+
+	ctx := context.Background()
+	_, err := service.CompileScript(ctx, "test-script", false)
+
+	if err == nil {
+		t.Error("CompileScript() should return error when save fails on MarkCompiling")
+	}
+}
+
+// Composer 1.
+func TestCompilationService_CompileScript_SaveErrorOnMarkCompilationSuccess(t *testing.T) {
+	repo := &mockScriptRepository{}
+	service := NewCompilationService(repo)
+
+	script := &domain.Script{
+		ID:         "test-script",
+		Name:       "Test Script",
+		Language:   "rust",
+		SourceCode: "fn main() {}",
+	}
+
+	repo.scripts = map[string]*domain.Script{
+		"test-script": script,
+	}
+
+	compiler := &mockCompiler{
+		language:  "rust",
+		available: true,
+		compileResult: &domain.CompileResult{
+			WASMBinary: []byte{1, 2, 3},
+			WASMSize:   3,
+			Duration:   100 * time.Millisecond,
+		},
+	}
+
+	service.RegisterCompiler(compiler)
+
+	repo.saveError = errors.New("save failed")
+
+	ctx := context.Background()
+	_, err := service.CompileScript(ctx, "test-script", false)
+
+	if err == nil {
+		t.Error("CompileScript() should return error when save fails on MarkCompilationSuccess")
+	}
+}
+
+// Composer 1.
+func TestCompilationService_CompileScript_WithOptimize(t *testing.T) {
+	repo := &mockScriptRepository{}
+	service := NewCompilationService(repo)
+
+	script := &domain.Script{
+		ID:         "test-script",
+		Name:       "Test Script",
+		Language:   "rust",
+		SourceCode: "fn main() {}",
+	}
+
+	repo.scripts = map[string]*domain.Script{
+		"test-script": script,
+	}
+
+	compiler := &mockCompiler{
+		language:  "rust",
+		available: true,
+		compileResult: &domain.CompileResult{
+			WASMBinary: []byte{1, 2, 3},
+			WASMSize:   3,
+			Duration:   100 * time.Millisecond,
+		},
+	}
+
+	service.RegisterCompiler(compiler)
+
+	ctx := context.Background()
+	result, err := service.CompileScript(ctx, "test-script", true)
+
+	if err != nil {
+		t.Errorf("CompileScript() error = %v, want nil", err)
+	}
+
+	if result == nil {
+		t.Fatal("CompileScript() returned nil result")
+	}
+}
+
 // Mock implementations
 type mockCompiler struct {
 	language      string

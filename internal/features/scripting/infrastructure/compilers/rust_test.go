@@ -2,6 +2,7 @@ package compilers
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -625,5 +626,149 @@ func TestRustCompiler_ValidateSyntax_WithRustEnv(t *testing.T) {
 	err := compiler.ValidateSyntax(ctx, req)
 	if err == nil {
 		t.Error("ValidateSyntax() should return error when compiler not available")
+	}
+}
+
+// Composer 1.
+func TestRustCompiler_ParseRustError_MultipleErrors(t *testing.T) {
+	cache := &mockCacheManager{}
+	compiler := NewRustCompiler(cache)
+
+	output := `error[E0308]: mismatched types
+ --> src/lib.rs:10:5
+  |
+10 |     let x: i32 = "hello";
+  |                  ^^^^^^^ expected i32, found &str
+
+error[E0425]: cannot find value 'foo' in this scope
+ --> src/lib.rs:15:3
+  |
+15 |     foo();
+  |     ^^^ not found in this scope`
+	err := compiler.parseRustError(output)
+
+	if err == nil {
+		t.Fatal("parseRustError() should return error")
+	}
+
+	compErr, ok := err.(*domain.CompilationError)
+	if !ok {
+		t.Fatal("parseRustError() should return CompilationError")
+	}
+
+	// Должен извлечь первую ошибку
+	if compErr.Code != "E0308" {
+		t.Errorf("Code = %q, want %q", compErr.Code, "E0308")
+	}
+
+	if compErr.Line != 10 {
+		t.Errorf("Line = %d, want %d", compErr.Line, 10)
+	}
+}
+
+// Composer 1.
+func TestRustCompiler_ParseRustError_WithLocationLine(t *testing.T) {
+	cache := &mockCacheManager{}
+	compiler := NewRustCompiler(cache)
+
+	output := "error[E0308]: mismatched types\n --> src/lib.rs:42:10"
+	err := compiler.parseRustError(output)
+
+	if err == nil {
+		t.Fatal("parseRustError() should return error")
+	}
+
+	compErr, ok := err.(*domain.CompilationError)
+	if !ok {
+		t.Fatal("parseRustError() should return CompilationError")
+	}
+
+	if compErr.Line != 42 {
+		t.Errorf("Line = %d, want %d", compErr.Line, 42)
+	}
+
+	if compErr.Column != 10 {
+		t.Errorf("Column = %d, want %d", compErr.Column, 10)
+	}
+}
+
+// Composer 1.
+func TestRustCompiler_GetRustEnv_WithBothHomes(t *testing.T) {
+	cache := &mockCacheManager{}
+	compiler := NewRustCompiler(cache)
+	compiler.rustupHome = "/test/rustup"
+	compiler.cargoHome = "/test/cargo"
+
+	env := compiler.getRustEnv()
+
+	// Проверяем что RUSTUP_HOME установлен
+	foundRustupHome := false
+	foundCargoHome := false
+	foundPath := false
+
+	for _, e := range env {
+		if strings.Contains(e, "RUSTUP_HOME=/test/rustup") {
+			foundRustupHome = true
+		}
+		if strings.Contains(e, "CARGO_HOME=/test/cargo") {
+			foundCargoHome = true
+		}
+		if strings.HasPrefix(e, "PATH=") && strings.Contains(e, "/test/cargo/bin") {
+			foundPath = true
+		}
+	}
+
+	if !foundRustupHome {
+		t.Error("RUSTUP_HOME should be set in environment")
+	}
+
+	if !foundCargoHome {
+		t.Error("CARGO_HOME should be set in environment")
+	}
+
+	if !foundPath {
+		t.Error("PATH should include cargo/bin")
+	}
+}
+
+// Composer 1.
+func TestRustCompiler_GetRustEnv_OnlyRustupHome(t *testing.T) {
+	cache := &mockCacheManager{}
+	compiler := NewRustCompiler(cache)
+	compiler.rustupHome = "/test/rustup"
+	compiler.cargoHome = ""
+
+	env := compiler.getRustEnv()
+
+	foundRustupHome := false
+	for _, e := range env {
+		if strings.Contains(e, "RUSTUP_HOME=/test/rustup") {
+			foundRustupHome = true
+		}
+	}
+
+	if !foundRustupHome {
+		t.Error("RUSTUP_HOME should be set in environment")
+	}
+}
+
+// Composer 1.
+func TestRustCompiler_GetRustEnv_OnlyCargoHome(t *testing.T) {
+	cache := &mockCacheManager{}
+	compiler := NewRustCompiler(cache)
+	compiler.rustupHome = ""
+	compiler.cargoHome = "/test/cargo"
+
+	env := compiler.getRustEnv()
+
+	foundCargoHome := false
+	for _, e := range env {
+		if strings.Contains(e, "CARGO_HOME=/test/cargo") {
+			foundCargoHome = true
+		}
+	}
+
+	if !foundCargoHome {
+		t.Error("CARGO_HOME should be set in environment")
 	}
 }

@@ -165,6 +165,168 @@ func TestFromEnv_MITMDomainLists(t *testing.T) {
 	}
 }
 
+func TestFromEnv_DEV_MODE_One(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("DEV_MODE", "1")
+
+	cfg := FromEnv()
+
+	if !cfg.DevMode {
+		t.Errorf("DevMode should be true when DEV_MODE=1")
+	}
+}
+
+func TestFromEnv_PREVIEW_DECOMPRESS_Zero(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("PREVIEW_DECOMPRESS", "0")
+
+	cfg := FromEnv()
+
+	if cfg.PreviewDecompress {
+		t.Errorf("PreviewDecompress should be false when PREVIEW_DECOMPRESS=0")
+	}
+}
+
+func TestFromEnv_WS_DEFLATE_PREVIEW_Zero(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("WS_DEFLATE_PREVIEW", "0")
+
+	cfg := FromEnv()
+
+	if cfg.WSDeflatePreview {
+		t.Errorf("WSDeflatePreview should be false when WS_DEFLATE_PREVIEW=0")
+	}
+}
+
+func TestFromEnv_ResponseDelayRange_Reversed(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("RESPONSE_DELAY_MS", "300-100")
+
+	cfg := FromEnv()
+
+	if cfg.ResponseDelayMinMs != 100 || cfg.ResponseDelayMaxMs != 300 {
+		t.Errorf("ResponseDelay range should be reversed: got %d-%d, want 100-300", cfg.ResponseDelayMinMs, cfg.ResponseDelayMaxMs)
+	}
+}
+
+func TestFromEnv_ResponseDelayRange_InvalidMin(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("RESPONSE_DELAY_MS", "invalid-100")
+
+	cfg := FromEnv()
+
+	if cfg.ResponseDelayMinMs != 0 || cfg.ResponseDelayMaxMs != 0 {
+		t.Errorf("ResponseDelay range should be 0-0 when min is invalid: got %d-%d", cfg.ResponseDelayMinMs, cfg.ResponseDelayMaxMs)
+	}
+}
+
+func TestFromEnv_ResponseDelayRange_InvalidMax(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("RESPONSE_DELAY_MS", "100-invalid")
+
+	cfg := FromEnv()
+
+	if cfg.ResponseDelayMinMs != 0 || cfg.ResponseDelayMaxMs != 0 {
+		t.Errorf("ResponseDelay range should be 0-0 when max is invalid: got %d-%d", cfg.ResponseDelayMinMs, cfg.ResponseDelayMaxMs)
+	}
+}
+
+func TestFromEnv_INTERCEPT_REQUESTS_Zero(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("INTERCEPT_REQUESTS", "0")
+
+	cfg := FromEnv()
+
+	if cfg.InterceptRequests {
+		t.Errorf("InterceptRequests should be false when INTERCEPT_REQUESTS=0")
+	}
+}
+
+func TestFromEnv_INTERCEPT_RESPONSES_Zero(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("INTERCEPT_RESPONSES", "0")
+
+	cfg := FromEnv()
+
+	if cfg.InterceptResponses {
+		t.Errorf("InterceptResponses should be false when INTERCEPT_RESPONSES=0")
+	}
+}
+
+func TestFromEnv_INTERCEPT_REENCODE_Zero(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("INTERCEPT_REENCODE", "0")
+
+	cfg := FromEnv()
+
+	if cfg.InterceptReencode {
+		t.Errorf("InterceptReencode should be false when INTERCEPT_REENCODE=0")
+	}
+}
+
+func TestFromEnv_STEALTH_HEADERS_Zero(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("STEALTH_HEADERS", "0")
+
+	cfg := FromEnv()
+
+	if cfg.StealthHeaders {
+		t.Errorf("StealthHeaders should be false when STEALTH_HEADERS=0")
+	}
+}
+
+func TestFromEnv_THROTTLE_ENABLE_True(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("THROTTLE_ENABLE", "true")
+
+	cfg := FromEnv()
+
+	if !cfg.ThrottleEnabled {
+		t.Errorf("ThrottleEnabled should be true when THROTTLE_ENABLE=true")
+	}
+}
+
+func TestFromEnv_THROTTLE_OFFLINE_True(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("THROTTLE_OFFLINE", "true")
+
+	cfg := FromEnv()
+
+	if !cfg.ThrottleOffline {
+		t.Errorf("ThrottleOffline should be true when THROTTLE_OFFLINE=true")
+	}
+}
+
+func TestFromEnv_INTERCEPT_ENABLE_True(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("INTERCEPT_ENABLE", "true")
+
+	cfg := FromEnv()
+
+	if !cfg.InterceptEnabled {
+		t.Errorf("InterceptEnabled should be true when INTERCEPT_ENABLE=true")
+	}
+}
+
+func TestFromEnv_InterceptLists(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("INTERCEPT_METHODS", "GET,POST")
+	t.Setenv("INTERCEPT_URL_CONTAINS", "api,test")
+	t.Setenv("INTERCEPT_CONTENT_TYPES", "application/json,text/html")
+
+	cfg := FromEnv()
+
+	if len(cfg.InterceptMethods) != 2 {
+		t.Errorf("InterceptMethods length = %d, want 2", len(cfg.InterceptMethods))
+	}
+	if len(cfg.InterceptURLContains) != 2 {
+		t.Errorf("InterceptURLContains length = %d, want 2", len(cfg.InterceptURLContains))
+	}
+	if len(cfg.InterceptContentTypes) != 2 {
+		t.Errorf("InterceptContentTypes length = %d, want 2", len(cfg.InterceptContentTypes))
+	}
+}
+
 func TestGetEnv_WithValue(t *testing.T) {
 	t.Setenv("TEST_VAR", "test_value")
 
@@ -299,11 +461,102 @@ func TestSplitCSV_Single(t *testing.T) {
 	}
 }
 
+func TestGetAPIPort_Default(t *testing.T) {
+	os.Unsetenv("API_PORT")
+	os.Unsetenv("ADDR")
+
+	result := getAPIPort(":9092")
+
+	if result != ":9092" {
+		t.Errorf("getAPIPort() = %q, want %q", result, ":9092")
+	}
+}
+
+func TestGetAPIPort_FromAPI_PORT_Number(t *testing.T) {
+	t.Setenv("API_PORT", "8080")
+	os.Unsetenv("ADDR")
+
+	result := getAPIPort(":9092")
+
+	if result != ":8080" {
+		t.Errorf("getAPIPort() = %q, want %q", result, ":8080")
+	}
+}
+
+func TestGetAPIPort_FromAPI_PORT_WithColon(t *testing.T) {
+	t.Setenv("API_PORT", ":8080")
+	os.Unsetenv("ADDR")
+
+	result := getAPIPort(":9092")
+
+	if result != ":8080" {
+		t.Errorf("getAPIPort() = %q, want %q", result, ":8080")
+	}
+}
+
+func TestGetAPIPort_FromAPI_PORT_InvalidNumber(t *testing.T) {
+	t.Setenv("API_PORT", "invalid")
+	os.Unsetenv("ADDR")
+
+	result := getAPIPort(":9092")
+
+	if result != "invalid" {
+		t.Errorf("getAPIPort() = %q, want %q", result, "invalid")
+	}
+}
+
+func TestGetAPIPort_FromADDR_Fallback(t *testing.T) {
+	os.Unsetenv("API_PORT")
+	t.Setenv("ADDR", ":8080")
+
+	result := getAPIPort(":9092")
+
+	if result != ":8080" {
+		t.Errorf("getAPIPort() = %q, want %q", result, ":8080")
+	}
+}
+
+func TestGetAPIPort_API_PORT_Priority(t *testing.T) {
+	t.Setenv("API_PORT", "8080")
+	t.Setenv("ADDR", ":9999")
+
+	result := getAPIPort(":9092")
+
+	if result != ":8080" {
+		t.Errorf("getAPIPort() should prefer API_PORT over ADDR, got %q", result)
+	}
+}
+
+func TestFilepathJoinSafe(t *testing.T) {
+	result := filepathJoinSafe("path", "to", "file")
+
+	expected := "path" + string(os.PathSeparator) + "to" + string(os.PathSeparator) + "file"
+	if result != expected {
+		t.Errorf("filepathJoinSafe() = %q, want %q", result, expected)
+	}
+}
+
+func TestFilepathJoinSafe_Empty(t *testing.T) {
+	result := filepathJoinSafe()
+
+	if result != "" {
+		t.Errorf("filepathJoinSafe() with no args = %q, want empty string", result)
+	}
+}
+
+func TestFilepathJoinSafe_Single(t *testing.T) {
+	result := filepathJoinSafe("single")
+
+	if result != "single" {
+		t.Errorf("filepathJoinSafe() = %q, want %q", result, "single")
+	}
+}
+
 // helper to clear relevant env vars
 func clearEnv(t *testing.T) {
 	t.Helper()
 	keys := []string{
-		"ADDR", "LOG_LEVEL", "DEV_MODE", "CORS_ALLOW_ORIGIN",
+		"ADDR", "API_PORT", "LOG_LEVEL", "DEV_MODE", "CORS_ALLOW_ORIGIN",
 		"DEFAULT_TARGET", "PREVIEW_MAX_BYTES", "SSE_POLL_INTERVAL_MS",
 		"TLS_ADDR", "TLS_CERT_FILE", "TLS_KEY_FILE",
 		"CAPTURE_BODIES", "BODY_MAX_BYTES", "BODY_SPOOL_DIR", "PREVIEW_DECOMPRESS",
