@@ -2,6 +2,7 @@ package compilers
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -701,6 +702,9 @@ func TestRustCompiler_GetRustEnv_WithBothHomes(t *testing.T) {
 
 	env := compiler.getRustEnv()
 
+	// Expected path with proper OS separators
+	expectedCargoBin := filepath.Join("/test/cargo", "bin")
+
 	// Проверяем что RUSTUP_HOME установлен
 	foundRustupHome := false
 	foundCargoHome := false
@@ -713,7 +717,8 @@ func TestRustCompiler_GetRustEnv_WithBothHomes(t *testing.T) {
 		if strings.Contains(e, "CARGO_HOME=/test/cargo") {
 			foundCargoHome = true
 		}
-		if strings.HasPrefix(e, "PATH=") && strings.Contains(e, "/test/cargo/bin") {
+		// Use case-insensitive prefix check for PATH and check for expected cargo bin path
+		if len(e) >= 5 && strings.EqualFold(e[:5], "PATH=") && strings.Contains(e, expectedCargoBin) {
 			foundPath = true
 		}
 	}
@@ -727,7 +732,7 @@ func TestRustCompiler_GetRustEnv_WithBothHomes(t *testing.T) {
 	}
 
 	if !foundPath {
-		t.Error("PATH should include cargo/bin")
+		t.Errorf("PATH should include cargo/bin (%s)", expectedCargoBin)
 	}
 }
 
