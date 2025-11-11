@@ -71,7 +71,7 @@ frontend-dev-web:
 	cd frontend && flutter run -d chrome
 
 frontend-build-web:
-	cd frontend && flutter build web --release
+	cd frontend && flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
 	rm -rf cmd/network-debugger-web/_web
 	mkdir -p cmd/network-debugger-web/_web
 	cp -R frontend/build/web/* cmd/network-debugger-web/_web/
