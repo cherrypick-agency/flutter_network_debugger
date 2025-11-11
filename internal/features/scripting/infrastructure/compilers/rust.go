@@ -303,13 +303,34 @@ func (c *RustCompiler) getRustEnv() []string {
 
 	if c.cargoHome != "" {
 		env = append(env, fmt.Sprintf("CARGO_HOME=%s", c.cargoHome))
-		// Also add cargo/bin to PATH
+		// Update PATH to include cargo/bin
 		cargoPath := filepath.Join(c.cargoHome, "bin")
-		pathEnv := fmt.Sprintf("PATH=%s%c%s", cargoPath, filepath.ListSeparator, os.Getenv("PATH"))
-		env = append(env, pathEnv)
+		env = updatePathInEnv(env, cargoPath)
 	}
 
 	return env
+}
+
+// updatePathInEnv updates the PATH environment variable by prepending newPath
+// It removes any existing PATH entry and adds a new one with newPath at the beginning
+func updatePathInEnv(env []string, newPath string) []string {
+	var existingPath string
+	var result []string
+
+	// Find and extract existing PATH, filter it out
+	for _, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			existingPath = strings.TrimPrefix(e, "PATH=")
+		} else {
+			result = append(result, e)
+		}
+	}
+
+	// Prepend newPath to existing PATH
+	updatedPath := fmt.Sprintf("PATH=%s%c%s", newPath, filepath.ListSeparator, existingPath)
+	result = append(result, updatedPath)
+
+	return result
 }
 
 // parseRustError parses Rust compiler error output
