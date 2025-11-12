@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'port_checker.dart';
 
 class StartupConfig {
@@ -47,6 +48,7 @@ class _StartupDialogState extends State<_StartupDialog> {
   late TextEditingController _proxyPortCtrl;
   PortStatus? _portStatus;
   bool _checking = true;
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -57,7 +59,26 @@ class _StartupDialogState extends State<_StartupDialog> {
     _proxyPortCtrl = TextEditingController(
       text: widget.initialConfig.forwardProxyPort.toString(),
     );
+    _loadAppVersion();
     _checkPorts();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${packageInfo.version}';
+        });
+      }
+    } catch (e) {
+      // Fallback version
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v0.1.6';
+        });
+      }
+    }
   }
 
   @override
@@ -158,13 +179,30 @@ class _StartupDialogState extends State<_StartupDialog> {
               size: 24,
             ),
             const SizedBox(width: 12),
-            Text(
-              _checking
-                  ? 'Checking Server Status'
-                  : (_portStatus?.bothStopped ?? true
-                        ? 'Server Configuration'
-                        : 'Server Status'),
+            Expanded(
+              child: Text(
+                _checking
+                    ? 'Checking Server Status'
+                    : (_portStatus?.bothStopped ?? true
+                          ? 'Server Configuration'
+                          : 'Server Status'),
+              ),
             ),
+            if (_appVersion.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _appVersion,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
           ],
         ),
         content: SizedBox(
