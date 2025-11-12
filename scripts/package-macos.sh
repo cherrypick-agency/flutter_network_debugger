@@ -34,7 +34,7 @@ mkdir -p "$DIST_DIR"
 echo -e "\n${YELLOW}Step 2/5: Building Go server binary...${NC}"
 cd "$(dirname "$0")/.."
 echo "  Building for macOS $(uname -m)..."
-CGO_ENABLED=0 GOOS=darwin GOARCH=$(uname -m | sed 's/x86_64/amd64/;s/arm64/arm64/') \
+CGO_ENABLED=1 GOOS=darwin GOARCH=$(uname -m | sed 's/x86_64/amd64/;s/arm64/arm64/') \
   go build -ldflags="-s -w" -o "$DIST_DIR/server_darwin_$(uname -m | sed 's/x86_64/amd64/')" \
   ./cmd/network-debugger
 

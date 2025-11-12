@@ -32,7 +32,7 @@ mkdir -p "$DIST_DIR"
 echo -e "\n${YELLOW}Step 2/6: Building Go server binary...${NC}"
 cd "$(dirname "$0")/.."
 echo "  Building for Linux $ARCH..."
-CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" \
+CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \
   go build -ldflags="-s -w" -o "$DIST_DIR/server_linux_$ARCH" \
   ./cmd/network-debugger
 

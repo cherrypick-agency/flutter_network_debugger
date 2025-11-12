@@ -1,4 +1,3 @@
-./network-debugger
 /tmp/
 /build/
 /web/downloads/
@@ -44,6 +43,11 @@ coverage*.out
 *.test
 *.pprof
 *.prof
+
+# Built binaries (avoid committing by accident)
+/network-debugger
+/network-debugger.exe
+/network-debugger-*
 
 # ===============
 # Flutter / Dart (frontend)
