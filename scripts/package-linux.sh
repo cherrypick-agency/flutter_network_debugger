@@ -49,7 +49,7 @@ cd frontend
 flutter clean
 flutter pub get
 echo "  Building with version: $VERSION"
-flutter build linux --release --build-name="$VERSION" --build-number="1"
+flutter build linux --release --build-name="$VERSION" --build-number="1" --no-tree-shake-icons
 
 BUILD_DIR="build/linux/x64/release/bundle"
 if [ ! -d "$BUILD_DIR" ]; then

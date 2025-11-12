@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: false  # Disabled: use build-desktop.yml instead
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +49,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    if: false  # Disabled: use build-desktop.yml instead
     permissions:
       contents: write
     steps:
@@ -85,7 +87,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   pages:
-    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,11 +96,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download web build
-        uses: actions/download-artifact@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          name: webapp
-          path: webapp
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Build Flutter web
+        working-directory: frontend
+        run: flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
+
+      - name: Copy web build
+        run: |
+          mkdir -p webapp
+          cp -R frontend/build/web/* webapp/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

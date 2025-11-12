@@ -50,7 +50,7 @@ cd frontend
 flutter clean
 flutter pub get
 echo "  Building with version: $VERSION"
-flutter build macos --release --build-name="$VERSION" --build-number="1"
+flutter build macos --release --build-name="$VERSION" --build-number="1" --no-tree-shake-icons
 
 if [ ! -d "build/macos/Build/Products/Release/$BUNDLE_NAME" ]; then
   echo -e "${RED}Error: Flutter build failed${NC}"
