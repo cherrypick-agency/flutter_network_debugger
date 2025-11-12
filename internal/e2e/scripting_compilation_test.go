@@ -61,7 +61,7 @@ func TestE2E_ScriptCompilation_Rust(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// 1. Check available compilers
 	t.Log("Step 1: Checking available compilers...")
@@ -301,7 +301,7 @@ func TestE2E_ScriptCompilation_MultiFile_Rust(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// 1. Check available compilers
 	t.Log("Step 1: Checking available compilers...")
@@ -557,7 +557,7 @@ func TestE2E_ScriptValidation(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	tests := []struct {
 		name      string

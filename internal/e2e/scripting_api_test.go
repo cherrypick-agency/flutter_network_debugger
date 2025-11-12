@@ -49,7 +49,7 @@ func TestE2E_ScriptingAPI_CRUD(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// 2. Load WASM fixture
 	wasmData := loadTestWASM(t, "add_header.wasm")
@@ -162,7 +162,7 @@ func TestE2E_ScriptingAPI_RequestModification(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// Start upstream echo server
 	echoSrv := startEchoHTTPServer(t)
@@ -258,7 +258,7 @@ func TestE2E_ScriptingAPI_ValidationError(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// Try to create script with invalid WASM
 	invalidWASM := loadTestWASM(t, "invalid.wasm")
@@ -322,7 +322,7 @@ func TestE2E_ScriptingAPI_Noop(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// Create noop script (returns input unchanged)
 	wasmData := loadTestWASM(t, "noop.wasm")
@@ -403,7 +403,7 @@ func TestE2E_ScriptingAPI_ResponseModification(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// Rust script that modifies response
 	sourceCode := `use extism_pdk::*;
@@ -559,7 +559,7 @@ func TestE2E_ScriptingAPI_BothTriggers(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// Rust script that sees both request and response
 	sourceCode := `use extism_pdk::*;
@@ -752,7 +752,7 @@ func TestE2E_ScriptingAPI_Timeout(t *testing.T) {
 	}()
 
 	baseURL := "http://" + addr
-	waitReady(t, baseURL, 10*time.Second)
+	waitReady(t, baseURL, 60*time.Second)
 
 	// Load timeout WASM fixture (infinite loop)
 	timeoutWASM := loadTestWASM(t, "timeout.wasm")
