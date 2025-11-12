@@ -33,10 +33,14 @@ concurrency:
 
 jobs:
   build-macos:
-    runs-on: macos-latest
     strategy:
       matrix:
-        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            runner: macos-13  # Intel runner
+          - arch: arm64
+            runner: macos-latest  # Apple Silicon runner
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,17 +65,17 @@ jobs:
           path: |
             ~/.pub-cache
             frontend/.dart_tool
-          key: ${{ runner.os }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-
+            ${{ runner.os }}-${{ matrix.arch }}-flutter-
 
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-${{ matrix.arch }}-go-
 
       - name: Flutter pub get
         working-directory: frontend
@@ -96,26 +100,10 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          # Override architecture for cross-compilation if needed
-          if [ "${{ matrix.arch }}" = "x86_64" ] && [ "$(uname -m)" != "x86_64" ]; then
-            echo "Cross-compiling for x86_64 on arm64 host"
-            # Build Go binary for x86_64
-            CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
-              -o dist/server_darwin_amd64 ./cmd/network-debugger
-            # Flutter currently doesn't support cross-compilation for macOS
-            # So we skip x86_64 builds on arm64 runners
-            echo "Skipping x86_64 Flutter build on arm64 runner"
-            exit 0
-          elif [ "${{ matrix.arch }}" = "arm64" ] && [ "$(uname -m)" != "arm64" ]; then
-            echo "Cannot cross-compile arm64 on x86_64 runner"
-            exit 0
-          fi
-
           chmod +x scripts/package-macos.sh
           ./scripts/package-macos.sh
 
       - name: Upload DMG artifact
-        if: matrix.arch == runner.arch || matrix.arch == 'arm64' && runner.arch == 'ARM64'
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}-dmg
