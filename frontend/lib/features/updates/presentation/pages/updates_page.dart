@@ -42,7 +42,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
       debugPrint('Failed to get PackageInfo: $e');
       setState(() {
         // Fallback to version from pubspec.yaml instead of hardcoded 1.0.0
-        _currentVersion = '0.1.4';
+        _currentVersion = '?';
       });
     }
   }

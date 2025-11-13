@@ -11,6 +11,22 @@ class SessionsFilters extends StatelessWidget {
 
   final VoidCallback onApply;
 
+  Color _getMethodColor(String method) {
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return Colors.purple;
+      case 'POST':
+        return Colors.blue;
+      case 'PUT':
+      case 'PATCH':
+        return Colors.orange;
+      case 'DELETE':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Observer(
@@ -36,34 +52,151 @@ class SessionsFilters extends StatelessWidget {
                     vertical: 8,
                   ),
                 ),
-                items: const [
-                  DropdownMenuItem(
+                selectedItemBuilder: (context) {
+                  return [
+                    'any',
+                    'GET',
+                    'POST',
+                    'PUT',
+                    'DELETE',
+                    'PATCH',
+                    'OPTIONS',
+                  ].map((method) {
+                    if (method == 'any') {
+                      return const Text(
+                        'Any method',
+                        style: TextStyle(fontSize: 12),
+                      );
+                    }
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor(method),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(method, style: const TextStyle(fontSize: 12)),
+                      ],
+                    );
+                  }).toList();
+                },
+                items: [
+                  const DropdownMenuItem(
                     value: 'any',
                     child: Text('Any method', style: TextStyle(fontSize: 12)),
                   ),
                   DropdownMenuItem(
                     value: 'GET',
-                    child: Text('GET', style: TextStyle(fontSize: 12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor('GET'),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('GET', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'POST',
-                    child: Text('POST', style: TextStyle(fontSize: 12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor('POST'),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('POST', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'PUT',
-                    child: Text('PUT', style: TextStyle(fontSize: 12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor('PUT'),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('PUT', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'DELETE',
-                    child: Text('DELETE', style: TextStyle(fontSize: 12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor('DELETE'),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('DELETE', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'PATCH',
-                    child: Text('PATCH', style: TextStyle(fontSize: 12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor('PATCH'),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('PATCH', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'OPTIONS',
-                    child: Text('OPTIONS', style: TextStyle(fontSize: 12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _getMethodColor('OPTIONS'),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('OPTIONS', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
                   ),
                 ],
                 onChanged: (v) {

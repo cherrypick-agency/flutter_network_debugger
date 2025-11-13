@@ -14,3 +14,4 @@ ALTER TABLE runtime_settings ADD COLUMN IF NOT EXISTS font_scale REAL DEFAULT 1.
 
 
 
+

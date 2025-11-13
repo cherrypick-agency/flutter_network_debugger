@@ -458,12 +458,14 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                   if (!isWs && method.isNotEmpty)
                                     _chip(
                                       method.toUpperCase(),
-                                      backgroundColor: Theme.of(
+                                      backgroundColor: _methodBg(
                                         context,
-                                      ).colorScheme.surfaceVariant,
-                                      foregroundColor: Theme.of(
+                                        method,
+                                      ),
+                                      foregroundColor: _methodFg(
                                         context,
-                                      ).colorScheme.onSurfaceVariant,
+                                        method,
+                                      ),
                                     ),
                                   if (!isWs && status > 0)
                                     _chip(
@@ -743,6 +745,26 @@ class _SessionsColumnState extends State<SessionsColumn> {
     return cs.error;
   }
 
+  Color _methodBg(BuildContext context, String method) {
+    final m = method.toUpperCase();
+    final cs = Theme.of(context).colorScheme;
+    if (m == 'GET') return Colors.purple.withOpacity(0.12);
+    if (m == 'POST') return cs.primary.withOpacity(0.12);
+    if (m == 'PUT' || m == 'PATCH') return cs.tertiary.withOpacity(0.12);
+    if (m == 'DELETE') return cs.error.withOpacity(0.12);
+    return cs.surfaceVariant;
+  }
+
+  Color _methodFg(BuildContext context, String method) {
+    final m = method.toUpperCase();
+    final cs = Theme.of(context).colorScheme;
+    if (m == 'GET') return Colors.purple;
+    if (m == 'POST') return cs.primary;
+    if (m == 'PUT' || m == 'PATCH') return cs.tertiary;
+    if (m == 'DELETE') return cs.error;
+    return cs.onSurfaceVariant;
+  }
+
   bool _shouldShowProcessName(String? name) {
     final n = (name ?? '').trim().toLowerCase();
     if (n.isEmpty) return false;
@@ -764,10 +786,39 @@ class _SessionsColumnState extends State<SessionsColumn> {
 
   String _formatTimeHMSSafe(DateTime? dt) {
     if (dt == null) return '';
+
+    // Проверяем, сегодняшняя ли дата
+    final now = DateTime.now();
+    final isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     final s = dt.second.toString().padLeft(2, '0');
-    return '$h:$m:$s';
+    final time = '$h:$m:$s';
+
+    if (isToday) {
+      return time; // Только время
+    } else {
+      // Дата + время (без года)
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      final monthStr = months[dt.month - 1];
+      final day = dt.day;
+      return '$monthStr $day $time';
+    }
   }
 
   void _onScroll() {

@@ -41,8 +41,9 @@ class BodyViewController {
 
     // If current mode is not available, switch to first available
     if (!_availableModes.contains(_currentMode)) {
-      _currentMode =
-          _availableModes.isNotEmpty ? _availableModes.first : BodyViewMode.raw;
+      _currentMode = _availableModes.isNotEmpty
+          ? _availableModes.first
+          : BodyViewMode.raw;
     }
   }
 
@@ -65,7 +66,7 @@ class BodyViewController {
       case BodyViewMode.pretty:
         return 'Pretty';
       case BodyViewMode.jsonTree:
-        return 'JSON Tree';
+        return 'Tree';
       case BodyViewMode.htmlPreview:
         return 'HTML';
       case BodyViewMode.base64Decoded:
