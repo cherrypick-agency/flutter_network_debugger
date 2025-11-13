@@ -31,9 +31,10 @@
 </p>
 
 
-![Screenshot](./screenshot.png)
+<img width="500"  alt="image" src="https://github.com/user-attachments/assets/08c2b8fe-4c88-400d-97d9-d33833dffe19"  />
+<img width="500"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
 
-![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
+<!--![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)-->
 
 Free tool for debugging HTTP, WebSocket, SOCKS which is MUCH BETTER than the built-in Flutter Netwrok Devtools.
 
