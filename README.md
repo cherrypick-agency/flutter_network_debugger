@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/cherrypick-agency/flutter_network_debugger" alt="License" />
+    <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
   </a>
   <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/coverage.yml">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cherrypick-agency/flutter_network_debugger/gh-pages/coverage.json" alt="coverage" />
