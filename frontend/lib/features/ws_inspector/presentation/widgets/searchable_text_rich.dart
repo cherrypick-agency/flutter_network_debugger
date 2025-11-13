@@ -91,14 +91,18 @@ class SearchableTextRich extends StatelessWidget {
         if (s > last) {
           out.add(TextSpan(text: srcText.substring(last, s), style: baseStyle));
         }
-        final key = GlobalKey();
-        keys.add(key);
+        // Стабильные ключи для якорей при наличии anchorScope
+        final anchorIndex = matchCounter();
+        final k = search.anchorScope == null
+            ? GlobalKey()
+            : GlobalObjectKey('${search.anchorScope}:$anchorIndex');
+        keys.add(k);
         // Якорь должен иметь ненулевую высоту и базовую линию, чтобы ensureVisible корректно работал
         out.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
             baseline: TextBaseline.alphabetic,
-            child: SizedBox(key: key, width: 0, height: 1),
+            child: SizedBox(key: k, width: 0, height: 1),
           ),
         );
         final isFocused = matchCounter() == cfg.focusedIndex;
@@ -133,10 +137,9 @@ class SearchableTextRich extends StatelessWidget {
       if (idx < 0) return -1;
       if (!cfg.wholeWord) return idx;
       final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right =
-          (idx + q.length) < src.length
-              ? src.substring(idx + q.length, idx + q.length + 1)
-              : null;
+      final right = (idx + q.length) < src.length
+          ? src.substring(idx + q.length, idx + q.length + 1)
+          : null;
       final leftOk = left == null || !isWordChar(left);
       final rightOk = right == null || !isWordChar(right);
       if (leftOk && rightOk) return idx;
@@ -145,10 +148,9 @@ class SearchableTextRich extends StatelessWidget {
         idx = src.indexOf(q, nextStart);
         if (idx < 0) return -1;
         final l = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final r =
-            (idx + q.length) < src.length
-                ? src.substring(idx + q.length, idx + q.length + 1)
-                : null;
+        final r = (idx + q.length) < src.length
+            ? src.substring(idx + q.length, idx + q.length + 1)
+            : null;
         final lo = l == null || !isWordChar(l);
         final ro = r == null || !isWordChar(r);
         if (lo && ro) return idx;
@@ -169,14 +171,17 @@ class SearchableTextRich extends StatelessWidget {
           TextSpan(text: srcText.substring(start, idx), style: baseStyle),
         );
       }
-      final key = GlobalKey();
-      keys.add(key);
+      final anchorIndex = matchCounter();
+      final k = search.anchorScope == null
+          ? GlobalKey()
+          : GlobalObjectKey('${search.anchorScope}:$anchorIndex');
+      keys.add(k);
       // Якорь должен иметь ненулевую высоту и базовую линию, чтобы ensureVisible корректно работал
       out.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
-          child: SizedBox(key: key, width: 0, height: 1),
+          child: SizedBox(key: k, width: 0, height: 1),
         ),
       );
       final isFocused = matchCounter() == cfg.focusedIndex;

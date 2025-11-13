@@ -69,6 +69,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   bool _tree = false;
   bool _showTimeline = true;
   final ScrollController _listCtrl = ScrollController();
+  bool _stickToBottom = true;
   // Last known frames list length (for auto-scroll)
   int _lastFramesLen = 0;
   // Flag that after next frame we should scroll down
@@ -76,12 +77,35 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   DateTimeRange? _brushRange;
   String? _expandedId;
 
+  @override
+  void initState() {
+    super.initState();
+    _listCtrl.addListener(_onListScroll);
+  }
+
+  void _onListScroll() {
+    if (!_listCtrl.hasClients) return;
+    final pos = _listCtrl.position;
+    // небольшой порог, чтобы не дёргать прокрутку при едва заметном «хвосте»
+    const threshold = 48.0;
+    _stickToBottom = (pos.maxScrollExtent - pos.pixels) <= threshold;
+  }
+
   // Уникальный ключ фрейма, чтобы не путать элементы с одинаковыми id в разных направлениях
   String _frameKeyOf(Map<String, dynamic> f) {
     final id = (f['id'] ?? '').toString();
     final dir = (f['direction'] ?? '').toString();
     final ts = (f['ts'] ?? '').toString();
     return '$id|$dir|$ts';
+  }
+
+  // Ключ для UI-элементов: порядок + основное содержимое фрейма
+  String _uiKeyOf(int index, Map<String, dynamic> f) {
+    final dir = (f['direction'] ?? '').toString();
+    final opcode = (f['opcode'] ?? '').toString();
+    final size = (f['size'] ?? '').toString();
+    final preview = (f['preview'] ?? '').toString();
+    return '$index|$dir|$opcode|$size|$preview';
   }
 
   // Поиск индекса фрейма как по составному ключу, так и по исходному id
@@ -115,6 +139,12 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   GlobalKey _tileKeyFor(String id) =>
       _frameTileKeys.putIfAbsent(id, () => GlobalKey());
 
+  // Controllers for programmatic expand/collapse of tiles
+  final Map<String, ExpansionTileController> _frameTileControllers =
+      <String, ExpansionTileController>{};
+  ExpansionTileController _tileControllerFor(String id) =>
+      _frameTileControllers.putIfAbsent(id, () => ExpansionTileController());
+
   // Local search at frame level
   final Map<String, _LocalSearchState> _localSearch =
       <String, _LocalSearchState>{};
@@ -126,6 +156,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         .map((f) => _frameKeyOf(f))
         .toSet();
     _frameTileKeys.removeWhere((k, _) => !current.contains(k));
+    _frameTileControllers.removeWhere((k, _) => !current.contains(k));
     _localSearch.removeWhere((k, _) => !current.contains(k));
     _frameMatchCounts.removeWhere((k, _) => !current.contains(k));
     _frameMatchKeys.removeWhere((k, _) => !current.contains(k));
@@ -148,7 +179,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     if (ctx != null) {
       Scrollable.ensureVisible(
         ctx,
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         alignment: 0.1,
       );
     }
@@ -166,7 +198,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     if (ctx != null) {
       Scrollable.ensureVisible(
         ctx,
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         alignment: 0.1,
       );
     }
@@ -198,18 +231,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   // but only if user was already at the end of the list
   void _maybeAutoScrollToBottomOnNewFrames() {
     if (widget.frames.length > _lastFramesLen) {
-      bool atBottom = false;
-      if (_listCtrl.hasClients) {
-        try {
-          final pos = _listCtrl.position;
-          // small tolerance to not jerk if almost at bottom
-          atBottom = pos.pixels >= (pos.maxScrollExtent - 16);
-        } catch (_) {}
-      } else {
-        // if scroll not attached yet — consider user not at bottom
-        atBottom = false;
-      }
-      _autoScrollPending = atBottom;
+      _autoScrollPending = _stickToBottom;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_autoScrollPending && _listCtrl.hasClients) {
@@ -246,8 +268,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     _listCtrl
         .animateTo(
           target.clamp(0, _listCtrl.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
         )
         .whenComplete(() {
           if (!mounted) return;
@@ -264,7 +286,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
               try {
                 Scrollable.ensureVisible(
                   ctx,
-                  duration: const Duration(milliseconds: 180),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
                   alignment: 0.1,
                 );
               } catch (_) {}
@@ -324,18 +347,50 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   // Однострочный рендер JSON с подсветкой токенов для заголовка
   Widget _buildTitleRich(BuildContext context, String preview) {
-    final obj = _tryDecodeNormalizedForHeader(preview);
-    if (obj == null) {
-      return Text(
-        preview,
+    // 1) Чистый JSON целиком
+    final wholeObj = _tryDecodeNormalizedForHeader(preview);
+    if (wholeObj != null) {
+      final spans = _buildInlineJsonSpans(context, wholeObj);
+      return Text.rich(
+        TextSpan(children: spans),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: context.appText.body,
       );
     }
-    final spans = _buildInlineJsonSpans(context, obj);
-    return Text.rich(
-      TextSpan(children: spans),
+    // 2) JSON как часть строки (например, socket.io '42/ns,[...]')
+    final jsonPart = _extractJsonPayload(preview);
+    if (jsonPart != null) {
+      try {
+        final decoded = jsonDecode(jsonPart);
+        final normalized = _decodeNestedJsonStrings(decoded);
+        final idx = preview.indexOf(jsonPart);
+        final before = idx > 0 ? preview.substring(0, idx) : '';
+        final afterIdx = idx + jsonPart.length;
+        final after = (afterIdx < preview.length)
+            ? preview.substring(afterIdx)
+            : '';
+        final List<InlineSpan> children = [];
+        if (before.isNotEmpty) {
+          children.add(TextSpan(text: before, style: context.appText.body));
+        }
+        children.addAll(_buildInlineJsonSpans(context, normalized));
+        if (after.isNotEmpty) {
+          children.add(TextSpan(text: after, style: context.appText.body));
+        }
+        return Text.rich(
+          TextSpan(children: children),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: context.appText.body,
+        );
+      } catch (_) {
+        // если вдруг не распарсили — упадём на дефолтный рендер
+      }
+    }
+    // 3) Не JSON — просто текст
+    return Text(
+      preview,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: context.appText.body,
@@ -403,7 +458,6 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   void _reindexGlobalMatches() {
     final query = _searchCtrl.text.trim();
-    _frameMatchCounts.clear();
     _globalTotalMatches = 0;
     if (query.isEmpty) {
       setState(() {
@@ -424,16 +478,18 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       }
       final preview = (fm['preview'] ?? '').toString();
       final extractedJson = _extractJsonPayload(preview);
-      int cnt = 0;
-      if (extractedJson != null && (_pretty || _tree)) {
-        cnt = _countMatchesIn(extractedJson);
+      final computedCnt = (extractedJson != null && (_pretty || _tree))
+          ? _countMatchesIn(extractedJson)
+          : _countMatchesIn(preview);
+      final frameKey = _frameKeyOf(fm);
+      final effectiveCnt = _frameMatchCounts.containsKey(frameKey)
+          ? (_frameMatchCounts[frameKey] ?? 0)
+          : computedCnt;
+      if (effectiveCnt > 0) {
+        _frameMatchCounts[frameKey] = effectiveCnt;
+        _globalTotalMatches += effectiveCnt;
       } else {
-        cnt = _countMatchesIn(preview);
-      }
-      if (cnt > 0) {
-        final frameKey = _frameKeyOf(fm);
-        _frameMatchCounts[frameKey] = cnt;
-        _globalTotalMatches += cnt;
+        _frameMatchCounts.remove(frameKey);
       }
     }
     if (_globalTotalMatches == 0) {
@@ -536,9 +592,17 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     if (_globalTotalMatches <= 0) return;
     final (fid, local) = _resolveGlobalIndexToFrame(gIndex);
     if (fid == null) return;
+    final String? prevExpanded = _expandedId;
     setState(() {
       _expandedId = fid;
     });
+    // Ensure target tile is expanded; optionally collapse previous
+    try {
+      _tileControllerFor(fid).expand();
+      if (prevExpanded != null && prevExpanded != fid) {
+        _tileControllerFor(prevExpanded).collapse();
+      }
+    } catch (_) {}
     // Scroll to tile (rough + precise adjustment)
     _scrollToFrame(fid);
     // Always defer focus to internal match until keys are ready
@@ -596,7 +660,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                   if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
                     Scrollable.ensureVisible(
                       ctx2,
-                      duration: const Duration(milliseconds: 200),
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
                       alignment: 0.1,
                     );
                   }
@@ -604,7 +669,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
               } else {
                 Scrollable.ensureVisible(
                   ctx,
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
                   alignment: 0.1,
                 );
               }
@@ -643,16 +709,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                           _brushRange = r;
                         });
                       },
-                      onFrameHover: (id) {
-                        final idx = _findFrameIndexByAnyId(id);
-                        if (idx >= 0 && _listCtrl.hasClients) {
-                          final estimatedItemExtent = 56.0;
-                          final target = (idx * estimatedItemExtent).toDouble();
-                          _listCtrl.jumpTo(
-                            target.clamp(0, _listCtrl.position.maxScrollExtent),
-                          );
-                        }
-                      },
+                      // hover: только подсветка на таймлайне, без скролла списка
                     );
                   },
                 ),
@@ -828,6 +885,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                         );
                       }
                       final frameKey = _frameKeyOf(f);
+                      final uiKey = _uiKeyOf(i, f);
                       final isExpanded = frameKey == _expandedId;
                       // Local focusedIndex for this frame
                       int localFocusedIndex = -1;
@@ -851,7 +909,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                       return KeyedSubtree(
                         key: _tileKeyFor(frameKey),
                         child: ExpansionTile(
-                          key: ValueKey('frame_$frameKey'),
+                          key: ValueKey('frame_$uiKey'),
+                          controller: _tileControllerFor(frameKey),
                           initiallyExpanded: isExpanded,
                           tilePadding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -930,6 +989,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                         wholeWord: activeWholeWord,
                                         useRegex: activeUseRegex,
                                         focusedIndex: activeFocusedIndex,
+                                        anchorScope: 'ws:$frameKey',
                                         onRebuilt: (count, keys) {
                                           if (local.show) {
                                             setState(() {
@@ -994,8 +1054,28 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                       right: 6,
                                       child: Align(
                                         alignment: Alignment.topRight,
-                                        child: local.show
-                                            ? CommonSearchBar(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            // Кнопка копирования содержимого фрейма
+                                            IconButton(
+                                              tooltip: 'Copy content',
+                                              icon: const Icon(
+                                                Icons.copy,
+                                                size: 18,
+                                              ),
+                                              onPressed: () {
+                                                final toCopy =
+                                                    extractedJson ?? preview;
+                                                Clipboard.setData(
+                                                  ClipboardData(text: toCopy),
+                                                );
+                                              },
+                                            ),
+                                            const SizedBox(width: 6),
+                                            // Поиск по содержимому фрейма
+                                            if (local.show)
+                                              CommonSearchBar(
                                                 controller: local.controller,
                                                 focusNode: local.focus,
                                                 countText: local.keys.isEmpty
@@ -1043,7 +1123,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                                   });
                                                 },
                                               )
-                                            : IconButton(
+                                            else
+                                              IconButton(
                                                 tooltip: 'Search in frame',
                                                 icon: const Icon(
                                                   Icons.search,
@@ -1062,6 +1143,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                                       });
                                                 },
                                               ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1294,17 +1377,34 @@ extension on WsDetailsPanel {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        onChangeOpcode(localOpcode);
-                        onChangeDirection(localDirection);
-                        onToggleHeartbeats(localHideHeartbeats);
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Apply'),
-                    ),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            localOpcode = 'all';
+                            localDirection = 'all';
+                            localHideHeartbeats = false;
+                            namespaceCtrl.clear();
+                          });
+                          onChangeOpcode('all');
+                          onChangeDirection('all');
+                          onToggleHeartbeats(false);
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Reset'),
+                      ),
+                      const Spacer(),
+                      ElevatedButton(
+                        onPressed: () {
+                          onChangeOpcode(localOpcode);
+                          onChangeDirection(localDirection);
+                          onToggleHeartbeats(localHideHeartbeats);
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Apply'),
+                      ),
+                    ],
                   ),
                 ],
               ),

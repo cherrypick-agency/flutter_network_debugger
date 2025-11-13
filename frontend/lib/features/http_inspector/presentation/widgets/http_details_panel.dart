@@ -210,7 +210,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
                   child: _buildRequest(context, req),
                 ),
               ),
-              const VerticalDivider(width: 1),
               Expanded(
                 child: _Card(
                   title: 'Response',
@@ -413,6 +412,18 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
                 ),
               ],
             ),
+            if (url.isNotEmpty)
+              _loadingFetch
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton.icon(
+                      onPressed: () => _refetchOriginalRequest(context, req),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Repeat'),
+                    ),
           ],
         ),
         const SizedBox(height: 8),
@@ -422,7 +433,10 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ...qp.entries.map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: _KeyValueItem(name: e.key, value: e.value.join(', ')),
+              child: _CopyableKeyValueItem(
+                name: e.key,
+                value: e.value.join(', '),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -433,7 +447,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ...reqCookies.entries.map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: _KeyValueItem(name: e.key, value: e.value),
+              child: _CopyableKeyValueItem(name: e.key, value: e.value),
             ),
           ),
           const SizedBox(height: 8),
@@ -692,28 +706,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
                                 },
                               );
                             }),
-                            const SizedBox(width: 4),
-                            TextButton.icon(
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: body));
-                              },
-                              icon: const Icon(Icons.copy, size: 16),
-                              label: const Text('Copy'),
-                            ),
-                            if (url.isNotEmpty)
-                              _loadingFetch
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : IconButton(
-                                      onPressed: () => _refetch(context, url),
-                                      icon: const Icon(Icons.refresh, size: 16),
-                                      tooltip: 'Refetch full body',
-                                    ),
                           ],
                         ),
                       ),
@@ -773,7 +765,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           ..._kvList(cache).map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: _KeyValueItem(name: e.key, value: e.value),
+              child: _CopyableKeyValueItem(name: e.key, value: e.value),
             ),
           ),
           const SizedBox(height: 8),
@@ -791,7 +783,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         }).map(
           (e) => Padding(
             padding: const EdgeInsets.only(bottom: 2),
-            child: _KeyValueItem(name: e.key, value: e.value),
+            child: _CopyableKeyValueItem(name: e.key, value: e.value),
           ),
         ),
       ],
@@ -1207,6 +1199,154 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     }
   }
 
+  Future<void> _refetchOriginalRequest(
+    BuildContext context,
+    Map<String, dynamic>? req,
+  ) async {
+    if (req == null) return;
+
+    setState(() {
+      _loadingFetch = true;
+    });
+
+    try {
+      final method = (req['method'] ?? 'GET').toString().toUpperCase();
+      final url = (req['url'] ?? '').toString();
+      final headers =
+          (req['headers'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k.toString(), v.toString()),
+          ) ??
+          <String, String>{};
+      final bodyStr = (req['body'] ?? '').toString();
+
+      if (url.isEmpty) {
+        throw Exception('URL is empty');
+      }
+
+      final client = sl<AppHttpClient>();
+
+      // Prepare request based on method
+      final query = {'_target': url};
+
+      // Try to parse body as JSON Map
+      Map<String, dynamic>? bodyMap;
+      if (bodyStr.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(bodyStr);
+          if (decoded is Map) {
+            bodyMap = decoded.cast<String, dynamic>();
+          }
+        } catch (_) {
+          // If not valid JSON, leave bodyMap as null
+        }
+      }
+
+      dynamic res;
+      switch (method) {
+        case 'POST':
+          res = await client.post(
+            path: '/httpproxy',
+            query: query,
+            body: bodyMap,
+            headers: headers,
+          );
+          break;
+        case 'PUT':
+          res = await client.put(
+            path: '/httpproxy',
+            query: query,
+            body: bodyMap,
+            headers: headers,
+          );
+          break;
+        case 'DELETE':
+          res = await client.delete(
+            path: '/httpproxy',
+            query: query,
+            body: bodyMap,
+            headers: headers,
+          );
+          break;
+        case 'PATCH':
+          res = await client.patch(
+            path: '/httpproxy',
+            query: query,
+            body: bodyMap,
+            headers: headers,
+          );
+          break;
+        default: // GET, HEAD, OPTIONS, etc.
+          res = await client.get(
+            path: '/httpproxy',
+            query: query,
+            headers: headers,
+          );
+      }
+
+      final responseData = res.data?.toString() ?? '';
+
+      // Show result in modal
+      if (!mounted) return;
+
+      await showModalBottomSheet(
+        // ignore: use_build_context_synchronously
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Repeated Request Response',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$method $url',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    responseData,
+                    style: context.appText.monospace,
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: responseData));
+                  },
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      final msg = resolveErrorMessage(e);
+      if (!mounted) return;
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${msg.title}: ${msg.description}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingFetch = false;
+        });
+      }
+    }
+  }
+
   Widget _chip(BuildContext context, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1359,14 +1499,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
             },
           );
         }),
-        const SizedBox(width: 4),
-        TextButton.icon(
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: body));
-          },
-          icon: const Icon(Icons.copy, size: 16),
-          label: const Text('Copy'),
-        ),
       ],
     );
   }
@@ -1476,6 +1608,86 @@ class _KeyValueItem extends StatelessWidget {
   }
 }
 
+class _CopyableKeyValueItem extends StatefulWidget {
+  const _CopyableKeyValueItem({required this.name, required this.value});
+  final String name;
+  final String value;
+
+  @override
+  State<_CopyableKeyValueItem> createState() => _CopyableKeyValueItemState();
+}
+
+class _CopyableKeyValueItemState extends State<_CopyableKeyValueItem> {
+  bool _hover = false;
+  bool _iconHover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final nameStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontWeight: FontWeight.w600,
+    );
+    final valueStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      color: context.appColors.textSecondary,
+    );
+    final iconSize = valueStyle?.fontSize ?? 12;
+    final iconColor = valueStyle?.color;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: SelectableText.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: '${widget.name}: ', style: nameStyle),
+            TextSpan(text: widget.value, style: valueStyle),
+            if (_hover)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _iconHover = true),
+                  onExit: (_) => setState(() => _iconHover = false),
+                  child: GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(
+                        ClipboardData(text: '${widget.name}: ${widget.value}'),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 1,
+                      ),
+                      margin: const EdgeInsets.only(left: 6),
+                      decoration: BoxDecoration(
+                        color: _iconHover
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Icon(
+                        Icons.copy,
+                        size: iconSize,
+                        color: _iconHover
+                            ? Theme.of(context).colorScheme.primary
+                            : iconColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _HeaderItem extends StatefulWidget {
   const _HeaderItem({required this.name, required this.value, this.raw});
   final String name;
@@ -1515,100 +1727,91 @@ class _HeaderItemState extends State<_HeaderItem> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${widget.name}: ', style: nameStyle),
-          Expanded(
-            child: SelectableText.rich(
-              TextSpan(
-                style: valueStyle,
-                children: [
-                  TextSpan(text: shownValue),
-                  if (_hover)
-                    WidgetSpan(
-                      alignment: PlaceholderAlignment.baseline,
-                      baseline: TextBaseline.alphabetic,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isSensitive)
-                            MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              onEnter: (_) => setState(() => _iconHover = true),
-                              onExit: (_) => setState(() => _iconHover = false),
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _reveal = !_reveal;
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 2,
-                                    vertical: 1,
-                                  ),
-                                  margin: const EdgeInsets.only(left: 6),
-                                  decoration: BoxDecoration(
-                                    color: _iconHover
-                                        ? Theme.of(context).colorScheme.primary
-                                              .withValues(alpha: 0.12)
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Icon(
-                                    _reveal
-                                        ? Icons.visibility_off
-                                        : Icons.visibility,
-                                    size: iconSize,
-                                    color: _iconHover
-                                        ? Theme.of(context).colorScheme.primary
-                                        : iconColor,
-                                  ),
-                                ),
-                              ),
+      child: SelectableText.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: '${widget.name}: ', style: nameStyle),
+            TextSpan(text: shownValue, style: valueStyle),
+            if (_hover)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSensitive)
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        onEnter: (_) => setState(() => _iconHover = true),
+                        onExit: (_) => setState(() => _iconHover = false),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _reveal = !_reveal;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 1,
                             ),
-                          MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            onEnter: (_) => setState(() => _iconHover = true),
-                            onExit: (_) => setState(() => _iconHover = false),
-                            child: GestureDetector(
-                              onTap: () {
-                                Clipboard.setData(
-                                  ClipboardData(text: '${widget.name}: $raw'),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 2,
-                                  vertical: 1,
-                                ),
-                                margin: const EdgeInsets.only(left: 6),
-                                decoration: BoxDecoration(
-                                  color: _iconHover
-                                      ? Theme.of(context).colorScheme.primary
-                                            .withValues(alpha: 0.12)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Icon(
-                                  Icons.copy,
-                                  size: iconSize,
-                                  color: _iconHover
-                                      ? Theme.of(context).colorScheme.primary
-                                      : iconColor,
-                                ),
-                              ),
+                            margin: const EdgeInsets.only(left: 6),
+                            decoration: BoxDecoration(
+                              color: _iconHover
+                                  ? Theme.of(context).colorScheme.primary
+                                        .withValues(alpha: 0.12)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Icon(
+                              _reveal ? Icons.visibility_off : Icons.visibility,
+                              size: iconSize,
+                              color: _iconHover
+                                  ? Theme.of(context).colorScheme.primary
+                                  : iconColor,
                             ),
                           ),
-                        ],
+                        ),
+                      ),
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      onEnter: (_) => setState(() => _iconHover = true),
+                      onExit: (_) => setState(() => _iconHover = false),
+                      child: GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(
+                            ClipboardData(text: '${widget.name}: $raw'),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 1,
+                          ),
+                          margin: const EdgeInsets.only(left: 6),
+                          decoration: BoxDecoration(
+                            color: _iconHover
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.12)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Icon(
+                            Icons.copy,
+                            size: iconSize,
+                            color: _iconHover
+                                ? Theme.of(context).colorScheme.primary
+                                : iconColor,
+                          ),
+                        ),
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

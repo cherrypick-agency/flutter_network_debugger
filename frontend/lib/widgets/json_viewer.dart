@@ -64,8 +64,9 @@ class _JsonViewerState extends State<JsonViewer> {
   void _gotoPrev() {
     if (_matchKeys.isEmpty) return;
     setState(() {
-      _focusedIndex =
-          (_focusedIndex - 1) < 0 ? _matchKeys.length - 1 : _focusedIndex - 1;
+      _focusedIndex = (_focusedIndex - 1) < 0
+          ? _matchKeys.length - 1
+          : _focusedIndex - 1;
     });
     _scrollToFocused();
   }
@@ -81,9 +82,21 @@ class _JsonViewerState extends State<JsonViewer> {
           // Скроллим ТОЛЬКО внутренний скролл JSON
           _innerScrollCtrl.position.ensureVisible(
             renderObject,
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
             alignment: 0.1,
           );
+          // Дополнительная коррекция после итоговой компоновки
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try {
+              _innerScrollCtrl.position.ensureVisible(
+                renderObject,
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOutCubic,
+                alignment: 0.1,
+              );
+            } catch (_) {}
+          });
         }
       } catch (_) {
         // игнорируем — лучше не трогать родителя
@@ -131,10 +144,9 @@ class _JsonViewerState extends State<JsonViewer> {
                     right: 6,
                     child: Align(
                       alignment: Alignment.topRight,
-                      child:
-                          _showSearch
-                              ? _buildSearchBar(context)
-                              : _buildSearchButton(context),
+                      child: _showSearch
+                          ? _buildSearchBar(context)
+                          : _buildSearchButton(context),
                     ),
                   ),
                 ],
@@ -155,10 +167,9 @@ class _JsonViewerState extends State<JsonViewer> {
                 right: 6,
                 child: Align(
                   alignment: Alignment.topRight,
-                  child:
-                      _showSearch
-                          ? _buildSearchBar(context)
-                          : _buildSearchButton(context),
+                  child: _showSearch
+                      ? _buildSearchBar(context)
+                      : _buildSearchButton(context),
                 ),
               ),
             ],
@@ -182,7 +193,10 @@ class _JsonViewerState extends State<JsonViewer> {
               children: [
                 SingleChildScrollView(
                   controller: _innerScrollCtrl,
-                  child: JsonPrettyRich(data: data, search: searchCfg),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: JsonPrettyRich(data: data, search: searchCfg),
+                  ),
                 ),
                 Positioned(
                   top: 6,
@@ -190,10 +204,9 @@ class _JsonViewerState extends State<JsonViewer> {
                   right: 6,
                   child: Align(
                     alignment: Alignment.topRight,
-                    child:
-                        _showSearch
-                            ? _buildSearchBar(context)
-                            : _buildSearchButton(context),
+                    child: _showSearch
+                        ? _buildSearchBar(context)
+                        : _buildSearchButton(context),
                   ),
                 ),
               ],
@@ -206,7 +219,10 @@ class _JsonViewerState extends State<JsonViewer> {
             Positioned.fill(
               child: SingleChildScrollView(
                 controller: _innerScrollCtrl,
-                child: JsonPrettyRich(data: data, search: searchCfg),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: JsonPrettyRich(data: data, search: searchCfg),
+                ),
               ),
             ),
             Positioned(
@@ -214,10 +230,9 @@ class _JsonViewerState extends State<JsonViewer> {
               left: 0,
               right: 0,
               child: Center(
-                child:
-                    _showSearch
-                        ? _buildSearchBar(context)
-                        : _buildSearchButton(context),
+                child: _showSearch
+                    ? _buildSearchBar(context)
+                    : _buildSearchButton(context),
               ),
             ),
           ],
@@ -229,27 +244,48 @@ class _JsonViewerState extends State<JsonViewer> {
   Widget _buildSearchButton(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      child: IconButton(
-        iconSize: 18,
-        padding: const EdgeInsets.all(4),
-        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-        tooltip: 'Search',
-        onPressed: () {
-          setState(() => _showSearch = true);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _searchFocusNode.requestFocus();
-          });
-        },
-        icon: const Icon(Icons.search, size: 18),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            iconSize: 18,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            tooltip: 'Copy JSON',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: widget.jsonString));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('JSON copied to clipboard'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 18),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            iconSize: 18,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() => _showSearch = true);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _searchFocusNode.requestFocus();
+              });
+            },
+            icon: const Icon(Icons.search, size: 18),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSearchBar(BuildContext context) {
-    final countText =
-        _matchKeys.isEmpty
-            ? '0/0'
-            : '${_focusedIndex + 1}/${_matchKeys.length}';
+    final countText = _matchKeys.isEmpty
+        ? '0/0'
+        : '${_focusedIndex + 1}/${_matchKeys.length}';
     final hk = sl<HotkeysService>();
     void _closeSearch() {
       setState(() {
@@ -276,10 +312,9 @@ class _JsonViewerState extends State<JsonViewer> {
         wholeWord: _wholeWord,
         useRegex: _useRegex,
         canNavigate: _matchKeys.isNotEmpty,
-        onChanged:
-            () => setState(() {
-              _focusedIndex = 0;
-            }),
+        onChanged: () => setState(() {
+          _focusedIndex = 0;
+        }),
         onNext: _gotoNext,
         onPrev: _gotoPrev,
         onClose: _closeSearch,
@@ -322,10 +357,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
 
     while (idx >= 0) {
       final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right =
-          (idx + q.length) < src.length
-              ? src.substring(idx + q.length, idx + q.length + 1)
-              : null;
+      final right = (idx + q.length) < src.length
+          ? src.substring(idx + q.length, idx + q.length + 1)
+          : null;
       final leftOk = left == null || !isWordChar(left);
       final rightOk = right == null || !isWordChar(right);
       if (leftOk && rightOk) return true;
@@ -585,18 +619,16 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
                             )
                           else
                             TextSpan(
-                              text:
-                                  expanded
-                                      ? (value is Map ? '{' : '[')
-                                      : (value is Map
-                                          ? '{… ${value.length}}'
-                                          : '[… ${value.length}]'),
+                              text: expanded
+                                  ? (value is Map ? '{' : '[')
+                                  : (value is Map
+                                        ? '{… ${value.length}}'
+                                        : '[… ${value.length}]'),
                               style: punct,
-                              recognizer:
-                                  TapGestureRecognizer()
-                                    ..onTap = () {
-                                      _toggle(childPath, expanded);
-                                    },
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  _toggle(childPath, expanded);
+                                },
                             ),
                           TextSpan(
                             text: (expanded ? '' : (idx != last ? ',' : '')),
@@ -667,12 +699,11 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
                           TextSpan(
                             text: '$i: ',
                             style: punct,
-                            recognizer:
-                                TapGestureRecognizer()
-                                  ..onTap = () {
-                                    if (!container) return;
-                                    _toggle(childPath, expanded);
-                                  },
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                if (!container) return;
+                                _toggle(childPath, expanded);
+                              },
                           ),
                           if (!container)
                             ..._valueToSpans(
@@ -691,18 +722,16 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
                             )
                           else
                             TextSpan(
-                              text:
-                                  expanded
-                                      ? (value is Map ? '{' : '[')
-                                      : (value is Map
-                                          ? '{… ${value.length}}'
-                                          : '[… ${value.length}]'),
+                              text: expanded
+                                  ? (value is Map ? '{' : '[')
+                                  : (value is Map
+                                        ? '{… ${value.length}}'
+                                        : '[… ${value.length}]'),
                               style: punct,
-                              recognizer:
-                                  TapGestureRecognizer()
-                                    ..onTap = () {
-                                      _toggle(childPath, expanded);
-                                    },
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  _toggle(childPath, expanded);
+                                },
                             ),
                         ],
                       ),
@@ -730,10 +759,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
     }
 
     // Build tree using a single recursive dispatcher
-    final dynamic root =
-        (widget.data is Map || widget.data is Iterable)
-            ? widget.data
-            : {'value': widget.data};
+    final dynamic root = (widget.data is Map || widget.data is Iterable)
+        ? widget.data
+        : {'value': widget.data};
     final List<Widget> children = buildNode(root, '', 0);
 
     final content = Column(
@@ -766,8 +794,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         TextSpan(
           text: text,
           style: baseStyle,
-          recognizer:
-              onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+          recognizer: onTap == null
+              ? null
+              : (TapGestureRecognizer()..onTap = onTap),
         ),
       ];
     }
@@ -781,8 +810,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           TextSpan(
             text: text,
             style: baseStyle,
-            recognizer:
-                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+            recognizer: onTap == null
+                ? null
+                : (TapGestureRecognizer()..onTap = onTap),
           ),
         ];
       }
@@ -812,21 +842,23 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
             TextSpan(
               text: text.substring(last, s),
               style: baseStyle,
-              recognizer:
-                  onTap == null
-                      ? null
-                      : (TapGestureRecognizer()..onTap = onTap),
+              recognizer: onTap == null
+                  ? null
+                  : (TapGestureRecognizer()..onTap = onTap),
             ),
           );
         }
-        final key = GlobalKey();
-        keys.add(key);
+        final anchorIndex = matchCounter();
+        final k = widget.search.anchorScope == null
+            ? GlobalKey()
+            : GlobalObjectKey('${widget.search.anchorScope}:$anchorIndex');
+        keys.add(k);
         // Небольшой якорь по базовой линии — помогает ensureVisible прокрутить точно к совпадению
         out.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
             baseline: TextBaseline.alphabetic,
-            child: SizedBox(key: key, width: 0, height: 1),
+            child: SizedBox(key: k, width: 0, height: 1),
           ),
         );
         final isFocused = matchCounter() == widget.search.focusedIndex;
@@ -834,12 +866,11 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           TextSpan(
             text: text.substring(s, e),
             style: baseStyle.copyWith(
-              decoration: TextDecoration.underline,
-              decorationColor: isFocused ? highlightFocused : highlight,
-              decorationThickness: 2,
+              backgroundColor: isFocused ? highlightFocused : highlight,
             ),
-            recognizer:
-                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+            recognizer: onTap == null
+                ? null
+                : (TapGestureRecognizer()..onTap = onTap),
           ),
         );
         incMatchCounter();
@@ -850,8 +881,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           TextSpan(
             text: text.substring(last),
             style: baseStyle,
-            recognizer:
-                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+            recognizer: onTap == null
+                ? null
+                : (TapGestureRecognizer()..onTap = onTap),
           ),
         );
       }
@@ -875,10 +907,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
             TextSpan(
               text: text.substring(start),
               style: baseStyle,
-              recognizer:
-                  onTap == null
-                      ? null
-                      : (TapGestureRecognizer()..onTap = onTap),
+              recognizer: onTap == null
+                  ? null
+                  : (TapGestureRecognizer()..onTap = onTap),
             ),
           );
         }
@@ -886,10 +917,9 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       }
       if (widget.search.wholeWord) {
         final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final right =
-            (idx + q.length) < src.length
-                ? src.substring(idx + q.length, idx + q.length + 1)
-                : null;
+        final right = (idx + q.length) < src.length
+            ? src.substring(idx + q.length, idx + q.length + 1)
+            : null;
         final leftOk = left == null || !isWordChar(left);
         final rightOk = right == null || !isWordChar(right);
         if (!(leftOk && rightOk)) {
@@ -902,18 +932,22 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           TextSpan(
             text: text.substring(start, idx),
             style: baseStyle,
-            recognizer:
-                onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+            recognizer: onTap == null
+                ? null
+                : (TapGestureRecognizer()..onTap = onTap),
           ),
         );
       }
-      final key = GlobalKey();
-      keys.add(key);
+      final anchorIndex = matchCounter();
+      final k = widget.search.anchorScope == null
+          ? GlobalKey()
+          : GlobalObjectKey('${widget.search.anchorScope}:$anchorIndex');
+      keys.add(k);
       out.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
-          child: SizedBox(key: key, width: 0, height: 1),
+          child: SizedBox(key: k, width: 0, height: 1),
         ),
       );
       final isFocused = matchCounter() == widget.search.focusedIndex;
@@ -921,12 +955,11 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         TextSpan(
           text: text.substring(idx, idx + q.length),
           style: baseStyle.copyWith(
-            decoration: TextDecoration.underline,
-            decorationColor: isFocused ? highlightFocused : highlight,
-            decorationThickness: 2,
+            backgroundColor: isFocused ? highlightFocused : highlight,
           ),
-          recognizer:
-              onTap == null ? null : (TapGestureRecognizer()..onTap = onTap),
+          recognizer: onTap == null
+              ? null
+              : (TapGestureRecognizer()..onTap = onTap),
         ),
       );
       incMatchCounter();
@@ -1190,10 +1223,9 @@ class JsonPrettyRich extends StatelessWidget {
       if (idx < 0) return -1;
       if (!cfg.wholeWord) return idx;
       final left = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-      final right =
-          (idx + q.length) < src.length
-              ? src.substring(idx + q.length, idx + q.length + 1)
-              : null;
+      final right = (idx + q.length) < src.length
+          ? src.substring(idx + q.length, idx + q.length + 1)
+          : null;
       final leftOk = left == null || !isWordChar(left);
       final rightOk = right == null || !isWordChar(right);
       if (leftOk && rightOk) return idx;
@@ -1202,10 +1234,9 @@ class JsonPrettyRich extends StatelessWidget {
         idx = src.indexOf(q, nextStart);
         if (idx < 0) return -1;
         final l = idx - 1 >= 0 ? src.substring(idx - 1, idx) : null;
-        final r =
-            (idx + q.length) < src.length
-                ? src.substring(idx + q.length, idx + q.length + 1)
-                : null;
+        final r = (idx + q.length) < src.length
+            ? src.substring(idx + q.length, idx + q.length + 1)
+            : null;
         final lo = l == null || !isWordChar(l);
         final ro = r == null || !isWordChar(r);
         if (lo && ro) return idx;
@@ -1224,13 +1255,16 @@ class JsonPrettyRich extends StatelessWidget {
       if (idx > start) {
         out.add(TextSpan(text: text.substring(start, idx), style: baseStyle));
       }
-      final key = GlobalKey();
-      keys.add(key);
+      final anchorIndex = matchCounter();
+      final k = cfg.anchorScope == null
+          ? GlobalKey()
+          : GlobalObjectKey('${cfg.anchorScope}:$anchorIndex');
+      keys.add(k);
       out.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
-          child: SizedBox(key: key, width: 0, height: 1),
+          child: SizedBox(key: k, width: 0, height: 1),
         ),
       );
       final isFocused = matchCounter() == cfg.focusedIndex;
@@ -1238,9 +1272,7 @@ class JsonPrettyRich extends StatelessWidget {
         TextSpan(
           text: text.substring(idx, idx + q.length),
           style: baseStyle.copyWith(
-            decoration: TextDecoration.underline,
-            decorationColor: isFocused ? highlightFocused : highlight,
-            decorationThickness: 2,
+            backgroundColor: isFocused ? highlightFocused : highlight,
           ),
         ),
       );
@@ -1260,6 +1292,7 @@ class JsonSearchConfig {
     this.useRegex = false,
     required this.focusedIndex,
     required this.onRebuilt,
+    this.anchorScope,
   });
   final String query;
   final bool matchCase;
@@ -1267,4 +1300,7 @@ class JsonSearchConfig {
   final bool useRegex;
   final int focusedIndex;
   final void Function(int count, List<GlobalKey> keys)? onRebuilt;
+  // Используется для стабильных ключей якорей в пределах конкретного контейнера
+  // чтобы избежать конфликтов GlobalKey при быстрых перестроениях/навигации.
+  final String? anchorScope;
 }
