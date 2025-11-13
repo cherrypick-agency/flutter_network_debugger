@@ -19,6 +19,22 @@ class MatchRulesForm extends StatelessWidget {
     'OPTIONS',
   ];
 
+  Color _getMethodColor(String method) {
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return Colors.purple;
+      case 'POST':
+        return Colors.blue;
+      case 'PUT':
+      case 'PATCH':
+        return Colors.orange;
+      case 'DELETE':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -56,8 +72,17 @@ class MatchRulesForm extends StatelessWidget {
                 children: [
                   ..._httpMethods.map((method) {
                     final isSelected = store.selectedMethods.contains(method);
+                    final methodColor = _getMethodColor(method);
                     return FilterChip(
                       label: Text(method),
+                      avatar: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: methodColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
                       selected: isSelected,
                       onSelected: (_) => store.toggleMethod(method),
                       selectedColor: Theme.of(

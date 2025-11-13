@@ -22,8 +22,9 @@ class ScriptSettingsForm extends StatelessWidget {
           Observer(
             builder: (_) => TextField(
               decoration: InputDecoration(
-                labelText: 'Script Name *',
-                hintText: 'e.g., Add Authentication Header',
+                labelText: 'Script Name',
+                hintText:
+                    'e.g., Add Authentication Header (auto-generated if empty)',
                 errorText: store.nameError,
                 border: const OutlineInputBorder(),
               ),

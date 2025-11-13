@@ -22,6 +22,92 @@ import (
 	"network-debugger/internal/features/scripting/usecase"
 )
 
+// DTOs для一致ного JSON на фронте (camelCase)
+type scriptConfigDTO struct {
+	TimeoutMs     int      `json:"timeoutMs"`
+	MemoryLimitMB int      `json:"memoryLimitMB"`
+	AllowedHosts  []string `json:"allowedHosts"`
+}
+
+type matchRulesDTO struct {
+	Methods     []string `json:"methods"`
+	HostPattern string   `json:"hostPattern"`
+	PathPattern string   `json:"pathPattern"`
+	PatternType string   `json:"patternType"`
+}
+
+type scriptDTO struct {
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Description       string                   `json:"description"`
+	Runtime           domain.ScriptRuntime     `json:"runtime"`
+	Code              string                   `json:"code"`
+	Language          string                   `json:"language"`
+	TriggerType       domain.TriggerType       `json:"triggerType"`
+	Priority          int                      `json:"priority"`
+	Enabled           bool                     `json:"enabled"`
+	MatchRules        matchRulesDTO            `json:"matchRules"`
+	Config            scriptConfigDTO          `json:"config"`
+	CreatedAt         time.Time                `json:"createdAt"`
+	UpdatedAt         time.Time                `json:"updatedAt"`
+	SourceCode        string                   `json:"sourceCode"`
+	Dependencies      map[string]string        `json:"dependencies"`
+	CompilationStatus domain.CompilationStatus `json:"compilationStatus"`
+	CompilationError  string                   `json:"compilationError"`
+	LastCompiledAt    *time.Time               `json:"lastCompiledAt"`
+}
+
+func toScriptDTO(s *domain.Script) scriptDTO {
+	var codeStr string
+	if len(s.Code) > 0 {
+		codeStr = base64.StdEncoding.EncodeToString(s.Code)
+	} else {
+		codeStr = ""
+	}
+	// Гарантируем корректные значения по умолчанию
+	pt := string(s.MatchRules.PatternType)
+	if pt == "" {
+		pt = "wildcard"
+	}
+	methods := []string{}
+	if len(s.MatchRules.Methods) > 0 {
+		methods = append(methods, s.MatchRules.Methods...)
+	}
+	allowedHosts := []string{}
+	if len(s.Config.AllowedHosts) > 0 {
+		allowedHosts = append(allowedHosts, s.Config.AllowedHosts...)
+	}
+	return scriptDTO{
+		ID:          s.ID,
+		Name:        s.Name,
+		Description: s.Description,
+		Runtime:     s.Runtime,
+		Code:        codeStr,
+		Language:    s.Language,
+		TriggerType: s.TriggerType,
+		Priority:    s.Priority,
+		Enabled:     s.Enabled,
+		MatchRules: matchRulesDTO{
+			Methods:     methods,
+			HostPattern: s.MatchRules.HostPattern,
+			PathPattern: s.MatchRules.PathPattern,
+			PatternType: pt,
+		},
+		Config: scriptConfigDTO{
+			TimeoutMs:     s.Config.TimeoutMs,
+			MemoryLimitMB: s.Config.MemoryLimitMB,
+			AllowedHosts:  allowedHosts,
+		},
+		CreatedAt:         s.CreatedAt,
+		UpdatedAt:         s.UpdatedAt,
+		SourceCode:        s.SourceCode,
+		Dependencies:      s.Dependencies,
+		CompilationStatus: s.CompilationStatus,
+		CompilationError:  s.CompilationError,
+		LastCompiledAt:    s.LastCompiledAt,
+	}
+}
+
 // ScriptHandlers handles HTTP requests for script management
 type ScriptHandlers struct {
 	service            *usecase.ScriptService
@@ -213,7 +299,7 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(script)
+	json.NewEncoder(w).Encode(toScriptDTO(script))
 }
 
 // ListScripts handles GET /_api/v1/scripts
@@ -225,7 +311,12 @@ func (h *ScriptHandlers) ListScripts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(scripts)
+	// Гарантируем camelCase и code как string
+	out := make([]scriptDTO, len(scripts))
+	for i := range scripts {
+		out[i] = toScriptDTO(scripts[i])
+	}
+	json.NewEncoder(w).Encode(out)
 }
 
 // GetScript handles GET /_api/v1/scripts/{id}
@@ -243,7 +334,7 @@ func (h *ScriptHandlers) GetScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(script)
+	json.NewEncoder(w).Encode(toScriptDTO(script))
 }
 
 // UpdateScript handles PUT /_api/v1/scripts/{id}
@@ -263,14 +354,22 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 
 	// Decode updates
 	var req struct {
-		Name        *string `json:"name,omitempty"`
-		Description *string `json:"description,omitempty"`
-		Code        *string `json:"code,omitempty"`       // Base64-encoded WASM binary
-		SourceCode  *string `json:"sourceCode,omitempty"` // Source code (requires recompilation)
-		Language    *string `json:"language,omitempty"`
-		TriggerType *string `json:"triggerType,omitempty"`
-		Priority    *int    `json:"priority,omitempty"`
-		Config      *struct {
+		Name         *string            `json:"name,omitempty"`
+		Description  *string            `json:"description,omitempty"`
+		Code         *string            `json:"code,omitempty"`         // Base64-encoded WASM binary
+		SourceCode   *string            `json:"sourceCode,omitempty"`   // Source code (requires recompilation)
+		Dependencies *map[string]string `json:"dependencies,omitempty"` // Multi-file project files
+		Language     *string            `json:"language,omitempty"`
+		TriggerType  *string            `json:"triggerType,omitempty"`
+		Priority     *int               `json:"priority,omitempty"`
+		Enabled      *bool              `json:"enabled,omitempty"`
+		MatchRules   *struct {
+			Methods     []string `json:"methods"`
+			HostPattern string   `json:"hostPattern"`
+			PathPattern string   `json:"pathPattern"`
+			PatternType string   `json:"patternType"`
+		} `json:"matchRules,omitempty"`
+		Config *struct {
 			TimeoutMs     int      `json:"timeoutMs"`
 			MemoryLimitMB int      `json:"memoryLimitMB"`
 			AllowedHosts  []string `json:"allowedHosts"`
@@ -290,7 +389,12 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		script.Description = *req.Description
 	}
 	if req.Code != nil {
-		script.Code = []byte(*req.Code)
+		// Принимаем base64, но на всякий случай поддержим и «как есть»
+		if decoded, err := base64.StdEncoding.DecodeString(*req.Code); err == nil {
+			script.Code = decoded
+		} else {
+			script.Code = []byte(*req.Code)
+		}
 	}
 	if req.Language != nil {
 		script.Language = *req.Language
@@ -301,10 +405,44 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	if req.Priority != nil {
 		script.Priority = *req.Priority
 	}
+	if req.Enabled != nil {
+		script.Enabled = *req.Enabled
+	}
 	if req.Config != nil {
 		script.Config.TimeoutMs = req.Config.TimeoutMs
 		script.Config.MemoryLimitMB = req.Config.MemoryLimitMB
 		script.Config.AllowedHosts = req.Config.AllowedHosts
+	}
+	if req.Dependencies != nil {
+		// Полностью заменяем набор файлов проекта
+		script.Dependencies = *req.Dependencies
+	}
+	if req.MatchRules != nil {
+		pt := req.MatchRules.PatternType
+		if pt == "" {
+			pt = "wildcard"
+		}
+		// Простая валидация regexp как при создании
+		if domain.PatternType(pt) == domain.PatternRegex {
+			if req.MatchRules.HostPattern != "" {
+				if _, err := regexp.Compile(req.MatchRules.HostPattern); err != nil {
+					http.Error(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+			if req.MatchRules.PathPattern != "" {
+				if _, err := regexp.Compile(req.MatchRules.PathPattern); err != nil {
+					http.Error(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+		script.MatchRules = domain.MatchRules{
+			Methods:     append([]string(nil), req.MatchRules.Methods...),
+			HostPattern: req.MatchRules.HostPattern,
+			PathPattern: req.MatchRules.PathPattern,
+			PatternType: domain.PatternType(pt),
+		}
 	}
 
 	// Handle sourceCode updates - clear WASM to force recompilation
@@ -324,7 +462,7 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(script)
+	json.NewEncoder(w).Encode(toScriptDTO(script))
 }
 
 // DeleteScript handles DELETE /_api/v1/scripts/{id}
@@ -1112,7 +1250,8 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 	// Return created script
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(&newScript)
+	dto := toScriptDTO(&newScript)
+	json.NewEncoder(w).Encode(dto)
 }
 
 // validateScriptData validates script data before import

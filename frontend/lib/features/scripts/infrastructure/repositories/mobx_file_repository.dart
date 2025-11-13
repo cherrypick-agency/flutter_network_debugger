@@ -146,7 +146,19 @@ class MobxFileRepository implements FileRepository {
   Future<Either<DomainFailure, void>> save(FileDocument file) async {
     try {
       // Получаем оригинальное имя файла из sanitized ID
-      final filename = _getFilename(file.id);
+      String? filename = _getFilename(file.id);
+      // Фоллбэк: некоторые плагины/редактор могут отдавать id как оригинальное имя файла
+      // В этом случае примем id за имя файла напрямую.
+      filename ??= scriptStore.sourceFiles.containsKey(file.id)
+          ? file.id
+          : null;
+      // Ещё один фоллбэк: reverse sanitize (main_rs -> main.rs)
+      filename ??= () {
+        final unsanitized = file.id.replaceAll('_', '.');
+        return scriptStore.sourceFiles.containsKey(unsanitized)
+            ? unsanitized
+            : null;
+      }();
       if (filename == null) {
         return Left(
           DomainFailure.notFound(
@@ -162,7 +174,7 @@ class MobxFileRepository implements FileRepository {
 
       return loadResult.fold((failure) => Left(failure), (existingFile) {
         // Обновляем содержимое файла используя оригинальное имя
-        scriptStore.updateSourceFile(filename, file.content);
+        scriptStore.updateSourceFile(filename!, file.content);
         return const Right(null);
       });
     } catch (e) {

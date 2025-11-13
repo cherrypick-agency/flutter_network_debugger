@@ -456,6 +456,12 @@ abstract class _ScriptEditorStore with Store {
 
   @action
   bool validate() {
+    // Auto-generate name if empty
+    if (name.trim().isEmpty) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch % 1000000;
+      name = 'Untitled Script $timestamp';
+    }
+
     validateName();
 
     // For writeSource/importZip modes, validate sourceFiles instead of code

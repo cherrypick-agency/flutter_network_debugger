@@ -138,4 +138,16 @@ class EditorDI {
     editorController.dispose();
     _unsavedOverlay?.dispose();
   }
+
+  /// Принудительно сохраняет буфер редактора в ScriptEditorStore.
+  /// Используем перед отправкой на сервер, чтобы не потерять последние правки.
+  Future<void> flushUnsavedChanges() async {
+    await _unsavedOverlay?.flushAll();
+  }
+
+  /// Перезагружает текущий выбранный файл в редакторе, чтобы сбросить dirty‑флаг.
+  Future<void> reloadCurrentFileIfAny(String? selectedFile) async {
+    if (selectedFile == null) return;
+    await editorController.loadFile(selectedFile);
+  }
 }

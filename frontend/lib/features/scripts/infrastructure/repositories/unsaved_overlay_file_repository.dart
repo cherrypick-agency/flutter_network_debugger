@@ -37,6 +37,19 @@ class UnsavedOverlayFileRepository implements FileRepository {
     _subFileDeleted?.cancel();
   }
 
+  /// Принудительно сохраняет все несохранённые изменения в базовый репозиторий.
+  /// Нужен для случаев, когда пользователь жмёт Cmd+S раньше, чем сработает авто‑сейв.
+  Future<void> flushAll() async {
+    // Делаем копию ключей, т.к. коллекция будет изменяться по мере сохранения
+    final pending = List<String>.from(_unsavedByFileId.keys);
+    for (final fileId in pending) {
+      final loaded = await load(fileId);
+      await loaded.fold((_) async {}, (file) async {
+        await save(file);
+      });
+    }
+  }
+
   @override
   Future<Either<DomainFailure, FileDocument>> create({
     required String folderId,

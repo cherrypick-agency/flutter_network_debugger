@@ -26,6 +26,29 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
   Future<Script> create(Script script) async {
     final json = script.toJson();
     final responseJson = await _apiService.create(json);
+    // Бэкенд в режиме source/dependencies может вернуть только { "id": "..." }.
+    // В таком случае дотягиваем полноценный объект отдельным запросом.
+    final maybeName = responseJson['name'];
+    final maybeRuntime = responseJson['runtime'];
+    final maybeLanguage = responseJson['language'];
+    final maybeTrigger = responseJson['triggerType'];
+    final hasFullEntity =
+        maybeName != null &&
+        maybeRuntime != null &&
+        maybeLanguage != null &&
+        maybeTrigger != null;
+
+    if (hasFullEntity) {
+      return Script.fromJson(responseJson);
+    }
+
+    final id = responseJson['id'];
+    if (id is String && id.isNotEmpty) {
+      final fetched = await _apiService.getById(id);
+      return Script.fromJson(fetched);
+    }
+
+    // В крайнем случае пробуем распарсить как есть (даст понятную ошибку, если формат неожиданный)
     return Script.fromJson(responseJson);
   }
 
@@ -59,8 +82,11 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
 
   @override
   Future<Script> compile(String id, {bool optimize = true}) async {
-    final responseJson = await _apiService.compile(id, optimize: optimize);
-    return Script.fromJson(responseJson);
+    // 1) Запускаем компиляцию (API возвращает статус/логи)
+    await _apiService.compile(id, optimize: optimize);
+    // 2) Дотягиваем актуальный объект скрипта после компиляции
+    final json = await _apiService.getById(id);
+    return Script.fromJson(json);
   }
 
   @override

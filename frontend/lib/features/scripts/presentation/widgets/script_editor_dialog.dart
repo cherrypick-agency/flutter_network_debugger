@@ -69,9 +69,15 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   late final ScriptEditorStore _editorStore;
   late final CompilerListStore _compilerStore;
   EditorDI? _editorDI; // Multi-file editor DI (lazy init)
+  Future<void>? _initEditorFuture; // фикс дергания FutureBuilder
   bool _isSaving = false;
   bool _loadingCompilers = true;
   Map<String, bool>? _canCompileByLanguage; // доступность компиляции по языкам
+  final FocusNode _hotkeysFocus = FocusNode(
+    debugLabel: 'script_editor_hotkeys',
+  );
+  DateTime? _saveGuardUntil;
+  DateTime? _compileGuardUntil;
 
   @override
   void initState() {
@@ -87,11 +93,14 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     } else {
       _editorStore.initForNewScript();
     }
+    // Запускаем ленивую инициализацию редактора один раз
+    _initEditorFuture = _initEditorDI();
   }
 
   @override
   void dispose() {
     _editorDI?.dispose();
+    _hotkeysFocus.dispose();
     super.dispose();
   }
 
@@ -161,6 +170,24 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
             _editorStore.sourceFiles.isNotEmpty);
   }
 
+  bool _shouldProceedSave() {
+    final now = DateTime.now();
+    if (_saveGuardUntil != null && now.isBefore(_saveGuardUntil!)) {
+      return false;
+    }
+    _saveGuardUntil = now.add(const Duration(milliseconds: 300));
+    return true;
+  }
+
+  bool _shouldProceedCompile() {
+    final now = DateTime.now();
+    if (_compileGuardUntil != null && now.isBefore(_compileGuardUntil!)) {
+      return false;
+    }
+    _compileGuardUntil = now.add(const Duration(milliseconds: 300));
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
@@ -196,7 +223,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
         actions: <Type, Action<Intent>>{
           SaveScriptIntent: CallbackAction<SaveScriptIntent>(
             onInvoke: (_) {
-              if (!_isSaving && _editorStore.isValid) {
+              if (_shouldProceedSave() && !_isSaving && _editorStore.isValid) {
                 _save();
               }
               return null;
@@ -212,7 +239,8 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
           CompileScriptIntent: CallbackAction<CompileScriptIntent>(
             onInvoke: (_) {
               // Compile if Extism script and compilable content is present
-              if (_editorStore.runtime == ScriptRuntime.extism &&
+              if (_shouldProceedCompile() &&
+                  _editorStore.runtime == ScriptRuntime.extism &&
                   !widget.scriptsStore.isCompiling &&
                   !_isSaving &&
                   _hasCompilableContent()) {
@@ -228,146 +256,189 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
             },
           ),
         },
-        child: Dialog.fullscreen(
-          child: DefaultTabController(
-            length: 4,
-            child: Scaffold(
-              appBar: AppBar(
-                title: Observer(builder: (_) => Text(_editorStore.title)),
-                leading: IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => _confirmClose(context),
-                ),
-                actions: [
-                  // Compile button - show for Extism scripts in writeSource mode or when editing
-                  Observer(
-                    builder: (_) {
-                      // Show compile button for Extism runtime when compilable content is present
-                      final shouldShowCompile =
-                          _editorStore.runtime == ScriptRuntime.extism &&
-                          _hasCompilableContent();
+        child: RawKeyboardListener(
+          focusNode: _hotkeysFocus,
+          autofocus: true,
+          onKey: (event) {
+            // Fallback для macOS: перехватываем ⌘S и ⌘⇧C на уровне платформы,
+            // если они не дошли до Shortcuts из‑за platform view редактора.
+            if (event is RawKeyDownEvent) {
+              final isMeta = event.isMetaPressed;
+              final isCtrl = event.isControlPressed;
+              final key = event.logicalKey;
+              // Save: Cmd+S или Ctrl+S
+              if ((isMeta || isCtrl) && key == LogicalKeyboardKey.keyS) {
+                if (_shouldProceedSave() &&
+                    !_isSaving &&
+                    _editorStore.isValid) {
+                  _save();
+                }
+                // предотвращаем повторную обработку
+                return;
+              }
+              // Compile: Cmd+Shift+C или Ctrl+Shift+C
+              if ((isMeta || isCtrl) &&
+                  event.isShiftPressed &&
+                  key == LogicalKeyboardKey.keyC) {
+                if (_shouldProceedCompile() &&
+                    _editorStore.runtime == ScriptRuntime.extism &&
+                    !widget.scriptsStore.isCompiling &&
+                    !_isSaving &&
+                    _hasCompilableContent()) {
+                  _compileScript();
+                }
+                return;
+              }
+            }
+          },
+          child: Dialog.fullscreen(
+            child: DefaultTabController(
+              length: 4,
+              child: Scaffold(
+                appBar: AppBar(
+                  title: Observer(builder: (_) => Text(_editorStore.title)),
+                  leading: IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => _confirmClose(context),
+                  ),
+                  actions: [
+                    // Compile button - show for Extism scripts in writeSource mode or when editing
+                    Observer(
+                      builder: (_) {
+                        // Show compile button for Extism runtime when compilable content is present
+                        final shouldShowCompile =
+                            _editorStore.runtime == ScriptRuntime.extism &&
+                            _hasCompilableContent();
 
-                      if (!shouldShowCompile) {
-                        return const SizedBox.shrink();
-                      }
+                        if (!shouldShowCompile) {
+                          return const SizedBox.shrink();
+                        }
 
-                      final isCompiling = widget.scriptsStore.isCompiling;
-                      final canCompile =
-                          !isCompiling && !_isSaving && _hasCompilableContent();
+                        final isCompiling = widget.scriptsStore.isCompiling;
+                        final canCompile =
+                            !isCompiling &&
+                            !_isSaving &&
+                            _hasCompilableContent();
 
-                      // Dynamic tooltip message based on state
-                      final tooltipMessage = !canCompile
-                          ? (_isSaving
-                                ? 'Saving script...'
-                                : isCompiling
-                                ? 'Compiling...'
-                                : 'No source files to compile')
-                          : 'Compile (Ctrl+Shift+C)';
+                        // Dynamic tooltip message based on state
+                        final tooltipMessage = !canCompile
+                            ? (_isSaving
+                                  ? 'Saving script...'
+                                  : isCompiling
+                                  ? 'Compiling...'
+                                  : 'No source files to compile')
+                            : 'Compile (Ctrl+Shift+C)';
 
-                      return Tooltip(
-                        message: tooltipMessage,
-                        child: ElevatedButton.icon(
-                          onPressed: canCompile ? _compileScript : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: canCompile
-                                ? Colors.green
-                                : Colors.grey,
-                            foregroundColor: Colors.white,
+                        return Tooltip(
+                          message: tooltipMessage,
+                          child: ElevatedButton.icon(
+                            onPressed: canCompile ? _compileScript : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: canCompile
+                                  ? Colors.green
+                                  : Colors.grey,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: isCompiling
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.build),
+                            label: Text(
+                              isCompiling ? 'Compiling...' : 'Compile',
+                            ),
                           ),
-                          icon: isCompiling
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Observer(
+                      builder: (_) => Tooltip(
+                        message:
+                            Theme.of(context).platform == TargetPlatform.macOS
+                            ? 'Save (⌘S)'
+                            : 'Save (Ctrl+S)',
+                        child: TextButton.icon(
+                          onPressed: _isSaving || !_editorStore.isValid
+                              ? null
+                              : _save,
+                          icon: _isSaving
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
                                   ),
                                 )
-                              : const Icon(Icons.build),
-                          label: Text(isCompiling ? 'Compiling...' : 'Compile'),
+                              : const Icon(Icons.save),
+                          label: Text(_isSaving ? 'Saving...' : 'Save'),
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  Observer(
-                    builder: (_) => Tooltip(
-                      message: 'Save (Ctrl+S)',
-                      child: TextButton.icon(
-                        onPressed: _isSaving || !_editorStore.isValid
-                            ? null
-                            : _save,
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.save),
-                        label: Text(_isSaving ? 'Saving...' : 'Save'),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(48),
-                  child: TabBar(
-                    isScrollable: true,
-                    tabs: const [
-                      Tab(text: 'Code', icon: Icon(Icons.code, size: 20)),
-                      Tab(
-                        text: 'Settings',
-                        icon: Icon(Icons.settings, size: 20),
-                      ),
-                      Tab(
-                        text: 'Match Rules',
-                        icon: Icon(Icons.filter_alt, size: 20),
-                      ),
-                      Tab(text: 'Test', icon: Icon(Icons.science, size: 20)),
-                    ],
-                    onTap: _editorStore.setCurrentTab,
+                    const SizedBox(width: 8),
+                  ],
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(48),
+                    child: TabBar(
+                      isScrollable: true,
+                      tabs: const [
+                        Tab(text: 'Code', icon: Icon(Icons.code, size: 20)),
+                        Tab(
+                          text: 'Settings',
+                          icon: Icon(Icons.settings, size: 20),
+                        ),
+                        Tab(
+                          text: 'Match Rules',
+                          icon: Icon(Icons.filter_alt, size: 20),
+                        ),
+                        Tab(text: 'Test', icon: Icon(Icons.science, size: 20)),
+                      ],
+                      onTap: _editorStore.setCurrentTab,
+                    ),
                   ),
                 ),
-              ),
-              body: Observer(
-                builder: (_) {
-                  if (_editorStore.errorMessage != null) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _editorStore.errorMessage!,
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
+                body: Observer(
+                  builder: (_) {
+                    if (_editorStore.errorMessage != null) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.red,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _editorStore.errorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
-                  return TabBarView(
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      _buildCodeTab(),
-                      _buildSettingsTab(),
-                      _buildMatchRulesTab(),
-                      _buildTestTab(),
-                    ],
-                  );
-                },
-              ), // body Observer
-            ), // Scaffold
-          ), // DefaultTabController
-        ), // Dialog.fullscreen
+                    return TabBarView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _buildCodeTab(),
+                        _buildSettingsTab(),
+                        _buildMatchRulesTab(),
+                        _buildTestTab(),
+                      ],
+                    );
+                  },
+                ), // body Observer
+              ), // Scaffold
+            ), // DefaultTabController
+          ), // Dialog.fullscreen
+        ), // RawKeyboardListener
       ), // Actions
     ); // Shortcuts
   }
@@ -454,14 +525,15 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
 
   Widget _buildMultiFileEditor() {
     return FutureBuilder<void>(
-      future: _initEditorDI(),
+      // важен стабильный future, чтобы не мигал спиннер на каждом rebuild
+      future: _initEditorFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting ||
-            _editorDI == null) {
+        // Если редактор ещё не создан — показываем лоадер
+        if (_editorDI == null) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (snapshot.hasError) {
+        if (snapshot.hasError && _editorDI == null) {
           return Center(
             child: Text('Failed to initialize editor: ${snapshot.error}'),
           );
@@ -787,6 +859,9 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
       return;
     }
 
+    // Перед сохранением принудительно сбрасываем несохранённые изменения редактора
+    await _editorDI?.flushUnsavedChanges();
+
     setState(() => _isSaving = true);
 
     try {
@@ -798,11 +873,12 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
           script,
         );
       } else {
-        await widget.scriptsStore.createScript(script);
+        final createdScript = await widget.scriptsStore.createScript(script);
+        // Остаёмся в редакторе и переключаемся в режим редактирования нового скрипта
+        _editorStore.initForEdit(createdScript);
       }
 
       if (mounted) {
-        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -813,6 +889,8 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
             backgroundColor: Colors.green,
           ),
         );
+        // Сбрасываем индикатор несохранённых изменений, перезагрузив активный файл
+        await _editorDI?.reloadCurrentFileIfAny(_editorStore.selectedFile);
       }
     } catch (e) {
       if (mounted) {
@@ -1042,6 +1120,9 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     // Save the script first (create new or update existing)
     setState(() => _isSaving = true);
     try {
+      // Перед сохранением принудительно сбрасываем несохранённые изменения редактора
+      await _editorDI?.flushUnsavedChanges();
+
       final script = _editorStore.buildScript();
 
       if (_editorStore.isEditing) {

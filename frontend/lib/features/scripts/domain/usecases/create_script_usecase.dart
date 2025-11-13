@@ -23,8 +23,14 @@ class CreateScriptUseCase {
       throw ArgumentError('Script name cannot be empty');
     }
 
-    if (script.code.trim().isEmpty) {
-      throw ArgumentError('Script code cannot be empty');
+    // For multi-file projects (writeSource/importZip), validate dependencies
+    // For single-file (uploadWasm), validate code
+    final hasSourceFiles =
+        script.dependencies != null && script.dependencies!.isNotEmpty;
+    final hasCode = script.code.trim().isNotEmpty;
+
+    if (!hasCode && !hasSourceFiles) {
+      throw ArgumentError('Script code or source files are required');
     }
 
     if (script.priority < 0 || script.priority > 100) {
