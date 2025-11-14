@@ -1,6 +1,6 @@
 library dio_debugger;
 
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'dart:html';
 
 import 'package:dio/dio.dart';
 
@@ -39,6 +39,10 @@ class DioDebugger {
   DioDebugger._();
 
   /// Подключает интерсептор reverse‑proxy к [dio]. Возвращает тот же [dio] для чейнинга.
+  ///
+  /// [resetCaptureOnHotRestart] - если true, отправляет запрос на прокси для очистки
+  /// предыдущих сессий и создания нового capture ID. Полезно для разделения
+  /// hot restart'ов при разработке.
   static Dio attach(
     Dio dio, {
     String? upstreamBaseUrl,
@@ -52,6 +56,7 @@ class DioDebugger {
     List<Pattern>? allowPaths,
     List<Pattern>? allowHosts,
     List<String>? allowMethods,
+    bool resetCaptureOnHotRestart = false,
   }) {
     final enabledEffective = enabled ?? _computeEnabledFromEnv();
     if (!enabledEffective) return dio;
@@ -84,7 +89,7 @@ class DioDebugger {
           readEnvVar('PROXY_BASE_URL'),
           readEnvVar('HTTP_PROXY'),
         ]) ??
-        (Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091');
+        _getDefaultProxyUrl();
 
     final path = (proxyHttpPath ??
         _firstNonEmpty([
@@ -109,26 +114,30 @@ class DioDebugger {
 
     if (mode == 'reverse') {
       if (upstream.isEmpty || proxy.isEmpty) return dio;
-      final alreadyAttached =
-          dio.interceptors.any((i) => i is ReverseProxyInterceptor);
-      if (!alreadyAttached) {
-        final interceptor = ReverseProxyInterceptor(
-          upstreamBaseUrl: upstream,
-          proxyBaseUrl: proxy,
-          proxyHttpPath: path,
-          skipPaths: skipPaths,
-          skipHosts: skipHosts,
-          skipMethods: _upper(skipMethods),
-          allowPaths: allowPaths,
-          allowHosts: allowHosts,
-          allowMethods: _upper(allowMethods),
-        );
-        if (insertFirst) {
-          dio.interceptors.insert(0, interceptor);
-        } else {
-          dio.interceptors.add(interceptor);
-        }
+
+      // Remove old interceptor if exists (for hot restart support)
+      dio.interceptors.removeWhere((i) => i is ReverseProxyInterceptor);
+
+      // Create new interceptor
+      final interceptor = ReverseProxyInterceptor(
+        upstreamBaseUrl: upstream,
+        proxyBaseUrl: proxy,
+        proxyHttpPath: path,
+        skipPaths: skipPaths,
+        skipHosts: skipHosts,
+        skipMethods: _upper(skipMethods),
+        allowPaths: allowPaths,
+        allowHosts: allowHosts,
+        allowMethods: _upper(allowMethods),
+        resetCaptureOnFirstRequest: resetCaptureOnHotRestart,
+      );
+
+      if (insertFirst) {
+        dio.interceptors.insert(0, interceptor);
+      } else {
+        dio.interceptors.add(interceptor);
       }
+
       return dio;
     }
 
@@ -186,5 +195,20 @@ class DioDebugger {
     if (p.startsWith('https://')) p = p.substring('https://'.length);
     if (p.endsWith(';')) p = p.substring(0, p.length - 1);
     return p;
+  }
+
+  /// Returns default proxy URL based on platform.
+  /// Android emulator: 10.0.2.2 (special IP for host machine)
+  /// Other platforms: localhost
+  static String _getDefaultProxyUrl() {
+    try {
+      // Try to access Platform.isAndroid (only available on dart:io platforms)
+      return Platform.isAndroid
+          ? 'http://10.0.2.2:9091'
+          : 'http://localhost:9091';
+    } catch (_) {
+      // On web or if Platform is not available, return localhost
+      return 'http://localhost:9091';
+    }
   }
 }

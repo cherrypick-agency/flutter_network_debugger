@@ -7,7 +7,12 @@ Future<void> main() async {
   );
 
   // Attach reverse proxy interceptor for local debugging
-  DioDebugger.attach(dio);
+  // Set resetCaptureOnHotRestart: true to automatically clear previous sessions
+  // and start a new capture on each hot restart
+  DioDebugger.attach(
+    dio,
+    resetCaptureOnHotRestart: true,
+  );
 
   final response = await dio.get('/health');
   print('Status: \'${response.statusCode}\'');

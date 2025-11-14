@@ -42,6 +42,11 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		Str("target_param", r.URL.Query().Get("_target")).
 		Msg("[HTTPPROXY] Incoming request")
 
+	// Check for _resetCapture parameter and reset if requested
+	if r.URL.Query().Get("_resetCapture") == "true" {
+		d.resetCaptureBeforeRequest()
+	}
+
 	// Offline mode simulation
 	if d.Cfg.ThrottleOffline {
 		writeError(w, http.StatusServiceUnavailable, "OFFLINE", "proxy offline (simulated)", nil)
@@ -88,6 +93,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 
 	incomingQ := r.URL.Query()
 	incomingQ.Del("_target")
+	incomingQ.Del("_resetCapture")
 	// Нормализуем ключи входящих параметров: убираем ведущий '?'
 	cleanedIncoming := url.Values{}
 	for k, vv := range incomingQ {
@@ -419,6 +425,13 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 					TTFB:    durationMs(tStart, firstByte),
 					Total:   durationMs(tStart, time.Now()),
 				},
+				// HAR export support
+				ReqHeaders:      cloneHeader(r.Header),
+				RespHeaders:     cloneHeader(resp.Header),
+				Cookies:         r.Cookies(),
+				QueryParams:     r.URL.Query(),
+				ReqHTTPVersion:  r.Proto,
+				RespHTTPVersion: resp.Proto,
 			}
 			// Best-effort content-type
 			if ct := resp.Header.Get("Content-Type"); ct != "" {
@@ -426,6 +439,14 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			}
 			// Optional body spooling
 			if d.Cfg.CaptureBodies {
+				// Spool request body if available
+				if len(reqBodyBuf) > 0 {
+					if f, err := d.spoolBodyBytes(reqBodyBuf, "req"); err == nil && f != "" {
+						tx.ReqBodyFile = f
+						d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
+					}
+				}
+				// Spool response body
 				if f, err := d.spoolBody(resp.Body, int64(d.Cfg.BodyMaxBytes), "resp"); err == nil && f != "" {
 					tx.RespBodyFile = f
 					d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
@@ -894,6 +915,31 @@ func (d *Deps) spoolBody(r io.Reader, max int64, kind string) (string, error) {
 	}
 	_ = f.Close()
 	// return path
+	abs, _ := filepath.Abs(f.Name())
+	return abs, nil
+}
+
+func (d *Deps) spoolBodyBytes(data []byte, kind string) (string, error) {
+	if len(data) == 0 {
+		return "", nil
+	}
+	dir := d.Cfg.BodySpoolDir
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, "gpx-"+kind+"-*.bin")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Sync() }()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return "", err
+	}
+	_ = f.Close()
 	abs, _ := filepath.Abs(f.Name())
 	return abs, nil
 }

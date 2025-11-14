@@ -82,6 +82,26 @@ DioDebugger.attach(
 );
 ```
 
+### Auto-reset capture on hot restart
+
+During development, you may want to separate network traffic captured from different hot restarts. Use the `resetCaptureOnHotRestart` parameter to automatically clear previous sessions and start a new capture:
+
+```dart
+if (kDebugMode) {
+  DioDebugger.attach(
+    dio,
+    resetCaptureOnHotRestart: true,  // Clear sessions on each hot restart
+  );
+}
+```
+
+This adds a `_resetCapture=true` query parameter to the first proxied request, which triggers the proxy to:
+- Clear all previous sessions
+- Increment the capture ID
+- Start a new capture session
+
+This approach has **zero latency** — no separate HTTP request is made, the reset happens inline with your first network call. The proxy will safely ignore this parameter if the reset feature is not supported.
+
 ### Configuration examples
 - Via `--dart-define`:
 ```bash

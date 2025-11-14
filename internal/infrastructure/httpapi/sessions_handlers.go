@@ -4,11 +4,14 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	mem "network-debugger/internal/adapters/storage/memory"
 	"network-debugger/internal/domain"
 	"network-debugger/internal/usecase"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,6 +113,11 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	}
 	switch parts[1] {
 	case "frames":
+		// Check if this is /frames/{frameId}/body
+		if len(parts) >= 4 && parts[3] == "body" {
+			d.handleFrameBody(w, r, id, parts[2])
+			return
+		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		if limit <= 0 {
 			limit = 100
@@ -455,6 +463,11 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 	}
 	switch parts[1] {
 	case "frames":
+		// Check if this is /frames/{frameId}/body
+		if len(parts) >= 4 && parts[3] == "body" {
+			d.handleFrameBody(w, r, id, parts[2])
+			return
+		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		if limit <= 0 {
 			limit = 100
@@ -831,6 +844,78 @@ func (d *Deps) handleV1Captures(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"items": out})
+}
+
+// handleV1CaptureReset clears all sessions and starts a new capture
+func (d *Deps) handleV1CaptureReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "use POST", nil)
+		return
+	}
+
+	// Get memory store
+	repo := sessionsRepoOf(d.Svc)
+	mem, ok := repo.(*mem.Store)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "CAPTURE_UNAVAILABLE", "capture unsupported", nil)
+		return
+	}
+
+	// Clear all sessions
+	if err := d.Svc.ClearAll(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "CLEAR_FAILED", err.Error(), nil)
+		return
+	}
+
+	// Close live connections
+	if d.Live != nil {
+		d.Live.CloseAll()
+	}
+
+	// Broadcast clear event
+	if d.Monitor != nil {
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
+	}
+
+	// Start new capture
+	newCapture := mem.StartCapture()
+
+	d.Logger.Info().Int("capture", newCapture).Msg("capture reset")
+
+	// Return new capture state
+	type resp struct {
+		Recording bool `json:"recording"`
+		Current   int  `json:"current"`
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp{Recording: true, Current: newCapture})
+}
+
+// resetCaptureBeforeRequest resets capture when _resetCapture=true query param is present.
+// Called from handleHTTPProxy before proxying the first request.
+func (d *Deps) resetCaptureBeforeRequest() {
+	repo := sessionsRepoOf(d.Svc)
+	mem, ok := repo.(*mem.Store)
+	if !ok {
+		return
+	}
+
+	// Clear all sessions
+	_ = d.Svc.ClearAll(context.Background())
+
+	// Close live connections
+	if d.Live != nil {
+		d.Live.CloseAll()
+	}
+
+	// Broadcast clear event
+	if d.Monitor != nil {
+		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
+	}
+
+	// Start new capture
+	newCapture := mem.StartCapture()
+	d.Logger.Info().Int("capture", newCapture).Msg("capture reset via _resetCapture param")
 }
 
 // helper to get underlying session repository (MVP, not ideal)
@@ -1258,4 +1343,65 @@ func (d *Deps) enrichWithHTTPMeta(ctx context.Context, sess domain.Session) (*ht
 	}
 
 	return meta, sz
+}
+
+// handleFrameBody serves the raw body content for a specific frame
+func (d *Deps) handleFrameBody(w http.ResponseWriter, r *http.Request, sessionID string, frameID string) {
+	// Use direct GetFrameByID for O(1) lookup instead of O(n) ListFrames
+	frame, found, err := d.Svc.GetFrameByID(r.Context(), sessionID, frameID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "FRAME_GET_FAILED", err.Error(), map[string]any{"sessionId": sessionID, "frameId": frameID})
+		return
+	}
+
+	if !found {
+		writeError(w, http.StatusNotFound, "FRAME_NOT_FOUND", "frame not found", map[string]any{"frameId": frameID})
+		return
+	}
+
+	targetFrame := &frame
+
+	// Check if BodyFile exists
+	if targetFrame.BodyFile == "" {
+		// No body file - return preview as fallback
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Body-Source", "preview")
+		if _, err := w.Write([]byte(targetFrame.Preview)); err != nil {
+			// Log error but response already started
+			log.Printf("Error writing preview response: %v", err)
+		}
+		return
+	}
+
+	// Check file size before reading to prevent OOM
+	fileInfo, err := os.Stat(targetFrame.BodyFile)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "BODY_STAT_FAILED", err.Error(), map[string]any{"frameId": frameID, "bodyFile": targetFrame.BodyFile})
+		return
+	}
+
+	const maxBodySize = 100 * 1024 * 1024 // 100 MB limit
+	if fileInfo.Size() >= maxBodySize {
+		writeError(w, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE",
+			fmt.Sprintf("body file size (%d bytes) exceeds maximum allowed size (%d bytes)", fileInfo.Size(), maxBodySize),
+			map[string]any{"frameId": frameID, "fileSize": fileInfo.Size(), "maxSize": maxBodySize})
+		return
+	}
+
+	// Read from BodyFile
+	bodyData, err := os.ReadFile(targetFrame.BodyFile)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "BODY_READ_FAILED", err.Error(), map[string]any{"frameId": frameID, "bodyFile": targetFrame.BodyFile})
+		return
+	}
+
+	// Return raw bytes
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Body-Source", "file")
+	w.Header().Set("X-Frame-Id", frameID)
+	w.Header().Set("Content-Length", strconv.Itoa(len(bodyData)))
+	if _, err := w.Write(bodyData); err != nil {
+		// Log error but response already started
+		log.Printf("Error writing body response: %v", err)
+	}
 }

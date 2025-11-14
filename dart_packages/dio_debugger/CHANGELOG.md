@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5
+- Feature: Added `resetCaptureOnHotRestart` parameter to `DioDebugger.attach()`.
+  When set to `true`, automatically clears previous sessions and starts a new capture
+  on each hot restart, making it easy to separate traffic from different app runs.
+- Implementation: Uses `_resetCapture=true` query parameter in the first proxied request
+  for zero-latency capture reset (no separate HTTP call).
+- Backend: Added `_resetCapture` query parameter support in `/httpproxy` handler
+  for atomic capture reset operation.
+- Docs: Added "Auto-reset capture on hot restart" section to README.
+- Docs: Updated example with `resetCaptureOnHotRestart` usage.
+
 ## 0.1.4
 - Fix: eliminated double `?` and encoded `%3F` artifacts in query when building target URL.
   Now `ReverseProxyInterceptor` normalizes keys (strips leading `?`) and

@@ -13,6 +13,7 @@ class ReverseProxyInterceptor extends Interceptor {
     this.allowPaths,
     this.allowHosts,
     this.allowMethods,
+    this.resetCaptureOnFirstRequest = false,
   })  : _upstreamBaseUrl = upstreamBaseUrl,
         _proxyBaseUrl = _ensureHttpScheme(proxyBaseUrl),
         _proxyHttpPath =
@@ -31,6 +32,10 @@ class ReverseProxyInterceptor extends Interceptor {
   final List<Pattern>? allowHosts;
   final List<String>? allowMethods; // в верхнем регистре
 
+  // Reset capture: если true, добавляет _resetCapture=true к первому запросу
+  final bool resetCaptureOnFirstRequest;
+  bool _isFirstRequest = true;
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     // Если уже идём через прокси endpoint — не трогаем, чтобы избежать двойной переписки
@@ -48,10 +53,19 @@ class ReverseProxyInterceptor extends Interceptor {
     // иначе собираем из upstreamBaseUrl + path + query. Значения query нормализуем в строки.
     final Uri target = _buildTargetUri(options);
 
+    // Формируем query параметры для прокси
+    final proxyQueryParams = <String, String>{'_target': target.toString()};
+
+    // Добавляем _resetCapture=true для первого запроса если требуется
+    if (resetCaptureOnFirstRequest && _isFirstRequest) {
+      proxyQueryParams['_resetCapture'] = 'true';
+      _isFirstRequest = false;
+    }
+
     options
       ..baseUrl = _proxyBaseUrl
       ..path = _proxyHttpPath
-      ..queryParameters = {'_target': target.toString()};
+      ..queryParameters = proxyQueryParams;
 
     handler.next(options);
   }
