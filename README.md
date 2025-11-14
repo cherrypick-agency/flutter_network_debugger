@@ -31,7 +31,7 @@
 </p>
 
 
-<img alt="image" src="https://github.com/user-attachments/assets/08c2b8fe-4c88-400d-97d9-d33833dffe19"  />
+<img width="1312" height="818" alt="image" src="https://github.com/user-attachments/assets/47db4416-b053-40d3-94e8-5325de77e6a7" />
 <img width="500"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
 
 <!--![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)-->
