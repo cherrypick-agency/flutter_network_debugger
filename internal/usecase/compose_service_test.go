@@ -99,6 +99,10 @@ func (s *stubSessionRepo) ClearAllSessions(ctx context.Context) error {
 	return nil
 }
 
+func (s *stubSessionRepo) DeleteImportedSessions(ctx context.Context) error {
+	return nil
+}
+
 type stubFrameRepo struct{}
 
 func (stubFrameRepo) AppendFrame(ctx context.Context, sessionID string, f domain.Frame) error {

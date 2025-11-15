@@ -57,6 +57,10 @@ func (m *mockSessionRepo) ClearAllSessions(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockSessionRepo) DeleteImportedSessions(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockSessionRepo) AddSpoolFile(ctx context.Context, sessionID string, path string) {}
 
 type mockFrameRepo struct {

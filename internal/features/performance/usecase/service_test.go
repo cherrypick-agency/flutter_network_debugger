@@ -624,6 +624,10 @@ func (m *mockSessionRepoForPerformance) ClearAllSessions(ctx context.Context) er
 	return nil
 }
 
+func (m *mockSessionRepoForPerformance) DeleteImportedSessions(ctx context.Context) error {
+	return nil
+}
+
 type mockFrameRepoForPerformance struct{}
 
 func (m *mockFrameRepoForPerformance) AppendFrame(ctx context.Context, sessionID string, f domain.Frame) error {
