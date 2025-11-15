@@ -526,6 +526,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.2"
+  hex_viewer:
+    dependency: "direct main"
+    description:
+      path: "../dart_packages/hex_viewer"
+      relative: true
+    source: path
+    version: "0.1.0"
   highlight:
     dependency: "direct main"
     description:

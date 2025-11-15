@@ -33,14 +33,12 @@ class FramesTimeline extends StatelessWidget {
         tsList.add(DateTime.parse(tsStr));
       } catch (_) {}
     }
-    DateTime minTs =
-        tsList.isEmpty
-            ? DateTime.now().subtract(const Duration(seconds: 1))
-            : tsList.reduce((a, b) => a.isBefore(b) ? a : b);
-    DateTime maxTs =
-        tsList.isEmpty
-            ? DateTime.now().add(const Duration(seconds: 1))
-            : tsList.reduce((a, b) => a.isAfter(b) ? a : b);
+    DateTime minTs = tsList.isEmpty
+        ? DateTime.now().subtract(const Duration(seconds: 1))
+        : tsList.reduce((a, b) => a.isBefore(b) ? a : b);
+    DateTime maxTs = tsList.isEmpty
+        ? DateTime.now().add(const Duration(seconds: 1))
+        : tsList.reduce((a, b) => a.isAfter(b) ? a : b);
     if (!maxTs.isAfter(minTs)) {
       maxTs = minTs.add(const Duration(seconds: 2));
     }
@@ -165,7 +163,10 @@ class _InteractiveLayerState extends State<_InteractiveLayer> {
       final dx = (x - pos.dx).abs();
       if (dx < bestDist) {
         bestDist = dx;
-        bestId = (f['id'] ?? '${ts.toIso8601String()}/$i').toString();
+        // Use composite key format: id|dir|ts for proper frame identification
+        final id = (f['id'] ?? '').toString();
+        final dir = (f['direction'] ?? '').toString();
+        bestId = '$id|$dir|$tsStr';
         bestFrame = f;
       }
     }
@@ -198,10 +199,9 @@ class _InteractiveLayerState extends State<_InteractiveLayer> {
                   (c.maxHeight - widget.padding.vertical) / 4,
                 );
                 final dir = (_hoverFrame!['direction'] ?? '').toString();
-                final y =
-                    dir == 'upstream->client'
-                        ? (centerY - laneOffset)
-                        : (centerY + laneOffset);
+                final y = dir == 'upstream->client'
+                    ? (centerY - laneOffset)
+                    : (centerY + laneOffset);
                 _tooltipAnchor = Offset(
                   e.localPosition.dx,
                   (y - 12).clamp(0.0, c.maxHeight),
@@ -247,10 +247,9 @@ class _InteractiveLayerState extends State<_InteractiveLayer> {
                   _brushEndX != null) {
                 final start = _xToTs(_brushStartX!, c.maxWidth);
                 final end = _xToTs(_brushEndX!, c.maxWidth);
-                final range =
-                    start.isBefore(end)
-                        ? DateTimeRange(start: start, end: end)
-                        : DateTimeRange(start: end, end: start);
+                final range = start.isBefore(end)
+                    ? DateTimeRange(start: start, end: end)
+                    : DateTimeRange(start: end, end: start);
                 widget.onBrushChanged!(range);
               }
             },

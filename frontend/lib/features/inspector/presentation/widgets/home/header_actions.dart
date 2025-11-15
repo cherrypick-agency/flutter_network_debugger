@@ -27,6 +27,7 @@ class HeaderActions extends StatelessWidget {
     this.onOpenScripts,
     this.onOpenBreakpoints,
     this.onOpenMapping,
+    this.onOpenExportImport,
     // this.onOpenPerformance,
   });
 
@@ -46,6 +47,7 @@ class HeaderActions extends StatelessWidget {
   final VoidCallback? onOpenScripts;
   final VoidCallback? onOpenBreakpoints;
   final VoidCallback? onOpenMapping;
+  final VoidCallback? onOpenExportImport;
   // final VoidCallback? onOpenPerformance;
 
   @override
@@ -198,6 +200,13 @@ class HeaderActions extends StatelessWidget {
         //     tooltip: 'Performance Insights',
         //     icon: const Icon(Icons.analytics),
         //   ),
+        // Export/Import HAR
+        if (onOpenExportImport != null)
+          IconButton(
+            onPressed: onOpenExportImport,
+            tooltip: 'Export / Import HAR',
+            icon: const Icon(Icons.import_export),
+          ),
         if (onOpenIntegrations != null)
           IconButton(
             onPressed: onOpenIntegrations,

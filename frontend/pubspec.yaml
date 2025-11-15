@@ -72,6 +72,8 @@ dependencies:
     path: ../dart_packages/http_debugger
   socket_io_debugger:
     path: ../dart_packages/socket_io_debugger
+  hex_viewer:
+    path: ../dart_packages/hex_viewer
   flutter_markdown: ^0.7.4+1
   flutter_monaco_crossplatform: ^1.0.2
   # Scripts feature dependencies from pub.dev (all packages fixed!)

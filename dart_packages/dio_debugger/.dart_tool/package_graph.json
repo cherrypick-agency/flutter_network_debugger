@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "dio_debugger",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "dependencies": [
         "dio"
       ],

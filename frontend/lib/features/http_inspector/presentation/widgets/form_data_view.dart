@@ -69,21 +69,19 @@ class FormDataView extends StatelessWidget {
         if (fields.isNotEmpty) ...[
           _SectionTitle(text: 'Fields'),
           const SizedBox(height: 4),
-          ...fields
-              .map(
-                (e) => _FieldRow(
-                  name: e['name']?.toString() ?? '',
-                  value: (e['value'] ?? e['valuePreview'] ?? '').toString(),
-                  truncated: (e['truncated'] == true),
-                ),
-              )
-              .toList(),
+          ...fields.map(
+            (e) => _FieldRow(
+              name: e['name']?.toString() ?? '',
+              value: (e['value'] ?? e['valuePreview'] ?? '').toString(),
+              truncated: (e['truncated'] == true),
+            ),
+          ),
           const SizedBox(height: 8),
         ],
         if (files.isNotEmpty) ...[
           _SectionTitle(text: 'Files'),
           const SizedBox(height: 4),
-          ...files.map((e) => _FileRow(item: e)).toList(),
+          ...files.map((e) => _FileRow(item: e)),
           const SizedBox(height: 8),
         ],
         Align(
@@ -167,10 +165,9 @@ class _FileRow extends StatelessWidget {
     final ct = (item['contentType'] ?? '').toString();
     final truncated = (item['truncated'] == true);
     final valuePreview = (item['valuePreview'] ?? '').toString();
-    final previewSize =
-        (item['previewSize'] is num)
-            ? (item['previewSize'] as num).toInt()
-            : null;
+    final previewSize = (item['previewSize'] is num)
+        ? (item['previewSize'] as num).toInt()
+        : null;
     final isImage = ct.toLowerCase().startsWith('image/');
     final isTextish =
         ct.isEmpty ||
@@ -191,10 +188,7 @@ class _FileRow extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: SelectableText(
-                  '$name: $filename${ct.isNotEmpty ? ' ($ct)' : ''}' +
-                      (previewSize != null
-                          ? ' · ${_fmtSize(previewSize)}'
-                          : ''),
+                  '$name: $filename${ct.isNotEmpty ? ' ($ct)' : ''}${previewSize != null ? ' · ${_fmtSize(previewSize)}' : ''}',
                   style: mono,
                 ),
               ),
@@ -220,7 +214,7 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(text, style: Theme.of(context).textTheme.labelSmall),
@@ -236,6 +230,6 @@ String _fmtSize(int bytes) {
     size /= 1024;
     unit++;
   }
-  if (unit == 0) return '${bytes} ${units[unit]}';
+  if (unit == 0) return '$bytes ${units[unit]}';
   return '${size.toStringAsFixed(1)} ${units[unit]}';
 }

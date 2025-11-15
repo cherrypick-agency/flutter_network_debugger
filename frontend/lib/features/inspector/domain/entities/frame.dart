@@ -8,6 +8,7 @@ class Frame extends Equatable {
     required this.opcode,
     required this.size,
     required this.preview,
+    this.bodyFile,
   });
   final String id;
   final DateTime ts;
@@ -15,6 +16,15 @@ class Frame extends Equatable {
   final String opcode;
   final int size;
   final String preview;
+  final String? bodyFile;
   @override
-  List<Object?> get props => [id, ts, direction, opcode, size, preview];
+  List<Object?> get props => [
+    id,
+    ts,
+    direction,
+    opcode,
+    size,
+    preview,
+    bodyFile,
+  ];
 }

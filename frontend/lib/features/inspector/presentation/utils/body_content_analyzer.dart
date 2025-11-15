@@ -77,8 +77,9 @@ class BodyContentAnalyzer {
       }
     }
 
-    // Always offer Raw mode as fallback
+    // Always offer Raw and Hex modes as fallback
     availableModes.add(BodyViewMode.raw);
+    availableModes.add(BodyViewMode.hex);
 
     // If Pretty mode is available and no primary mode, use it
     if (primaryMode == null && availableModes.contains(BodyViewMode.pretty)) {
@@ -94,14 +95,12 @@ class BodyContentAnalyzer {
       availableModes: availableModes,
       defaultMode: primaryMode,
       detection: primaryDetection,
-      jwtData:
-          primaryMode == BodyViewMode.jwtDecoded
-              ? _jwtDetector.parse(content)
-              : null,
-      base64Data:
-          primaryMode == BodyViewMode.base64Decoded
-              ? _base64Detector.decode(content)
-              : null,
+      jwtData: primaryMode == BodyViewMode.jwtDecoded
+          ? _jwtDetector.parse(content)
+          : null,
+      base64Data: primaryMode == BodyViewMode.base64Decoded
+          ? _base64Detector.decode(content)
+          : null,
     );
   }
 }

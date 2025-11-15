@@ -45,7 +45,7 @@ Suitable for local development and test environments. Has crossplatform interfac
 - grouping by domain/route
 - Filters: method, status, MIME, minimum duration, by headers...
 - Convenient search with highlighting
-- HTTP details: headers (with sensitive data masking), body (pretty/JSON tree), TTFB/Total
+- HTTP details: headers (with sensitive data masking), body (pretty/JSON tree/HEX), TTFB/Total...
 - CORS/Cache hints, cookies and TLS summary
 - WebSocket details: events/frames, pings/pongs, payload preview, json highligh
 - HAR/Curl export

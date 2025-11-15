@@ -1,0 +1,18 @@
+# Build artifacts
+build/
+.dart_tool/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Package config
+.packages
+pubspec.lock
+
+# Test coverage
+coverage/
+
+# macOS
+.DS_Store

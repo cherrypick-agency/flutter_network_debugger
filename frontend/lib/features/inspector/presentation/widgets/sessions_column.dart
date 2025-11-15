@@ -7,6 +7,8 @@ import '../../application/stores/home_ui_store.dart';
 import 'package:provider/provider.dart';
 import '../../application/stores/aggregate_store.dart';
 import '../../domain/entities/session.dart';
+import '../../../../widgets/highlighted_url_widget.dart';
+import '../../../../widgets/http_method_chip.dart';
 
 class SessionsColumn extends StatefulWidget {
   const SessionsColumn({
@@ -387,13 +389,12 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                   final mark = Theme.of(
                                     context,
                                   ).colorScheme.tertiary;
-                                  final child = _buildHighlightedUrl(
-                                    context,
-                                    _formatDisplayUrl(
-                                      s.target as String,
-                                      suppressHost: commonHost,
-                                    ),
-                                    widget.sessionSearchCtrl.text,
+                                  final child = HighlightedUrlWidget(
+                                    url: s.target as String,
+                                    searchQuery: widget.sessionSearchCtrl.text,
+                                    suppressHost: commonHost,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
                                   );
                                   if (!warn) return child;
                                   return Container(
@@ -458,11 +459,11 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                   if (!isWs && method.isNotEmpty)
                                     _chip(
                                       method.toUpperCase(),
-                                      backgroundColor: _methodBg(
+                                      backgroundColor: getHttpMethodBgColor(
                                         context,
                                         method,
                                       ),
-                                      foregroundColor: _methodFg(
+                                      foregroundColor: getHttpMethodFgColor(
                                         context,
                                         method,
                                       ),
@@ -594,87 +595,6 @@ class _SessionsColumnState extends State<SessionsColumn> {
   }
 
   // ===== helpers (UI formatting) =====
-  Widget _buildHighlightedUrl(BuildContext context, String text, String query) {
-    final baseStyle =
-        Theme.of(
-          context,
-        ).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace') ??
-        const TextStyle(fontFamily: 'monospace');
-    final q = query.trim();
-    if (q.isEmpty) {
-      return Text(
-        text,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: baseStyle,
-      );
-    }
-    final String src = text;
-    final String srcLower = src.toLowerCase();
-    final String qLower = q.toLowerCase();
-    int start = 0;
-    final spans = <InlineSpan>[];
-    // Yellow highlighting like in other searches
-    final Color hl = context.appColors.warning.withValues(alpha: 0.35);
-    while (true) {
-      final idx = srcLower.indexOf(qLower, start);
-      if (idx < 0) {
-        if (start < src.length) {
-          spans.add(TextSpan(text: src.substring(start), style: baseStyle));
-        }
-        break;
-      }
-      if (idx > start) {
-        spans.add(TextSpan(text: src.substring(start, idx), style: baseStyle));
-      }
-      spans.add(
-        TextSpan(
-          text: src.substring(idx, idx + q.length),
-          style: baseStyle.copyWith(backgroundColor: hl),
-        ),
-      );
-      start = idx + q.length;
-    }
-    return RichText(
-      text: TextSpan(children: spans),
-      maxLines: 3,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
-  // Компактное представление URL для списка: при необходимости скрываем домен
-  // и аккуратно восстанавливаем path + query без двойного кодирования типа "%3F".
-  String _formatDisplayUrl(String raw, {String? suppressHost}) {
-    try {
-      final u = Uri.parse(raw);
-      // Если у всех элементов один и тот же домен — скрываем схему/домен/порт
-      if (suppressHost != null &&
-          suppressHost.isNotEmpty &&
-          u.host == suppressHost) {
-        final String path = u.path.startsWith('/')
-            ? u.path.substring(1)
-            : u.path;
-        final String q = u.query.isNotEmpty ? '?${u.query}' : '';
-        final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
-        return '/$path$q$frag';
-      }
-      // Иначе — оставляем как есть, но нормализуем двойное кодирование
-      // (например, если пришло messages?%3Flimit=20, восстановим как messages?limit=20).
-      // Для этого собираем строку из разобранных компонентов.
-      final String auth = u.hasAuthority
-          ? '${u.host}${u.hasPort ? ':${u.port}' : ''}'
-          : '';
-      final String base = u.scheme.isNotEmpty ? '${u.scheme}://$auth' : auth;
-      final String q = u.query.isNotEmpty ? '?${u.query}' : '';
-      final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
-      return '$base${u.path}$q$frag';
-    } catch (_) {
-      // На всякий случай возвращаем исходную строку
-      // (например, если это невалидный URL).
-      return raw;
-    }
-  }
-
   Widget _chip(String text, {Color? backgroundColor, Color? foregroundColor}) {
     final bg = backgroundColor ?? Theme.of(context).colorScheme.surfaceVariant;
     final fg =
@@ -745,26 +665,6 @@ class _SessionsColumnState extends State<SessionsColumn> {
     return cs.error;
   }
 
-  Color _methodBg(BuildContext context, String method) {
-    final m = method.toUpperCase();
-    final cs = Theme.of(context).colorScheme;
-    if (m == 'GET') return Colors.purple.withOpacity(0.12);
-    if (m == 'POST') return cs.primary.withOpacity(0.12);
-    if (m == 'PUT' || m == 'PATCH') return cs.tertiary.withOpacity(0.12);
-    if (m == 'DELETE') return cs.error.withOpacity(0.12);
-    return cs.surfaceVariant;
-  }
-
-  Color _methodFg(BuildContext context, String method) {
-    final m = method.toUpperCase();
-    final cs = Theme.of(context).colorScheme;
-    if (m == 'GET') return Colors.purple;
-    if (m == 'POST') return cs.primary;
-    if (m == 'PUT' || m == 'PATCH') return cs.tertiary;
-    if (m == 'DELETE') return cs.error;
-    return cs.onSurfaceVariant;
-  }
-
   bool _shouldShowProcessName(String? name) {
     final n = (name ?? '').trim().toLowerCase();
     if (n.isEmpty) return false;
@@ -787,14 +687,19 @@ class _SessionsColumnState extends State<SessionsColumn> {
   String _formatTimeHMSSafe(DateTime? dt) {
     if (dt == null) return '';
 
-    // Проверяем, сегодняшняя ли дата
+    // Конвертируем UTC в локальное время
+    final localDt = dt.toLocal();
+
+    // Проверяем, сегодняшняя ли дата (по локальному времени)
     final now = DateTime.now();
     final isToday =
-        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+        localDt.year == now.year &&
+        localDt.month == now.month &&
+        localDt.day == now.day;
 
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
+    final h = localDt.hour.toString().padLeft(2, '0');
+    final m = localDt.minute.toString().padLeft(2, '0');
+    final s = localDt.second.toString().padLeft(2, '0');
     final time = '$h:$m:$s';
 
     if (isToday) {
@@ -815,8 +720,8 @@ class _SessionsColumnState extends State<SessionsColumn> {
         'Nov',
         'Dec',
       ];
-      final monthStr = months[dt.month - 1];
-      final day = dt.day;
+      final monthStr = months[localDt.month - 1];
+      final day = localDt.day;
       return '$monthStr $day $time';
     }
   }

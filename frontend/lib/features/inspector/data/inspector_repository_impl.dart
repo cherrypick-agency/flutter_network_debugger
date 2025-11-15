@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:app_http_client/application/app_http_client.dart';
 import '../../../core/di/di.dart';
 import '../../../core/network/error_utils.dart';
@@ -127,6 +128,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
               opcode: m['opcode'] as String,
               size: (m['size'] as num).toInt(),
               preview: m['preview'] as String,
+              bodyFile: m['bodyFile'] as String?,
             ),
           )
           .toList(growable: false);
@@ -225,6 +227,76 @@ class InspectorRepositoryImpl implements InspectorRepository {
       return ProcessIcon(format: format, data: dataBase64);
     } catch (e) {
       return null;
+    }
+  }
+
+  // ============================================================================
+  // HAR EXPORT/IMPORT
+  // ============================================================================
+
+  /// Export sessions to HAR format
+  /// Returns the URL to download the HAR file
+  Future<String> exportHAR({
+    List<String>? sessionIds,
+    bool includeBodies = true,
+    bool includeSensitive = false,
+    bool minify = false,
+  }) async {
+    try {
+      // Build URL with query parameters for GET request
+      final queryParams = <String, String>{
+        'includeBodies': includeBodies.toString(),
+        'includeSensitive': includeSensitive.toString(),
+        'minify': minify.toString(),
+        if (sessionIds != null && sessionIds.isNotEmpty)
+          'sessionIds': sessionIds.join(','),
+      };
+
+      // Return URL for direct download
+      // Frontend will open this URL to trigger download
+      final baseUrl = _api.defaultHost;
+      final query = Uri(queryParameters: queryParams).query;
+      return '$baseUrl/_api/v1/export/har?$query';
+    } catch (e) {
+      throw resolveErrorMessage(e);
+    }
+  }
+
+  /// Import HAR file
+  ///
+  /// Parses the HAR JSON string and sends it to the backend.
+  /// Validation is performed in the store before calling this method.
+  /// Returns statistics about the import operation.
+  Future<Map<String, dynamic>> importHAR(
+    String harJson, {
+    required String mode,
+  }) async {
+    try {
+      // Parse JSON string to object
+      // Validation already done in export_import_store before calling this method
+      final harObject = jsonDecode(harJson);
+
+      // Send parsed object to backend with mode parameter
+      final response = await _api.post(
+        host: null,
+        path: '/_api/v1/import/har?mode=$mode',
+        body: harObject,
+      );
+
+      final data = (response.data is Map<String, dynamic>)
+          ? (response.data as Map<String, dynamic>)
+          : {};
+
+      return {
+        'imported': data['imported'] ?? 0,
+        'failed': data['failed'] ?? 0,
+        'total': data['total'] ?? 0,
+        'sessionIds': (data['sessionIds'] as List?)?.cast<String>() ?? [],
+      };
+    } on FormatException catch (e) {
+      throw Exception('Invalid JSON format: ${e.message}');
+    } catch (e) {
+      throw resolveErrorMessage(e);
     }
   }
 }

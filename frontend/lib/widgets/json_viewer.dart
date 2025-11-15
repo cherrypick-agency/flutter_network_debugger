@@ -6,6 +6,7 @@ import '../core/hotkeys/hotkeys_service.dart';
 import 'common_search_bar.dart';
 import '../core/di/di.dart';
 import '../theme/context_ext.dart';
+import 'json_search_controller.dart';
 
 /// Универсальный JSON-виджет поверх json_tree_viewer
 class JsonViewer extends StatefulWidget {
@@ -14,10 +15,25 @@ class JsonViewer extends StatefulWidget {
     required this.jsonString,
     this.forceTree = false,
     this.treeHeight = 280,
+    this.unlimitedHeight = false,
+    this.showSearchAndCopyButtons = true,
+    this.searchConfig,
+    this.externalSearchController,
   });
   final String jsonString;
   final bool forceTree;
   final double treeHeight;
+  final bool unlimitedHeight;
+  final bool showSearchAndCopyButtons;
+
+  /// External search configuration (when search is managed by parent widget)
+  /// If provided, internal search state is ignored
+  final JsonSearchConfig? searchConfig;
+
+  /// External search controller (alternative to searchConfig)
+  /// When provided, JsonViewer will use this controller's state for search
+  /// and will NOT render search/copy buttons (parent widget should render them)
+  final JsonSearchController? externalSearchController;
 
   @override
   State<JsonViewer> createState() => _JsonViewerState();
@@ -35,22 +51,55 @@ class _JsonViewerState extends State<JsonViewer> {
   List<GlobalKey> _matchKeys = const [];
 
   @override
+  void initState() {
+    super.initState();
+    // Subscribe to external controller if provided
+    widget.externalSearchController?.addListener(_onExternalControllerChange);
+  }
+
+  @override
+  void didUpdateWidget(JsonViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update subscription if controller changed
+    if (oldWidget.externalSearchController != widget.externalSearchController) {
+      oldWidget.externalSearchController?.removeListener(
+        _onExternalControllerChange,
+      );
+      widget.externalSearchController?.addListener(_onExternalControllerChange);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.externalSearchController?.removeListener(
+      _onExternalControllerChange,
+    );
     _searchCtrl.dispose();
     _searchFocusNode.dispose();
     _innerScrollCtrl.dispose();
     super.dispose();
   }
 
+  void _onExternalControllerChange() {
+    // When external controller changes, rebuild to update searchConfig
+    setState(() {});
+  }
+
   void _handleMatchesRebuilt(int count, List<GlobalKey> keys) {
-    setState(() {
-      _matchKeys = keys;
-      if (_matchKeys.isEmpty) {
-        _focusedIndex = 0;
-      } else if (_focusedIndex >= _matchKeys.length) {
-        _focusedIndex = 0;
-      }
-    });
+    // Update external controller if provided
+    if (widget.externalSearchController != null) {
+      widget.externalSearchController!.updateMatchKeys(keys);
+    } else {
+      // Use internal state
+      setState(() {
+        _matchKeys = keys;
+        if (_matchKeys.isEmpty) {
+          _focusedIndex = 0;
+        } else if (_focusedIndex >= _matchKeys.length) {
+          _focusedIndex = 0;
+        }
+      });
+    }
   }
 
   void _gotoNext() {
@@ -118,73 +167,116 @@ class _JsonViewerState extends State<JsonViewer> {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (widget.forceTree) {
-          final searchCfgTree = JsonSearchConfig(
-            query: _searchCtrl.text.trim(),
-            matchCase: _matchCase,
-            wholeWord: _wholeWord,
-            useRegex: _useRegex,
-            focusedIndex: _focusedIndex,
-            onRebuilt: _handleMatchesRebuilt,
-          );
+          // Priority: searchConfig > externalSearchController > internal state
+          final searchCfgTree =
+              widget.searchConfig ??
+              (widget.externalSearchController != null
+                  ? JsonSearchConfig(
+                      query: widget.externalSearchController!.searchText.trim(),
+                      matchCase: widget.externalSearchController!.matchCase,
+                      wholeWord: widget.externalSearchController!.wholeWord,
+                      useRegex: widget.externalSearchController!.useRegex,
+                      focusedIndex:
+                          widget.externalSearchController!.focusedIndex,
+                      onRebuilt: _handleMatchesRebuilt,
+                    )
+                  : JsonSearchConfig(
+                      query: _searchCtrl.text.trim(),
+                      matchCase: _matchCase,
+                      wholeWord: _wholeWord,
+                      useRegex: _useRegex,
+                      focusedIndex: _focusedIndex,
+                      onRebuilt: _handleMatchesRebuilt,
+                    ));
           final content = JsonTreeRich(data: data, search: searchCfgTree);
+
+          // Fullscreen mode - no internal scroll, unlimited height
+          if (widget.unlimitedHeight) {
+            // Don't show buttons if external controller is provided (parent will render them)
+            if (widget.showSearchAndCopyButtons &&
+                widget.externalSearchController == null) {
+              return Stack(
+                children: [
+                  content,
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _showSearch
+                        ? _buildSearchBar(context)
+                        : _buildSearchButton(context),
+                  ),
+                ],
+              );
+            }
+            return content;
+          }
+
+          // Constrained height with internal scroll
           if (!constraints.hasBoundedHeight) {
             return ConstrainedBox(
               constraints: BoxConstraints(maxHeight: widget.treeHeight),
-              child: Stack(
-                children: [
-                  // Высота подстраивается под контент до maxHeight,
-                  // без обязательного заполнения по высоте
-                  SingleChildScrollView(
-                    controller: _innerScrollCtrl,
-                    child: content,
-                  ),
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    right: 6,
-                    child: Align(
-                      alignment: Alignment.topRight,
-                      child: _showSearch
-                          ? _buildSearchBar(context)
-                          : _buildSearchButton(context),
-                    ),
-                  ),
-                ],
+              child: SingleChildScrollView(
+                controller: _innerScrollCtrl,
+                child: content,
               ),
             );
           }
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: SingleChildScrollView(
-                  controller: _innerScrollCtrl,
-                  child: content,
-                ),
-              ),
-              Positioned(
-                top: 6,
-                left: 6,
-                right: 6,
-                child: Align(
-                  alignment: Alignment.topRight,
+
+          // Bounded height with internal scroll
+          return SingleChildScrollView(
+            controller: _innerScrollCtrl,
+            child: content,
+          );
+        }
+
+        // Priority: searchConfig > externalSearchController > internal state
+        final searchCfg =
+            widget.searchConfig ??
+            (widget.externalSearchController != null
+                ? JsonSearchConfig(
+                    query: widget.externalSearchController!.searchText.trim(),
+                    matchCase: widget.externalSearchController!.matchCase,
+                    wholeWord: widget.externalSearchController!.wholeWord,
+                    useRegex: widget.externalSearchController!.useRegex,
+                    focusedIndex: widget.externalSearchController!.focusedIndex,
+                    onRebuilt: _handleMatchesRebuilt,
+                  )
+                : JsonSearchConfig(
+                    query: _showSearch ? _searchCtrl.text.trim() : '',
+                    matchCase: _matchCase,
+                    wholeWord: _wholeWord,
+                    useRegex: _useRegex,
+                    focusedIndex: _focusedIndex,
+                    onRebuilt: _handleMatchesRebuilt,
+                  ));
+
+        // Fullscreen mode - no internal scroll, unlimited height
+        if (widget.unlimitedHeight) {
+          final content = SizedBox(
+            width: double.infinity,
+            child: JsonPrettyRich(data: data, search: searchCfg),
+          );
+
+          // Don't show buttons if external controller is provided (parent will render them)
+          if (widget.showSearchAndCopyButtons &&
+              widget.externalSearchController == null) {
+            return Stack(
+              children: [
+                content,
+                Positioned(
+                  top: 8,
+                  right: 8,
                   child: _showSearch
                       ? _buildSearchBar(context)
                       : _buildSearchButton(context),
                 ),
-              ),
-            ],
-          );
+              ],
+            );
+          }
+          return content;
         }
 
-        final searchCfg = JsonSearchConfig(
-          query: _showSearch ? _searchCtrl.text.trim() : '',
-          matchCase: _matchCase,
-          wholeWord: _wholeWord,
-          useRegex: _useRegex,
-          focusedIndex: _focusedIndex,
-          onRebuilt: _handleMatchesRebuilt,
-        );
-
+        // Constrained height with internal scroll
         if (!constraints.hasBoundedHeight) {
           // Внутренний скролл и закрепленная сверху панель поиска, контейнер сжимается до контента
           return ConstrainedBox(
@@ -198,44 +290,30 @@ class _JsonViewerState extends State<JsonViewer> {
                     child: JsonPrettyRich(data: data, search: searchCfg),
                   ),
                 ),
-                Positioned(
-                  top: 6,
-                  left: 6,
-                  right: 6,
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    child: _showSearch
-                        ? _buildSearchBar(context)
-                        : _buildSearchButton(context),
+                if (widget.showSearchAndCopyButtons)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    right: 6,
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: _showSearch
+                          ? _buildSearchBar(context)
+                          : _buildSearchButton(context),
+                    ),
                   ),
-                ),
               ],
             ),
           );
         }
-        // Обычный режим с закрепленной панелью по центру сверху
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: SingleChildScrollView(
-                controller: _innerScrollCtrl,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: JsonPrettyRich(data: data, search: searchCfg),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 6,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: _showSearch
-                    ? _buildSearchBar(context)
-                    : _buildSearchButton(context),
-              ),
-            ),
-          ],
+
+        // Bounded height with internal scroll (обычный режим)
+        return SingleChildScrollView(
+          controller: _innerScrollCtrl,
+          child: SizedBox(
+            width: double.infinity,
+            child: JsonPrettyRich(data: data, search: searchCfg),
+          ),
         );
       },
     );

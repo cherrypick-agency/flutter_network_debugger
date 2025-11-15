@@ -19,6 +19,9 @@ enum BodyViewMode {
 
   /// Raw text without formatting
   raw,
+
+  /// Hexadecimal viewer
+  hex,
 }
 
 /// Controller for managing body view state (SOLID: Single Responsibility)
@@ -75,6 +78,8 @@ class BodyViewController {
         return 'JWT';
       case BodyViewMode.raw:
         return 'Raw';
+      case BodyViewMode.hex:
+        return 'Hex';
     }
   }
 
@@ -92,6 +97,8 @@ class BodyViewController {
       case BodyViewMode.jwtDecoded:
         return null;
       case BodyViewMode.raw:
+        return null;
+      case BodyViewMode.hex:
         return null;
     }
   }

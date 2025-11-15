@@ -46,6 +46,7 @@ import 'features/compiler_management/presentation/stores/installation_progress_s
 import 'features/common/notifications/notifications_overlay.dart';
 import 'features/breakpoints/presentation/widgets/breakpoints_dialog.dart';
 import 'features/mapping/presentation/widgets/mapping_dialog.dart';
+import 'features/export_import/presentation/widgets/export_import_dialog.dart';
 import 'features/performance/presentation/pages/performance_page.dart';
 
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
@@ -769,6 +770,19 @@ class _MyHomePageState extends State<MyHomePage> {
                                       pageBuilder: (ctx, _, __) {
                                         return const MappingDialog();
                                       },
+                                    );
+                                  },
+                                  onOpenExportImport: () async {
+                                    final sessionsStore = sl<SessionsStore>();
+                                    await showExportImportDialog(
+                                      context,
+                                      visibleSessionIds: sessionsStore.items
+                                          .map((s) => s.id)
+                                          .toList(),
+                                      visibleSessionsCount:
+                                          sessionsStore.items.length,
+                                      totalSessionsCount:
+                                          sessionsStore.items.length,
                                     );
                                   },
                                   // onOpenPerformance: () {

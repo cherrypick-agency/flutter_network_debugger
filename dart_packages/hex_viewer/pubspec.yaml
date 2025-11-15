@@ -1,0 +1,23 @@
+name: hex_viewer
+description: "Zero-dependency hexadecimal viewer widget for Flutter with selection, copy, and byte grouping support."
+version: 0.1.0
+repository: https://github.com/cherrypick-agency/flutter_network_debugger
+homepage: https://github.com/cherrypick-agency/flutter_network_debugger
+issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues
+topics:
+  - hex
+  - viewer
+  - binary
+  - debug
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

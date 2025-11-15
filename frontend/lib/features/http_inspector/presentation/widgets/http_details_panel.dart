@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,22 +6,57 @@ import 'package:provider/provider.dart';
 import 'package:app_http_client/application/app_http_client.dart';
 import 'package:highlight_selectable/highlight_selectable.dart';
 import 'package:highlight_selectable/theme_map.dart';
+import 'package:http/http.dart' as http;
 import '../../../inspector/presentation/utils/graphql_detect.dart';
 import '../../../inspector/presentation/utils/graphql_formatter.dart';
 import '../../../inspector/presentation/utils/body_view_mode.dart';
 import '../../../inspector/presentation/utils/body_content_analyzer.dart';
 import '../../../inspector/presentation/widgets/jwt_viewer.dart';
+import '../../../inspector/presentation/widgets/body_fullscreen_dialog.dart';
 import '../../../inspector/application/stores/session_details_store.dart';
 import '../../../../core/network/error_utils.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../widgets/json_viewer.dart';
+import '../../../../widgets/json_search_controller.dart';
 import '../../../../core/di/di.dart';
 import '../../../../widgets/html_preview.dart';
-import 'form_data_view.dart';
-import 'highlighted_url_text.dart';
+import '../../../../widgets/highlighted_url_widget.dart';
+import '../../../../widgets/http_method_chip.dart';
 import '../../../tags/presentation/widgets/tags_editor.dart';
+import '../../../inspector/presentation/widgets/hex_body_renderer.dart';
+import 'request_action_buttons.dart';
+import 'request_body_tab.dart';
+import 'request_info_tab.dart';
+import 'response_body_tab.dart';
+import 'response_info_tab.dart';
 
-enum CurlExportMode { compact, multiline, withOptions }
+// Callback type aliases for clean interfaces
+typedef BodyAnalyzer =
+    ContentAnalysisResult Function(String body, String? contentType);
+
+typedef BodyViewChipsBuilder =
+    Widget Function({
+      required String body,
+      required BodyViewController controller,
+      required ContentAnalysisResult analysis,
+      String? title,
+      String? contentType,
+      String? baseUrl,
+      String? frameId,
+      int? bodySize,
+    });
+
+typedef BodyContentSliverRenderer =
+    List<Widget> Function({
+      required String body,
+      required BodyViewController controller,
+      required ContentAnalysisResult analysis,
+      required String? contentType,
+      required bool isRequest,
+      String? baseUrl,
+      String? frameId,
+      int? bodySize,
+    });
 
 class HttpDetailsPanel extends StatefulWidget {
   const HttpDetailsPanel({
@@ -37,17 +73,135 @@ class HttpDetailsPanel extends StatefulWidget {
   State<HttpDetailsPanel> createState() => _HttpDetailsPanelState();
 }
 
-class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
+class _HttpDetailsPanelState extends State<HttpDetailsPanel>
+    with TickerProviderStateMixin {
   // View controllers for request and response bodies
   final _reqViewController = BodyViewController();
   final _respViewController = BodyViewController();
   final _contentAnalyzer = BodyContentAnalyzer();
+
+  // Tab controllers for Request and Response sections
+  late TabController _reqTabController;
+  late TabController _respTabController;
 
   bool _loadingFetch = false;
   int? _respTtfbMs;
   int? _respTotalMs;
   String? _bodyOverride;
   String? _highlightThemeKey;
+
+  // Full body cache (panel-level) - loaded once and shared across all view modes
+  String? _fullReqBody;
+  String? _fullRespBody;
+  bool _reqBodyLoading = false;
+  bool _respBodyLoading = false;
+  String? _reqBodyError;
+  String? _respBodyError;
+
+  // Cache for expensive content analysis (to avoid re-analyzing on every rebuild)
+  String? _lastReqBody;
+  String? _lastReqContentType;
+  ContentAnalysisResult? _reqAnalysis;
+  String? _lastRespBody;
+  String? _lastRespContentType;
+  ContentAnalysisResult? _respAnalysis;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with 2 tabs (will be recreated if needed)
+    _reqTabController = TabController(length: 2, vsync: this);
+    _respTabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _reqTabController.dispose();
+    _respTabController.dispose();
+    super.dispose();
+  }
+
+  /// Recreate tab controller if number of tabs changed
+  void _ensureTabController({
+    required TabController controller,
+    required int newLength,
+    required bool isRequest,
+  }) {
+    if (controller.length != newLength) {
+      controller.dispose();
+      final newController = TabController(length: newLength, vsync: this);
+      if (isRequest) {
+        _reqTabController = newController;
+      } else {
+        _respTabController = newController;
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(HttpDetailsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Reset cache if frames or sessionId changed (different HTTP request selected)
+    if (oldWidget.frames != widget.frames ||
+        oldWidget.sessionId != widget.sessionId) {
+      setState(() {
+        // Clear analysis cache
+        _lastReqBody = null;
+        _lastReqContentType = null;
+        _reqAnalysis = null;
+        _lastRespBody = null;
+        _lastRespContentType = null;
+        _respAnalysis = null;
+
+        // Clear full body cache and reset loading states
+        _fullReqBody = null;
+        _fullRespBody = null;
+        _reqBodyLoading = false;
+        _respBodyLoading = false;
+        _reqBodyError = null;
+        _respBodyError = null;
+      });
+
+      // Trigger loading for new frames (ONCE, not in build())
+      _triggerFullBodyLoadIfNeeded();
+    }
+  }
+
+  /// Trigger full body loading for request and response (called once on frame change)
+  void _triggerFullBodyLoadIfNeeded() {
+    // Extract request data
+    final req = _findByType(widget.frames, 'http_request');
+    final reqFrame = _findFrameByType(widget.frames, 'http_request');
+
+    if (req != null && reqFrame != null) {
+      final reqBody = (req['body'] ?? '').toString();
+      final reqFrameId = reqFrame['frame']?['id']?.toString();
+      final reqBodySize = reqFrame['frame']?['size'] as int?;
+      _loadFullBodyIfNeeded(
+        frameId: reqFrameId,
+        preview: reqBody,
+        bodySize: reqBodySize,
+        isRequest: true,
+      );
+    }
+
+    // Extract response data
+    final resp = _findByType(widget.frames, 'http_response');
+    final respFrame = _findFrameByType(widget.frames, 'http_response');
+
+    if (resp != null && respFrame != null) {
+      final respBody = (resp['body'] ?? '').toString();
+      final respFrameId = respFrame['frame']?['id']?.toString();
+      final respBodySize = respFrame['frame']?['size'] as int?;
+      _loadFullBodyIfNeeded(
+        frameId: respFrameId,
+        preview: respBody,
+        bodySize: respBodySize,
+        isRequest: false,
+      );
+    }
+  }
 
   Future<void> _openTagsDialog() async {
     final sid = widget.sessionId;
@@ -67,6 +221,164 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               child: const Text('Close'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// Load full body data from API if needed (truncated preview)
+  /// This is panel-level caching - loaded once and shared across all view modes for efficiency
+  Future<void> _loadFullBodyIfNeeded({
+    required String? frameId,
+    required String preview,
+    required int? bodySize,
+    required bool isRequest,
+  }) async {
+    final sessionId = widget.sessionId;
+    if (sessionId == null || frameId == null || bodySize == null) return;
+
+    // Check if full data is needed (preview is truncated)
+    // Compare bytes to bytes (not code units to bytes)
+    if (bodySize <= utf8.encode(preview).length) return;
+
+    // Check if already loaded or loading
+    if (isRequest) {
+      if (_fullReqBody != null || _reqBodyLoading) return;
+    } else {
+      if (_fullRespBody != null || _respBodyLoading) return;
+    }
+
+    if (!mounted) return;
+
+    // Start loading
+    setState(() {
+      if (isRequest) {
+        _reqBodyLoading = true;
+      } else {
+        _respBodyLoading = true;
+      }
+    });
+
+    try {
+      // Use http package for direct API call (similar to HexBodyRenderer)
+      final baseUrl = sl<AppHttpClient>().defaultHost;
+      final url = '$baseUrl/api/v1/sessions/$sessionId/frames/$frameId/body';
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw TimeoutException('Request timed out after 30 seconds');
+            },
+          );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final fullBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+        setState(() {
+          if (isRequest) {
+            _fullReqBody = fullBody;
+            _reqBodyLoading = false;
+            _reqBodyError = null; // Clear error on success
+            // Invalidate analysis cache to force re-analysis on full data
+            _lastReqBody = null;
+            _reqAnalysis = null;
+          } else {
+            _fullRespBody = fullBody;
+            _respBodyLoading = false;
+            _respBodyError = null; // Clear error on success
+            // Invalidate analysis cache to force re-analysis on full data
+            _lastRespBody = null;
+            _respAnalysis = null;
+          }
+        });
+      } else if (response.statusCode == 404) {
+        // Frame body not found
+        if (mounted) {
+          setState(() {
+            if (isRequest) {
+              _reqBodyLoading = false;
+              _reqBodyError = 'Frame body not found';
+            } else {
+              _respBodyLoading = false;
+              _respBodyError = 'Frame body not found';
+            }
+          });
+        }
+      } else if (response.statusCode == 413) {
+        // Body too large
+        if (mounted) {
+          setState(() {
+            if (isRequest) {
+              _reqBodyLoading = false;
+              _reqBodyError = 'Body too large (exceeds 100MB limit)';
+            } else {
+              _respBodyLoading = false;
+              _respBodyError = 'Body too large (exceeds 100MB limit)';
+            }
+          });
+        }
+      } else {
+        // Other HTTP errors
+        if (mounted) {
+          setState(() {
+            if (isRequest) {
+              _reqBodyLoading = false;
+              _reqBodyError = 'Failed to load: HTTP ${response.statusCode}';
+            } else {
+              _respBodyLoading = false;
+              _respBodyError = 'Failed to load: HTTP ${response.statusCode}';
+            }
+          });
+        }
+      }
+    } catch (e) {
+      // Log error for debugging
+      debugPrint(
+        'Failed to load full ${isRequest ? "request" : "response"} body: $e',
+      );
+
+      // Save error and stop loading
+      if (mounted) {
+        setState(() {
+          if (isRequest) {
+            _reqBodyLoading = false;
+            _reqBodyError = 'Network error: ${e.toString()}';
+          } else {
+            _respBodyLoading = false;
+            _respBodyError = 'Network error: ${e.toString()}';
+          }
+        });
+      }
+    }
+  }
+
+  void _openBodyFullScreen({
+    required String title,
+    required String body,
+    required ContentAnalysisResult analysis,
+    required BodyViewController controller,
+    String? contentType,
+    String? baseUrl,
+    String? frameId,
+    int? bodySize,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return BodyFullScreenDialog(
+          title: title,
+          body: body,
+          analysis: analysis,
+          initialMode: controller.current,
+          getHighlightTheme: _currentHlTheme,
+          detectLanguage: _detectLanguage,
+          contentType: contentType,
+          baseUrl: baseUrl,
+          sessionId: widget.sessionId,
+          frameId: frameId,
+          bodySize: bodySize,
         );
       },
     );
@@ -137,6 +449,44 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     return 'plaintext';
   }
 
+  /// Analyze request body with caching to avoid expensive re-analysis on rebuild
+  ContentAnalysisResult _analyzeRequestBody(String body, String? contentType) {
+    // Cache key based on body length and content type
+    // This automatically invalidates when full data loads (different length)
+    final cacheKey = '${body.length}:$contentType';
+    final lastCacheKey = _lastReqBody != null
+        ? '${_lastReqBody!.length}:$_lastReqContentType'
+        : null;
+
+    // Analyze if cache is empty OR if cache key changed
+    if (_reqAnalysis == null || cacheKey != lastCacheKey) {
+      _lastReqBody = body;
+      _lastReqContentType = contentType;
+      _reqAnalysis = _contentAnalyzer.analyze(body, contentType: contentType);
+      _reqViewController.setAvailableModes(_reqAnalysis!.availableModes);
+    }
+    return _reqAnalysis!;
+  }
+
+  /// Analyze response body with caching to avoid expensive re-analysis on rebuild
+  ContentAnalysisResult _analyzeResponseBody(String body, String? contentType) {
+    // Cache key based on body length and content type
+    // This automatically invalidates when full data loads (different length)
+    final cacheKey = '${body.length}:$contentType';
+    final lastCacheKey = _lastRespBody != null
+        ? '${_lastRespBody!.length}:$_lastRespContentType'
+        : null;
+
+    // Analyze if cache is empty OR if cache key changed
+    if (_respAnalysis == null || cacheKey != lastCacheKey) {
+      _lastRespBody = body;
+      _lastRespContentType = contentType;
+      _respAnalysis = _contentAnalyzer.analyze(body, contentType: contentType);
+      _respViewController.setAvailableModes(_respAnalysis!.availableModes);
+    }
+    return _respAnalysis!;
+  }
+
   Widget _highlightBlock(String body, {String? contentType}) {
     if (body.isEmpty) return const SizedBox.shrink();
     final lang = _detectLanguage(body, contentType);
@@ -168,6 +518,8 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     _ensureHighlightThemeInitialized(context);
     final req = _findByType(widget.frames, 'http_request');
     final resp = _findByType(widget.frames, 'http_response');
+    final reqFrame = _findFrameByType(widget.frames, 'http_request');
+    final respFrame = _findFrameByType(widget.frames, 'http_response');
     final reqTs = _tsOf(widget.frames, 'http_request');
     final respTs = _tsOf(widget.frames, 'http_response');
     final durationMs = (reqTs != null && respTs != null)
@@ -179,17 +531,50 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(width: 4),
-                  Text('HTTP Details', style: context.appText.title),
-                  if (durationMs != null) _chip(context, '$durationMs ms'),
-                ],
-              ),
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: Text('Details', style: context.appText.title),
             ),
+            if (req != null && req['method'] != null) ...[
+              const SizedBox(width: 12),
+              HttpMethodChip(
+                method: req['method'].toString(),
+                style: context.appText.subtitle.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+            if (req != null && req['url'] != null) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: HighlightedUrlWidget(
+                    url: req['url'].toString(),
+                    baseStyle: context.appText.subtitle,
+                    selectable: true,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  final url = req['url']?.toString() ?? '';
+                  final uri = _tryParseUri(url);
+                  final rawQp =
+                      uri?.queryParametersAll ?? <String, List<String>>{};
+                  final qp = _normalizeQueryKeys(rawQp);
+                  final normalizedUrl = (uri == null)
+                      ? null
+                      : _rebuildUrlWithQuery(uri, qp);
+                  Clipboard.setData(ClipboardData(text: normalizedUrl ?? url));
+                },
+                icon: const Icon(Icons.copy, size: 18),
+                tooltip: 'Copy URL',
+                iconSize: 18,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+              ),
+            ],
             TextButton.icon(
               onPressed:
                   (widget.sessionId == null || (widget.sessionId ?? '').isEmpty)
@@ -200,20 +585,81 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
         Expanded(
           child: Row(
             children: [
               Expanded(
-                child: _Card(
-                  title: 'Request',
-                  child: _buildRequest(context, req),
+                child: Builder(
+                  builder: (context) {
+                    // Determine if request has body
+                    final reqBody = (req?['body'] ?? '').toString();
+                    final hasReqBody = reqBody.isNotEmpty;
+
+                    // Build tabs list
+                    final reqTabs = <Tab>[
+                      if (hasReqBody) const Tab(text: 'Body'),
+                      const Tab(text: 'Info'),
+                    ];
+
+                    // Ensure tab controller has correct length
+                    _ensureTabController(
+                      controller: _reqTabController,
+                      newLength: reqTabs.length,
+                      isRequest: true,
+                    );
+
+                    return _Card(
+                      title: 'Request',
+                      actions: req != null
+                          ? [_buildRequestActionButtons(context, req)]
+                          : null,
+                      tabController: _reqTabController,
+                      tabs: reqTabs,
+                      child: _buildRequest(
+                        context,
+                        req,
+                        reqFrame,
+                        hasBodyTab: hasReqBody,
+                      ),
+                    );
+                  },
                 ),
               ),
               Expanded(
-                child: _Card(
-                  title: 'Response',
-                  child: _buildResponse(context, resp),
+                child: Builder(
+                  builder: (context) {
+                    // Determine if response has body
+                    final respBody = (resp?['body'] ?? '').toString();
+                    final hasRespBody = respBody.isNotEmpty;
+
+                    // Build tabs list
+                    final respTabs = <Tab>[
+                      if (hasRespBody) const Tab(text: 'Body'),
+                      const Tab(text: 'Info'),
+                    ];
+
+                    // Ensure tab controller has correct length
+                    _ensureTabController(
+                      controller: _respTabController,
+                      newLength: respTabs.length,
+                      isRequest: false,
+                    );
+
+                    return _ResponseCard(
+                      resp: resp,
+                      durationMs: durationMs,
+                      respTtfbMs: _respTtfbMs,
+                      respTotalMs: _respTotalMs,
+                      tabController: _respTabController,
+                      tabs: respTabs,
+                      child: _buildResponse(
+                        context,
+                        resp,
+                        respFrame,
+                        hasBodyTab: hasRespBody,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -223,7 +669,47 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     );
   }
 
-  Widget _buildRequest(BuildContext context, Map<String, dynamic>? req) {
+  /// Build action buttons for Request card header
+  Widget _buildRequestActionButtons(
+    BuildContext context,
+    Map<String, dynamic> req,
+  ) {
+    final headers =
+        (req['headers'] as Map?)?.map(
+          (k, v) => MapEntry(k.toString(), v.toString()),
+        ) ??
+        <String, String>{};
+    final body = _normalizeMaybeQuotedJson((req['body'] ?? '').toString());
+    final url = (req['url'] ?? '').toString();
+    final uri = _tryParseUri(url);
+    final rawQp = uri?.queryParametersAll ?? <String, List<String>>{};
+    final qp = _normalizeQueryKeys(rawQp);
+    final normalizedUrl = (uri == null) ? null : _rebuildUrlWithQuery(uri, qp);
+
+    return RequestActionButtons(
+      url: normalizedUrl ?? url,
+      method: req['method']?.toString() ?? 'GET',
+      headers: headers,
+      body: body,
+      form: req['form'] is Map
+          ? Map<String, dynamic>.from(req['form'] as Map)
+          : null,
+      onCopyCurl: (curl) {
+        // Curl already copied by the widget, no additional action needed
+      },
+      onRepeat: url.isNotEmpty
+          ? () => _refetchOriginalRequest(context, req)
+          : null,
+      isLoading: _loadingFetch,
+    );
+  }
+
+  Widget _buildRequest(
+    BuildContext context,
+    Map<String, dynamic>? req,
+    Map<String, dynamic>? reqFrame, {
+    required bool hasBodyTab,
+  }) {
     if (req == null) {
       final method = (widget.httpMeta?['method'] ?? '')
           .toString()
@@ -301,18 +787,9 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           orElse: () => const MapEntry('', ''),
         )
         .value;
-    final ctLower = ctHeader.toLowerCase();
-    final hasFormObj = req['form'] is Map && (req['form'] as Map).isNotEmpty;
-    final isFormCt =
-        ctLower.contains('multipart/form-data') ||
-        ctLower.contains('application/x-www-form-urlencoded');
-    final hideRawBody = hasFormObj || isFormCt;
-    final url = (req['url'] ?? '').toString();
-    final uri = _tryParseUri(url);
-    // Нормализуем возможные артефакты вида "?%3F..." и ключи параметров, начинающиеся с '?'
+    final uri = _tryParseUri((req['url'] ?? '').toString());
     final rawQp = uri?.queryParametersAll ?? <String, List<String>>{};
     final qp = _normalizeQueryKeys(rawQp);
-    final normalizedUrl = (uri == null) ? null : _rebuildUrlWithQuery(uri, qp);
     // cookies: prefer raw (unmasked) if available
     final cookieHeader =
         headersRaw.entries
@@ -335,189 +812,46 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
               )
               .value;
     final reqCookies = _parseRequestCookies(cookieHeader);
-    return ListView(
-      children: [
-        // Полная строка URL в отдельной строке со скроллом
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SelectableText(
-                '${(req['method'] ?? '').toString().toUpperCase()}  ',
-                style: context.appText.subtitle,
-              ),
-              HighlightedUrlText(
-                url: normalizedUrl ?? url,
-                baseStyle: context.appText.subtitle,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Кнопки на новой строке, чтобы не мешали URL
-        Wrap(
-          spacing: 8,
-          children: [
-            TextButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: normalizedUrl ?? url));
-              },
-              icon: const Icon(Icons.link, size: 16),
-              label: const Text('Copy URL'),
-            ),
-            MenuAnchor(
-              builder: (context, controller, child) {
-                return TextButton.icon(
-                  onPressed: () {
-                    // Default: copy compact version
-                    final curl = _buildCurl(req, CurlExportMode.compact);
-                    Clipboard.setData(ClipboardData(text: curl));
-                  },
-                  onLongPress: () {
-                    if (controller.isOpen) {
-                      controller.close();
-                    } else {
-                      controller.open();
-                    }
-                  },
-                  icon: const Icon(Icons.content_paste, size: 16),
-                  label: const Text('Copy as cURL'),
-                );
-              },
-              menuChildren: [
-                MenuItemButton(
-                  leadingIcon: const Icon(Icons.remove, size: 16),
-                  child: const Text('Compact'),
-                  onPressed: () {
-                    final curl = _buildCurl(req, CurlExportMode.compact);
-                    Clipboard.setData(ClipboardData(text: curl));
-                  },
-                ),
-                MenuItemButton(
-                  leadingIcon: const Icon(Icons.wrap_text, size: 16),
-                  child: const Text('Multiline'),
-                  onPressed: () {
-                    final curl = _buildCurl(req, CurlExportMode.multiline);
-                    Clipboard.setData(ClipboardData(text: curl));
-                  },
-                ),
-                MenuItemButton(
-                  leadingIcon: const Icon(Icons.settings, size: 16),
-                  child: const Text('With options'),
-                  onPressed: () {
-                    final curl = _buildCurl(req, CurlExportMode.withOptions);
-                    Clipboard.setData(ClipboardData(text: curl));
-                  },
-                ),
-              ],
-            ),
-            if (url.isNotEmpty)
-              _loadingFetch
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : TextButton.icon(
-                      onPressed: () => _refetchOriginalRequest(context, req),
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Repeat'),
-                    ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (qp.isNotEmpty) ...[
-          Text('Query Params', style: context.appText.subtitle),
-          const SizedBox(height: 4),
-          ...qp.entries.map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: _CopyableKeyValueItem(
-                name: e.key,
-                value: e.value.join(', '),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        if (reqCookies.isNotEmpty) ...[
-          Text('Cookies', style: context.appText.subtitle),
-          const SizedBox(height: 4),
-          ...reqCookies.entries.map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: _CopyableKeyValueItem(name: e.key, value: e.value),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        // Form Data (multipart/urlencoded) – если есть, показываем перед сырым Body
-        FormDataView(
-          form: (req['form'] is Map)
-              ? (req['form'] as Map).cast<String, dynamic>()
-              : null,
-          contentType: ctHeader,
-          rawBody: body,
-        ),
-        const SizedBox(height: 6),
-        if (body.isNotEmpty && !hideRawBody) ...[
-          // Analyze content and initialize view controller
-          Builder(
-            builder: (ctx) {
-              final analysis = _contentAnalyzer.analyze(
-                body,
-                contentType: ctHeader,
-              );
-              _reqViewController.setAvailableModes(analysis.availableModes);
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text('Body', style: context.appText.subtitle),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildBodyViewChips(
-                          body: body,
-                          controller: _reqViewController,
-                          analysis: analysis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  _renderBodyContent(
-                    body: body,
-                    controller: _reqViewController,
-                    analysis: analysis,
-                    contentType: ctHeader,
-                  ),
-                ],
-              );
-            },
+    // Return TabBarView with conditional Body tab
+    return TabBarView(
+      controller: _reqTabController,
+      children: [
+        // Body Tab (only if hasBodyTab is true)
+        if (hasBodyTab)
+          RequestBodyTab(
+            body: body,
+            fullBody: _fullReqBody,
+            contentType: ctHeader,
+            controller: _reqViewController,
+            analyzeContent: _analyzeRequestBody,
+            buildViewChips: _buildBodyViewChips,
+            buildBodyContent: _renderBodyContentAsSliver,
+            form: (req['form'] is Map)
+                ? (req['form'] as Map).cast<String, dynamic>()
+                : null,
+            cookies: reqCookies,
+            frameId: reqFrame?['frame']?['id']?.toString(),
+            bodySize: reqFrame?['frame']?['size'] as int?,
+            isLoading: _reqBodyLoading,
           ),
-        ],
-        const SizedBox(height: 8),
-        Text('Headers', style: context.appText.subtitle),
-        const SizedBox(height: 4),
-        ...headers.entries.map(
-          (e) => Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: _HeaderItem(
-              name: e.key,
-              value: e.value,
-              raw: headersRaw[e.key],
-            ),
-          ),
+
+        // Info Tab (always present)
+        RequestInfoTab(
+          queryParams: qp,
+          headers: headers,
+          headersRaw: headersRaw,
         ),
       ],
     );
   }
 
-  Widget _buildResponse(BuildContext context, Map<String, dynamic>? resp) {
+  Widget _buildResponse(
+    BuildContext context,
+    Map<String, dynamic>? resp,
+    Map<String, dynamic>? respFrame, {
+    required bool hasBodyTab,
+  }) {
     if (resp == null) {
       final method = (widget.httpMeta?['method'] ?? '')
           .toString()
@@ -607,13 +941,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
           (k, v) => MapEntry(k.toString(), v.toString()),
         ) ??
         <String, String>{};
-    final reqTs = _tsOf(widget.frames, 'http_request');
-    final respTs = _tsOf(widget.frames, 'http_response');
-    final durationMs = (reqTs != null && respTs != null)
-        ? respTs.difference(reqTs).inMilliseconds
-        : null;
     final status = (resp['status'] ?? 0) as int;
-    final color = _statusColor(context, status);
     // Cache & CORS quick analysis
     final cache = _computeCacheMeta(status, headers);
     final cors = _computeCorsMeta(
@@ -632,159 +960,37 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refetchInline(url));
     }
 
-    return ListView(
+    // Return TabBarView with conditional Body tab
+    return TabBarView(
+      controller: _respTabController,
       children: [
-        Text(
-          'Status: $status',
-          style: context.appText.subtitle.copyWith(color: color),
-        ),
-        if (status == 0 && (errMessage != null && errMessage.isNotEmpty))
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              'Transport Error: $errMessage',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
+        // Body Tab (only if hasBodyTab is true)
+        if (hasBodyTab)
+          ResponseBodyTab(
+            body: body,
+            fullBody: _fullRespBody,
+            contentType: ctHeader,
+            controller: _respViewController,
+            analyzeContent: _analyzeResponseBody,
+            buildViewChips: _buildBodyViewChips,
+            buildBodyContent: _renderBodyContentAsSliver,
+            statusCode: status,
+            errorMessage: errMessage,
+            baseUrl: url,
+            frameId: respFrame?['frame']?['id']?.toString(),
+            bodySize: respFrame?['frame']?['size'] as int?,
+            isLoading: _respBodyLoading,
           ),
-        if (durationMs != null || _respTtfbMs != null || _respTotalMs != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 6),
-            child: Wrap(
-              spacing: 8,
-              children: [
-                if (_respTotalMs != null)
-                  _chip(context, 'Total: $_respTotalMs ms')
-                else if (durationMs != null)
-                  _chip(context, 'Total: $durationMs ms'),
-                if (_respTtfbMs != null)
-                  _chip(context, 'TTFB: $_respTtfbMs ms'),
-                if (_respTotalMs != null &&
-                    _respTtfbMs != null &&
-                    (_respTotalMs! - _respTtfbMs!) >= 0)
-                  _chip(
-                    context,
-                    'Download: ${_respTotalMs! - _respTtfbMs!} ms',
-                  ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 8),
-        if (body.isNotEmpty) ...[
-          // Analyze content and initialize view controller
-          Builder(
-            builder: (ctx) {
-              final analysis = _contentAnalyzer.analyze(
-                body,
-                contentType: ctHeader,
-              );
-              _respViewController.setAvailableModes(analysis.availableModes);
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text('Body', style: context.appText.subtitle),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            ...analysis.availableModes.map((mode) {
-                              return FilterChip(
-                                label: Text(BodyViewController.getLabel(mode)),
-                                selected: _respViewController.isActive(mode),
-                                onSelected: (_) {
-                                  setState(() {
-                                    _respViewController.switchTo(mode);
-                                  });
-                                },
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  _renderBodyContent(
-                    body: body,
-                    controller: _respViewController,
-                    analysis: analysis,
-                    contentType: ctHeader,
-                    baseUrl: url.isNotEmpty ? url : null,
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-        const SizedBox(height: 8),
-        Text('Headers', style: context.appText.subtitle),
-        const SizedBox(height: 4),
-        ...headers.entries.map(
-          (e) => Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: _HeaderItem(
-              name: e.key,
-              value: e.value,
-              raw: headersRaw[e.key],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Security section (TLS & Cookies)
-        Text('Security', style: context.appText.subtitle),
-        const SizedBox(height: 6),
-        ..._securityRows(resp, headers),
-        const SizedBox(height: 12),
-        // Cache & CORS section
-        Text('Cache & CORS', style: context.appText.subtitle),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            if (cache['status'] != null)
-              _chip(context, 'cache: ${cache['status']}'),
-            _chip(context, cors['ok'] == true ? 'CORS OK' : 'CORS Fail'),
-            if ((headers['Vary'] ?? headers['vary']) != null)
-              _chip(context, 'Vary: ${(headers['Vary'] ?? headers['vary'])}'),
-          ],
-        ),
-        const SizedBox(height: 6),
-        // Cache table
-        if (cache.isNotEmpty) ...[
-          Text('Cache', style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 4),
-          ..._kvList(cache).map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: _CopyableKeyValueItem(name: e.key, value: e.value),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        // CORS table
-        Text('CORS', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 4),
-        ..._kvList({
-          'origin': reqHeaders['Origin'] ?? reqHeaders['origin'] ?? '',
-          'allowedOrigin': cors['allowedOrigin'] ?? '',
-          'allowedMethods': (cors['allowedMethods'] ?? []).toString(),
-          'allowedHeaders': (cors['allowedHeaders'] ?? []).toString(),
-          'vary': headers['Vary'] ?? headers['vary'] ?? '',
-          'preflight': (cors['preflight'] == true).toString(),
-        }).map(
-          (e) => Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: _CopyableKeyValueItem(name: e.key, value: e.value),
-          ),
+        // Info Tab (always present)
+        ResponseInfoTab(
+          headers: headers,
+          headersRaw: headersRaw,
+          tlsInfo: resp['preview']?['tlsInfo'] as Map<String, dynamic>?,
+          cookieSummary:
+              resp['preview']?['cookieSummary'] as Map<String, dynamic>?,
+          cacheInfo: cache,
+          corsInfo: cors,
         ),
       ],
     );
@@ -829,6 +1035,25 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
       try {
         final obj = jsonDecode(preview) as Map<String, dynamic>;
         if (obj['type'] == type) return obj;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// Find full frame (not just preview) by type
+  /// Returns map with 'frame' (raw frame) and 'data' (parsed preview)
+  Map<String, dynamic>? _findFrameByType(List<dynamic> frames, String type) {
+    for (final it in frames) {
+      final mp = (it as Map<String, dynamic>);
+      final preview = mp['preview']?.toString() ?? '';
+      try {
+        final obj = jsonDecode(preview) as Map<String, dynamic>;
+        if (obj['type'] == type) {
+          return {
+            'frame': mp, // Full frame with id, size, etc.
+            'data': obj, // Parsed preview data
+          };
+        }
       } catch (_) {}
     }
     return null;
@@ -981,17 +1206,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     return '';
   }
 
-  List<MapEntry<String, String>> _kvList(Map<String, dynamic> m) {
-    return m.entries
-        .map(
-          (e) => MapEntry(
-            e.key,
-            e.value is List ? (e.value as List).join(', ') : e.value.toString(),
-          ),
-        )
-        .toList();
-  }
-
   Map<String, List<String>> _normalizeQueryKeys(Map<String, List<String>> src) {
     if (src.isEmpty) return const {};
     final out = <String, List<String>>{};
@@ -1041,72 +1255,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     return out;
   }
 
-  Color _statusColor(BuildContext context, int status) {
-    final cs = Theme.of(context).colorScheme;
-    if (status >= 500) return cs.error;
-    if (status >= 400) return cs.tertiary;
-    if (status >= 300) return cs.primary;
-    return Colors.green;
-  }
-
-  List<Widget> _securityRows(
-    Map<String, dynamic> resp,
-    Map<String, String> headers,
-  ) {
-    final List<Widget> out = [];
-    // TLS summary from response preview if present
-    final tls = resp['tls'];
-    if (tls is Map) {
-      out.addAll([
-        SelectableText(
-          'TLS: ${tls['version'] ?? ''} ${tls['cipherSuite'] ?? ''}  ALPN: ${tls['alpn'] ?? ''}',
-          style: context.appText.monospace,
-        ),
-        if ((tls['serverName'] ?? '').toString().isNotEmpty)
-          SelectableText(
-            'SNI: ${tls['serverName']}',
-            style: context.appText.monospace,
-          ),
-      ]);
-      final certs =
-          (tls['peerCertificates'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-      if (certs.isNotEmpty) {
-        out.add(const SizedBox(height: 4));
-        out.add(
-          Text('Certificates', style: Theme.of(context).textTheme.labelLarge),
-        );
-        for (final c in certs) {
-          out.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: SelectableText(
-                '- ${c['subject']} | Issuer: ${c['issuer']} | NotAfter: ${c['notAfter']}',
-                style: context.appText.monospace,
-              ),
-            ),
-          );
-        }
-      }
-      out.add(const SizedBox(height: 6));
-    }
-    // Cookies summary
-    final cs = resp['cookieSummary'];
-    if (cs is Map) {
-      out.add(Text('Cookies', style: Theme.of(context).textTheme.labelLarge));
-      out.add(
-        SelectableText(
-          'Set-Cookie: ${cs['setCookieCount']} | Secure: ${cs['secure']} | HttpOnly: ${cs['httpOnly']} | SameSite Lax/Strict/None: ${cs['sameSiteLax']}/${cs['sameSiteStrict']}/${cs['sameSiteNone']}',
-          style: context.appText.monospace,
-        ),
-      );
-    }
-    if (out.isEmpty) {
-      out.add(SelectableText('—', style: context.appText.monospace));
-    }
-    return out;
-  }
-
   List<String> _splitCsv(String s) {
     if (s.isEmpty) return const [];
     return s
@@ -1114,67 +1262,6 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList(growable: false);
-  }
-
-  Future<void> _refetch(BuildContext context, String url) async {
-    setState(() {
-      _loadingFetch = true;
-    });
-    try {
-      final client = sl<AppHttpClient>();
-      final res = await client.get(path: '/httpproxy', query: {'_target': url});
-      final data = res.data?.toString() ?? '';
-      // show modal with full body
-      if (!mounted) {
-        return;
-      }
-      await showModalBottomSheet(
-        // ignore: use_build_context_synchronously
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Fetched Body',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: SelectableText(data, style: context.appText.monospace),
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: data));
-                  },
-                  icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('Copy'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      final msg = resolveErrorMessage(e);
-      if (!mounted) {
-        return;
-      }
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${msg.title}: ${msg.description}')),
-      );
-    } finally {
-      setState(() {
-        _loadingFetch = false;
-      });
-    }
   }
 
   Future<void> _refetchInline(String url) async {
@@ -1347,214 +1434,395 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel> {
     }
   }
 
-  Widget _chip(BuildContext context, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(text, style: Theme.of(context).textTheme.labelSmall),
-    );
-  }
-
-  String _buildCurl(
-    Map<String, dynamic> req, [
-    CurlExportMode mode = CurlExportMode.compact,
-  ]) {
-    final method = (req['method'] ?? 'GET').toString().toUpperCase();
-    final url = (req['url'] ?? '').toString();
-
-    // Validate URL
-    if (url.isEmpty) {
-      return '# Error: URL is empty';
-    }
-
-    final headers =
-        (req['headers'] as Map?)?.map(
-          (k, v) => MapEntry(k.toString(), v.toString()),
-        ) ??
-        <String, String>{};
-    final body = (req['body'] ?? '').toString();
-    final form = req['form'] is Map
-        ? Map<String, dynamic>.from(req['form'] as Map)
-        : null;
-
-    // Extract cookies from headers
-    String? cookieValue;
-    final headersToInclude = <String, String>{};
-    headers.forEach((k, v) {
-      if (k.toLowerCase() == 'cookie') {
-        cookieValue = v;
-      } else {
-        headersToInclude[k] = v;
-      }
-    });
-
-    // Determine if we should use form-data format
-    final contentType =
-        headers['Content-Type'] ?? headers['content-type'] ?? '';
-    final useFormData =
-        form != null &&
-        (contentType.contains('multipart/form-data') ||
-            contentType.contains('application/x-www-form-urlencoded'));
-
-    final b = StringBuffer();
-    final isMultiline =
-        mode == CurlExportMode.multiline || mode == CurlExportMode.withOptions;
-    final newline = isMultiline ? ' \\\n  ' : ' ';
-
-    // Start command
-    b.write("curl -X $method$newline'");
-    b.write(_escapeShellArg(url));
-    b.write("'");
-
-    // Add headers
-    headersToInclude.forEach((k, v) {
-      // Skip Content-Type and Content-Length for form-data (curl adds them automatically)
-      if (useFormData &&
-          (k.toLowerCase() == 'content-type' ||
-              k.toLowerCase() == 'content-length')) {
-        return;
-      }
-      b.write("$newline-H '$k: ${_escapeShellArg(v)}'");
-    });
-
-    // Add cookie
-    if ((cookieValue ?? '').isNotEmpty) {
-      b.write("$newline--cookie '${_escapeShellArg(cookieValue!)}'");
-    }
-
-    // Add body or form data
-    if (useFormData) {
-      // Use -F for form data
-      // Form structure: {type: "multipart", fields: [...], files: [...]}
-      final fields =
-          (form['fields'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final files =
-          (form['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-
-      // Add regular fields
-      for (final field in fields) {
-        final name = field['name']?.toString() ?? '';
-        final value =
-            field['valuePreview']?.toString() ??
-            field['value']?.toString() ??
-            '';
-        if (name.isNotEmpty) {
-          b.write("$newline-F '$name=${_escapeShellArg(value)}'");
-        }
-      }
-
-      // Add file uploads (Note: file paths need to be manually adjusted)
-      if (files.isNotEmpty) {
-        b.write("$newline# Note: Replace file paths with actual local paths");
-      }
-      for (final file in files) {
-        final name = file['name']?.toString() ?? '';
-        final filename = file['filename']?.toString() ?? 'file';
-        if (name.isNotEmpty) {
-          b.write("$newline-F '$name=@$filename'");
-        }
-      }
-    } else if (body.isNotEmpty) {
-      // Use --data for regular body
-      b.write("$newline--data '${_escapeShellArg(body)}'");
-    }
-
-    // Add additional options for withOptions mode
-    if (mode == CurlExportMode.withOptions) {
-      b.write("$newline--location");
-      b.write("$newline--insecure");
-    }
-
-    b.write("$newline--compressed");
-
-    return b.toString();
-  }
-
-  String _escapeShellArg(String arg) {
-    return arg.replaceAll("'", "'\\''");
-  }
-
   /// Build body view mode chips (DRY - reusable for request and response)
   Widget _buildBodyViewChips({
     required String body,
     required BodyViewController controller,
     required ContentAnalysisResult analysis,
+    String? title,
+    String? contentType,
+    String? baseUrl,
+    String? frameId,
+    int? bodySize,
   }) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        ...analysis.availableModes.map((mode) {
-          return FilterChip(
-            label: Text(BodyViewController.getLabel(mode)),
-            selected: controller.isActive(mode),
-            onSelected: (_) {
-              setState(() {
-                controller.switchTo(mode);
-              });
+    return Padding(
+      padding: const EdgeInsets.only(top: 7),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.fullscreen, size: 24),
+            tooltip: 'Full Screen',
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(),
+            onPressed: () {
+              // Determine if this is request or response based on controller
+              final isRequest = controller == _reqViewController;
+              // Use full body from cache if available
+              final actualBody = isRequest
+                  ? (_fullReqBody ?? body)
+                  : (_fullRespBody ?? body);
+
+              _openBodyFullScreen(
+                title: title ?? 'Body',
+                body: actualBody,
+                analysis: analysis,
+                controller: controller,
+                contentType: contentType,
+                baseUrl: baseUrl,
+                frameId: frameId,
+                bodySize: bodySize,
+              );
             },
-          );
-        }),
-      ],
+          ),
+          ...analysis.availableModes.map((mode) {
+            // Determine if data is loading for this controller
+            final isLoading =
+                (controller == _reqViewController && _reqBodyLoading) ||
+                (controller == _respViewController && _respBodyLoading);
+
+            return FilterChip(
+              label: Text(
+                BodyViewController.getLabel(mode),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              selected: controller.isActive(mode),
+              visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              // Disable chip if data is loading
+              onSelected: isLoading
+                  ? null
+                  : (_) {
+                      setState(() {
+                        controller.switchTo(mode);
+                      });
+                    },
+            );
+          }),
+        ],
+      ),
     );
   }
 
   /// Render body content based on current view mode (DRY - reusable)
-  Widget _renderBodyContent({
+  /// Render body content as slivers for CustomScrollView integration
+  ///
+  /// This eliminates nested scroll conflicts by properly integrating body view modes
+  /// (especially HexBodyRenderer) as slivers rather than wrapped widgets.
+  List<Widget> _renderBodyContentAsSliver({
     required String body,
     required BodyViewController controller,
     required ContentAnalysisResult analysis,
     required String? contentType,
+    required bool isRequest,
     String? baseUrl,
+    String? frameId,
+    int? bodySize,
+    JsonSearchController? searchController,
   }) {
+    // Use full body from panel-level cache if available, otherwise use preview
+    final actualBody = isRequest
+        ? (_fullReqBody ?? body)
+        : (_fullRespBody ?? body);
+    final isLoading = isRequest ? _reqBodyLoading : _respBodyLoading;
+    final error = isRequest ? _reqBodyError : _respBodyError;
     final mode = controller.current;
 
+    // PRIORITY 1: Show error if loading failed
+    if (error != null) {
+      return [
+        SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading full body',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // Retry: clear error and trigger reload
+                      setState(() {
+                        if (isRequest) {
+                          _reqBodyError = null;
+                        } else {
+                          _respBodyError = null;
+                        }
+                      });
+                      // Trigger reload
+                      _loadFullBodyIfNeeded(
+                        frameId: frameId,
+                        preview: body,
+                        bodySize: bodySize,
+                        isRequest: isRequest,
+                      );
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () {
+                      // Fallback: clear error to show preview
+                      setState(() {
+                        if (isRequest) {
+                          _reqBodyError = null;
+                        } else {
+                          _respBodyError = null;
+                        }
+                      });
+                    },
+                    child: const Text('Show preview instead'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // PRIORITY 2: Show loading indicator for modes that display full text (not for hex - it has its own loading)
+    if (isLoading && mode != BodyViewMode.hex) {
+      return [
+        const SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading full body data...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // Check if we're displaying truncated preview (not loading, but body is incomplete)
+    // BUG FIX: Only show warning if full body hasn't been loaded yet
+    // Compare preview body length (not actualBody which might already be full)
+    final hasFullBody = isRequest
+        ? _fullReqBody != null
+        : _fullRespBody != null;
+    final previewLength = utf8
+        .encode(body)
+        .length; // body = preview from frames
+    final isTruncated =
+        !isLoading &&
+        !hasFullBody &&
+        bodySize != null &&
+        previewLength < bodySize;
+
+    // Get mode content slivers
+    final modeSlivers = _renderModeContentAsSliver(
+      mode: mode,
+      body: actualBody,
+      analysis: analysis,
+      contentType: contentType,
+      baseUrl: baseUrl,
+      frameId: frameId,
+      bodySize: bodySize,
+      searchController: searchController,
+    );
+
+    // Prepend warning banner if showing truncated preview
+    if (isTruncated) {
+      return [
+        SliverToBoxAdapter(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.15),
+              border: Border(left: BorderSide(color: Colors.orange, width: 4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.warning_amber, size: 18, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '⚠ Displaying truncated preview ($previewLength / $bodySize bytes). Loading full data...',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        ...modeSlivers,
+      ];
+    }
+
+    return modeSlivers;
+  }
+
+  /// Render mode-specific content as slivers
+  List<Widget> _renderModeContentAsSliver({
+    required BodyViewMode mode,
+    required String body,
+    required ContentAnalysisResult analysis,
+    required String? contentType,
+    String? baseUrl,
+    String? frameId,
+    int? bodySize,
+    JsonSearchController? searchController,
+  }) {
     switch (mode) {
+      case BodyViewMode.hex:
+        // BUG 2 fix: Use HexBodyRenderer widget for interactivity (clickable bytes)
+        // instead of static slivers which are read-only
+        return [
+          SliverToBoxAdapter(
+            child: HexBodyRenderer(
+              body: body,
+              sessionId: widget.sessionId,
+              frameId: frameId,
+              bodySize: bodySize,
+              apiBaseUrl: baseUrl,
+            ),
+          ),
+        ];
+
+      // Other modes: wrap in SliverToBoxAdapter (they don't have nested scroll issues)
       case BodyViewMode.jwtDecoded:
-        return JwtViewer(token: body, jwtData: analysis.jwtData);
+        return [
+          SliverToBoxAdapter(
+            child: JwtViewer(token: body, jwtData: analysis.jwtData),
+          ),
+        ];
 
       case BodyViewMode.base64Decoded:
         final decoded = analysis.base64Data?.decoded ?? body;
         final isJson = analysis.base64Data?.isJson ?? false;
         if (isJson) {
-          return JsonViewer(jsonString: decoded, forceTree: false);
+          return [
+            SliverToBoxAdapter(
+              child: JsonViewer(
+                jsonString: decoded,
+                forceTree: false,
+                unlimitedHeight: true,
+                externalSearchController: searchController,
+              ),
+            ),
+          ];
         }
-        return SelectableText(decoded, style: context.appText.monospace);
+        return [
+          SliverToBoxAdapter(
+            child: SelectableText(decoded, style: context.appText.monospace),
+          ),
+        ];
 
       case BodyViewMode.jsonTree:
-        return JsonViewer(jsonString: body, forceTree: true);
+        return [
+          SliverToBoxAdapter(
+            child: JsonViewer(
+              jsonString: body,
+              forceTree: true,
+              unlimitedHeight: true,
+              externalSearchController: searchController,
+            ),
+          ),
+        ];
 
       case BodyViewMode.pretty:
         if (analysis.isJson) {
-          return JsonViewer(jsonString: body, forceTree: false);
+          return [
+            SliverToBoxAdapter(
+              child: JsonViewer(
+                jsonString: body,
+                forceTree: false,
+                unlimitedHeight: true,
+                externalSearchController: searchController,
+              ),
+            ),
+          ];
         }
         // Auto-format GraphQL queries in Pretty mode
         if (GraphqlLanguageDetector.isLikelyGraphql(body)) {
-          final formatted = GraphQLFormatter.format(body);
-          return _highlightBlock(formatted, contentType: contentType);
+          try {
+            final formatted = GraphQLFormatter.format(body);
+            return [
+              SliverToBoxAdapter(
+                child: _highlightBlock(formatted, contentType: contentType),
+              ),
+            ];
+          } catch (e) {
+            // Fallback to raw if formatting fails
+            return [
+              SliverToBoxAdapter(
+                child: _highlightBlock(body, contentType: contentType),
+              ),
+            ];
+          }
         }
-        return _highlightBlock(body, contentType: contentType);
+        return [
+          SliverToBoxAdapter(
+            child: _highlightBlock(body, contentType: contentType),
+          ),
+        ];
 
       case BodyViewMode.htmlPreview:
-        return SizedBox(
-          height: 480,
-          child: HtmlPreview(html: body, baseUrl: baseUrl),
-        );
+        return [
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 480,
+              child: HtmlPreview(html: body, baseUrl: baseUrl),
+            ),
+          ),
+        ];
 
       case BodyViewMode.raw:
-        return SelectableText(body, style: context.appText.monospace);
+        return [
+          SliverToBoxAdapter(
+            child: SelectableText(body, style: context.appText.monospace),
+          ),
+        ];
     }
   }
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.child});
+  const _Card({
+    required this.title,
+    required this.child,
+    this.actions,
+    this.tabController,
+    this.tabs,
+  });
   final String title;
   final Widget child;
+  final List<Widget>? actions;
+  final TabController? tabController;
+  final List<Tab>? tabs;
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -1565,13 +1833,42 @@ class _Card extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (actions != null) ...[const Spacer(), ...actions!],
+              ],
             ),
-            const SizedBox(height: 8),
+            if (tabs != null && tabController != null) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                height: 32,
+                child: TabBar(
+                  controller: tabController,
+                  tabs: tabs!,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  labelPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                  labelStyle: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(fontSize: 13, height: 1.0),
+                  unselectedLabelStyle: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(fontSize: 13, height: 1.0),
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                ),
+              ),
+            ],
+            const SizedBox(height: 2),
             Expanded(child: child),
           ],
         ),
@@ -1580,239 +1877,125 @@ class _Card extends StatelessWidget {
   }
 }
 
-class _KeyValueItem extends StatelessWidget {
-  const _KeyValueItem({required this.name, required this.value});
-  final String name;
-  final String value;
+class _ResponseCard extends StatelessWidget {
+  const _ResponseCard({
+    required this.resp,
+    required this.durationMs,
+    required this.respTtfbMs,
+    required this.respTotalMs,
+    required this.child,
+    this.tabController,
+    this.tabs,
+  });
+  final Map<String, dynamic>? resp;
+  final int? durationMs;
+  final int? respTtfbMs;
+  final int? respTotalMs;
+  final Widget child;
+  final TabController? tabController;
+  final List<Tab>? tabs;
 
   @override
   Widget build(BuildContext context) {
-    return SelectableText.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: '$name: ',
-            style: context.appText.monospace.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          TextSpan(
-            text: value,
-            style: context.appText.monospace.copyWith(
-              color: context.appColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+    final status = resp?['status'] as int? ?? 0;
+    final color = _statusColor(context, status);
+    final totalTime = respTotalMs ?? durationMs;
 
-class _CopyableKeyValueItem extends StatefulWidget {
-  const _CopyableKeyValueItem({required this.name, required this.value});
-  final String name;
-  final String value;
-
-  @override
-  State<_CopyableKeyValueItem> createState() => _CopyableKeyValueItemState();
-}
-
-class _CopyableKeyValueItemState extends State<_CopyableKeyValueItem> {
-  bool _hover = false;
-  bool _iconHover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final nameStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      fontFamily: 'monospace',
-      fontWeight: FontWeight.w600,
-    );
-    final valueStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      fontFamily: 'monospace',
-      color: context.appColors.textSecondary,
-    );
-    final iconSize = valueStyle?.fontSize ?? 12;
-    final iconColor = valueStyle?.color;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: SelectableText.rich(
-        TextSpan(
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.all(8),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextSpan(text: '${widget.name}: ', style: nameStyle),
-            TextSpan(text: widget.value, style: valueStyle),
-            if (_hover)
-              WidgetSpan(
-                alignment: PlaceholderAlignment.baseline,
-                baseline: TextBaseline.alphabetic,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  onEnter: (_) => setState(() => _iconHover = true),
-                  onExit: (_) => setState(() => _iconHover = false),
-                  child: GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(
-                        ClipboardData(text: '${widget.name}: ${widget.value}'),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 1,
-                      ),
-                      margin: const EdgeInsets.only(left: 6),
-                      decoration: BoxDecoration(
-                        color: _iconHover
-                            ? Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.12)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Icon(
-                        Icons.copy,
-                        size: iconSize,
-                        color: _iconHover
-                            ? Theme.of(context).colorScheme.primary
-                            : iconColor,
+            Row(
+              children: [
+                Text(
+                  'Response',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (totalTime != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _durationBg(context, totalTime),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Total: $totalTime ms',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _durationFg(context, totalTime),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                ],
+                Text(
+                  'Status: $status',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: color),
+                ),
+              ],
+            ),
+            if (tabs != null && tabController != null) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                height: 32,
+                child: TabBar(
+                  controller: tabController,
+                  tabs: tabs!,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  labelPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                  labelStyle: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(fontSize: 13, height: 1.0),
+                  unselectedLabelStyle: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(fontSize: 13, height: 1.0),
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
                 ),
               ),
+            ],
+            const SizedBox(height: 2),
+            Expanded(child: child),
           ],
         ),
       ),
     );
   }
-}
 
-class _HeaderItem extends StatefulWidget {
-  const _HeaderItem({required this.name, required this.value, this.raw});
-  final String name;
-  final String value;
-  final String? raw;
-  @override
-  State<_HeaderItem> createState() => _HeaderItemState();
-}
+  Color _statusColor(BuildContext context, int status) {
+    final cs = Theme.of(context).colorScheme;
+    if (status >= 500) return cs.error;
+    if (status >= 400) return cs.tertiary;
+    if (status >= 300) return cs.primary;
+    return Colors.green;
+  }
 
-class _HeaderItemState extends State<_HeaderItem> {
-  bool _hover = false;
-  bool _iconHover = false;
-  bool _reveal = false;
-  @override
-  Widget build(BuildContext context) {
-    final nameStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      fontFamily: 'monospace',
-      fontWeight: FontWeight.w600,
-    );
-    final valueStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      fontFamily: 'monospace',
-      color: context.appColors.textSecondary,
-    );
-    final iconSize = valueStyle?.fontSize ?? 12;
-    final iconColor = valueStyle?.color;
-    final lname = widget.name.toLowerCase();
-    final isSensitive =
-        lname == 'authorization' ||
-        lname == 'cookie' ||
-        lname == 'set-cookie' ||
-        lname.contains('token') ||
-        lname.contains('secret') ||
-        lname.contains('api-key') ||
-        lname.contains('apikey');
-    final raw = widget.raw ?? widget.value;
-    final shownValue = (isSensitive && !_reveal) ? '***' : raw;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: SelectableText.rich(
-        TextSpan(
-          children: [
-            TextSpan(text: '${widget.name}: ', style: nameStyle),
-            TextSpan(text: shownValue, style: valueStyle),
-            if (_hover)
-              WidgetSpan(
-                alignment: PlaceholderAlignment.baseline,
-                baseline: TextBaseline.alphabetic,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isSensitive)
-                      MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        onEnter: (_) => setState(() => _iconHover = true),
-                        onExit: (_) => setState(() => _iconHover = false),
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _reveal = !_reveal;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 2,
-                              vertical: 1,
-                            ),
-                            margin: const EdgeInsets.only(left: 6),
-                            decoration: BoxDecoration(
-                              color: _iconHover
-                                  ? Theme.of(context).colorScheme.primary
-                                        .withValues(alpha: 0.12)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Icon(
-                              _reveal ? Icons.visibility_off : Icons.visibility,
-                              size: iconSize,
-                              color: _iconHover
-                                  ? Theme.of(context).colorScheme.primary
-                                  : iconColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      onEnter: (_) => setState(() => _iconHover = true),
-                      onExit: (_) => setState(() => _iconHover = false),
-                      child: GestureDetector(
-                        onTap: () {
-                          Clipboard.setData(
-                            ClipboardData(text: '${widget.name}: $raw'),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 1,
-                          ),
-                          margin: const EdgeInsets.only(left: 6),
-                          decoration: BoxDecoration(
-                            color: _iconHover
-                                ? Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.12)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Icon(
-                            Icons.copy,
-                            size: iconSize,
-                            color: _iconHover
-                                ? Theme.of(context).colorScheme.primary
-                                : iconColor,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+  Color _durationBg(BuildContext context, int ms) {
+    final cs = Theme.of(context).colorScheme;
+    if (ms < 300) return Colors.green.withValues(alpha: 0.12);
+    if (ms < 1000) return cs.tertiary.withValues(alpha: 0.12);
+    return cs.error.withValues(alpha: 0.12);
+  }
+
+  Color _durationFg(BuildContext context, int ms) {
+    final cs = Theme.of(context).colorScheme;
+    if (ms < 300) return Colors.green;
+    if (ms < 1000) return cs.tertiary;
+    return cs.error;
   }
 }

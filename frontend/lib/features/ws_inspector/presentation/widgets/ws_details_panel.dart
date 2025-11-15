@@ -18,6 +18,13 @@ String _fmtTime(String ts) {
   }
 }
 
+// Atomic pending focus state to prevent race conditions (Bug #12 fix)
+class _PendingFocus {
+  final String frameId;
+  final int localIndex;
+  _PendingFocus(this.frameId, this.localIndex);
+}
+
 // Local search state for a single frame
 class _LocalSearchState {
   _LocalSearchState()
@@ -69,27 +76,45 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   bool _tree = false;
   bool _showTimeline = true;
   final ScrollController _listCtrl = ScrollController();
-  bool _stickToBottom = true;
-  // Last known frames list length (for auto-scroll)
-  int _lastFramesLen = 0;
-  // Flag that after next frame we should scroll down
-  bool _autoScrollPending = false;
+  // TEMPORARILY DISABLED: Auto-scroll logic
+  // bool _stickToBottom = true;
+  // // Last known frames list length (for auto-scroll)
+  // int _lastFramesLen = 0;
+  // // Flag that after next frame we should scroll down
+  // bool _autoScrollPending = false;
   DateTimeRange? _brushRange;
-  String? _expandedId;
+
+  // Guard flag to prevent concurrent reindexing (Bug #3 fix)
+  bool _isReindexing = false;
+
+  // Cached filtered frames list for scroll methods
+  List<Map<String, dynamic>> _cachedVisibleFrames = [];
+
+  // Update cached visible frames (call whenever filters or frames change)
+  void _updateVisibleFramesCache() {
+    _cachedVisibleFrames = _computeVisibleFrames();
+    // Clear focused index cache when visible frames change (Bug #1 & #2 fix)
+    _frameLocalFocusedIndex.clear();
+    // Clear match keys cache when visible frames change (Bug #8 fix)
+    _frameMatchKeys.clear();
+  }
 
   @override
   void initState() {
     super.initState();
-    _listCtrl.addListener(_onListScroll);
+    _updateVisibleFramesCache();
+    // TEMPORARILY DISABLED: Auto-scroll logic
+    // _listCtrl.addListener(_onListScroll);
   }
 
-  void _onListScroll() {
-    if (!_listCtrl.hasClients) return;
-    final pos = _listCtrl.position;
-    // небольшой порог, чтобы не дёргать прокрутку при едва заметном «хвосте»
-    const threshold = 48.0;
-    _stickToBottom = (pos.maxScrollExtent - pos.pixels) <= threshold;
-  }
+  // TEMPORARILY DISABLED: Auto-scroll logic
+  // void _onListScroll() {
+  //   if (!_listCtrl.hasClients) return;
+  //   final pos = _listCtrl.position;
+  //   // небольшой порог, чтобы не дёргать прокрутку при едва заметном «хвосте»
+  //   const threshold = 48.0;
+  //   _stickToBottom = (pos.maxScrollExtent - pos.pixels) <= threshold;
+  // }
 
   // Уникальный ключ фрейма, чтобы не путать элементы с одинаковыми id в разных направлениях
   String _frameKeyOf(Map<String, dynamic> f) {
@@ -97,26 +122,6 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     final dir = (f['direction'] ?? '').toString();
     final ts = (f['ts'] ?? '').toString();
     return '$id|$dir|$ts';
-  }
-
-  // Ключ для UI-элементов: порядок + основное содержимое фрейма
-  String _uiKeyOf(int index, Map<String, dynamic> f) {
-    final dir = (f['direction'] ?? '').toString();
-    final opcode = (f['opcode'] ?? '').toString();
-    final size = (f['size'] ?? '').toString();
-    final preview = (f['preview'] ?? '').toString();
-    return '$index|$dir|$opcode|$size|$preview';
-  }
-
-  // Поиск индекса фрейма как по составному ключу, так и по исходному id
-  int _findFrameIndexByAnyId(String anyId) {
-    final framesList = widget.frames.cast<Map<String, dynamic>>();
-    final byComposite = framesList.indexWhere((e) => _frameKeyOf(e) == anyId);
-    if (byComposite >= 0) return byComposite;
-    final byRawId = framesList.indexWhere(
-      (e) => (e['id'] ?? '').toString() == anyId,
-    );
-    return byRawId;
   }
 
   // Global search across all frames
@@ -131,19 +136,20 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   final Map<String, int> _frameMatchCounts = <String, int>{};
   final Map<String, List<GlobalKey>> _frameMatchKeys =
       <String, List<GlobalKey>>{};
-  String? _pendingFocusFrameId;
-  int _pendingFocusLocalIndex = 0;
+  // Cache: frameKey → local focused index (-1 if not focused)
+  final Map<String, int> _frameLocalFocusedIndex = <String, int>{};
+  // Bug #12 fix: Atomic pending focus to prevent race conditions
+  _PendingFocus? _pendingFocus;
 
-  // Keys of tile containers for precise ensureVisible in external list
-  final Map<String, GlobalKey> _frameTileKeys = <String, GlobalKey>{};
-  GlobalKey _tileKeyFor(String id) =>
-      _frameTileKeys.putIfAbsent(id, () => GlobalKey());
+  // Keys for stable widget identity (not cached - created fresh each build)
+  ValueKey<String> _tileKeyFor(String id) => ValueKey<String>('tile_$id');
 
   // Controllers for programmatic expand/collapse of tiles
-  final Map<String, ExpansionTileController> _frameTileControllers =
-      <String, ExpansionTileController>{};
-  ExpansionTileController _tileControllerFor(String id) =>
-      _frameTileControllers.putIfAbsent(id, () => ExpansionTileController());
+  // BUG 2 fix: Use ExpansibleController for programmatic expansion
+  final Map<String, ExpansibleController> _frameTileControllers =
+      <String, ExpansibleController>{};
+  ExpansibleController _tileControllerFor(String id) =>
+      _frameTileControllers.putIfAbsent(id, () => ExpansibleController());
 
   // Local search at frame level
   final Map<String, _LocalSearchState> _localSearch =
@@ -155,17 +161,25 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         .cast<Map<String, dynamic>>()
         .map((f) => _frameKeyOf(f))
         .toSet();
-    _frameTileKeys.removeWhere((k, _) => !current.contains(k));
-    _frameTileControllers.removeWhere((k, _) => !current.contains(k));
-    _localSearch.removeWhere((k, _) => !current.contains(k));
+    _frameTileControllers.removeWhere((k, controller) {
+      if (!current.contains(k)) {
+        controller.dispose();
+        return true;
+      }
+      return false;
+    });
+    _localSearch.removeWhere((k, state) {
+      if (!current.contains(k)) {
+        state.dispose();
+        return true;
+      }
+      return false;
+    });
     _frameMatchCounts.removeWhere((k, _) => !current.contains(k));
     _frameMatchKeys.removeWhere((k, _) => !current.contains(k));
-    if (_expandedId != null && !current.contains(_expandedId)) {
-      _expandedId = null;
-    }
-    if (_pendingFocusFrameId != null &&
-        !current.contains(_pendingFocusFrameId)) {
-      _pendingFocusFrameId = null;
+    _frameLocalFocusedIndex.removeWhere((k, _) => !current.contains(k));
+    if (_pendingFocus != null && !current.contains(_pendingFocus!.frameId)) {
+      _pendingFocus = null;
     }
   }
 
@@ -227,73 +241,90 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     return isWsPingPong || isEnginePingPong;
   }
 
+  // Compute visible frames applying all filters
+  List<Map<String, dynamic>> _computeVisibleFrames() {
+    return widget.frames.cast<Map<String, dynamic>>().where((f) {
+      if (!_frameMatches(f)) return false;
+      if (_brushRange != null) {
+        try {
+          final ts = DateTime.parse((f['ts'] ?? '').toString());
+          if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end))
+            return false;
+        } catch (_) {
+          return false;
+        }
+      }
+      if (widget.hideHeartbeats && _isHeartbeat(f)) return false;
+      return true;
+    }).toList();
+  }
+
+  // TEMPORARILY DISABLED: Auto-scroll logic
   // If new frames appeared — scroll down if necessary,
   // but only if user was already at the end of the list
-  void _maybeAutoScrollToBottomOnNewFrames() {
-    if (widget.frames.length > _lastFramesLen) {
-      _autoScrollPending = _stickToBottom;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_autoScrollPending && _listCtrl.hasClients) {
-          final max = _listCtrl.position.maxScrollExtent;
-          if (max > 0) {
-            _listCtrl.animateTo(
-              max,
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
-            );
-          }
-        }
-        _lastFramesLen = widget.frames.length;
-        _autoScrollPending = false;
-      });
-    } else {
-      _lastFramesLen = widget.frames.length;
-    }
-  }
+  // void _maybeAutoScrollToBottomOnNewFrames() {
+  //   if (widget.frames.length > _lastFramesLen) {
+  //     _autoScrollPending = _stickToBottom;
+  //     WidgetsBinding.instance.addPostFrameCallback((_) {
+  //       if (!mounted) return;
+  //       if (_autoScrollPending && _listCtrl.hasClients) {
+  //         final max = _listCtrl.position.maxScrollExtent;
+  //         if (max > 0) {
+  //           _listCtrl.animateTo(
+  //             max,
+  //             duration: const Duration(milliseconds: 120),
+  //             curve: Curves.easeOut,
+  //           );
+  //         }
+  //       }
+  //       _lastFramesLen = widget.frames.length;
+  //       _autoScrollPending = false;
+  //     });
+  //   } else {
+  //     _lastFramesLen = widget.frames.length;
+  //   }
+  // }
 
   @override
   void didUpdateWidget(covariant WsDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _maybeAutoScrollToBottomOnNewFrames();
-    _cleanupFrameCaches();
+    // TEMPORARILY DISABLED: Auto-scroll logic
+    // _maybeAutoScrollToBottomOnNewFrames();
+    // Clean up caches when frames list changes
+    if (oldWidget.frames != widget.frames) {
+      _cleanupFrameCaches();
+    }
+    // Update cache when frames or any filters change
+    if (oldWidget.frames != widget.frames ||
+        oldWidget.hideHeartbeats != widget.hideHeartbeats ||
+        oldWidget.opcodeFilter != widget.opcodeFilter ||
+        oldWidget.directionFilter != widget.directionFilter) {
+      _updateVisibleFramesCache();
+      // Reindex search when visible frames change
+      if (_showGlobalSearch && _searchCtrl.text.trim().isNotEmpty) {
+        _reindexGlobalMatches();
+      }
+    }
   }
 
   void _scrollToFrame(String frameId) {
-    // 1) Rough scroll by index to build widget in screen area
-    final idx = _findFrameIndexByAnyId(frameId);
+    // Use cached visible frames for consistency with displayed list
+    final visibleFrames = _cachedVisibleFrames;
+
+    final idx = visibleFrames.indexWhere((f) {
+      final compositeKey = _frameKeyOf(f);
+      return compositeKey == frameId || (f['id'] ?? '').toString() == frameId;
+    });
+
     if (idx < 0 || !_listCtrl.hasClients) return;
-    final estimatedItemExtent = 56.0;
+
+    final estimatedItemExtent = 80.0; // Average height including heartbeats
     final target = (idx * estimatedItemExtent).toDouble();
-    _listCtrl
-        .animateTo(
-          target.clamp(0, _listCtrl.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-        )
-        .whenComplete(() {
-          if (!mounted) return;
-          // 2) Precise adjustment: ensureVisible by tile container key
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            String compositeId = frameId;
-            try {
-              final fm = widget.frames[idx] as Map<String, dynamic>;
-              compositeId = _frameKeyOf(fm);
-            } catch (_) {}
-            final key = _tileKeyFor(compositeId);
-            final ctx = key.currentContext;
-            if (ctx != null) {
-              try {
-                Scrollable.ensureVisible(
-                  ctx,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  alignment: 0.1,
-                );
-              } catch (_) {}
-            }
-          });
-        });
+    _listCtrl.animateTo(
+      target.clamp(0, _listCtrl.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   // (заголовок рендерим через _buildTitleRich)
@@ -457,51 +488,60 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   }
 
   void _reindexGlobalMatches() {
-    final query = _searchCtrl.text.trim();
-    _globalTotalMatches = 0;
-    if (query.isEmpty) {
-      setState(() {
-        _globalFocusedIndex = 0;
-      });
-      return;
-    }
-    for (final f in widget.frames) {
-      final fm = f as Map<String, dynamic>;
-      if (!_frameMatches(fm)) continue;
-      if (widget.hideHeartbeats && _isHeartbeat(fm)) continue;
-      if (_brushRange != null) {
-        try {
-          final ts = DateTime.parse((fm['ts'] ?? '').toString());
-          if (ts.isBefore(_brushRange!.start) || ts.isAfter(_brushRange!.end))
-            continue;
-        } catch (_) {}
+    // Guard against concurrent reindexing (Bug #3 fix)
+    if (_isReindexing) return;
+    _isReindexing = true;
+
+    try {
+      final query = _searchCtrl.text.trim();
+      _globalTotalMatches = 0;
+      _frameLocalFocusedIndex.clear();
+      if (query.isEmpty) {
+        _frameMatchCounts.clear();
+        // Clear match keys when query is empty (Bug #9 fix)
+        _frameMatchKeys.clear();
+        setState(() {
+          _globalFocusedIndex = 0;
+        });
+        return;
       }
-      final preview = (fm['preview'] ?? '').toString();
-      final extractedJson = _extractJsonPayload(preview);
-      final computedCnt = (extractedJson != null && (_pretty || _tree))
-          ? _countMatchesIn(extractedJson)
-          : _countMatchesIn(preview);
-      final frameKey = _frameKeyOf(fm);
-      final effectiveCnt = _frameMatchCounts.containsKey(frameKey)
-          ? (_frameMatchCounts[frameKey] ?? 0)
-          : computedCnt;
-      if (effectiveCnt > 0) {
-        _frameMatchCounts[frameKey] = effectiveCnt;
-        _globalTotalMatches += effectiveCnt;
+      // Use cached visible frames for consistent filtering
+      final visibleFrames = _cachedVisibleFrames;
+      int acc = 0;
+      for (final fm in visibleFrames) {
+        final preview = (fm['preview'] ?? '').toString();
+        final extractedJson = _extractJsonPayload(preview);
+        final computedCnt = (extractedJson != null && (_pretty || _tree))
+            ? _countMatchesIn(extractedJson)
+            : _countMatchesIn(preview);
+        final frameKey = _frameKeyOf(fm);
+        final effectiveCnt = computedCnt;
+        if (effectiveCnt > 0) {
+          _frameMatchCounts[frameKey] = effectiveCnt;
+          _globalTotalMatches += effectiveCnt;
+          // Pre-compute local focused index for this frame
+          final end = acc + effectiveCnt - 1;
+          if (_globalFocusedIndex >= acc && _globalFocusedIndex <= end) {
+            _frameLocalFocusedIndex[frameKey] = _globalFocusedIndex - acc;
+          }
+          acc += effectiveCnt;
+        } else {
+          _frameMatchCounts.remove(frameKey);
+        }
+      }
+      if (_globalTotalMatches == 0) {
+        setState(() {
+          _globalFocusedIndex = 0;
+        });
+      } else if (_globalFocusedIndex >= _globalTotalMatches) {
+        setState(() {
+          _globalFocusedIndex = 0;
+        });
       } else {
-        _frameMatchCounts.remove(frameKey);
+        setState(() {});
       }
-    }
-    if (_globalTotalMatches == 0) {
-      setState(() {
-        _globalFocusedIndex = 0;
-      });
-    } else if (_globalFocusedIndex >= _globalTotalMatches) {
-      setState(() {
-        _globalFocusedIndex = 0;
-      });
-    } else {
-      setState(() {});
+    } finally {
+      _isReindexing = false;
     }
   }
 
@@ -509,36 +549,15 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     final q = _searchCtrl.text.trim();
     if (q.isEmpty) return 0;
     if (_useRegex) {
+      // Bug #24 fix: In regex mode, user controls word boundaries via \b
+      // Don't apply manual wholeWord checks - just use the regex as-is
       RegExp? re;
       try {
         re = RegExp(q, caseSensitive: _matchCase);
       } catch (_) {
         return 0;
       }
-      int c = 0;
-      for (final m in re.allMatches(text)) {
-        if (_wholeWord) {
-          bool isWordChar(String ch) {
-            final code = ch.codeUnitAt(0);
-            final isAZ =
-                (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-            final is09 = (code >= 48 && code <= 57);
-            return isAZ || is09 || ch == '_';
-          }
-
-          final s = m.start;
-          final e = m.end;
-          final left = s - 1 >= 0 ? text.substring(s - 1, s) : null;
-          final right = e < text.length ? text.substring(e, e + 1) : null;
-          final leftOk = left == null || !isWordChar(left);
-          final rightOk = right == null || !isWordChar(right);
-          if (!(leftOk && rightOk)) {
-            continue;
-          }
-        }
-        c++;
-      }
-      return c;
+      return re.allMatches(text).length;
     }
     final src = _matchCase ? text : text.toLowerCase();
     final query = _matchCase ? q : q.toLowerCase();
@@ -574,8 +593,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   (String?, int) _resolveGlobalIndexToFrame(int gIndex) {
     int acc = 0;
-    for (final f in widget.frames) {
-      final idStr = _frameKeyOf((f as Map<String, dynamic>));
+    // Use cached visible frames for consistent filtering
+    final visibleFrames = _cachedVisibleFrames;
+    for (final f in visibleFrames) {
+      final idStr = _frameKeyOf(f);
       final cnt = _frameMatchCounts[idStr] ?? 0;
       if (cnt <= 0) continue;
       final end = acc + cnt - 1;
@@ -590,24 +611,22 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   void _focusGlobal(int gIndex) {
     if (_globalTotalMatches <= 0) return;
+    // Clear focused index cache before resolving (handles null case)
+    _frameLocalFocusedIndex.clear();
     final (fid, local) = _resolveGlobalIndexToFrame(gIndex);
     if (fid == null) return;
-    final String? prevExpanded = _expandedId;
-    setState(() {
-      _expandedId = fid;
+    // Update local focused index cache for highlighting
+    _frameLocalFocusedIndex[fid] = local;
+    // BUG 2 fix: Expand tile and wait for it to render before scrolling
+    _tileControllerFor(fid).expand();
+    // Wait for tile expansion to complete and widgets to build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Scroll to tile after expansion
+      _scrollToFrame(fid);
+      // Defer focus to internal match until keys are ready
+      _pendingFocus = _PendingFocus(fid, local);
     });
-    // Ensure target tile is expanded; optionally collapse previous
-    try {
-      _tileControllerFor(fid).expand();
-      if (prevExpanded != null && prevExpanded != fid) {
-        _tileControllerFor(prevExpanded).collapse();
-      }
-    } catch (_) {}
-    // Scroll to tile (rough + precise adjustment)
-    _scrollToFrame(fid);
-    // Always defer focus to internal match until keys are ready
-    _pendingFocusFrameId = fid;
-    _pendingFocusLocalIndex = local;
   }
 
   void _gotoNext() {
@@ -636,16 +655,22 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     for (final s in _localSearch.values) {
       s.dispose();
     }
+    // Dispose all ExpansibleControllers to prevent memory leaks
+    for (final controller in _frameTileControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   void _onChildMatches(String frameId, int count, List<GlobalKey> keys) {
-    if (!_showGlobalSearch)
+    if (!_showGlobalSearch) {
       return; // local search should not overwrite global keys
+    }
     _frameMatchKeys[frameId] = keys;
     // if waiting for focus on this specific frame — try to navigate
-    if (_pendingFocusFrameId == frameId) {
-      final local = _pendingFocusLocalIndex;
+    final pending = _pendingFocus;
+    if (pending != null && pending.frameId == frameId) {
+      final local = pending.localIndex;
       if (local >= 0 && local < keys.length) {
         final ctx = keys[local].currentContext;
         if (ctx != null) {
@@ -678,40 +703,35 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
           });
         }
       }
-      _pendingFocusFrameId = null;
+      _pendingFocus = null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    _cleanupFrameCaches();
+    // Use pre-computed cached visible frames
+    final visibleFrames = _cachedVisibleFrames;
+
     final timelineSection = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: (_showTimeline)
           ? Column(
               children: [
-                Builder(
-                  builder: (context) {
-                    final framesList = widget.frames
-                        .cast<Map<String, dynamic>>();
-                    final tlFrames = framesList.where((f) {
-                      if (!_frameMatches(f)) return false;
-                      if (widget.hideHeartbeats && _isHeartbeat(f))
-                        return false;
-                      return true;
-                    }).toList();
-                    return FramesTimeline(
-                      frames: tlFrames,
-                      height: 50,
-                      onFrameTap: _scrollToFrame,
-                      onBrushChanged: (r) {
-                        setState(() {
-                          _brushRange = r;
-                        });
-                      },
-                      // hover: только подсветка на таймлайне, без скролла списка
-                    );
+                FramesTimeline(
+                  frames: visibleFrames,
+                  height: 50,
+                  onFrameTap: _scrollToFrame,
+                  onBrushChanged: (r) {
+                    _brushRange = r;
+                    _updateVisibleFramesCache();
+                    // Reindex search when brush filter changes
+                    if (_showGlobalSearch &&
+                        _searchCtrl.text.trim().isNotEmpty) {
+                      _reindexGlobalMatches();
+                    }
+                    setState(() {});
                   },
+                  // hover: только подсветка на таймлайне, без скролла списка
                 ),
                 const Align(
                   alignment: Alignment.centerLeft,
@@ -746,6 +766,11 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                   setState(() {
                     _pretty = v;
                     if (v) _tree = false;
+                    // Reindex search if active (match counts depend on pretty/tree)
+                    if (_showGlobalSearch &&
+                        _searchCtrl.text.trim().isNotEmpty) {
+                      _reindexGlobalMatches();
+                    }
                   });
                 },
               ),
@@ -757,6 +782,11 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                   setState(() {
                     _tree = v;
                     if (v) _pretty = false;
+                    // Reindex search if active (match counts depend on pretty/tree)
+                    if (_showGlobalSearch &&
+                        _searchCtrl.text.trim().isNotEmpty) {
+                      _reindexGlobalMatches();
+                    }
                   });
                 },
               ),
@@ -819,21 +849,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                 Expanded(
                   child: ListView.builder(
                     controller: _listCtrl,
-                    itemCount: widget.frames.length,
+                    itemCount: visibleFrames.length,
                     itemBuilder: (_, i) {
-                      final f = widget.frames[i] as Map<String, dynamic>;
-                      if (!_frameMatches(f)) {
-                        return const SizedBox.shrink();
-                      }
-                      if (_brushRange != null) {
-                        try {
-                          final ts = DateTime.parse((f['ts'] ?? '').toString());
-                          if (ts.isBefore(_brushRange!.start) ||
-                              ts.isAfter(_brushRange!.end)) {
-                            return const SizedBox.shrink();
-                          }
-                        } catch (_) {}
-                      }
+                      final f = visibleFrames[i];
                       final preview = (f['preview'] ?? '').toString();
                       final extractedJson = _extractJsonPayload(preview);
                       final dir = (f['direction'] ?? '').toString();
@@ -855,14 +873,12 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                             ? context.appColors.success
                             : context.appColors.primary,
                       );
-                      if (widget.hideHeartbeats && isHeartbeat) {
-                        return const SizedBox.shrink();
-                      }
                       if (isHeartbeat) {
                         final label = isWsPingPong
                             ? opcode.toUpperCase()
                             : (preview == '2' ? 'PING' : 'PONG');
                         return ListTile(
+                          key: ValueKey('heartbeat_${_frameKeyOf(f)}'),
                           dense: true,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -885,274 +901,246 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                         );
                       }
                       final frameKey = _frameKeyOf(f);
-                      final uiKey = _uiKeyOf(i, f);
-                      final isExpanded = frameKey == _expandedId;
-                      // Local focusedIndex for this frame
-                      int localFocusedIndex = -1;
-                      if (_globalTotalMatches > 0 &&
-                          _frameMatchCounts.isNotEmpty) {
-                        int acc = 0;
-                        for (final ff in widget.frames) {
-                          final fid = _frameKeyOf((ff as Map<String, dynamic>));
-                          final cnt = _frameMatchCounts[fid] ?? 0;
-                          if (cnt <= 0) continue;
-                          final end = acc + cnt - 1;
-                          if (fid == frameKey &&
-                              _globalFocusedIndex >= acc &&
-                              _globalFocusedIndex <= end) {
-                            localFocusedIndex = _globalFocusedIndex - acc;
-                            break;
-                          }
-                          acc += cnt;
-                        }
-                      }
-                      return KeyedSubtree(
+                      // Use pre-computed local focused index (O(1) lookup)
+                      final localFocusedIndex =
+                          _frameLocalFocusedIndex[frameKey] ?? -1;
+                      return ExpansionTile(
                         key: _tileKeyFor(frameKey),
-                        child: ExpansionTile(
-                          key: ValueKey('frame_$uiKey'),
-                          controller: _tileControllerFor(frameKey),
-                          initiallyExpanded: isExpanded,
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          dense: true,
-                          leading: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              icon,
-                              const SizedBox(width: 6),
-                              Text(f['opcode'].toString()),
-                            ],
-                          ),
-                          title: _buildTitleRich(context, preview),
-                          subtitle: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${f['size']} B',
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(
-                                        color: context.appColors.textSecondary,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          trailing: Text(
-                            ts,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: context.appColors.textSecondary,
-                                ),
-                          ),
-                          onExpansionChanged: (open) {
-                            setState(() {
-                              _expandedId = open
-                                  ? frameKey
-                                  : (_expandedId == frameKey
-                                        ? null
-                                        : _expandedId);
-                            });
-                          },
+                        controller: _tileControllerFor(frameKey),
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                        dense: true,
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Builder(
-                              builder: (context) {
-                                final local = _localFor(frameKey);
-                                final String activeQuery = local.show
-                                    ? local.controller.text.trim()
-                                    : (_showGlobalSearch
-                                          ? _searchCtrl.text.trim()
-                                          : '');
-                                final bool activeMatchCase = local.show
-                                    ? local.matchCase
-                                    : _matchCase;
-                                final bool activeWholeWord = local.show
-                                    ? local.wholeWord
-                                    : _wholeWord;
-                                final bool activeUseRegex = local.show
-                                    ? local.useRegex
-                                    : _useRegex;
-                                final int activeFocusedIndex = local.show
-                                    ? local.focusedIndex
-                                    : (localFocusedIndex < 0
-                                          ? 0
-                                          : localFocusedIndex);
-
-                                final content = Container(
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.all(8),
-                                  child: Builder(
-                                    builder: (context) {
-                                      final cfg = JsonSearchConfig(
-                                        query: activeQuery,
-                                        matchCase: activeMatchCase,
-                                        wholeWord: activeWholeWord,
-                                        useRegex: activeUseRegex,
-                                        focusedIndex: activeFocusedIndex,
-                                        anchorScope: 'ws:$frameKey',
-                                        onRebuilt: (count, keys) {
-                                          if (local.show) {
-                                            setState(() {
-                                              local.keys = keys;
-                                              if (local.focusedIndex >=
-                                                  keys.length) {
-                                                local.focusedIndex = 0;
-                                              }
-                                            });
-                                          } else if (_showGlobalSearch) {
-                                            _onChildMatches(
-                                              frameKey,
-                                              count,
-                                              keys,
-                                            );
-                                            if ((_frameMatchCounts[frameKey] ??
-                                                    -1) !=
-                                                count) {
-                                              _frameMatchCounts[frameKey] =
-                                                  count;
-                                              _reindexGlobalMatches();
-                                            }
-                                          }
-                                        },
-                                      );
-                                      if (extractedJson != null) {
-                                        try {
-                                          final parsed = jsonDecode(
-                                            extractedJson,
-                                          );
-                                          final normalized =
-                                              _decodeNestedJsonStrings(parsed);
-                                          if (_tree) {
-                                            return JsonTreeRich(
-                                              data: normalized,
-                                              search: cfg,
-                                            );
-                                          }
-                                          if (_pretty) {
-                                            return JsonPrettyRich(
-                                              data: normalized,
-                                              search: cfg,
-                                            );
-                                          }
-                                        } catch (_) {}
-                                      }
-                                      return SearchableTextRich(
-                                        text: preview,
-                                        search: cfg,
-                                        style: context.appText.monospace,
-                                      );
-                                    },
-                                  ),
-                                );
-
-                                return Stack(
-                                  children: [
-                                    content,
-                                    Positioned(
-                                      top: 6,
-                                      left: 6,
-                                      right: 6,
-                                      child: Align(
-                                        alignment: Alignment.topRight,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // Кнопка копирования содержимого фрейма
-                                            IconButton(
-                                              tooltip: 'Copy content',
-                                              icon: const Icon(
-                                                Icons.copy,
-                                                size: 18,
-                                              ),
-                                              onPressed: () {
-                                                final toCopy =
-                                                    extractedJson ?? preview;
-                                                Clipboard.setData(
-                                                  ClipboardData(text: toCopy),
-                                                );
-                                              },
-                                            ),
-                                            const SizedBox(width: 6),
-                                            // Поиск по содержимому фрейма
-                                            if (local.show)
-                                              CommonSearchBar(
-                                                controller: local.controller,
-                                                focusNode: local.focus,
-                                                countText: local.keys.isEmpty
-                                                    ? '0/0'
-                                                    : '${local.focusedIndex + 1}/${local.keys.length}',
-                                                matchCase: local.matchCase,
-                                                wholeWord: local.wholeWord,
-                                                useRegex: local.useRegex,
-                                                canNavigate:
-                                                    local.keys.isNotEmpty,
-                                                onChanged: () {
-                                                  setState(() {
-                                                    local.focusedIndex = 0;
-                                                  });
-                                                },
-                                                onNext: () =>
-                                                    _localGotoNext(frameKey),
-                                                onPrev: () =>
-                                                    _localGotoPrev(frameKey),
-                                                onClose: () {
-                                                  setState(() {
-                                                    local.show = false;
-                                                    local.controller.clear();
-                                                    local.focusedIndex = 0;
-                                                    local.keys = const [];
-                                                    local.focus.unfocus();
-                                                  });
-                                                },
-                                                onToggleMatchCase: () {
-                                                  setState(() {
-                                                    local.matchCase =
-                                                        !local.matchCase;
-                                                  });
-                                                },
-                                                onToggleWholeWord: () {
-                                                  setState(() {
-                                                    local.wholeWord =
-                                                        !local.wholeWord;
-                                                  });
-                                                },
-                                                onToggleRegex: () {
-                                                  setState(() {
-                                                    local.useRegex =
-                                                        !local.useRegex;
-                                                  });
-                                                },
-                                              )
-                                            else
-                                              IconButton(
-                                                tooltip: 'Search in frame',
-                                                icon: const Icon(
-                                                  Icons.search,
-                                                  size: 18,
-                                                ),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    local.show = true;
-                                                  });
-                                                  WidgetsBinding.instance
-                                                      .addPostFrameCallback((
-                                                        _,
-                                                      ) {
-                                                        local.focus
-                                                            .requestFocus();
-                                                      });
-                                                },
-                                              ),
-                                          ],
-                                        ),
-                                      ),
+                            icon,
+                            const SizedBox(width: 6),
+                            Text(opcode),
+                          ],
+                        ),
+                        title: _buildTitleRich(context, preview),
+                        subtitle: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '$size B',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: context.appColors.textSecondary,
                                     ),
-                                  ],
-                                );
-                              },
+                              ),
                             ),
                           ],
                         ),
+                        trailing: Text(
+                          ts,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: context.appColors.textSecondary,
+                              ),
+                        ),
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final local = _localFor(frameKey);
+                              final String activeQuery = local.show
+                                  ? local.controller.text.trim()
+                                  : (_showGlobalSearch
+                                        ? _searchCtrl.text.trim()
+                                        : '');
+                              final bool activeMatchCase = local.show
+                                  ? local.matchCase
+                                  : _matchCase;
+                              final bool activeWholeWord = local.show
+                                  ? local.wholeWord
+                                  : _wholeWord;
+                              final bool activeUseRegex = local.show
+                                  ? local.useRegex
+                                  : _useRegex;
+                              final int activeFocusedIndex = local.show
+                                  ? local.focusedIndex
+                                  : (localFocusedIndex < 0
+                                        ? 0
+                                        : localFocusedIndex);
+
+                              final contentWidget = Builder(
+                                builder: (context) {
+                                  final cfg = JsonSearchConfig(
+                                    query: activeQuery,
+                                    matchCase: activeMatchCase,
+                                    wholeWord: activeWholeWord,
+                                    useRegex: activeUseRegex,
+                                    focusedIndex: activeFocusedIndex,
+                                    anchorScope: 'ws:$frameKey',
+                                    onRebuilt: (count, keys) {
+                                      if (local.show) {
+                                        setState(() {
+                                          local.keys = keys;
+                                          if (local.focusedIndex >=
+                                              keys.length) {
+                                            local.focusedIndex = 0;
+                                          }
+                                        });
+                                      } else if (_showGlobalSearch) {
+                                        _onChildMatches(frameKey, count, keys);
+                                        // Bug #7 fix: Don't call _reindexGlobalMatches() here
+                                        // to avoid infinite loop. The count from child widget
+                                        // is the same as what _reindexGlobalMatches computes.
+                                        // Just update the map directly.
+                                        if ((_frameMatchCounts[frameKey] ??
+                                                -1) !=
+                                            count) {
+                                          _frameMatchCounts[frameKey] = count;
+                                        }
+                                      }
+                                    },
+                                  );
+                                  if (extractedJson != null) {
+                                    try {
+                                      final parsed = jsonDecode(extractedJson);
+                                      final normalized =
+                                          _decodeNestedJsonStrings(parsed);
+                                      if (_tree) {
+                                        return JsonTreeRich(
+                                          data: normalized,
+                                          search: cfg,
+                                        );
+                                      }
+                                      if (_pretty) {
+                                        return JsonPrettyRich(
+                                          data: normalized,
+                                          search: cfg,
+                                        );
+                                      }
+                                    } catch (_) {}
+                                  }
+                                  return SearchableTextRich(
+                                    text: preview,
+                                    search: cfg,
+                                    style: context.appText.monospace,
+                                  );
+                                },
+                              );
+
+                              // BUG 1 fix: Wrap content in scrollable container
+                              // so Stack doesn't scroll, only content inside scrolls
+                              final content = ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxHeight: 400, // Max height before scrolling
+                                ),
+                                child: SingleChildScrollView(
+                                  child: Container(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.all(8),
+                                    child: contentWidget,
+                                  ),
+                                ),
+                              );
+
+                              return Stack(
+                                children: [
+                                  content,
+                                  Positioned(
+                                    top: 6,
+                                    left: 6,
+                                    right: 6,
+                                    child: Align(
+                                      alignment: Alignment.topRight,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Кнопка копирования содержимого фрейма
+                                          IconButton(
+                                            tooltip: 'Copy content',
+                                            icon: const Icon(
+                                              Icons.copy,
+                                              size: 18,
+                                            ),
+                                            onPressed: () {
+                                              final toCopy =
+                                                  extractedJson ?? preview;
+                                              Clipboard.setData(
+                                                ClipboardData(text: toCopy),
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(width: 6),
+                                          // Поиск по содержимому фрейма
+                                          if (local.show)
+                                            CommonSearchBar(
+                                              controller: local.controller,
+                                              focusNode: local.focus,
+                                              countText: local.keys.isEmpty
+                                                  ? '0/0'
+                                                  : '${local.focusedIndex + 1}/${local.keys.length}',
+                                              matchCase: local.matchCase,
+                                              wholeWord: local.wholeWord,
+                                              useRegex: local.useRegex,
+                                              canNavigate:
+                                                  local.keys.isNotEmpty,
+                                              onChanged: () {
+                                                setState(() {
+                                                  local.focusedIndex = 0;
+                                                });
+                                              },
+                                              onNext: () =>
+                                                  _localGotoNext(frameKey),
+                                              onPrev: () =>
+                                                  _localGotoPrev(frameKey),
+                                              onClose: () {
+                                                setState(() {
+                                                  local.show = false;
+                                                  local.controller.clear();
+                                                  local.focusedIndex = 0;
+                                                  local.keys = const [];
+                                                  local.focus.unfocus();
+                                                });
+                                              },
+                                              onToggleMatchCase: () {
+                                                setState(() {
+                                                  local.matchCase =
+                                                      !local.matchCase;
+                                                });
+                                              },
+                                              onToggleWholeWord: () {
+                                                setState(() {
+                                                  local.wholeWord =
+                                                      !local.wholeWord;
+                                                });
+                                              },
+                                              onToggleRegex: () {
+                                                setState(() {
+                                                  local.useRegex =
+                                                      !local.useRegex;
+                                                });
+                                              },
+                                            )
+                                          else
+                                            IconButton(
+                                              tooltip: 'Search in frame',
+                                              icon: const Icon(
+                                                Icons.search,
+                                                size: 18,
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  local.show = true;
+                                                });
+                                                WidgetsBinding.instance
+                                                    .addPostFrameCallback((_) {
+                                                      local.focus
+                                                          .requestFocus();
+                                                    });
+                                              },
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -1204,9 +1192,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         useRegex: _useRegex,
         canNavigate: _globalTotalMatches > 0,
         onChanged: () {
-          _globalFocusedIndex = 0;
+          setState(() {
+            _globalFocusedIndex = 0;
+          });
           _reindexGlobalMatches();
-          setState(() {});
         },
         onNext: _gotoNext,
         onPrev: _gotoPrev,
