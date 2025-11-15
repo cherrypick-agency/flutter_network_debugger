@@ -30,11 +30,15 @@ func (apiStubRepo) ListSessions(context.Context, uc.SessionFilter) ([]domain.Ses
 func (apiStubRepo) IncrementCounters(context.Context, string, domain.Frame) error { return nil }
 func (apiStubRepo) SetClosed(context.Context, string, time.Time, *string) error   { return nil }
 func (apiStubRepo) ClearAllSessions(context.Context) error                        { return nil }
+func (apiStubRepo) DeleteImportedSessions(context.Context) error                  { return nil }
 
 // frames
 func (apiStubRepo) AppendFrame(context.Context, string, domain.Frame) error { return nil }
 func (apiStubRepo) ListFrames(context.Context, string, string, int) ([]domain.Frame, string, error) {
 	return []domain.Frame{{ID: "f1"}}, "", nil
+}
+func (apiStubRepo) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
 }
 
 // events

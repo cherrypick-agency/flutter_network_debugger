@@ -2,10 +2,13 @@ package redact
 
 import (
 	"encoding/json"
-	"strings"
 )
 
-var sensitiveKeys = []string{"authorization", "cookie", "access_token", "id_token", "session", "apikey"}
+// TODO: Нужна возможность настраивать маскировку через UI
+// Проблема: много разных режимов отображения (preview, HAR export, WS frames)
+// Требуется единая система управления sensitive data redaction
+// Временно отключено - показываем все токены полностью
+// var sensitiveKeys = []string{"authorization", "cookie", "access_token", "id_token", "session", "apikey"}
 
 // RedactJSON masks sensitive fields in a JSON string best-effort.
 func RedactJSON(s string) string {
@@ -43,11 +46,6 @@ func redactNode(n *any) {
 }
 
 func isSensitiveKey(k string) bool {
-	k = strings.ToLower(k)
-	for _, s := range sensitiveKeys {
-		if k == s {
-			return true
-		}
-	}
+	// Temporarily disabled - TODO: make this configurable via UI
 	return false
 }

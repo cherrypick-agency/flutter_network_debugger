@@ -76,6 +76,10 @@ func (m *mockFrameRepo) ListFrames(ctx context.Context, sessionID string, from s
 	return frames[:limit], "", nil
 }
 
+func (m *mockFrameRepo) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
+}
+
 type mockEventRepo struct {
 	events map[string][]domain.Event
 }
@@ -372,6 +376,10 @@ func (f *failingFrameRepo) AppendFrame(ctx context.Context, sessionID string, fr
 
 func (f *failingFrameRepo) ListFrames(ctx context.Context, sessionID string, from string, limit int) ([]domain.Frame, string, error) {
 	return nil, "", context.DeadlineExceeded
+}
+
+func (f *failingFrameRepo) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, context.DeadlineExceeded
 }
 
 func TestSessionService_AddFrame_ErrorPath(t *testing.T) {

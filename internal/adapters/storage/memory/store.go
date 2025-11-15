@@ -172,6 +172,57 @@ func (s *Store) ClearAllSessions(ctx context.Context) error {
 	return nil
 }
 
+func (s *Store) DeleteImportedSessions(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Find and cleanup imported sessions (ClientAddr == "imported")
+	toDelete := make([]string, 0)
+	for id, e := range s.items {
+		if e == nil {
+			continue
+		}
+		if e.session.ClientAddr == "imported" {
+			// Cleanup spool files
+			for _, p := range e.spoolFiles {
+				_ = os.Remove(p)
+			}
+			// Cleanup frame body files
+			for _, f := range e.frames {
+				if f.BodyFile != "" {
+					_ = os.Remove(f.BodyFile)
+				}
+			}
+			// Cleanup HTTP transaction body files
+			for _, tx := range e.httpTxs {
+				if tx.ReqBodyFile != "" {
+					_ = os.Remove(tx.ReqBodyFile)
+				}
+				if tx.RespBodyFile != "" {
+					_ = os.Remove(tx.RespBodyFile)
+				}
+			}
+			toDelete = append(toDelete, id)
+		}
+	}
+
+	// Delete sessions from map
+	for _, id := range toDelete {
+		delete(s.items, id)
+	}
+
+	// Remove from order slice
+	newOrder := make([]string, 0, len(s.order))
+	for _, id := range s.order {
+		if _, exists := s.items[id]; exists {
+			newOrder = append(newOrder, id)
+		}
+	}
+	s.order = newOrder
+
+	return nil
+}
+
 func (s *Store) ListSessions(ctx context.Context, f usecase.SessionFilter) ([]domain.Session, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -334,6 +385,22 @@ func (s *Store) ListFrames(ctx context.Context, sessionID string, from string, l
 	out := make([]domain.Frame, end-start)
 	copy(out, e.frames[start:end])
 	return out, next, nil
+}
+
+func (s *Store) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	e, ok := s.items[sessionID]
+	if !ok {
+		return domain.Frame{}, false, nil
+	}
+	// Linear search for frame by ID
+	for i := range e.frames {
+		if e.frames[i].ID == frameID {
+			return e.frames[i], true, nil
+		}
+	}
+	return domain.Frame{}, false, nil
 }
 
 // EventRepository

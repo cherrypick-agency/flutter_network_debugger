@@ -25,11 +25,15 @@ func (stubRepo) ListSessions(context.Context, uc.SessionFilter) ([]domain.Sessio
 func (stubRepo) IncrementCounters(context.Context, string, domain.Frame) error { return nil }
 func (stubRepo) SetClosed(context.Context, string, time.Time, *string) error   { return nil }
 func (stubRepo) ClearAllSessions(context.Context) error                        { return nil }
+func (stubRepo) DeleteImportedSessions(context.Context) error                  { return nil }
 
 // FrameRepository
 func (stubRepo) AppendFrame(context.Context, string, domain.Frame) error { return nil }
 func (stubRepo) ListFrames(context.Context, string, string, int) ([]domain.Frame, string, error) {
 	return nil, "", nil
+}
+func (stubRepo) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
 }
 
 // EventRepository

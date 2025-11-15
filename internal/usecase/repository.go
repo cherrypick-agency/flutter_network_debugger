@@ -14,11 +14,13 @@ type SessionRepository interface {
 	IncrementCounters(ctx context.Context, id string, frame domain.Frame) error
 	SetClosed(ctx context.Context, id string, closedAt time.Time, errMsg *string) error
 	ClearAllSessions(ctx context.Context) error
+	DeleteImportedSessions(ctx context.Context) error
 }
 
 type FrameRepository interface {
 	AppendFrame(ctx context.Context, sessionID string, f domain.Frame) error
 	ListFrames(ctx context.Context, sessionID string, from string, limit int) ([]domain.Frame, string, error)
+	GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error)
 }
 
 type EventRepository interface {

@@ -27,9 +27,13 @@ func (m mockRepoForGraphQL) IncrementCounters(context.Context, string, domain.Fr
 }
 func (m mockRepoForGraphQL) SetClosed(context.Context, string, time.Time, *string) error { return nil }
 func (m mockRepoForGraphQL) ClearAllSessions(context.Context) error                      { return nil }
+func (m mockRepoForGraphQL) DeleteImportedSessions(context.Context) error                { return nil }
 func (m mockRepoForGraphQL) AppendFrame(context.Context, string, domain.Frame) error     { return nil }
 func (m mockRepoForGraphQL) ListFrames(context.Context, string, string, int) ([]domain.Frame, string, error) {
 	return m.frames, "", m.err
+}
+func (m mockRepoForGraphQL) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
 }
 func (m mockRepoForGraphQL) AppendEvent(context.Context, string, domain.Event) error { return nil }
 func (m mockRepoForGraphQL) ListEvents(context.Context, string, string, int) ([]domain.Event, string, error) {

@@ -49,6 +49,10 @@ func (m *mockSessionRepoForPerformance) ClearAllSessions(ctx context.Context) er
 	return nil
 }
 
+func (m *mockSessionRepoForPerformance) DeleteImportedSessions(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockSessionRepoForPerformance) AddSpoolFile(ctx context.Context, sessionID string, path string) {
 }
 
@@ -60,6 +64,10 @@ func (m *mockFrameRepoForPerformance) AppendFrame(ctx context.Context, sessionID
 
 func (m *mockFrameRepoForPerformance) ListFrames(ctx context.Context, sessionID string, from string, limit int) ([]domain.Frame, string, error) {
 	return nil, "", nil
+}
+
+func (m *mockFrameRepoForPerformance) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
 }
 
 type mockEventRepoForPerformance struct{}

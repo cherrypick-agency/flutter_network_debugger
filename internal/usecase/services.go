@@ -83,6 +83,10 @@ func (s *SessionService) ClearAll(ctx context.Context) error {
 	return s.sessions.ClearAllSessions(ctx)
 }
 
+func (s *SessionService) DeleteImported(ctx context.Context) error {
+	return s.sessions.DeleteImportedSessions(ctx)
+}
+
 func (s *SessionService) AddFrame(ctx context.Context, sessionID string, frame domain.Frame) error {
 	if err := s.frames.AppendFrame(ctx, sessionID, frame); err != nil {
 		return err
@@ -96,6 +100,10 @@ func (s *SessionService) AddEvent(ctx context.Context, sessionID string, event d
 
 func (s *SessionService) ListFrames(ctx context.Context, sessionID string, from string, limit int) ([]domain.Frame, string, error) {
 	return s.frames.ListFrames(ctx, sessionID, from, limit)
+}
+
+func (s *SessionService) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	return s.frames.GetFrameByID(ctx, sessionID, frameID)
 }
 
 func (s *SessionService) ListEvents(ctx context.Context, sessionID string, from string, limit int) ([]domain.Event, string, error) {

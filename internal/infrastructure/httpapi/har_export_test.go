@@ -34,6 +34,9 @@ func (m mockRepoForHAR) AppendFrame(context.Context, string, domain.Frame) error
 func (m mockRepoForHAR) ListFrames(context.Context, string, string, int) ([]domain.Frame, string, error) {
 	return nil, "", nil
 }
+func (m mockRepoForHAR) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
+}
 func (m mockRepoForHAR) AppendEvent(context.Context, string, domain.Event) error { return nil }
 func (m mockRepoForHAR) ListEvents(context.Context, string, string, int) ([]domain.Event, string, error) {
 	return nil, "", nil
@@ -44,6 +47,7 @@ func (m mockRepoForHAR) AppendHTTPTransaction(context.Context, domain.HTTPTransa
 func (m mockRepoForHAR) ListHTTPTransactions(context.Context, string, string, int) ([]domain.HTTPTransaction, string, error) {
 	return m.transactions, m.nextCursor, m.err
 }
+func (m mockRepoForHAR) DeleteImportedSessions(context.Context) error { return nil }
 
 func TestExportHARForSession_MultipleTransactions(t *testing.T) {
 	repo := mockRepoForHAR{
@@ -162,6 +166,9 @@ func (m *mockRepoWithPagination) AppendFrame(context.Context, string, domain.Fra
 func (m *mockRepoWithPagination) ListFrames(context.Context, string, string, int) ([]domain.Frame, string, error) {
 	return nil, "", nil
 }
+func (m *mockRepoWithPagination) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
+}
 func (m *mockRepoWithPagination) AppendEvent(context.Context, string, domain.Event) error {
 	return nil
 }
@@ -185,6 +192,7 @@ func (m *mockRepoWithPagination) ListHTTPTransactions(ctx context.Context, sessi
 		{Method: "GET", URL: "http://example.com/3", Status: 200, StartedAt: time.Unix(3000, 0).UTC(), Timings: domain.HTTPTimings{Total: 100}},
 	}, "", nil
 }
+func (m *mockRepoWithPagination) DeleteImportedSessions(context.Context) error { return nil }
 
 func TestExportHARForSession_Error(t *testing.T) {
 	repo := mockRepoForHAR{

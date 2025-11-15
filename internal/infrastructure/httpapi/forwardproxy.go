@@ -773,9 +773,25 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 		Timings: domain.HTTPTimings{
 			Total: durationMs(tStart, time.Now()),
 		},
+		// HAR export support
+		ReqHeaders:      cloneHeader(outReq.Header),
+		RespHeaders:     cloneHeader(resp.Header),
+		Cookies:         outReq.Cookies(),
+		QueryParams:     outURL.Query(),
+		ReqHTTPVersion:  outReq.Proto,
+		RespHTTPVersion: resp.Proto,
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		tx.ContentType = ct
+	}
+	// Optional body spooling
+	if d.Cfg.CaptureBodies && shouldMonitor {
+		if len(reqBodyBuf) > 0 {
+			if f, err := d.spoolBodyBytes(reqBodyBuf, "req"); err == nil && f != "" {
+				tx.ReqBodyFile = f
+				d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
+			}
+		}
 	}
 	if shouldMonitor {
 		_ = d.Svc.AddHTTPTransaction(contextWithNoCancel(), tx)

@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 // HTTPTransaction represents a single HTTP reverse-proxied request/response pair captured by the proxy.
 type HTTPTransaction struct {
@@ -17,6 +20,14 @@ type HTTPTransaction struct {
 	ContentType  string      `json:"contentType,omitempty"`
 	ReqBodyFile  string      `json:"reqBodyFile,omitempty"`
 	RespBodyFile string      `json:"respBodyFile,omitempty"`
+
+	// HAR export support fields
+	ReqHeaders      http.Header         `json:"reqHeaders,omitempty"`
+	RespHeaders     http.Header         `json:"respHeaders,omitempty"`
+	Cookies         []*http.Cookie      `json:"cookies,omitempty"`
+	QueryParams     map[string][]string `json:"queryParams,omitempty"`
+	ReqHTTPVersion  string              `json:"reqHttpVersion,omitempty"`
+	RespHTTPVersion string              `json:"respHttpVersion,omitempty"`
 }
 
 // HTTPTimings captures coarse-grained timing milestones for a transaction.

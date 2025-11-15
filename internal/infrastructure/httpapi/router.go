@@ -339,9 +339,13 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	})
 	mux.HandleFunc("/_api/v1/sessions", d.handleV1ListSessions)
 	mux.HandleFunc("/_api/v1/sessions/aggregate", d.handleV1SessionsAggregate)
+	// HAR export/import
+	mux.HandleFunc("/_api/v1/export/har", d.handleExportHAR)
+	mux.HandleFunc("/_api/v1/import/har", d.handleImportHAR)
 	// Capture controls
 	mux.HandleFunc("/_api/v1/capture", d.handleV1Capture)
 	mux.HandleFunc("/_api/v1/captures", d.handleV1Captures)
+	mux.HandleFunc("/_api/v1/capture/reset", d.handleV1CaptureReset)
 	// Runtime settings (response delay, etc.)
 	mux.HandleFunc("/_api/v1/settings", d.handleV1Settings)
 	mux.HandleFunc("/_api/v1/monitor/ws", d.Monitor.HandleWS)

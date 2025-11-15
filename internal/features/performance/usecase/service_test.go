@@ -634,6 +634,10 @@ func (m *mockFrameRepoForPerformance) ListFrames(ctx context.Context, sessionID 
 	return nil, "", nil
 }
 
+func (m *mockFrameRepoForPerformance) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	return domain.Frame{}, false, nil
+}
+
 type mockEventRepoForPerformance struct{}
 
 func (m *mockEventRepoForPerformance) AppendEvent(ctx context.Context, sessionID string, e domain.Event) error {
