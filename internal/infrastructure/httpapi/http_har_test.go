@@ -16,7 +16,7 @@ type stubRepo struct{}
 // SessionRepository
 func (stubRepo) CreateSession(context.Context, domain.Session) error { return nil }
 func (stubRepo) GetSession(context.Context, string) (domain.Session, bool, error) {
-	return domain.Session{}, false, nil
+	return domain.Session{Kind: "http"}, true, nil
 }
 func (stubRepo) DeleteSession(context.Context, string) error { return nil }
 func (stubRepo) ListSessions(context.Context, uc.SessionFilter) ([]domain.Session, int, error) {
