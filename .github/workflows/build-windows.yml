@@ -3,16 +3,11 @@ name: Build Windows Desktop
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'frontend/**'
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'scripts/package-windows.ps1'
-      - '.github/workflows/build-windows.yml'
-  push:
     tags:
       - 'v*.*.*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
   workflow_call:
 
