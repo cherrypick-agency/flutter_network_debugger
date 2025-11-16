@@ -3,8 +3,6 @@ name: Desktop Builds
 on:
   push:
     branches: [ main ]
-    tags:
-      - 'v*.*.*'
     paths:
       - 'frontend/**'
       - 'cmd/network-debugger/**'
@@ -13,6 +11,9 @@ on:
       - 'scripts/package-*.sh'
       - 'scripts/package-*.ps1'
       - '.github/workflows/build-desktop.yml'
+  push:
+    tags:
+      - 'v*.*.*'
   pull_request:
     paths:
       - 'frontend/**'
