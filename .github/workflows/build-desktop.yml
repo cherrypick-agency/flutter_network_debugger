@@ -111,74 +111,8 @@ jobs:
           retention-days: 7
 
   # Временно отключили windows-сборку
-  build-windows:
-    runs-on: windows-latest
-    if: false
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          channel: 'stable'
-
-      - name: Cache Flutter dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~\AppData\Local\Pub\Cache
-            frontend\.dart_tool
-          key: ${{ runner.os }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~\go\pkg\mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Flutter pub get
-        working-directory: frontend
-        run: flutter pub get
-
-      - name: Enable Windows desktop
-        working-directory: frontend
-        run: |
-          flutter config --enable-windows-desktop
-          flutter create --platforms=windows .
-
-      - name: Set version
-        id: version
-        shell: bash
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build Windows ZIP
-        shell: pwsh
-        run: |
-          $env:VERSION = "${{ steps.version.outputs.VERSION }}"
-          ./scripts/package-windows.ps1 -Version $env:VERSION
-
-      - name: Upload ZIP artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-amd64-zip
-          path: dist/*.zip
-          retention-days: 7
+  # Windows builds moved to separate workflow: build-windows.yml
+  # This allows independent execution and better CI/CD organization
 
   build-linux:
     runs-on: ubuntu-latest
@@ -387,9 +321,13 @@ jobs:
             dist/*.zip
           retention-days: 7
 
+  # Windows desktop build - calls separate workflow
+  build-windows:
+    uses: ./.github/workflows/build-windows.yml
+
   # Release job - only runs on version tags
   release:
-    needs: [build-macos, build-linux, build-web]
+    needs: [build-macos, build-linux, build-web, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -432,7 +370,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [build-macos, build-linux, build-web]
+    needs: [build-macos, build-linux, build-web, build-windows]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -444,4 +382,5 @@ jobs:
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| macOS Desktop | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux Desktop | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows Desktop | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Web Binaries  | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY

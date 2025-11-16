@@ -1,0 +1,99 @@
+name: Build Windows Desktop
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/package-windows.ps1'
+      - '.github/workflows/build-windows.yml'
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\Pub\Cache
+            frontend\.dart_tool
+          key: ${{ runner.os }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~\go\pkg\mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Enable Windows desktop
+        working-directory: frontend
+        run: |
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows .
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Windows ZIP
+        shell: pwsh
+        run: |
+          $env:VERSION = "${{ steps.version.outputs.VERSION }}"
+          ./scripts/package-windows.ps1 -Version $env:VERSION
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64-zip
+          path: dist/*.zip
+          retention-days: 7
+
+  summary:
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## Windows Desktop Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows amd64 | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
