@@ -11,7 +11,8 @@ LDFLAGS := -s -w -X network-debugger/internal/infrastructure/observability.Versi
 # Release helper metadata (used by release-github target)
 TAG              := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
 FRONTEND_VERSION := $(shell echo $(TAG) | sed -E 's/^v//')
-BUILD_NUM        := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+CURRENT_BUILD    := $(shell grep '^version:' frontend/pubspec.yaml | sed -E 's/.*\+([0-9]+).*/\1/')
+BUILD_NUM        := $(shell echo $$(($(CURRENT_BUILD) + 1)))
 
 # Where to publish packaged artifacts by default
 PUBLISH_DIR ?= web
