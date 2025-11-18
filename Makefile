@@ -8,6 +8,11 @@ COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X network-debugger/internal/infrastructure/observability.Version=$(VERSION) -X network-debugger/internal/infrastructure/observability.Commit=$(COMMIT) -X network-debugger/internal/infrastructure/observability.Date=$(DATE)
 
+# Release helper metadata (used by release-github target)
+TAG              := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
+FRONTEND_VERSION := $(shell echo $(TAG) | sed -E 's/^v//')
+BUILD_NUM        := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+
 # Where to publish packaged artifacts by default
 PUBLISH_DIR ?= web
 
@@ -158,6 +163,34 @@ package: build-cross build-app-cross
 .PHONY: package-docs
 package-docs:
 	$(MAKE) package PUBLISH_DIR=docs
+
+.PHONY: release
+release:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Usage: make release VERSION=0.1.7"; \
+		exit 1; \
+	fi
+	@if ! echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "✗ VERSION='$(VERSION)' не похож на семвер X.Y.Z"; \
+		exit 1; \
+	fi
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "✗ Working tree не пустой. Сначала закоммить изменения или сделай stash."; \
+		exit 1; \
+	fi
+	@echo "→ Обновляем версию Flutter frontend..."
+	@echo "   frontend/pubspec.yaml: version: $(VERSION)+$(BUILD_NUM)"
+	@sed -i.bak -E 's/^version: .*/version: $(VERSION)+$(BUILD_NUM)/' frontend/pubspec.yaml && rm -f frontend/pubspec.yaml.bak
+	@git add frontend/pubspec.yaml
+	@echo "→ Создаём коммит и тег v$(VERSION)..."
+	@git commit -m "chore(release): v$(VERSION)"
+	@git tag v$(VERSION)
+	@echo "→ Пушим в origin..."
+	@git push origin HEAD
+	@git push origin v$(VERSION)
+	@echo ""
+	@echo "✓ Release v$(VERSION) подготовлен и запушен."
+	@echo "GitHub Actions уже соберут и опубликуют артефакты по тегу."
 
 frontend-dev-macos:
 	cd frontend && flutter run -d macos
