@@ -64,9 +64,17 @@ class GoServerManager {
         'Config: API port=${config.apiPort}, Proxy port=${config.forwardProxyPort}',
       );
 
+      // Для десктопного приложения отключаем авто‑открытие браузера
+      // у bundled Go-сервера через переменную окружения NO_BROWSER.
+      final environment = <String, String>{
+        ...Platform.environment,
+        'NO_BROWSER': '1',
+      };
+
       _process = await Process.start(
         serverPath,
         config.toArgs(),
+        environment: environment,
         mode: ProcessStartMode.normal,
       );
 
