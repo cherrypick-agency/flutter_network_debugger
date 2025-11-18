@@ -165,12 +165,14 @@ void main() {
       await tester.pumpWidget(_wrap(store, const ImportSettingsScreen()));
 
       // Assert
-      expect(find.text('Add to existing'), findsOneWidget);
+      expect(find.text('Add to existing (Merge)'), findsOneWidget);
       expect(find.text('Replace all sessions'), findsOneWidget);
       expect(find.text('Replace imported only'), findsOneWidget);
     });
 
-    testWidgets('Default mode is merge (Add to existing)', (tester) async {
+    testWidgets('Default mode is merge (Add to existing (Merge))', (
+      tester,
+    ) async {
       // Arrange
       final repo = _FakeRepository();
       final store = ExportImportStore(repo);

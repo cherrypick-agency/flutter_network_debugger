@@ -35,7 +35,7 @@ class NotificationSnackbar {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Error Details',
+                              n.title,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 8),

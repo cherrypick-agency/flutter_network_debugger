@@ -425,7 +425,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
-                                  // Process name chip
+                                  // Имя процесса
                                   if (_shouldShowProcessName(
                                     s.processInfo?.name,
                                   ))

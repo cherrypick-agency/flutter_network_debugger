@@ -906,7 +906,7 @@ class ImportSettingsScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               _ImportModeOption(
-                title: 'Add to existing',
+                title: 'Add to existing (Merge)',
                 description:
                     'Keep all current sessions and add imported ones (safe)',
                 mode: ImportMode.merge,
