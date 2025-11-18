@@ -49,7 +49,7 @@ Suitable for local development and test environments. Has crossplatform interfac
 - HTTP details: headers (with sensitive data masking), body (pretty/JSON tree/HEX), TTFB/Total...
 - CORS/Cache hints, cookies and TLS summary
 - WebSocket details: events/frames, pings/pongs, payload preview, json highligh
-- HAR/Curl export
+- import/export HAR
 - Artificial response delay (useful for simulating "slow networks")
 - Record/stop and records management
 - HTML responses preview

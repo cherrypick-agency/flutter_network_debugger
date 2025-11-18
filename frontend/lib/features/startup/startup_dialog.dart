@@ -75,7 +75,7 @@ class _StartupDialogState extends State<_StartupDialog> {
       // Fallback version
       if (mounted) {
         setState(() {
-          _appVersion = 'v0.1.6';
+          _appVersion = 'v?';
         });
       }
     }

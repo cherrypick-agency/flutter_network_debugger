@@ -1000,6 +1000,8 @@ class _MyHomePageState extends State<MyHomePage> {
                                                 bool selIsWs = true;
                                                 bool selIsHttp =
                                                     true; // fallback both
+                                                bool wsClosed = false;
+                                                DateTime? wsClosedAt;
                                                 if (sl<HomeUiStore>()
                                                         .selectedSessionId
                                                         .value !=
@@ -1027,6 +1029,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                                                 dynamic
                                                               >();
                                                       kind = s.kind;
+                                                      wsClosed =
+                                                          s.closedAt != null;
+                                                      wsClosedAt = s.closedAt;
                                                       break;
                                                     }
                                                   }
@@ -1153,6 +1158,8 @@ class _MyHomePageState extends State<MyHomePage> {
                                                               );
                                                           _savePrefs();
                                                         },
+                                                        wsClosed: wsClosed,
+                                                        wsClosedAt: wsClosedAt,
                                                       );
                                                     },
                                                   ),
