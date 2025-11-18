@@ -56,6 +56,8 @@ class WsDetailsPanel extends StatefulWidget {
     required this.onChangeDirection,
     required this.hideHeartbeats,
     required this.onToggleHeartbeats,
+    required this.isClosed,
+    this.closedAt,
   });
   final List<dynamic> frames;
   final List<dynamic> events;
@@ -66,6 +68,8 @@ class WsDetailsPanel extends StatefulWidget {
   final void Function(String) onChangeDirection;
   final bool hideHeartbeats;
   final void Function(bool) onToggleHeartbeats;
+  final bool isClosed;
+  final DateTime? closedAt;
 
   @override
   State<WsDetailsPanel> createState() => _WsDetailsPanelState();
@@ -757,7 +761,26 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         timelineSection,
         Expanded(
           child: _Card(
-            title: 'Frames',
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Frames'),
+                if (widget.isClosed) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    (() {
+                      final dt = widget.closedAt;
+                      if (dt == null) return '(closed)';
+                      final formatted = _fmtTime(dt.toIso8601String());
+                      return '(closed $formatted)';
+                    })(),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
             actions: [
               FilterChip(
                 label: const Text('Pretty', style: TextStyle(fontSize: 12)),
@@ -1021,122 +1044,171 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                 },
                               );
 
-                              // BUG 1 fix: Wrap content in scrollable container
-                              // so Stack doesn't scroll, only content inside scrolls
-                              final content = ConstrainedBox(
+                              // Ограничиваем высоту фрейма и скроллим только JSON,
+                              // панель с копированием/поиском висит поверх контента.
+                              return ConstrainedBox(
                                 constraints: const BoxConstraints(
-                                  maxHeight: 400, // Max height before scrolling
+                                  maxHeight: 400, // максимум, дальше скролл
                                 ),
-                                child: SingleChildScrollView(
-                                  child: Container(
-                                    alignment: Alignment.centerLeft,
-                                    padding: const EdgeInsets.all(8),
-                                    child: contentWidget,
-                                  ),
-                                ),
-                              );
-
-                              return Stack(
-                                children: [
-                                  content,
-                                  Positioned(
-                                    top: 6,
-                                    left: 6,
-                                    right: 6,
-                                    child: Align(
-                                      alignment: Alignment.topRight,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // Кнопка копирования содержимого фрейма
-                                          IconButton(
-                                            tooltip: 'Copy content',
-                                            icon: const Icon(
-                                              Icons.copy,
-                                              size: 18,
-                                            ),
-                                            onPressed: () {
-                                              final toCopy =
-                                                  extractedJson ?? preview;
-                                              Clipboard.setData(
-                                                ClipboardData(text: toCopy),
-                                              );
-                                            },
-                                          ),
-                                          const SizedBox(width: 6),
-                                          // Поиск по содержимому фрейма
-                                          if (local.show)
-                                            CommonSearchBar(
-                                              controller: local.controller,
-                                              focusNode: local.focus,
-                                              countText: local.keys.isEmpty
-                                                  ? '0/0'
-                                                  : '${local.focusedIndex + 1}/${local.keys.length}',
-                                              matchCase: local.matchCase,
-                                              wholeWord: local.wholeWord,
-                                              useRegex: local.useRegex,
-                                              canNavigate:
-                                                  local.keys.isNotEmpty,
-                                              onChanged: () {
-                                                setState(() {
-                                                  local.focusedIndex = 0;
-                                                });
-                                              },
-                                              onNext: () =>
-                                                  _localGotoNext(frameKey),
-                                              onPrev: () =>
-                                                  _localGotoPrev(frameKey),
-                                              onClose: () {
-                                                setState(() {
-                                                  local.show = false;
-                                                  local.controller.clear();
-                                                  local.focusedIndex = 0;
-                                                  local.keys = const [];
-                                                  local.focus.unfocus();
-                                                });
-                                              },
-                                              onToggleMatchCase: () {
-                                                setState(() {
-                                                  local.matchCase =
-                                                      !local.matchCase;
-                                                });
-                                              },
-                                              onToggleWholeWord: () {
-                                                setState(() {
-                                                  local.wholeWord =
-                                                      !local.wholeWord;
-                                                });
-                                              },
-                                              onToggleRegex: () {
-                                                setState(() {
-                                                  local.useRegex =
-                                                      !local.useRegex;
-                                                });
-                                              },
-                                            )
-                                          else
+                                child: Stack(
+                                  children: [
+                                    NotificationListener<ScrollNotification>(
+                                      onNotification: (notification) {
+                                        final metrics = notification.metrics;
+                                        if (notification
+                                                is ScrollUpdateNotification &&
+                                            notification.scrollDelta != null &&
+                                            metrics.axis == Axis.vertical) {
+                                          final delta =
+                                              notification.scrollDelta!;
+                                          if (_listCtrl.hasClients) {
+                                            final parentPos =
+                                                _listCtrl.position;
+                                            // Доскроллили контент фрейма до низа
+                                            // и продолжаем скроллить вниз —
+                                            // переводим скролл в родительский список.
+                                            if (metrics.pixels >=
+                                                    metrics.maxScrollExtent &&
+                                                delta > 0) {
+                                              final target =
+                                                  (parentPos.pixels + delta)
+                                                      .clamp(
+                                                        0.0,
+                                                        parentPos
+                                                            .maxScrollExtent,
+                                                      );
+                                              if (target != parentPos.pixels) {
+                                                _listCtrl.jumpTo(target);
+                                              }
+                                            }
+                                            // Доскроллили контент фрейма до верха
+                                            // и продолжаем скроллить вверх —
+                                            // передаём скролл родителю.
+                                            if (metrics.pixels <= 0 &&
+                                                delta < 0) {
+                                              final target =
+                                                  (parentPos.pixels + delta)
+                                                      .clamp(
+                                                        0.0,
+                                                        parentPos
+                                                            .maxScrollExtent,
+                                                      );
+                                              if (target != parentPos.pixels) {
+                                                _listCtrl.jumpTo(target);
+                                              }
+                                            }
+                                          }
+                                        }
+                                        return false;
+                                      },
+                                      child: SingleChildScrollView(
+                                        child: Container(
+                                          alignment: Alignment.centerLeft,
+                                          // небольшой внутренний отступ, без лишнего пустого места сверху
+                                          padding: const EdgeInsets.all(8),
+                                          child: contentWidget,
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 6,
+                                      left: 6,
+                                      right: 6,
+                                      child: Align(
+                                        alignment: Alignment.topRight,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
                                             IconButton(
-                                              tooltip: 'Search in frame',
+                                              tooltip: 'Copy content',
                                               icon: const Icon(
-                                                Icons.search,
+                                                Icons.copy,
                                                 size: 18,
                                               ),
                                               onPressed: () {
-                                                setState(() {
-                                                  local.show = true;
-                                                });
-                                                WidgetsBinding.instance
-                                                    .addPostFrameCallback((_) {
-                                                      local.focus
-                                                          .requestFocus();
-                                                    });
+                                                final toCopy =
+                                                    extractedJson ?? preview;
+                                                Clipboard.setData(
+                                                  ClipboardData(text: toCopy),
+                                                );
                                               },
                                             ),
-                                        ],
+                                            const SizedBox(width: 6),
+                                            if (local.show)
+                                              CommonSearchBar(
+                                                controller: local.controller,
+                                                focusNode: local.focus,
+                                                countText: local.keys.isEmpty
+                                                    ? '0/0'
+                                                    : '${local.focusedIndex + 1}/${local.keys.length}',
+                                                matchCase: local.matchCase,
+                                                wholeWord: local.wholeWord,
+                                                useRegex: local.useRegex,
+                                                canNavigate:
+                                                    local.keys.isNotEmpty,
+                                                onChanged: () {
+                                                  setState(() {
+                                                    local.focusedIndex = 0;
+                                                  });
+                                                },
+                                                onNext: () =>
+                                                    _localGotoNext(frameKey),
+                                                onPrev: () =>
+                                                    _localGotoPrev(frameKey),
+                                                onClose: () {
+                                                  setState(() {
+                                                    local.show = false;
+                                                    local.controller.clear();
+                                                    local.focusedIndex = 0;
+                                                    local.keys = const [];
+                                                    local.focus.unfocus();
+                                                  });
+                                                },
+                                                onToggleMatchCase: () {
+                                                  setState(() {
+                                                    local.matchCase =
+                                                        !local.matchCase;
+                                                  });
+                                                },
+                                                onToggleWholeWord: () {
+                                                  setState(() {
+                                                    local.wholeWord =
+                                                        !local.wholeWord;
+                                                  });
+                                                },
+                                                onToggleRegex: () {
+                                                  setState(() {
+                                                    local.useRegex =
+                                                        !local.useRegex;
+                                                  });
+                                                },
+                                              )
+                                            else
+                                              IconButton(
+                                                tooltip: 'Search in frame',
+                                                icon: const Icon(
+                                                  Icons.search,
+                                                  size: 18,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    local.show = true;
+                                                  });
+                                                  WidgetsBinding.instance
+                                                      .addPostFrameCallback((
+                                                        _,
+                                                      ) {
+                                                        local.focus
+                                                            .requestFocus();
+                                                      });
+                                                },
+                                              ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               );
                             },
                           ),
@@ -1234,7 +1306,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
 class _Card extends StatelessWidget {
   const _Card({required this.title, required this.child, this.actions});
-  final String title;
+  final Widget title;
   final Widget child;
   final List<Widget>? actions;
   @override
@@ -1250,11 +1322,11 @@ class _Card extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    title,
+                  child: DefaultTextStyle.merge(
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
+                    child: title,
                   ),
                 ),
                 if (actions != null) ...actions!,

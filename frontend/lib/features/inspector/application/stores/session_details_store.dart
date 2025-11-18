@@ -36,6 +36,10 @@ abstract class _SessionDetailsStore with Store {
 
   @action
   Future<void> open(String id) async {
+    // Перед открытием новой сессии аккуратно отписываемся от старой,
+    // чтобы не накапливать обработчики socket.io
+    _unsubscribeFromSession();
+
     sessionId = id;
     frames.clear();
     events.clear();
@@ -57,7 +61,11 @@ abstract class _SessionDetailsStore with Store {
     try {
       final from = frames.isNotEmpty ? frames.last.id : null;
       final res = await _listFrames(sessionId!, from: from, limit: 100);
-      frames.addAll(res);
+      // На всякий случай фильтруем дубликаты по id,
+      // если бэкенд вернёт пересекающиеся страницы
+      final existingIds = frames.map((f) => f.id).toSet();
+      final unique = res.where((f) => !existingIds.contains(f.id));
+      frames.addAll(unique);
     } catch (e, st) {
       final msg = resolveErrorMessage(e, st);
       loadError = msg.description;
@@ -118,9 +126,19 @@ abstract class _SessionDetailsStore with Store {
     final List<dynamic> arr = (data is List) ? data : [data];
     for (final f in arr) {
       try {
+        final id = (f['id'] ?? '').toString();
+        if (id.isEmpty) {
+          continue;
+        }
+        // Защита от дубликатов: один и тот же frame по id добавляем только один раз
+        final alreadyExists = frames.any((existing) => existing.id == id);
+        if (alreadyExists) {
+          continue;
+        }
+
         frames.add(
           Frame(
-            id: (f['id'] ?? '').toString(),
+            id: id,
             ts: DateTime.tryParse((f['ts'] ?? '').toString()) ?? DateTime.now(),
             direction: (f['direction'] ?? '').toString(),
             opcode: (f['opcode'] ?? '').toString(),
@@ -137,9 +155,18 @@ abstract class _SessionDetailsStore with Store {
     final List<dynamic> arr = (data is List) ? data : [data];
     for (final e in arr) {
       try {
+        final id = (e['id'] ?? '').toString();
+        if (id.isEmpty) {
+          continue;
+        }
+        final alreadyExists = events.any((existing) => existing.id == id);
+        if (alreadyExists) {
+          continue;
+        }
+
         events.add(
           EventEntity(
-            id: (e['id'] ?? '').toString(),
+            id: id,
             ts: DateTime.tryParse((e['ts'] ?? '').toString()) ?? DateTime.now(),
             namespace: (e['namespace'] ?? '').toString(),
             event: (e['event'] ?? e['name'] ?? '').toString(),

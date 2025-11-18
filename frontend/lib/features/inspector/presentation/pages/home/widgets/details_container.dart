@@ -21,10 +21,14 @@ class DetailsContainer extends StatelessWidget {
     final items = context.watch<SessionsStore>().items.toList();
     Map<String, dynamic>? meta;
     String? kind;
+    bool wsClosed = false;
+    DateTime? wsClosedAt;
     for (final s in items) {
       if (s.id == ui.selectedSessionId.value) {
         meta = s.httpMeta?.cast<String, dynamic>();
         kind = s.kind;
+        wsClosed = s.closedAt != null;
+        wsClosedAt = s.closedAt;
         break;
       }
     }
@@ -36,32 +40,30 @@ class DetailsContainer extends StatelessWidget {
     return Observer(
       builder: (_) {
         final details = context.watch<SessionDetailsStore>();
-        final frames =
-            details.frames
-                .map(
-                  (f) => {
-                    'id': f.id,
-                    'ts': f.ts.toIso8601String(),
-                    'direction': f.direction,
-                    'opcode': f.opcode,
-                    'size': f.size,
-                    'preview': f.preview,
-                  },
-                )
-                .toList();
-        final events =
-            details.events
-                .map(
-                  (e) => {
-                    'id': e.id,
-                    'ts': e.ts.toIso8601String(),
-                    'namespace': e.namespace,
-                    'event': e.event,
-                    'ackId': e.ackId,
-                    'argsPreview': e.argsPreview,
-                  },
-                )
-                .toList();
+        final frames = details.frames
+            .map(
+              (f) => {
+                'id': f.id,
+                'ts': f.ts.toIso8601String(),
+                'direction': f.direction,
+                'opcode': f.opcode,
+                'size': f.size,
+                'preview': f.preview,
+              },
+            )
+            .toList();
+        final events = details.events
+            .map(
+              (e) => {
+                'id': e.id,
+                'ts': e.ts.toIso8601String(),
+                'namespace': e.namespace,
+                'event': e.event,
+                'ackId': e.ackId,
+                'argsPreview': e.argsPreview,
+              },
+            )
+            .toList();
         return DetailsTabs(
           showWs: selIsWs,
           showHttp: selIsHttp,
@@ -82,6 +84,8 @@ class DetailsContainer extends StatelessWidget {
           onToggleHeartbeats: (v) {
             sl<HomeUiStore>().setHideHeartbeats(v);
           },
+          wsClosed: wsClosed,
+          wsClosedAt: wsClosedAt,
         );
       },
     );

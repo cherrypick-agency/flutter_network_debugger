@@ -23,6 +23,8 @@ class DetailsTabs extends StatelessWidget {
     required this.onChangeDirection,
     required this.hideHeartbeats,
     required this.onToggleHeartbeats,
+    required this.wsClosed,
+    required this.wsClosedAt,
   });
 
   // Какие вкладки показывать
@@ -43,6 +45,8 @@ class DetailsTabs extends StatelessWidget {
   final ValueChanged<String> onChangeDirection;
   final bool hideHeartbeats;
   final ValueChanged<bool> onToggleHeartbeats;
+  final bool wsClosed;
+  final DateTime? wsClosedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +88,8 @@ class DetailsTabs extends StatelessWidget {
       onChangeDirection: onChangeDirection,
       hideHeartbeats: hideHeartbeats,
       onToggleHeartbeats: onToggleHeartbeats,
+      isClosed: wsClosed,
+      closedAt: wsClosedAt,
     );
   }
 
