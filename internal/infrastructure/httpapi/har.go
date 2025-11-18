@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"network-debugger/internal/domain"
+	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
 )
 
@@ -243,7 +244,7 @@ func exportHARWithOptions(w http.ResponseWriter, r *http.Request, d *Deps, opts 
 			Version: "1.2",
 			Creator: harCreator{
 				Name:    "network-debugger",
-				Version: "0.1.6",
+				Version: obs.Version,
 				Comment: "Network Debugger - HTTP/WebSocket Inspector",
 			},
 			Entries: entries,
