@@ -32,7 +32,7 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-15-large  # Intel runner (macos-13 is deprecated)
+            runner: macos-15-intel  # Free Intel runner for public repos (supported until Aug 2027)
           - arch: arm64
             runner: macos-latest  # Apple Silicon runner
     runs-on: ${{ matrix.runner }}
