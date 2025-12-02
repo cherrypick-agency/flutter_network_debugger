@@ -31,9 +31,11 @@
 </p>
 
 <img width="1312" height="815" alt="image" src="https://github.com/user-attachments/assets/d9c95c20-f79b-45da-94a7-c341cd33a388" />
-<img width="250" alt="image" src="https://github.com/user-attachments/assets/3eb43e0d-e0ce-4c6d-a0c2-0fb5985ad8f9" />
-<img width="250" alt="image" src="https://github.com/user-attachments/assets/029cecea-cde6-466b-9e5c-06f5a78bba50" />
-<img width="250"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
+<img width="120" alt="image" src="https://github.com/user-attachments/assets/3eb43e0d-e0ce-4c6d-a0c2-0fb5985ad8f9" />
+<img width="120" alt="image" src="https://github.com/user-attachments/assets/029cecea-cde6-466b-9e5c-06f5a78bba50" />
+<img width="120" height="815" alt="image" src="https://github.com/user-attachments/assets/c9b753a8-874a-414d-a628-4b794e1e3319" />
+<img width="120"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
+
 
 <!--![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)-->
 
