@@ -187,6 +187,15 @@ func (e *ExtismExecutor) Close() error {
 
 // createPlugin creates a new plugin for the given script (used by PluginPool)
 func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script) (*extism.Plugin, error) {
+	// Validate script has compiled code
+	if len(script.Code) == 0 {
+		log.Printf("[Extism] Cannot create plugin for script '%s' (ID: %s): empty code", script.Name, script.ID)
+		return nil, fmt.Errorf("script '%s' has empty code, compilation required", script.Name)
+	}
+
+	log.Printf("[Extism] Creating plugin for script '%s' (ID: %s, Code size: %d bytes, Language: %s)",
+		script.Name, script.ID, len(script.Code), script.Language)
+
 	// Create host functions with script-specific AllowedHosts
 	hostFns := createHostFunctions(script.Config.AllowedHosts)
 
@@ -214,10 +223,11 @@ func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script)
 
 	plugin, err := extism.NewPlugin(ctx, manifest, config, hostFns)
 	if err != nil {
+		log.Printf("[Extism] Failed to create plugin for script '%s' (ID: %s): %v", script.Name, script.ID, err)
 		return nil, fmt.Errorf("failed to create plugin: %w", err)
 	}
 
-	log.Printf("[Extism] Created plugin for script %s (%s)", script.Name, script.Language)
+	log.Printf("[Extism] Successfully created plugin for script '%s' (ID: %s, Language: %s)", script.Name, script.ID, script.Language)
 
 	return plugin, nil
 }

@@ -71,6 +71,12 @@ func (s *ScriptService) ExecuteForRequest(ctx context.Context, req *domain.HTTPR
 		}
 		log.Printf("[ScriptService] Found executor for runtime %s", script.Runtime)
 
+		// Skip scripts without compiled code (early validation)
+		if len(script.Code) == 0 {
+			log.Printf("[ScriptService] Skipping script '%s' (ID: %s) - no compiled code available", script.Name, script.ID)
+			continue
+		}
+
 		// Prepare script context
 		scriptCtx := domain.ScriptContext{
 			Request: currentReq,
@@ -142,6 +148,12 @@ func (s *ScriptService) ExecuteForResponse(ctx context.Context, req *domain.HTTP
 	for _, script := range matchedScripts {
 		executor, ok := s.executors[script.Runtime]
 		if !ok {
+			continue
+		}
+
+		// Skip scripts without compiled code (early validation)
+		if len(script.Code) == 0 {
+			log.Printf("[ScriptService] Skipping script '%s' (ID: %s) - no compiled code available", script.Name, script.ID)
 			continue
 		}
 

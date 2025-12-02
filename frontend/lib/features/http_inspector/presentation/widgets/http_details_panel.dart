@@ -24,6 +24,8 @@ import '../../../../widgets/highlighted_url_widget.dart';
 import '../../../../widgets/http_method_chip.dart';
 import '../../../tags/presentation/widgets/tags_editor.dart';
 import '../../../inspector/presentation/widgets/hex_body_renderer.dart';
+import '../../../compose/domain/usecases/convert_request_to_template.dart';
+import '../../../compose/presentation/pages/compose_page.dart';
 import 'request_action_buttons.dart';
 import 'request_body_tab.dart';
 import 'request_info_tab.dart';
@@ -223,6 +225,27 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
           ],
         );
       },
+    );
+  }
+
+  /// Открывает Compose с данными текущего запроса для редактирования
+  void _openComposeWithRequest(Map<String, dynamic> req) {
+    final headersRaw =
+        (req['headersRaw'] as Map?)?.map(
+          (k, v) => MapEntry(k.toString(), v.toString()),
+        ) ??
+        <String, String>{};
+
+    final useCase = sl<ConvertRequestToTemplateUseCase>();
+    final template = useCase(
+      requestData: req,
+      headersRaw: headersRaw.isNotEmpty ? headersRaw : null,
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ComposePage(initialTemplate: template),
+      ),
     );
   }
 
@@ -570,6 +593,14 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
                 },
                 icon: const Icon(Icons.copy, size: 18),
                 tooltip: 'Copy URL',
+                iconSize: 18,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+              ),
+              IconButton(
+                onPressed: () => _openComposeWithRequest(req),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                tooltip: 'Edit in Compose',
                 iconSize: 18,
                 padding: const EdgeInsets.all(8),
                 constraints: const BoxConstraints(),

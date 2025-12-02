@@ -18,10 +18,16 @@ import '../../../inspector/application/stores/home_ui_store.dart';
 import '../../../../core/utils/debouncer.dart';
 import 'package:app_http_client/application/app_http_exception.dart';
 import '../../../../services/prefs.dart';
+import '../../../../widgets/http_method_chip.dart';
+import '../../../../widgets/copy_curl_button.dart';
 import 'dart:convert';
 
 class ComposePage extends StatefulWidget {
-  const ComposePage({super.key});
+  const ComposePage({super.key, this.initialTemplate});
+
+  /// Начальный шаблон для редактирования (например, из Inspector)
+  final ComposeTemplateDTO? initialTemplate;
+
   @override
   State<ComposePage> createState() => _ComposePageState();
 }
@@ -74,8 +80,17 @@ class _ComposePageState extends State<ComposePage> {
   void initState() {
     super.initState();
     _loadComposeConfig();
-    _loadDraftIfAny();
-    // загрузим библиотеку один раз при входе, без FutureBuilder в дереве
+
+    // Если передан начальный шаблон - применяем его, иначе загружаем черновик
+    if (widget.initialTemplate != null) {
+      _applyTemplate(widget.initialTemplate!);
+      _dirty = true; // новый запрос, пока не сохранён
+      _currentTplId = null; // сбрасываем id, это новый запрос
+    } else {
+      _loadDraftIfAny();
+    }
+
+    // загрузим библиотеку один раз при входе
     // ignore: discarded_futures
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // ignore: discarded_futures
@@ -401,7 +416,7 @@ class _ComposePageState extends State<ComposePage> {
                             children: [
                               // Method
                               SizedBox(
-                                width: 110,
+                                width: 120,
                                 child: DropdownButtonFormField<String>(
                                   value: _method,
                                   onChanged: (v) {
@@ -414,8 +429,43 @@ class _ComposePageState extends State<ComposePage> {
                                   iconSize: 16,
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(fontSize: 12),
+                                  selectedItemBuilder: (context) {
+                                    return [
+                                      'GET',
+                                      'POST',
+                                      'PUT',
+                                      'DELETE',
+                                      'PATCH',
+                                      'HEAD',
+                                      'OPTIONS',
+                                    ].map((method) {
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 10,
+                                            height: 10,
+                                            decoration: BoxDecoration(
+                                              color: getHttpMethodFgColor(
+                                                context,
+                                                method,
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            method,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList();
+                                  },
                                   items:
-                                      const [
+                                      [
                                             'GET',
                                             'POST',
                                             'PUT',
@@ -427,7 +477,30 @@ class _ComposePageState extends State<ComposePage> {
                                           .map(
                                             (m) => DropdownMenuItem(
                                               value: m,
-                                              child: Text(m),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    width: 10,
+                                                    height: 10,
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          getHttpMethodFgColor(
+                                                            context,
+                                                            m,
+                                                          ),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    m,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           )
                                           .toList(),
@@ -451,20 +524,22 @@ class _ComposePageState extends State<ComposePage> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Copy cURL',
-                                    onPressed: _copyCurl,
-                                    icon: const Icon(Icons.copy_all),
-                                  ),
-                                ],
+                              CopyCurlButton(
+                                url: _urlCtrl.text.trim(),
+                                method: _method,
+                                headers: {
+                                  for (final h in _headers)
+                                    if (h.key.trim().isNotEmpty) h.key: h.value,
+                                },
+                                body: _bodyMode == 'json'
+                                    ? _jsonCtrl.text
+                                    : _rawCtrl.text,
                               ),
                               const SizedBox(width: 8),
                               OutlinedButton.icon(
                                 onPressed: _onSaveToCollection,
                                 icon: const Icon(Icons.folder_open),
-                                label: const Text('Save to...'),
+                                label: const Text('Save'),
                               ),
                               const SizedBox(width: 8),
                               FilledButton.icon(
@@ -951,34 +1026,6 @@ class _ComposePageState extends State<ComposePage> {
       },
       child: Text(key, style: const TextStyle(fontSize: 12)),
     );
-  }
-
-  Future<void> _copyCurl() async {
-    final buf = StringBuffer();
-    buf.write('curl');
-    buf.write(' -X ' + _method);
-    for (final h in _headers) {
-      if (h.key.trim().isEmpty) continue;
-      buf.write(' -H ' + _shellEscape('${h.key}: ${h.value}'));
-    }
-    if (_bodyMode == 'raw' && _rawCtrl.text.isNotEmpty) {
-      buf.write(' --data ' + _shellEscape(_rawCtrl.text));
-    }
-    if (_bodyMode == 'json' && _jsonCtrl.text.isNotEmpty) {
-      buf.write(' --data ' + _shellEscape(_jsonCtrl.text));
-    }
-    buf.write(' ' + _shellEscape(_urlCtrl.text.trim()));
-    await Clipboard.setData(ClipboardData(text: buf.toString()));
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('cURL copied')));
-    }
-  }
-
-  String _shellEscape(String s) {
-    final escaped = s.replaceAll("'", "'\\''");
-    return "'" + escaped + "'";
   }
 
   Future<void> _maybeApplyTemplate(ComposeTemplateDTO tpl) async {

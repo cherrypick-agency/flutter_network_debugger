@@ -24,6 +24,7 @@ import '../../features/inspector/application/services/sessions_polling_service.d
 import '../../features/inspector/application/services/recent_window_service.dart';
 import '../../features/compose/data/compose_repository.dart';
 import '../../features/compose/application/compose_store.dart';
+import '../../features/compose/domain/usecases/convert_request_to_template.dart';
 import '../../features/breakpoints/data/breakpoints_api.dart';
 import '../../features/breakpoints/data/breakpoints_repository_impl.dart';
 import '../../features/breakpoints/domain/repositories/breakpoints_repository.dart';
@@ -127,12 +128,15 @@ Future<void> setupDI({
     () => SessionsPollingService(),
   );
   sl.registerLazySingleton<RecentWindowService>(() => RecentWindowService());
-  // Compose repository
+  // Compose feature
   sl.registerLazySingleton<ComposeRepository>(
     () => ComposeRepository(sl<AppHttpClient>()),
   );
   sl.registerLazySingleton<ComposeStore>(
     () => ComposeStore(sl<ComposeRepository>()),
+  );
+  sl.registerLazySingleton<ConvertRequestToTemplateUseCase>(
+    () => ConvertRequestToTemplateUseCase(),
   );
   // Filters store
   sl.registerLazySingleton<SessionsFiltersStore>(() => SessionsFiltersStore());

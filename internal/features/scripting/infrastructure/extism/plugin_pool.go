@@ -275,6 +275,22 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 
 		plugin, createErr := p.createFunc(ctx, p.script)
 		if createErr != nil {
+			// Log detailed error with circuit breaker state
+			currentState := p.circuitState.Load()
+			stateStr := "CLOSED"
+			if currentState == CircuitHalfOpen {
+				stateStr = "HALF-OPEN"
+			} else if currentState == CircuitOpen {
+				stateStr = "OPEN"
+			}
+			total := p.totalCount.Load()
+			errors := p.errorCount.Load()
+			errorRate := float64(0)
+			if total > 0 {
+				errorRate = float64(errors) / float64(total)
+			}
+			log.Printf("[PluginPool:%s] Failed to create plugin: %v (circuit: %s, errors: %d/%d = %.1f%%)",
+				p.scriptID, createErr, stateStr, errors, total, errorRate*100)
 			err = fmt.Errorf("failed to create plugin: %w", createErr)
 			return nil, err
 		}
@@ -341,10 +357,13 @@ func (p *PluginPool) Release(instance *pooledPlugin, execErr error) {
 		errors := p.errorCount.Add(1)
 		p.lastErrorTime.Store(time.Now())
 
+		// Log error details for diagnostics
+		errorRate := float64(errors) / float64(total)
+		log.Printf("[PluginPool:%s] Plugin execution error: %v (total: %d, errors: %d, rate: %.1f%%)",
+			p.scriptID, execErr, total, errors, errorRate*100)
+
 		// Check if should open circuit
 		if total >= CircuitMinSamples {
-			errorRate := float64(errors) / float64(total)
-
 			// CAS retry loop to handle concurrent state changes correctly
 			// Prevents TOCTOU race where state changes between Load() and CAS
 			for {
@@ -356,7 +375,8 @@ func (p *PluginPool) Release(instance *pooledPlugin, execErr error) {
 					if currentState == CircuitClosed || currentState == CircuitHalfOpen {
 						// Try atomic transition to OPEN
 						if p.circuitState.CompareAndSwap(currentState, CircuitOpen) {
-							log.Printf("[PluginPool:%s] Circuit breaker OPEN (%.1f%% errors)", p.scriptID, errorRate*100)
+							log.Printf("[PluginPool:%s] Circuit breaker OPEN (%.1f%% errors, %d/%d failures)",
+								p.scriptID, errorRate*100, errors, total)
 							break // Success - exit retry loop
 						}
 						// CAS failed - state changed by another goroutine, retry

@@ -51,6 +51,22 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Объединяем query из таргета и входящего запроса (кроме служебных параметров `_target`, `_resetCapture`)
+	// Параметры из входящего запроса имеют приоритет поверх параметров таргета
+	targetQ := u.Query()
+	incomingQ := r.URL.Query()
+	incomingQ.Del("_target")
+	incomingQ.Del("_resetCapture")
+
+	// Объединяем: входящие query перезаписывают query из таргета
+	for k, vv := range incomingQ {
+		targetQ.Del(k)
+		for _, v := range vv {
+			targetQ.Add(k, v)
+		}
+	}
+	u.RawQuery = targetQ.Encode()
+
 	// Check if this target should be monitored (exclude monitoring endpoints)
 	shouldMonitor := d.shouldMonitorTarget(u.Path)
 
@@ -131,7 +147,7 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		hdr.Set("Origin", origin)
 	}
 
-	upstreamConn, resp, err := dialer.Dial(u.String(), hdr)
+	upstreamConn, resp, err := d.dialWithFallback(&dialer, u, hdr)
 	if err != nil {
 		// Get human-readable error message
 		errorCode, errorMessage := humanizeProxyError(err)
@@ -176,6 +192,35 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	// Start pumps
 	go d.pipe(sessionID, clientConn, upstreamConn, domain.DirectionClientToUpstream, shouldMonitor)
 	go d.pipe(sessionID, upstreamConn, clientConn, domain.DirectionUpstreamToClient, shouldMonitor)
+}
+
+// dialWithFallback attempts to connect to the upstream WebSocket server.
+// If the connection fails due to a TLS handshake error (e.g., "first record does not look like a TLS handshake"),
+// it automatically retries with plain ws:// instead of wss://.
+func (d *Deps) dialWithFallback(dialer *websocket.Dialer, u *url.URL, hdr http.Header) (*websocket.Conn, *http.Response, error) {
+	conn, resp, err := dialer.Dial(u.String(), hdr)
+	if err != nil && u.Scheme == "wss" && strings.Contains(err.Error(), "first record does not look like a TLS handshake") {
+		// Log warning about TLS fallback
+		d.Logger.Warn().
+			Str("original_url", u.String()).
+			Msg("TLS handshake failed, attempting fallback to plain ws:// (target server may not support TLS)")
+
+		// Fallback to plain ws://
+		fallbackURL := *u
+		fallbackURL.Scheme = "ws"
+
+		// Remove TLS config for plain connection
+		fallbackDialer := *dialer
+		fallbackDialer.TLSClientConfig = nil
+
+		conn, resp, err = fallbackDialer.Dial(fallbackURL.String(), hdr)
+		if err == nil {
+			d.Logger.Info().
+				Str("fallback_url", fallbackURL.String()).
+				Msg("Successfully connected via plain ws:// after TLS fallback")
+		}
+	}
+	return conn, resp, err
 }
 
 func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain.Direction, shouldMonitor bool) {

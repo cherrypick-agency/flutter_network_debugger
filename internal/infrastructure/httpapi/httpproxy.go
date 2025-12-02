@@ -1154,6 +1154,9 @@ func humanizeProxyError(err error) (code string, message string) {
 	}
 
 	// TLS/SSL errors
+	if strings.Contains(errStrLower, "first record does not look like a tls handshake") {
+		return "TLS_HANDSHAKE_FAILED", "TLS handshake failed - target server may not support TLS (consider using ws:// instead of wss://)"
+	}
 	if strings.Contains(errStrLower, "tls") || strings.Contains(errStrLower, "certificate") {
 		return "TLS_ERROR", "SSL/TLS certificate error"
 	}
