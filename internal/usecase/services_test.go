@@ -84,6 +84,10 @@ func (m *mockFrameRepo) GetFrameByID(ctx context.Context, sessionID string, fram
 	return domain.Frame{}, false, nil
 }
 
+func (m *mockFrameRepo) UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error {
+	return nil
+}
+
 type mockEventRepo struct {
 	events map[string][]domain.Event
 }
@@ -384,6 +388,10 @@ func (f *failingFrameRepo) ListFrames(ctx context.Context, sessionID string, fro
 
 func (f *failingFrameRepo) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, context.DeadlineExceeded
+}
+
+func (f *failingFrameRepo) UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error {
+	return context.DeadlineExceeded
 }
 
 func TestSessionService_AddFrame_ErrorPath(t *testing.T) {

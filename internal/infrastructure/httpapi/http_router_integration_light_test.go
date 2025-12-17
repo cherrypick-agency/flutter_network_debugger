@@ -37,6 +37,9 @@ func (stubRepoNotFound) ListFrames(context.Context, string, string, int) ([]doma
 func (stubRepoNotFound) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, nil
 }
+func (stubRepoNotFound) UpdateFrameBodyFile(context.Context, string, string, string) error {
+	return nil
+}
 func (stubRepoNotFound) AppendEvent(context.Context, string, domain.Event) error { return nil }
 func (stubRepoNotFound) ListEvents(context.Context, string, string, int) ([]domain.Event, string, error) {
 	return nil, "", nil

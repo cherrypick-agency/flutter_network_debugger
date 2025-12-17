@@ -110,6 +110,10 @@ func (m *mockRepoForImport) GetFrameByID(ctx context.Context, sessionID, frameID
 	return domain.Frame{}, false, nil
 }
 
+func (m *mockRepoForImport) UpdateFrameBodyFile(ctx context.Context, sessionID, frameID, bodyFile string) error {
+	return nil
+}
+
 // EventRepository methods
 func (m *mockRepoForImport) AppendEvent(ctx context.Context, sessionID string, event domain.Event) error {
 	return nil

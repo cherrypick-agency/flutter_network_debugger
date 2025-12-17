@@ -116,6 +116,10 @@ func (stubFrameRepo) GetFrameByID(ctx context.Context, sessionID string, frameID
 	return domain.Frame{}, false, nil
 }
 
+func (stubFrameRepo) UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error {
+	return nil
+}
+
 type stubEventRepo struct{}
 
 func (stubEventRepo) AppendEvent(ctx context.Context, sessionID string, e domain.Event) error {

@@ -40,6 +40,7 @@ func (apiStubRepo) ListFrames(context.Context, string, string, int) ([]domain.Fr
 func (apiStubRepo) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, nil
 }
+func (apiStubRepo) UpdateFrameBodyFile(context.Context, string, string, string) error { return nil }
 
 // events
 func (apiStubRepo) AppendEvent(context.Context, string, domain.Event) error { return nil }

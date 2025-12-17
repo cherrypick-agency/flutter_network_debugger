@@ -35,6 +35,7 @@ func (stubRepo) ListFrames(context.Context, string, string, int) ([]domain.Frame
 func (stubRepo) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, nil
 }
+func (stubRepo) UpdateFrameBodyFile(context.Context, string, string, string) error { return nil }
 
 // EventRepository
 func (stubRepo) AppendEvent(context.Context, string, domain.Event) error { return nil }

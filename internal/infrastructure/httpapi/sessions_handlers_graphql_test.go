@@ -35,6 +35,9 @@ func (m mockRepoForGraphQL) ListFrames(context.Context, string, string, int) ([]
 func (m mockRepoForGraphQL) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, nil
 }
+func (m mockRepoForGraphQL) UpdateFrameBodyFile(context.Context, string, string, string) error {
+	return nil
+}
 func (m mockRepoForGraphQL) AppendEvent(context.Context, string, domain.Event) error { return nil }
 func (m mockRepoForGraphQL) ListEvents(context.Context, string, string, int) ([]domain.Event, string, error) {
 	return nil, "", nil

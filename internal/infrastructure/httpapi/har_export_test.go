@@ -37,6 +37,9 @@ func (m *mockRepoForHAR) ListFrames(context.Context, string, string, int) ([]dom
 func (m *mockRepoForHAR) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, nil
 }
+func (m *mockRepoForHAR) UpdateFrameBodyFile(context.Context, string, string, string) error {
+	return nil
+}
 func (m *mockRepoForHAR) AppendEvent(context.Context, string, domain.Event) error { return nil }
 func (m *mockRepoForHAR) ListEvents(context.Context, string, string, int) ([]domain.Event, string, error) {
 	return nil, "", nil
@@ -168,6 +171,9 @@ func (m *mockRepoWithPagination) ListFrames(context.Context, string, string, int
 }
 func (m *mockRepoWithPagination) GetFrameByID(context.Context, string, string) (domain.Frame, bool, error) {
 	return domain.Frame{}, false, nil
+}
+func (m *mockRepoWithPagination) UpdateFrameBodyFile(context.Context, string, string, string) error {
+	return nil
 }
 func (m *mockRepoWithPagination) AppendEvent(context.Context, string, domain.Event) error {
 	return nil

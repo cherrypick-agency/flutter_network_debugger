@@ -70,6 +70,10 @@ func (m *mockFrameRepoForPerformance) GetFrameByID(ctx context.Context, sessionI
 	return domain.Frame{}, false, nil
 }
 
+func (m *mockFrameRepoForPerformance) UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error {
+	return nil
+}
+
 type mockEventRepoForPerformance struct{}
 
 func (m *mockEventRepoForPerformance) AppendEvent(ctx context.Context, sessionID string, e domain.Event) error {
