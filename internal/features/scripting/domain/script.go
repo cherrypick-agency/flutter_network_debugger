@@ -24,6 +24,10 @@ type Script struct {
 	CompilationError  string            // Compilation error message
 	LastCompiledAt    *time.Time        // Last successful compilation time
 
+	// Validation (WASM exports check)
+	ValidationStatus ValidationStatus // WASM validation status
+	ValidationError  string           // Validation error message with fix suggestions
+
 	// Trigger Configuration
 	TriggerType TriggerType // request | response | both
 	MatchRules  MatchRules  // Pattern matching
@@ -49,6 +53,15 @@ const (
 	CompilationCompiling   CompilationStatus = "compiling"    // Currently compiling
 	CompilationSuccess     CompilationStatus = "success"      // Successfully compiled
 	CompilationStatusError CompilationStatus = "error"        // Compilation failed
+)
+
+// ValidationStatus represents the WASM validation state
+type ValidationStatus string
+
+const (
+	ValidationNotValidated ValidationStatus = "not_validated" // No validation attempted
+	ValidationValid        ValidationStatus = "valid"         // WASM exports are valid
+	ValidationInvalid      ValidationStatus = "invalid"       // WASM exports are invalid
 )
 
 // Validate performs domain-level validation
@@ -112,6 +125,28 @@ func (s *Script) MarkCompilationSuccess(wasm []byte) {
 func (s *Script) MarkCompilationError(err error) {
 	s.CompilationStatus = CompilationStatusError
 	s.CompilationError = err.Error()
+}
+
+// MarkValidationSuccess marks WASM validation as successful
+func (s *Script) MarkValidationSuccess() {
+	s.ValidationStatus = ValidationValid
+	s.ValidationError = ""
+}
+
+// MarkValidationError marks WASM validation as failed
+func (s *Script) MarkValidationError(err error) {
+	s.ValidationStatus = ValidationInvalid
+	s.ValidationError = err.Error()
+}
+
+// IsValidated returns true if WASM has been validated successfully
+func (s *Script) IsValidated() bool {
+	return s.ValidationStatus == ValidationValid
+}
+
+// NeedsValidation returns true if WASM needs validation
+func (s *Script) NeedsValidation() bool {
+	return len(s.Code) > 0 && s.ValidationStatus != ValidationValid
 }
 
 // TriggerType defines when a script should execute

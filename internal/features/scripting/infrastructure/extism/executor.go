@@ -158,15 +158,28 @@ func (e *ExtismExecutor) Runtime() domain.ScriptRuntime {
 	return domain.RuntimeExtism
 }
 
-// Validate checks if the script is valid WASM
+// Validate checks if the script is valid WASM with required exports
 func (e *ExtismExecutor) Validate(ctx context.Context, script domain.Script) error {
 	// Skip validation if Code is empty (script will be compiled later)
 	if len(script.Code) == 0 {
 		return nil
 	}
-	// Try to create a plugin to validate the WASM module
-	_, err := e.createPlugin(ctx, script)
-	return err
+
+	// First, validate WASM exports (fast check without creating plugin)
+	if err := ValidateWASMWithLanguage(script.Code, script.Language); err != nil {
+		return err
+	}
+
+	// Then try to create a plugin to validate the WASM module can be instantiated
+	plugin, err := e.createPlugin(ctx, script)
+	if err != nil {
+		return err
+	}
+
+	// Close the plugin since we only created it for validation
+	plugin.Close(ctx)
+
+	return nil
 }
 
 // Close cleans up all plugin pools and the compilation cache

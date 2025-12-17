@@ -261,6 +261,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	// Safely peek a small portion of request body and keep stream intact for upstream.
 	// This must be done BEFORE creating the proxy, as ModifyResponse callback needs access to it.
 	var reqBodyBuf []byte
+	var reqFrameID string // Will be set when request frame is created, used for body file update
 	if r.Body != nil {
 		peekSize := int(previewMaxBytes.Load())
 		if peekSize <= 0 {
@@ -403,7 +404,8 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			ttfb := durationMs(tStart, firstByte)
 			total := durationMs(tStart, time.Now())
 			preview := augmentPreviewWithTimings(basePreview, ttfb, total)
-			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
+			respFrameID := id.New()
+			fr := domain.Frame{ID: respFrameID, Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
 			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
 			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
@@ -444,12 +446,18 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 					if f, err := d.spoolBodyBytes(reqBodyBuf, "req"); err == nil && f != "" {
 						tx.ReqBodyFile = f
 						d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
+						// Update request frame with body file path
+						if reqFrameID != "" {
+							_ = d.Svc.UpdateFrameBodyFile(contextWithNoCancel(), sessionID, reqFrameID, f)
+						}
 					}
 				}
 				// Spool response body
 				if f, err := d.spoolBody(resp.Body, int64(d.Cfg.BodyMaxBytes), "resp"); err == nil && f != "" {
 					tx.RespBodyFile = f
 					d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
+					// Update response frame with body file path
+					_ = d.Svc.UpdateFrameBodyFile(contextWithNoCancel(), sessionID, respFrameID, f)
 				}
 			}
 			// Always add HTTP transaction
@@ -514,7 +522,8 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	rPrev.URL = &upstream
 	reqPreview := buildHTTPRequestPreview(&rPrev, reqBodyBuf)
 	// Always log request frame
-	fr = domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
+	reqFrameID = id.New()
+	fr = domain.Frame{ID: reqFrameID, Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
 	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
 	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()

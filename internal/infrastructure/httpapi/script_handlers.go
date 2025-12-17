@@ -55,6 +55,8 @@ type scriptDTO struct {
 	CompilationStatus domain.CompilationStatus `json:"compilationStatus"`
 	CompilationError  string                   `json:"compilationError"`
 	LastCompiledAt    *time.Time               `json:"lastCompiledAt"`
+	ValidationStatus  domain.ValidationStatus  `json:"validationStatus"`
+	ValidationError   string                   `json:"validationError,omitempty"`
 }
 
 func toScriptDTO(s *domain.Script) scriptDTO {
@@ -105,6 +107,8 @@ func toScriptDTO(s *domain.Script) scriptDTO {
 		CompilationStatus: s.CompilationStatus,
 		CompilationError:  s.CompilationError,
 		LastCompiledAt:    s.LastCompiledAt,
+		ValidationStatus:  s.ValidationStatus,
+		ValidationError:   s.ValidationError,
 	}
 }
 

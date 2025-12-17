@@ -12,7 +12,7 @@ import (
 // Composer 1.
 func TestNewCompilationService(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	if service == nil {
 		t.Fatal("NewCompilationService returned nil")
@@ -34,7 +34,7 @@ func TestNewCompilationService(t *testing.T) {
 // Composer 1.
 func TestCompilationService_RegisterCompiler(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	compiler := &mockCompiler{language: "rust", available: true}
 	service.RegisterCompiler(compiler)
@@ -58,7 +58,7 @@ func TestCompilationService_RegisterCompiler(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_Success(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -106,7 +106,7 @@ func TestCompilationService_CompileScript_Success(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_ScriptNotFound(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	ctx := context.Background()
 	_, err := service.CompileScript(ctx, "nonexistent", false)
@@ -119,7 +119,7 @@ func TestCompilationService_CompileScript_ScriptNotFound(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_NoSourceCode(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:       "test-script",
@@ -145,7 +145,7 @@ func TestCompilationService_CompileScript_NoSourceCode(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_UnsupportedLanguage(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -169,7 +169,7 @@ func TestCompilationService_CompileScript_UnsupportedLanguage(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_CompilerNotAvailable(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -196,7 +196,7 @@ func TestCompilationService_CompileScript_CompilerNotAvailable(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_CompilationError(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -232,7 +232,7 @@ func TestCompilationService_CompileScript_CompilationError(t *testing.T) {
 // Composer 1.
 func TestCompilationService_CompileScript_WithDependencies(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -275,7 +275,7 @@ func TestCompilationService_CompileScript_WithDependencies(t *testing.T) {
 // Composer 1.
 func TestCompilationService_ValidateSyntax_Success(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		Language:   "rust",
@@ -295,7 +295,7 @@ func TestCompilationService_ValidateSyntax_Success(t *testing.T) {
 // Composer 1.
 func TestCompilationService_ValidateSyntax_NoSourceCode(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		Language: "rust",
@@ -311,7 +311,7 @@ func TestCompilationService_ValidateSyntax_NoSourceCode(t *testing.T) {
 // Composer 1.
 func TestCompilationService_ValidateSyntax_UnsupportedLanguage(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		Language:   "python",
@@ -328,7 +328,7 @@ func TestCompilationService_ValidateSyntax_UnsupportedLanguage(t *testing.T) {
 // Composer 1.
 func TestCompilationService_ValidateSyntax_CompilerNotAvailable(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		Language:   "rust",
@@ -348,7 +348,7 @@ func TestCompilationService_ValidateSyntax_CompilerNotAvailable(t *testing.T) {
 // Composer 1.
 func TestCompilationService_ValidateDependencies_Success(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	compiler := &mockCompiler{language: "rust", available: true}
 	service.RegisterCompiler(compiler)
@@ -367,7 +367,7 @@ func TestCompilationService_ValidateDependencies_Success(t *testing.T) {
 // Composer 1.
 func TestCompilationService_ValidateDependencies_UnsupportedLanguage(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	deps := map[string]string{
 		"package.json": "{}",
@@ -383,7 +383,7 @@ func TestCompilationService_ValidateDependencies_UnsupportedLanguage(t *testing.
 // Composer 1.
 func TestCompilationService_GetAvailableCompilers(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	compiler1 := &mockCompiler{language: "rust", available: true}
 	compiler2 := &mockCompiler{language: "go", available: false}
@@ -422,7 +422,7 @@ func TestCompilationService_GetAvailableCompilers(t *testing.T) {
 // Composer 1.
 func TestCompilationService_GetAllCompilers(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	compiler1 := &mockCompiler{language: "rust", available: true}
 	compiler2 := &mockCompiler{language: "go", available: false}
@@ -448,7 +448,7 @@ func TestCompilationService_GetAllCompilers(t *testing.T) {
 // Composer 1.
 func TestCompilationService_IsCompilerAvailable(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	compiler1 := &mockCompiler{language: "rust", available: true}
 	compiler2 := &mockCompiler{language: "go", available: false}
@@ -474,7 +474,7 @@ func TestCompilationService_CompileScript_SaveErrorOnMarkCompiling(t *testing.T)
 	repo := &mockScriptRepository{
 		saveError: errors.New("save failed"),
 	}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -510,7 +510,7 @@ func TestCompilationService_CompileScript_SaveErrorOnMarkCompiling(t *testing.T)
 // Composer 1.
 func TestCompilationService_CompileScript_SaveErrorOnMarkCompilationSuccess(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",
@@ -548,7 +548,7 @@ func TestCompilationService_CompileScript_SaveErrorOnMarkCompilationSuccess(t *t
 // Composer 1.
 func TestCompilationService_CompileScript_WithOptimize(t *testing.T) {
 	repo := &mockScriptRepository{}
-	service := NewCompilationService(repo)
+	service := NewCompilationService(repo, nil)
 
 	script := &domain.Script{
 		ID:         "test-script",

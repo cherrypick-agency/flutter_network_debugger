@@ -190,8 +190,9 @@ func main() {
 			// Assign to deps
 			deps.ScriptSvc = scriptService
 
-			// Initialize Compilation service
-			compilationService := scriptingusecase.NewCompilationService(scriptRepo)
+			// Initialize Compilation service with WASM validator
+			wasmValidator := scriptingextism.NewExtismWASMValidator()
+			compilationService := scriptingusecase.NewCompilationService(scriptRepo, wasmValidator)
 
 			// Register compilers (ADAPTERS)
 

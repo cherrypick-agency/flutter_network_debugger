@@ -140,12 +140,24 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     }
   }
 
+  /// Compare frames by content (id) instead of reference to avoid unnecessary reloads
+  bool _framesEqual(List<dynamic> a, List<dynamic> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      final aMap = a[i] as Map<String, dynamic>?;
+      final bMap = b[i] as Map<String, dynamic>?;
+      if (aMap?['id'] != bMap?['id']) return false;
+    }
+    return true;
+  }
+
   @override
   void didUpdateWidget(HttpDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     // Reset cache if frames or sessionId changed (different HTTP request selected)
-    if (oldWidget.frames != widget.frames ||
+    // Compare frames by content (id) to avoid spurious reloads from Observer rebuilds
+    if (!_framesEqual(oldWidget.frames, widget.frames) ||
         oldWidget.sessionId != widget.sessionId) {
       setState(() {
         // Clear analysis cache
@@ -264,11 +276,15 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     // Compare bytes to bytes (not code units to bytes)
     if (bodySize <= utf8.encode(preview).length) return;
 
-    // Check if already loaded or loading
+    // Check if already loaded, loading, or has error (prevent auto-retry on error)
     if (isRequest) {
-      if (_fullReqBody != null || _reqBodyLoading) return;
+      if (_fullReqBody != null || _reqBodyLoading || _reqBodyError != null) {
+        return;
+      }
     } else {
-      if (_fullRespBody != null || _respBodyLoading) return;
+      if (_fullRespBody != null || _respBodyLoading || _respBodyError != null) {
+        return;
+      }
     }
 
     if (!mounted) return;
@@ -298,6 +314,26 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
       if (!mounted) return;
 
       if (response.statusCode == 200) {
+        // Check if backend returned preview fallback (body file not available)
+        final bodySource = response.headers['x-body-source'];
+        if (bodySource == 'preview') {
+          // Backend returned preview - full body not available (body capture disabled)
+          if (mounted) {
+            setState(() {
+              if (isRequest) {
+                _reqBodyLoading = false;
+                _reqBodyError =
+                    'Full body not available (body capture disabled)';
+              } else {
+                _respBodyLoading = false;
+                _respBodyError =
+                    'Full body not available (body capture disabled)';
+              }
+            });
+          }
+          return;
+        }
+
         final fullBody = utf8.decode(response.bodyBytes, allowMalformed: true);
         setState(() {
           if (isRequest) {

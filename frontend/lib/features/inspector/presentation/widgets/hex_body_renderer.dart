@@ -84,6 +84,8 @@ class _HexBodyRendererState extends State<HexBodyRenderer> {
 
   Future<void> _loadFullData() async {
     if (!mounted) return;
+    // Prevent multiple parallel requests
+    if (_loading) return;
 
     setState(() {
       _loading = true;

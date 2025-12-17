@@ -84,7 +84,7 @@ func (m *mockCompilerForCompilation) ValidateDependencies(deps map[string]string
 }
 
 func setupCompilationHandlers(repo *mockScriptRepositoryForCompilation) *CompilationHandlers {
-	service := usecase.NewCompilationService(repo)
+	service := usecase.NewCompilationService(repo, nil)
 	handlers := NewCompilationHandlers(service)
 	return handlers
 }

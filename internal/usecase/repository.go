@@ -21,6 +21,7 @@ type FrameRepository interface {
 	AppendFrame(ctx context.Context, sessionID string, f domain.Frame) error
 	ListFrames(ctx context.Context, sessionID string, from string, limit int) ([]domain.Frame, string, error)
 	GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error)
+	UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error
 }
 
 type EventRepository interface {

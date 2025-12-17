@@ -106,6 +106,10 @@ func (s *SessionService) GetFrameByID(ctx context.Context, sessionID string, fra
 	return s.frames.GetFrameByID(ctx, sessionID, frameID)
 }
 
+func (s *SessionService) UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error {
+	return s.frames.UpdateFrameBodyFile(ctx, sessionID, frameID, bodyFile)
+}
+
 func (s *SessionService) ListEvents(ctx context.Context, sessionID string, from string, limit int) ([]domain.Event, string, error) {
 	return s.events.ListEvents(ctx, sessionID, from, limit)
 }

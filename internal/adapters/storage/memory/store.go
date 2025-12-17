@@ -403,6 +403,22 @@ func (s *Store) GetFrameByID(ctx context.Context, sessionID string, frameID stri
 	return domain.Frame{}, false, nil
 }
 
+func (s *Store) UpdateFrameBodyFile(ctx context.Context, sessionID string, frameID string, bodyFile string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.items[sessionID]
+	if !ok {
+		return nil // Session not found - best effort
+	}
+	for i := range e.frames {
+		if e.frames[i].ID == frameID {
+			e.frames[i].BodyFile = bodyFile
+			return nil
+		}
+	}
+	return nil // Frame not found - best effort
+}
+
 // EventRepository
 func (s *Store) AppendEvent(ctx context.Context, sessionID string, ev domain.Event) error {
 	s.mu.Lock()

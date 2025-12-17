@@ -11,16 +11,18 @@ import (
 // CompilationService orchestrates script compilation (USE CASE in Clean Architecture)
 // This service coordinates between domain and infrastructure layers
 type CompilationService struct {
-	compilers map[string]domain.Compiler // Registered compiler implementations (ADAPTERS)
-	repo      domain.ScriptRepository    // Script persistence (PORT)
+	compilers     map[string]domain.Compiler // Registered compiler implementations (ADAPTERS)
+	repo          domain.ScriptRepository    // Script persistence (PORT)
+	wasmValidator domain.WASMValidator       // WASM validation (PORT)
 }
 
 // NewCompilationService creates a new compilation service
 // Dependency Injection: receives repository through constructor (Dependency Inversion Principle)
-func NewCompilationService(repo domain.ScriptRepository) *CompilationService {
+func NewCompilationService(repo domain.ScriptRepository, wasmValidator domain.WASMValidator) *CompilationService {
 	return &CompilationService{
-		compilers: make(map[string]domain.Compiler),
-		repo:      repo,
+		compilers:     make(map[string]domain.Compiler),
+		repo:          repo,
+		wasmValidator: wasmValidator,
 	}
 }
 
@@ -81,8 +83,19 @@ func (s *CompilationService) CompileScript(ctx context.Context, scriptID string,
 		return nil, fmt.Errorf("compilation failed: %w", err)
 	}
 
-	// Mark script as successfully compiled (domain behavior)
+	// Validate WASM exports (check for 'process' function)
+	if s.wasmValidator != nil {
+		if err := s.wasmValidator.ValidateWASM(result.WASMBinary, script.Language); err != nil {
+			script.MarkCompilationError(err)
+			script.MarkValidationError(err)
+			s.repo.Save(ctx, script)
+			return nil, fmt.Errorf("WASM validation failed: %w", err)
+		}
+	}
+
+	// Mark script as successfully compiled and validated (domain behavior)
 	script.MarkCompilationSuccess(result.WASMBinary)
+	script.MarkValidationSuccess()
 	if err := s.repo.Save(ctx, script); err != nil {
 		return nil, fmt.Errorf("save compiled script: %w", err)
 	}

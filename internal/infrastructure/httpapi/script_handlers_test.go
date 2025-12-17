@@ -228,7 +228,7 @@ func TestScriptHandlers_CreateScript_WithSourceCode(t *testing.T) {
 			}, nil
 		},
 	}
-	compilationService := usecase.NewCompilationService(repo)
+	compilationService := usecase.NewCompilationService(repo, nil)
 	compilationService.RegisterCompiler(compiler)
 	handlers := setupScriptHandlers(repo, compilationService)
 
@@ -269,7 +269,7 @@ func TestScriptHandlers_CreateScript_CompilationFailure(t *testing.T) {
 			return nil, errors.New("compilation failed")
 		},
 	}
-	compilationService := usecase.NewCompilationService(repo)
+	compilationService := usecase.NewCompilationService(repo, nil)
 	compilationService.RegisterCompiler(compiler)
 	handlers := setupScriptHandlers(repo, compilationService)
 
@@ -322,7 +322,7 @@ func TestScriptHandlers_CreateScript_WithDependencies(t *testing.T) {
 			}, nil
 		},
 	}
-	compilationService := usecase.NewCompilationService(repo)
+	compilationService := usecase.NewCompilationService(repo, nil)
 	compilationService.RegisterCompiler(compiler)
 	handlers := setupScriptHandlers(repo, compilationService)
 
