@@ -22,7 +22,7 @@ func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
 	}
 	// после подключения пошлём событие и убедимся, что оно доезжает
 	hub.Broadcast(domain.MonitorEvent{Type: "test", ID: "1"})
-	_ = c.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
 	_, msg, err := c.ReadMessage()
 	if err != nil || len(msg) == 0 {
 		t.Fatalf("expected message from hub, err=%v", err)

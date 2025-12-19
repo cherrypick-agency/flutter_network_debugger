@@ -282,10 +282,6 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
             -o dist/network-debugger-web_windows_amd64.exe ./cmd/network-debugger-web
 
-          echo "Building for windows/386..."
-          GOOS=windows GOARCH=386 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_windows_386.exe ./cmd/network-debugger-web
-
           echo "Building for windows/arm64..."
           GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" \
             -o dist/network-debugger-web_windows_arm64.exe ./cmd/network-debugger-web
@@ -301,7 +297,6 @@ jobs:
 
           # Create zip for Windows
           zip network-debugger-web_windows_amd64.zip network-debugger-web_windows_amd64.exe
-          zip network-debugger-web_windows_386.zip network-debugger-web_windows_386.exe
           zip network-debugger-web_windows_arm64.zip network-debugger-web_windows_arm64.exe
 
           # List all archives
