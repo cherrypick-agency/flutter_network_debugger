@@ -182,7 +182,6 @@ jobs:
           test -f bin/network-debugger_linux_amd64
           test -f bin/network-debugger_linux_arm64
           test -f bin/network-debugger_windows_amd64.exe
-          test -f bin/network-debugger_windows_386.exe
           test -f bin/network-debugger_windows_arm64.exe
           echo "All binaries successfully built"
 
