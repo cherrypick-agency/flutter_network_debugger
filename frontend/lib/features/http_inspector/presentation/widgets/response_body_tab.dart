@@ -16,6 +16,7 @@ typedef BodyViewChipsBuilder =
       String? baseUrl,
       String? frameId,
       int? bodySize,
+      int? bodyRawSize,
     });
 
 /// Callback typedef for body content rendering as slivers
@@ -29,6 +30,7 @@ typedef BodyContentSliverBuilder =
       String? baseUrl,
       String? frameId,
       int? bodySize,
+      int? bodyRawSize,
       JsonSearchController? searchController,
     });
 
@@ -58,6 +60,7 @@ class ResponseBodyTab extends StatefulWidget {
     this.baseUrl,
     this.frameId,
     this.bodySize,
+    this.bodyRawSize,
     this.fullBody,
     this.isLoading = false,
   });
@@ -86,8 +89,12 @@ class ResponseBodyTab extends StatefulWidget {
   /// Frame ID for loading full body data
   final String? frameId;
 
-  /// Total body size (for truncation detection)
+  /// Total body size from ContentLength header (for truncation detection)
   final int? bodySize;
+
+  /// Actual bytes read into preview (before JSON compaction/redaction)
+  /// Used for precise truncation detection
+  final int? bodyRawSize;
 
   /// Whether full body is currently loading
   final bool isLoading;
@@ -241,6 +248,7 @@ class _ResponseBodyTabState extends State<ResponseBodyTab> {
             baseUrl: widget.baseUrl,
             frameId: widget.frameId,
             bodySize: widget.bodySize,
+            bodyRawSize: widget.bodyRawSize,
           ),
         ),
       ),
@@ -256,6 +264,7 @@ class _ResponseBodyTabState extends State<ResponseBodyTab> {
         baseUrl: widget.baseUrl,
         frameId: widget.frameId,
         bodySize: widget.bodySize,
+        bodyRawSize: widget.bodyRawSize,
         searchController: _searchController,
       ),
     ];

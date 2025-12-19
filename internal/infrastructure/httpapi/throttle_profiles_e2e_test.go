@@ -17,7 +17,7 @@ import (
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 

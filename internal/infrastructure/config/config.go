@@ -116,11 +116,12 @@ func FromEnv() Config {
 	cfg.TLSAddr = getEnv("TLS_ADDR", "")
 	cfg.TLSCertFile = getEnv("TLS_CERT_FILE", "")
 	cfg.TLSKeyFile = getEnv("TLS_KEY_FILE", "")
-	// Body capture
-	if os.Getenv("CAPTURE_BODIES") == "1" || os.Getenv("CAPTURE_BODIES") == "true" {
-		cfg.CaptureBodies = true
+	// Body capture - enabled by default for full body loading support
+	cfg.CaptureBodies = true
+	if os.Getenv("CAPTURE_BODIES") == "0" || os.Getenv("CAPTURE_BODIES") == "false" {
+		cfg.CaptureBodies = false
 	}
-	cfg.BodyMaxBytes = getEnvInt("BODY_MAX_BYTES", 8<<20) // 8MB
+	cfg.BodyMaxBytes = getEnvInt("BODY_MAX_BYTES", 32<<20) // 32MB
 	cfg.BodySpoolDir = getEnv("BODY_SPOOL_DIR", "")
 	if os.Getenv("PREVIEW_DECOMPRESS") == "0" || os.Getenv("PREVIEW_DECOMPRESS") == "false" {
 		cfg.PreviewDecompress = false
@@ -132,10 +133,12 @@ func FromEnv() Config {
 	if cfg.WSPreviewMaxBytes <= 0 {
 		cfg.WSPreviewMaxBytes = 4096
 	}
-	if os.Getenv("WS_CAPTURE_BODIES") == "1" || os.Getenv("WS_CAPTURE_BODIES") == "true" {
-		cfg.WSCaptureBodies = true
+	// WS body capture - enabled by default for full body loading support
+	cfg.WSCaptureBodies = true
+	if os.Getenv("WS_CAPTURE_BODIES") == "0" || os.Getenv("WS_CAPTURE_BODIES") == "false" {
+		cfg.WSCaptureBodies = false
 	}
-	cfg.WSBodyMaxBytes = getEnvInt("WS_BODY_MAX_BYTES", 1<<20) // 1MB
+	cfg.WSBodyMaxBytes = getEnvInt("WS_BODY_MAX_BYTES", 4<<20) // 4MB
 	// enable deflate preview by default
 	if os.Getenv("WS_DEFLATE_PREVIEW") == "0" || os.Getenv("WS_DEFLATE_PREVIEW") == "false" {
 		cfg.WSDeflatePreview = false

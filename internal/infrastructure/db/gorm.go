@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
 )
@@ -30,8 +30,18 @@ func NewSQLite(path string) (*gorm.DB, error) {
 		IgnoreRecordNotFoundError: true,
 		LogLevel:                  glogger.Warn,
 	})
-	return gorm.Open(sqlite.Open(path), &gorm.Config{
+	gdb, err := gorm.Open(sqlite.Open(path), &gorm.Config{
 		Logger:      lg,
 		PrepareStmt: true,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Оптимизация SQLite для конкурентного доступа
+	gdb.Exec(`PRAGMA journal_mode = WAL`)
+	gdb.Exec(`PRAGMA busy_timeout = 5000`)
+	gdb.Exec(`PRAGMA synchronous = NORMAL`)
+
+	return gdb, nil
 }

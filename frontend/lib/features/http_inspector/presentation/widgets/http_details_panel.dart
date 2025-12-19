@@ -46,6 +46,7 @@ typedef BodyViewChipsBuilder =
       String? baseUrl,
       String? frameId,
       int? bodySize,
+      int? bodyRawSize,
     });
 
 typedef BodyContentSliverRenderer =
@@ -58,6 +59,7 @@ typedef BodyContentSliverRenderer =
       String? baseUrl,
       String? frameId,
       int? bodySize,
+      int? bodyRawSize,
     });
 
 class HttpDetailsPanel extends StatefulWidget {
@@ -191,11 +193,15 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     if (req != null && reqFrame != null) {
       final reqBody = (req['body'] ?? '').toString();
       final reqFrameId = reqFrame['frame']?['id']?.toString();
+      // Use Frame.Size (ContentLength) as total size
       final reqBodySize = reqFrame['frame']?['size'] as int?;
+      // Use bodyRawSize from preview (actual bytes read) to determine if truncated
+      final reqBodyRawSize = req['bodyRawSize'] as int?;
       _loadFullBodyIfNeeded(
         frameId: reqFrameId,
         preview: reqBody,
         bodySize: reqBodySize,
+        bodyRawSize: reqBodyRawSize,
         isRequest: true,
       );
     }
@@ -207,11 +213,15 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     if (resp != null && respFrame != null) {
       final respBody = (resp['body'] ?? '').toString();
       final respFrameId = respFrame['frame']?['id']?.toString();
+      // Use Frame.Size (ContentLength) as total size
       final respBodySize = respFrame['frame']?['size'] as int?;
+      // Use bodyRawSize from preview (actual bytes read) to determine if truncated
+      final respBodyRawSize = resp['bodyRawSize'] as int?;
       _loadFullBodyIfNeeded(
         frameId: respFrameId,
         preview: respBody,
         bodySize: respBodySize,
+        bodyRawSize: respBodyRawSize,
         isRequest: false,
       );
     }
@@ -267,14 +277,23 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     required String? frameId,
     required String preview,
     required int? bodySize,
+    int? bodyRawSize,
     required bool isRequest,
   }) async {
     final sessionId = widget.sessionId;
     if (sessionId == null || frameId == null || bodySize == null) return;
 
     // Check if full data is needed (preview is truncated)
-    // Compare bytes to bytes (not code units to bytes)
-    if (bodySize <= utf8.encode(preview).length) return;
+    // Use bodyRawSize (actual bytes read into preview) if available
+    // Body is truncated only if ContentLength > bodyRawSize (bytes actually read)
+    if (bodyRawSize != null) {
+      // Precise check: if all bytes were read into preview, no need to load full body
+      if (bodySize <= bodyRawSize) return;
+    } else {
+      // Fallback for old data without bodyRawSize
+      final previewLength = utf8.encode(preview).length;
+      if (bodySize <= previewLength) return;
+    }
 
     // Check if already loaded, loading, or has error (prevent auto-retry on error)
     if (isRequest) {
@@ -900,6 +919,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
             cookies: reqCookies,
             frameId: reqFrame?['frame']?['id']?.toString(),
             bodySize: reqFrame?['frame']?['size'] as int?,
+            bodyRawSize: req['bodyRawSize'] as int?,
             isLoading: _reqBodyLoading,
           ),
 
@@ -1046,6 +1066,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
             baseUrl: url,
             frameId: respFrame?['frame']?['id']?.toString(),
             bodySize: respFrame?['frame']?['size'] as int?,
+            bodyRawSize: resp['bodyRawSize'] as int?,
             isLoading: _respBodyLoading,
           ),
 
@@ -1511,6 +1532,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     String? baseUrl,
     String? frameId,
     int? bodySize,
+    int? bodyRawSize,
   }) {
     return Padding(
       padding: const EdgeInsets.only(top: 7),
@@ -1589,6 +1611,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     String? baseUrl,
     String? frameId,
     int? bodySize,
+    int? bodyRawSize,
     JsonSearchController? searchController,
   }) {
     // Use full body from panel-level cache if available, otherwise use preview
@@ -1692,18 +1715,18 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
 
     // Check if we're displaying truncated preview (not loading, but body is incomplete)
     // BUG FIX: Only show warning if full body hasn't been loaded yet
-    // Compare preview body length (not actualBody which might already be full)
     final hasFullBody = isRequest
         ? _fullReqBody != null
         : _fullRespBody != null;
-    final previewLength = utf8
-        .encode(body)
-        .length; // body = preview from frames
-    final isTruncated =
+    // Use bodyRawSize (actual bytes read) for precise truncation check
+    // Body is truncated only if ContentLength > bodyRawSize
+    // Calculate displayed preview size for truncation check and message
+    final displayedPreviewSize = bodyRawSize ?? utf8.encode(body).length;
+    final bool isTruncated =
         !isLoading &&
         !hasFullBody &&
         bodySize != null &&
-        previewLength < bodySize;
+        bodySize > displayedPreviewSize;
 
     // Get mode content slivers
     final modeSlivers = _renderModeContentAsSliver(
@@ -1735,7 +1758,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '⚠ Displaying truncated preview ($previewLength / $bodySize bytes). Loading full data...',
+                    '⚠ Displaying truncated preview ($displayedPreviewSize / $bodySize bytes). Loading full data...',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),

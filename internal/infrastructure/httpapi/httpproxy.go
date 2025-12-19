@@ -452,12 +452,20 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				}
-				// Spool response body
-				if f, err := d.spoolBody(resp.Body, int64(d.Cfg.BodyMaxBytes), "resp"); err == nil && f != "" {
-					tx.RespBodyFile = f
-					d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
-					// Update response frame with body file path
-					_ = d.Svc.UpdateFrameBodyFile(contextWithNoCancel(), sessionID, respFrameID, f)
+				// Spool response body - read into buffer, then restore for client
+				if resp.Body != nil {
+					bodyData, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(d.Cfg.BodyMaxBytes)))
+					if readErr == nil && len(bodyData) > 0 {
+						// Restore body for client - CRITICAL: without this client gets empty response
+						resp.Body = io.NopCloser(bytes.NewReader(bodyData))
+						// Spool to file
+						if f, err := d.spoolBodyBytes(bodyData, "resp"); err == nil && f != "" {
+							tx.RespBodyFile = f
+							d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
+							// Update response frame with body file path
+							_ = d.Svc.UpdateFrameBodyFile(contextWithNoCancel(), sessionID, respFrameID, f)
+						}
+					}
 				}
 			}
 			// Always add HTTP transaction
@@ -679,6 +687,10 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 	// headersRaw currently disabled in preview helpers to avoid config deps
 	max := int(previewMaxBytes.Load())
 	if len(body) > 0 {
+		// Store raw size BEFORE any transformations (JSON compaction, redaction)
+		// This allows frontend to know if body was fully read vs truncated
+		preview["bodyRawSize"] = len(body)
+
 		// Best-effort: decompress request preview if Content-Encoding set
 		b := body
 		enc := strings.ToLower(r.Header.Get("Content-Encoding"))
@@ -877,6 +889,10 @@ func buildHTTPResponsePreview(resp *http.Response) string {
 	}
 	max := int(previewMaxBytes.Load())
 	if len(bodyBuf) > 0 {
+		// Store raw size BEFORE any transformations (JSON compaction, redaction)
+		// This allows frontend to know if body was fully read vs truncated
+		preview["bodyRawSize"] = len(bodyBuf)
+
 		// Best-effort decompress for gzip/deflate for preview only
 		b := bodyBuf
 		enc := strings.ToLower(resp.Header.Get("Content-Encoding"))

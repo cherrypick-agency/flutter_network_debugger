@@ -34,10 +34,10 @@ func TestFromEnv_Defaults(t *testing.T) {
 	if cfg.TLSAddr != "" || cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" {
 		t.Fatalf("TLS defaults not empty")
 	}
-	if cfg.CaptureBodies {
-		t.Fatalf("CaptureBodies should be false by default")
+	if !cfg.CaptureBodies {
+		t.Fatalf("CaptureBodies should be true by default")
 	}
-	if cfg.BodyMaxBytes != 8<<20 {
+	if cfg.BodyMaxBytes != 32<<20 {
 		t.Fatalf("BodyMaxBytes: %d", cfg.BodyMaxBytes)
 	}
 	if !cfg.PreviewDecompress {
@@ -46,10 +46,10 @@ func TestFromEnv_Defaults(t *testing.T) {
 	if cfg.WSPreviewMaxBytes != cfg.PreviewMaxBytes {
 		t.Fatalf("WSPreviewMaxBytes default: %d", cfg.WSPreviewMaxBytes)
 	}
-	if cfg.WSCaptureBodies {
-		t.Fatalf("WSCaptureBodies default false")
+	if !cfg.WSCaptureBodies {
+		t.Fatalf("WSCaptureBodies should be true by default")
 	}
-	if cfg.WSBodyMaxBytes != 1<<20 {
+	if cfg.WSBodyMaxBytes != 4<<20 {
 		t.Fatalf("WSBodyMaxBytes: %d", cfg.WSBodyMaxBytes)
 	}
 	if !cfg.WSDeflatePreview {

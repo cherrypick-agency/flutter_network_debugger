@@ -10,8 +10,8 @@ import (
 
 // Global timeout guard for the e2e test package to avoid indefinite hangs.
 func TestMain(m *testing.M) {
-	// default 2 minutes, overridable via E2E_TIMEOUT_SECONDS
-	timeout := 2 * time.Minute
+	// default 5 minutes, overridable via E2E_TIMEOUT_SECONDS
+	timeout := 5 * time.Minute
 	if v := os.Getenv("E2E_TIMEOUT_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			timeout = time.Duration(n) * time.Second

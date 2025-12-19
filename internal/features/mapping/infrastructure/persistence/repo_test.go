@@ -6,7 +6,7 @@ import (
 
 	mdomain "network-debugger/internal/features/mapping/domain"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
