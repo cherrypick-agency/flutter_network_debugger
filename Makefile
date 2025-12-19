@@ -92,7 +92,6 @@ run-app: build-app
 win-app:
 	$(MAKE) frontend-build-web
 	cd cmd/network-debugger-web && GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web_windows_amd64.exe
-	cd cmd/network-debugger-web && GOOS=windows GOARCH=386 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web_windows_386.exe
 	cd cmd/network-debugger-web && GOOS=windows GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web_windows_arm64.exe
 
 # Cross-platform builds for network-debugger
@@ -115,7 +114,6 @@ network-debugger-windows:
 	@mkdir -p bin
 	cd cmd/network-debugger && \
 	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger_windows_amd64.exe && \
-	GOOS=windows GOARCH=386 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger_windows_386.exe && \
 	GOOS=windows GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger_windows_arm64.exe
 
 # Cross-platform builds for wsapp (includes embedding built web)
@@ -138,7 +136,6 @@ network-debugger-web-windows:
 	@mkdir -p bin
 	cd cmd/network-debugger-web && \
 	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web_windows_amd64.exe && \
-	GOOS=windows GOARCH=386 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web_windows_386.exe && \
 	GOOS=windows GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o ../../bin/network-debugger-web_windows_arm64.exe
 
 # Packaging
@@ -147,10 +144,8 @@ package: build-cross build-app-cross
 	@mkdir -p $(PUBLISH_DIR)/downloads
 	cd bin && \
 	zip -q ../$(PUBLISH_DIR)/downloads/network-debugger_windows_amd64.zip network-debugger_windows_amd64.exe || true && \
-	zip -q ../$(PUBLISH_DIR)/downloads/network-debugger_windows_386.zip network-debugger_windows_386.exe || true && \
 	zip -q ../$(PUBLISH_DIR)/downloads/network-debugger_windows_arm64.zip network-debugger_windows_arm64.exe || true && \
 	zip -q ../$(PUBLISH_DIR)/downloads/network-debugger-web_windows_amd64.zip network-debugger-web_windows_amd64.exe || true && \
-	zip -q ../$(PUBLISH_DIR)/downloads/network-debugger-web_windows_386.zip network-debugger-web_windows_386.exe || true && \
 	zip -q ../$(PUBLISH_DIR)/downloads/network-debugger-web_windows_arm64.zip network-debugger-web_windows_arm64.exe || true && \
 	tar -C . -czf ../$(PUBLISH_DIR)/downloads/network-debugger_darwin_amd64.tar.gz network-debugger_darwin_amd64 || true && \
 	tar -C . -czf ../$(PUBLISH_DIR)/downloads/network-debugger_darwin_arm64.tar.gz network-debugger_darwin_arm64 || true && \
