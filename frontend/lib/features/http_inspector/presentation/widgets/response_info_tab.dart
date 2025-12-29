@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../theme/context_ext.dart';
 import 'common/copyable_items.dart';
 
@@ -63,6 +64,13 @@ class ResponseInfoTab extends StatelessWidget {
     );
   }
 
+  /// Копирует все хедеры в буфер обмена
+  void _copyAllHeaders() {
+    final raw = headersRaw ?? headers;
+    final text = raw.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+    Clipboard.setData(ClipboardData(text: text));
+  }
+
   /// Build headers section
   List<Widget> _buildHeadersSection(BuildContext context) {
     return [
@@ -70,7 +78,13 @@ class ResponseInfoTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Headers', style: context.appText.subtitle),
+            Row(
+              children: [
+                Text('Headers', style: context.appText.subtitle),
+                const SizedBox(width: 6),
+                _CopyAllButton(onTap: _copyAllHeaders),
+              ],
+            ),
             const SizedBox(height: 4),
             ...headers.entries.map(
               (e) => Padding(
@@ -277,6 +291,48 @@ class ResponseInfoTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(text, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+/// Компактная кнопка копирования для заголовков секций
+class _CopyAllButton extends StatefulWidget {
+  const _CopyAllButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_CopyAllButton> createState() => _CopyAllButtonState();
+}
+
+class _CopyAllButtonState extends State<_CopyAllButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: _hover
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(
+            Icons.copy,
+            size: 14,
+            color: _hover
+                ? Theme.of(context).colorScheme.primary
+                : context.appColors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 }

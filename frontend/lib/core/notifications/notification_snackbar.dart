@@ -3,16 +3,21 @@ import 'notification.dart';
 
 class NotificationSnackbar {
   static void show(BuildContext context, NotificationMessage n) {
+    final scheme = Theme.of(context).colorScheme;
     Color color;
+    Color textColor;
     switch (n.level) {
       case NotificationLevel.error:
-        color = Theme.of(context).colorScheme.error;
+        color = scheme.error;
+        textColor = scheme.onErrorContainer;
         break;
       case NotificationLevel.warning:
-        color = Theme.of(context).colorScheme.tertiary;
+        color = scheme.tertiary;
+        textColor = scheme.onTertiaryContainer;
         break;
       case NotificationLevel.info:
-        color = Theme.of(context).colorScheme.primary;
+        color = scheme.primary;
+        textColor = scheme.onPrimaryContainer;
         break;
     }
     final controller = ScaffoldMessenger.of(context);
@@ -20,7 +25,12 @@ class NotificationSnackbar {
       SnackBar(
         content: Row(
           children: [
-            Expanded(child: Text('${n.title}: ${n.description}')),
+            Expanded(
+              child: Text(
+                '${n.title}: ${n.description}',
+                style: TextStyle(color: textColor),
+              ),
+            ),
             TextButton(
               onPressed: () {
                 controller.hideCurrentSnackBar();
@@ -43,9 +53,7 @@ class NotificationSnackbar {
                               SelectableText(n.description),
                             const SizedBox(height: 8),
                             if ((n.details ?? {}).isNotEmpty)
-                              SelectableText(
-                                'Details: ' + (n.details!.toString()),
-                              ),
+                              SelectableText('Details: ${n.details}'),
                             if ((n.raw ?? '').isNotEmpty) ...[
                               const SizedBox(height: 12),
                               Text(
@@ -69,11 +77,11 @@ class NotificationSnackbar {
                   },
                 );
               },
-              child: const Text('Details'),
+              child: Text('Details', style: TextStyle(color: textColor)),
             ),
           ],
         ),
-        backgroundColor: color.withOpacity(0.1),
+        backgroundColor: color.withValues(alpha: 0.85),
         duration: const Duration(seconds: 6),
       ),
     );

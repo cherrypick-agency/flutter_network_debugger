@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -49,6 +51,7 @@ class _StartupDialogState extends State<_StartupDialog> {
   PortStatus? _portStatus;
   bool _checking = true;
   String _appVersion = '';
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -61,6 +64,16 @@ class _StartupDialogState extends State<_StartupDialog> {
     );
     _loadAppVersion();
     _checkPorts();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_checking) {
+        _checkPorts();
+      }
+    });
   }
 
   Future<void> _loadAppVersion() async {
@@ -83,6 +96,7 @@ class _StartupDialogState extends State<_StartupDialog> {
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _apiPortCtrl.dispose();
     _proxyPortCtrl.dispose();
     super.dispose();

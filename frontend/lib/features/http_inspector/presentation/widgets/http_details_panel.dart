@@ -320,7 +320,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     try {
       // Use http package for direct API call (similar to HexBodyRenderer)
       final baseUrl = sl<AppHttpClient>().defaultHost;
-      final url = '$baseUrl/api/v1/sessions/$sessionId/frames/$frameId/body';
+      final url = '$baseUrl/_api/v1/sessions/$sessionId/frames/$frameId/body';
       final response = await http
           .get(Uri.parse(url))
           .timeout(

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import '../core/hotkeys/hotkeys_service.dart';
 import 'common_search_bar.dart';
@@ -662,58 +661,72 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
                   else
                     const SizedBox(width: 18, height: 18),
                   Expanded(
-                    child: SelectableText.rich(
-                      TextSpan(
-                        children: [
-                          ..._splitWithHighlights(
-                            '"${entry.key}": ',
-                            baseStyle: keyStyle,
-                            highlight: hl,
-                            highlightFocused: hlFocus,
-                            matchCounter: () => matchCounter,
-                            incMatchCounter: () {
-                              matchCounter++;
-                            },
-                            keys: keys,
-                            onTap: () {
-                              if (!container) return;
-                              _toggle(childPath, expanded);
-                            },
-                          ),
-                          if (!container)
-                            ..._valueToSpans(
-                              value,
-                              stringStyle,
-                              numberStyle,
-                              boolStyle,
-                              nullStyle,
-                              hl,
-                              hlFocus,
-                              () => matchCounter,
-                              () {
-                                matchCounter++;
-                              },
-                              keys,
-                            )
-                          else
-                            TextSpan(
-                              text: expanded
-                                  ? (value is Map ? '{' : '[')
-                                  : (value is Map
-                                        ? '{… ${value.length}}'
-                                        : '[… ${value.length}]'),
-                              style: punct,
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  _toggle(childPath, expanded);
-                                },
+                    child: (container
+                        ? GestureDetector(
+                            onTap: () => _toggle(childPath, expanded),
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  ..._splitWithHighlights(
+                                    '"${entry.key}": ',
+                                    baseStyle: keyStyle,
+                                    highlight: hl,
+                                    highlightFocused: hlFocus,
+                                    matchCounter: () => matchCounter,
+                                    incMatchCounter: () {
+                                      matchCounter++;
+                                    },
+                                    keys: keys,
+                                  ),
+                                  TextSpan(
+                                    text: expanded
+                                        ? (value is Map ? '{' : '[')
+                                        : (value is Map
+                                              ? '{… ${value.length}}'
+                                              : '[… ${value.length}]'),
+                                    style: punct,
+                                  ),
+                                  TextSpan(
+                                    text: (expanded
+                                        ? ''
+                                        : (idx != last ? ',' : '')),
+                                  ),
+                                ],
+                              ),
                             ),
-                          TextSpan(
-                            text: (expanded ? '' : (idx != last ? ',' : '')),
-                          ),
-                        ],
-                      ),
-                    ),
+                          )
+                        : Text.rich(
+                            TextSpan(
+                              children: [
+                                ..._splitWithHighlights(
+                                  '"${entry.key}": ',
+                                  baseStyle: keyStyle,
+                                  highlight: hl,
+                                  highlightFocused: hlFocus,
+                                  matchCounter: () => matchCounter,
+                                  incMatchCounter: () {
+                                    matchCounter++;
+                                  },
+                                  keys: keys,
+                                ),
+                                ..._valueToSpans(
+                                  value,
+                                  stringStyle,
+                                  numberStyle,
+                                  boolStyle,
+                                  nullStyle,
+                                  hl,
+                                  hlFocus,
+                                  () => matchCounter,
+                                  () {
+                                    matchCounter++;
+                                  },
+                                  keys,
+                                ),
+                                TextSpan(text: idx != last ? ',' : ''),
+                              ],
+                            ),
+                          )),
                   ),
                 ],
               ),
@@ -724,11 +737,15 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
             out.add(
               Padding(
                 padding: EdgeInsets.only(left: indent * indentPx + 18),
-                child: SelectableText.rich(
-                  TextSpan(
-                    text: value is Map ? '}' : ']',
-                    style: punct,
-                    children: [TextSpan(text: idx != last ? ',' : '')],
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => _toggle(childPath, true),
+                  child: Text.rich(
+                    TextSpan(
+                      text: value is Map ? '}' : ']',
+                      style: punct,
+                      children: [TextSpan(text: idx != last ? ',' : '')],
+                    ),
                   ),
                 ),
               ),
@@ -771,49 +788,46 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
                   else
                     const SizedBox(width: 18, height: 18),
                   Expanded(
-                    child: SelectableText.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '$i: ',
-                            style: punct,
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = () {
-                                if (!container) return;
-                                _toggle(childPath, expanded);
-                              },
-                          ),
-                          if (!container)
-                            ..._valueToSpans(
-                              value,
-                              stringStyle,
-                              numberStyle,
-                              boolStyle,
-                              nullStyle,
-                              hl,
-                              hlFocus,
-                              () => matchCounter,
-                              () {
-                                matchCounter++;
-                              },
-                              keys,
-                            )
-                          else
-                            TextSpan(
-                              text: expanded
-                                  ? (value is Map ? '{' : '[')
-                                  : (value is Map
-                                        ? '{… ${value.length}}'
-                                        : '[… ${value.length}]'),
-                              style: punct,
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  _toggle(childPath, expanded);
-                                },
+                    child: (container
+                        ? GestureDetector(
+                            onTap: () => _toggle(childPath, expanded),
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(text: '$i: ', style: punct),
+                                  TextSpan(
+                                    text: expanded
+                                        ? (value is Map ? '{' : '[')
+                                        : (value is Map
+                                              ? '{… ${value.length}}'
+                                              : '[… ${value.length}]'),
+                                    style: punct,
+                                  ),
+                                ],
+                              ),
                             ),
-                        ],
-                      ),
-                    ),
+                          )
+                        : Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: '$i: ', style: punct),
+                                ..._valueToSpans(
+                                  value,
+                                  stringStyle,
+                                  numberStyle,
+                                  boolStyle,
+                                  nullStyle,
+                                  hl,
+                                  hlFocus,
+                                  () => matchCounter,
+                                  () {
+                                    matchCounter++;
+                                  },
+                                  keys,
+                                ),
+                              ],
+                            ),
+                          )),
                   ),
                 ],
               ),
@@ -824,8 +838,12 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
             out.add(
               Padding(
                 padding: EdgeInsets.only(left: indent * indentPx + 18),
-                child: SelectableText.rich(
-                  TextSpan(text: value is Map ? '}' : ']', style: punct),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => _toggle(childPath, true),
+                  child: Text.rich(
+                    TextSpan(text: value is Map ? '}' : ']', style: punct),
+                  ),
                 ),
               ),
             );
@@ -853,7 +871,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       });
     }
 
-    return content;
+    return SelectionArea(child: content);
   }
 
   List<InlineSpan> _splitWithHighlights(
@@ -864,19 +882,10 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
     required int Function() matchCounter,
     required void Function() incMatchCounter,
     required List<GlobalKey> keys,
-    VoidCallback? onTap,
   }) {
     final query = widget.search.query;
     if (query.isEmpty) {
-      return [
-        TextSpan(
-          text: text,
-          style: baseStyle,
-          recognizer: onTap == null
-              ? null
-              : (TapGestureRecognizer()..onTap = onTap),
-        ),
-      ];
+      return [TextSpan(text: text, style: baseStyle)];
     }
     final List<InlineSpan> out = [];
     if (widget.search.useRegex) {
@@ -884,15 +893,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       try {
         re = RegExp(query, caseSensitive: widget.search.matchCase);
       } catch (_) {
-        return [
-          TextSpan(
-            text: text,
-            style: baseStyle,
-            recognizer: onTap == null
-                ? null
-                : (TapGestureRecognizer()..onTap = onTap),
-          ),
-        ];
+        return [TextSpan(text: text, style: baseStyle)];
       }
       int last = 0;
       Iterable<RegExpMatch> matches = re.allMatches(text);
@@ -916,15 +917,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           }
         }
         if (s > last) {
-          out.add(
-            TextSpan(
-              text: text.substring(last, s),
-              style: baseStyle,
-              recognizer: onTap == null
-                  ? null
-                  : (TapGestureRecognizer()..onTap = onTap),
-            ),
-          );
+          out.add(TextSpan(text: text.substring(last, s), style: baseStyle));
         }
         final anchorIndex = matchCounter();
         final k = widget.search.anchorScope == null
@@ -946,24 +939,13 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
             style: baseStyle.copyWith(
               backgroundColor: isFocused ? highlightFocused : highlight,
             ),
-            recognizer: onTap == null
-                ? null
-                : (TapGestureRecognizer()..onTap = onTap),
           ),
         );
         incMatchCounter();
         last = e;
       }
       if (last < text.length) {
-        out.add(
-          TextSpan(
-            text: text.substring(last),
-            style: baseStyle,
-            recognizer: onTap == null
-                ? null
-                : (TapGestureRecognizer()..onTap = onTap),
-          ),
-        );
+        out.add(TextSpan(text: text.substring(last), style: baseStyle));
       }
       return out;
     }
@@ -981,15 +963,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
       final idx = src.indexOf(q, start);
       if (idx < 0) {
         if (start < text.length) {
-          out.add(
-            TextSpan(
-              text: text.substring(start),
-              style: baseStyle,
-              recognizer: onTap == null
-                  ? null
-                  : (TapGestureRecognizer()..onTap = onTap),
-            ),
-          );
+          out.add(TextSpan(text: text.substring(start), style: baseStyle));
         }
         break;
       }
@@ -1006,15 +980,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
         }
       }
       if (idx > start) {
-        out.add(
-          TextSpan(
-            text: text.substring(start, idx),
-            style: baseStyle,
-            recognizer: onTap == null
-                ? null
-                : (TapGestureRecognizer()..onTap = onTap),
-          ),
-        );
+        out.add(TextSpan(text: text.substring(start, idx), style: baseStyle));
       }
       final anchorIndex = matchCounter();
       final k = widget.search.anchorScope == null
@@ -1035,9 +1001,6 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
           style: baseStyle.copyWith(
             backgroundColor: isFocused ? highlightFocused : highlight,
           ),
-          recognizer: onTap == null
-              ? null
-              : (TapGestureRecognizer()..onTap = onTap),
         ),
       );
       incMatchCounter();

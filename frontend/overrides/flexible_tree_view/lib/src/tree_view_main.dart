@@ -141,103 +141,106 @@ class _FlexibleTreeViewState<T> extends State<FlexibleTreeView<T>>
         : _buildTreeList();
   }
 
-  Widget _buildTreeList() => Material(
-        color: Colors.transparent,
-        child: Container(
-          width: widget.scrollable
-              ? (_maxDepth * widget.indent + widget.nodeWidth)
-              : double.infinity,
-          alignment: Alignment.centerLeft,
-          child: ReorderableListViewEx.builder(
-            scrollController: ScrollController(),
-            isItemReorderable: (index) {
-              var node = _listShowNodes[index];
-              // log('Item reorderable: ${node.reorderable}');
-              return node.reorderable;
-            },
-            onReorder: (oldIndex, newIndex) {
-              var orderNode = _listShowNodes[oldIndex];
-              var orderUpper = false;
-              if (oldIndex < newIndex) {
-                newIndex -= 1;
-                orderUpper = true;
-              }
-              var currentNode = _listShowNodes[newIndex];
-              var canReorder =
-                  widget.willRecorder?.call(orderNode, currentNode) ?? false;
-              if (canReorder) {
-                if (orderNode.parent == currentNode.parent) {
-                  if (currentNode.parent != null) {
-                    var children = orderNode.parent!.children;
-                    children.manulSort(currentNode, orderNode);
-                    rebuild();
-                  } else if (widget.nodes.contains(orderNode) &&
-                      widget.nodes.contains(currentNode)) {
-                    widget.nodes.manulSort(currentNode, orderNode);
-                    rebuild();
-                  }
-                } else {
-                  if (currentNode.parent != null) {
-                    if (orderNode.parent != null) {
-                      orderNode._removeSelf();
-                    } else if (widget.nodes.contains(orderNode)) {
-                      widget.nodes.remove(orderNode);
-                    }
-
-                    var children = currentNode.parent!.children;
-                    var index = children.indexOf(currentNode);
-                    if (orderUpper) {
-                      currentNode.parent!._insertNodeAt(index + 1, orderNode);
-                    } else {
-                      currentNode.parent!._insertNodeAt(index, orderNode);
-                    }
-                    rebuild();
-                  } else if (widget.nodes.contains(currentNode)) {
-                    if (orderNode.parent != null) {
-                      orderNode._removeSelf();
-                    }
-                    var index = widget.nodes.indexOf(currentNode);
-                    if (orderUpper) {
-                      widget.nodes.insert(index + 1, orderNode);
-                    } else {
-                      widget.nodes.insert(index, orderNode);
-                    }
-                    rebuild();
-                  }
+  Widget _buildTreeList() {
+    final content = Material(
+      color: Colors.transparent,
+      child: Container(
+        width: widget.scrollable
+            ? (_maxDepth * widget.indent + widget.nodeWidth)
+            : double.infinity,
+        alignment: Alignment.centerLeft,
+        child: ReorderableListViewEx.builder(
+          scrollController: ScrollController(),
+          isItemReorderable: (index) {
+            var node = _listShowNodes[index];
+            // log('Item reorderable: ${node.reorderable}');
+            return node.reorderable;
+          },
+          onReorder: (oldIndex, newIndex) {
+            var orderNode = _listShowNodes[oldIndex];
+            var orderUpper = false;
+            if (oldIndex < newIndex) {
+              newIndex -= 1;
+              orderUpper = true;
+            }
+            var currentNode = _listShowNodes[newIndex];
+            var canReorder =
+                widget.willRecorder?.call(orderNode, currentNode) ?? false;
+            if (canReorder) {
+              if (orderNode.parent == currentNode.parent) {
+                if (currentNode.parent != null) {
+                  var children = orderNode.parent!.children;
+                  children.manulSort(currentNode, orderNode);
+                  rebuild();
+                } else if (widget.nodes.contains(orderNode) &&
+                    widget.nodes.contains(currentNode)) {
+                  widget.nodes.manulSort(currentNode, orderNode);
+                  rebuild();
                 }
-                widget.onReorder?.call(orderNode, currentNode);
+              } else {
+                if (currentNode.parent != null) {
+                  if (orderNode.parent != null) {
+                    orderNode._removeSelf();
+                  } else if (widget.nodes.contains(orderNode)) {
+                    widget.nodes.remove(orderNode);
+                  }
+
+                  var children = currentNode.parent!.children;
+                  var index = children.indexOf(currentNode);
+                  if (orderUpper) {
+                    currentNode.parent!._insertNodeAt(index + 1, orderNode);
+                  } else {
+                    currentNode.parent!._insertNodeAt(index, orderNode);
+                  }
+                  rebuild();
+                } else if (widget.nodes.contains(currentNode)) {
+                  if (orderNode.parent != null) {
+                    orderNode._removeSelf();
+                  }
+                  var index = widget.nodes.indexOf(currentNode);
+                  if (orderUpper) {
+                    widget.nodes.insert(index + 1, orderNode);
+                  } else {
+                    widget.nodes.insert(index, orderNode);
+                  }
+                  rebuild();
+                }
               }
-            },
-            itemCount: _listShowNodes.length,
-            itemBuilder: (context, index) {
-              var node = _listShowNodes[index];
-              return TreeNodeWidget<T>(
-                key: GlobalObjectKey(node.key),
-                node: node,
-                builder: (context, node) => widget.originalNodeItemBuilder !=
-                        null
-                    ? DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: widget.nodeItemBackground?.call(context, node),
-                        ),
-                        child: widget.originalNodeItemBuilder!(context, node),
-                      )
-                    : RecommendNodeWidget<T>(
-                        node: node,
-                        builder: widget.nodeItemBuilder,
-                        backgroundBuilder: widget.nodeItemBackground,
-                        showLines: widget.showLines,
-                        lineColor: widget.lineColor,
-                        nodeWidth: widget.scrollable
-                            ? widget.nodeWidth
-                            : double.infinity,
-                        indent: widget.indent,
+              widget.onReorder?.call(orderNode, currentNode);
+            }
+          },
+          itemCount: _listShowNodes.length,
+          itemBuilder: (context, index) {
+            var node = _listShowNodes[index];
+            return TreeNodeWidget<T>(
+              key: GlobalObjectKey(node.key),
+              node: node,
+              builder: (context, node) => widget.originalNodeItemBuilder != null
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: widget.nodeItemBackground?.call(context, node),
                       ),
-              );
-            },
-          ),
+                      child: widget.originalNodeItemBuilder!(context, node),
+                    )
+                  : RecommendNodeWidget<T>(
+                      node: node,
+                      builder: widget.nodeItemBuilder,
+                      backgroundBuilder: widget.nodeItemBackground,
+                      showLines: widget.showLines,
+                      lineColor: widget.lineColor,
+                      nodeWidth: widget.scrollable
+                          ? widget.nodeWidth
+                          : double.infinity,
+                      indent: widget.indent,
+                    ),
+            );
+          },
         ),
-      );
+      ),
+    );
+
+    return SelectionArea(child: content);
+  }
 }
 
 class TreeNodeWidget<T> extends StatefulWidget {

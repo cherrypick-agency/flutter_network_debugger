@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/prefs.dart';
 import '../../features/startup/startup_dialog.dart';
 import '../go_server/go_server_manager.dart';
-import 'dart:async';
 
 /// Bootstrap service для desktop приложений
 /// Управляет запуском Go сервера и инициализацией приложения
@@ -270,6 +272,93 @@ class DesktopBootstrap {
   static Stream<String> get serverLogStream => _serverManager.logStream;
 }
 
+/// Виджет для отображения строки лога с подсветкой ключевых слов
+class _LogLine extends StatelessWidget {
+  final String line;
+  final ColorScheme scheme;
+
+  const _LogLine({required this.line, required this.scheme});
+
+  @override
+  Widget build(BuildContext context) {
+    const baseStyle = TextStyle(fontFamily: 'monospace', fontSize: 12);
+    final lower = line.toLowerCase();
+
+    // [stderr] - серый
+    final isStderr = lower.contains('[stderr]');
+    // Успешные сообщения - синий
+    final isSuccess =
+        lower.contains('started') ||
+        lower.contains('listening') ||
+        lower.contains('ready') ||
+        lower.contains('running') ||
+        lower.contains('"addr"');
+    // Предупреждения - оранжевый
+    final isWarn =
+        lower.contains('"level":"warn"') ||
+        lower.contains('level=warn') ||
+        lower.contains('warning');
+
+    // Базовый цвет строки
+    Color lineColor;
+    if (isStderr) {
+      lineColor = scheme.outline;
+    } else if (isSuccess) {
+      lineColor = scheme.primary;
+    } else if (isWarn) {
+      lineColor = scheme.tertiary;
+    } else {
+      lineColor = scheme.onSurface.withValues(alpha: 0.9);
+    }
+
+    // Паттерны для подсветки жирным красным
+    final errorPatterns = RegExp(
+      r'\b(error|fail|failed|cannot|unable|panic|fatal)\b',
+      caseSensitive: false,
+    );
+
+    if (!errorPatterns.hasMatch(line)) {
+      return Text(line, style: baseStyle.copyWith(color: lineColor));
+    }
+
+    // Разбиваем строку на части и подсвечиваем ключевые слова
+    final spans = <TextSpan>[];
+    int lastEnd = 0;
+
+    for (final match in errorPatterns.allMatches(line)) {
+      if (match.start > lastEnd) {
+        spans.add(
+          TextSpan(
+            text: line.substring(lastEnd, match.start),
+            style: baseStyle.copyWith(color: lineColor),
+          ),
+        );
+      }
+      spans.add(
+        TextSpan(
+          text: match.group(0),
+          style: baseStyle.copyWith(
+            color: scheme.error,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+      lastEnd = match.end;
+    }
+
+    if (lastEnd < line.length) {
+      spans.add(
+        TextSpan(
+          text: line.substring(lastEnd),
+          style: baseStyle.copyWith(color: lineColor),
+        ),
+      );
+    }
+
+    return Text.rich(TextSpan(children: spans));
+  }
+}
+
 /// Диалог, который показывает логи старта Go сервера и его текущий статус.
 /// Пользователь видит живой вывод stdout/stderr и вручную нажимает Continue,
 /// когда сервер успешно запустился.
@@ -295,11 +384,12 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
   bool _startRequested = false;
   bool _startFinished = false;
   bool _startSuccess = false;
+  final ScrollController _logsScrollController = ScrollController();
+  bool _autoScrollEnabled = true;
 
   @override
   void initState() {
     super.initState();
-    // Стартовое состояние и последние логи (если есть)
     _status = widget.serverManager.status;
     _logs.addAll(widget.serverManager.recentLogs);
 
@@ -311,14 +401,38 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
     _logSub = widget.serverManager.logStream.listen((line) {
       setState(() {
         _logs.add(line);
-        // Оставляем только последние ~200 строк, чтобы список не раздувался
         if (_logs.length > 200) {
           _logs.removeRange(0, _logs.length - 200);
         }
       });
+      _scrollToBottomIfEnabled();
     });
 
     _startServer();
+  }
+
+  void _scrollToBottomIfEnabled() {
+    if (!_autoScrollEnabled || !_logsScrollController.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_logsScrollController.hasClients) {
+        _logsScrollController.animateTo(
+          _logsScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _copyAllLogs() {
+    final text = _logs.join('\n');
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Logs copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _startServer() async {
@@ -341,6 +455,7 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
   void dispose() {
     _statusSub?.cancel();
     _logSub?.cancel();
+    _logsScrollController.dispose();
     super.dispose();
   }
 
@@ -451,9 +566,51 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
               ),
               const SizedBox(height: 8),
             ],
-            Text(
-              'Startup logs:',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            Row(
+              children: [
+                const Text(
+                  'Startup logs:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(
+                    _autoScrollEnabled
+                        ? Icons.vertical_align_bottom
+                        : Icons.vertical_align_center,
+                    size: 16,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _autoScrollEnabled = !_autoScrollEnabled;
+                    });
+                    if (_autoScrollEnabled) {
+                      _scrollToBottomIfEnabled();
+                    }
+                  },
+                  tooltip: _autoScrollEnabled
+                      ? 'Disable auto-scroll'
+                      : 'Auto-scroll to bottom',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 16),
+                  onPressed: _logs.isEmpty ? null : _copyAllLogs,
+                  tooltip: 'Copy all logs',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Container(
@@ -466,53 +623,44 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
                   color: scheme.outline.withValues(alpha: 0.6),
                 ),
               ),
-              child: Scrollbar(
-                thumbVisibility: true,
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: _logs.isEmpty ? 1 : _logs.length,
-                  itemBuilder: (context, index) {
-                    const baseStyle = TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                    );
-                    if (_logs.isEmpty) {
-                      return Text(
-                        'No output yet...',
-                        style: baseStyle.copyWith(
-                          color: scheme.outline.withValues(alpha: 0.9),
-                        ),
-                      );
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  // Отключаем автоскролл если пользователь скроллит вверх
+                  if (notification is ScrollUpdateNotification) {
+                    final maxScroll =
+                        _logsScrollController.position.maxScrollExtent;
+                    final currentScroll = _logsScrollController.position.pixels;
+                    if (maxScroll - currentScroll > 50) {
+                      if (_autoScrollEnabled) {
+                        setState(() => _autoScrollEnabled = false);
+                      }
                     }
-                    final line = _logs[index];
-                    final lower = line.toLowerCase();
-
-                    TextStyle style;
-
-                    // Простая подсветка: ошибки, warn и ключевые фразы старта
-                    if (lower.contains('error') ||
-                        lower.contains('[stderr]') ||
-                        lower.contains('"level":"error"')) {
-                      style = baseStyle.copyWith(
-                        color: scheme.error,
-                        fontWeight: FontWeight.w600,
-                      );
-                    } else if (lower.contains('warn') ||
-                        lower.contains('"level":"warn"')) {
-                      style = baseStyle.copyWith(color: scheme.tertiary);
-                    } else if (lower.contains('starting') ||
-                        lower.contains('listening') ||
-                        lower.contains('ready') ||
-                        lower.contains('"addr"')) {
-                      style = baseStyle.copyWith(color: scheme.primary);
-                    } else {
-                      style = baseStyle.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.9),
-                      );
-                    }
-
-                    return Text(line, style: style);
-                  },
+                  }
+                  return false;
+                },
+                child: Scrollbar(
+                  controller: _logsScrollController,
+                  thumbVisibility: true,
+                  child: SelectionArea(
+                    child: ListView.builder(
+                      controller: _logsScrollController,
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _logs.isEmpty ? 1 : _logs.length,
+                      itemBuilder: (context, index) {
+                        if (_logs.isEmpty) {
+                          return Text(
+                            'No output yet...',
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              color: scheme.outline.withValues(alpha: 0.9),
+                            ),
+                          );
+                        }
+                        return _LogLine(line: _logs[index], scheme: scheme);
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
