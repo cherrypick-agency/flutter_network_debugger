@@ -1,4 +1,4 @@
-/// Заглушка для платформ без dart:io (например, Web). Ничего не делает.
+/// Stub for platforms without dart:io (e.g. Web). Does nothing.
 class HttpDebuggerConfig {
   final String proxyHostPort;
   final bool allowBadCertificates;

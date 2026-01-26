@@ -1,7 +1,7 @@
 import 'dart:io';
 
-/// Обёртка над HttpClient, которая переписывает запросы на
-/// reverse‑proxy эндпоинт вида:
+/// Wrapper over HttpClient that rewrites requests to
+/// reverse-proxy endpoint of the form:
 ///   {proxyBaseUrl}{proxyHttpPath}?_target=<FULL_UPSTREAM_URL>
 class ReverseProxyHttpClient implements HttpClient {
   ReverseProxyHttpClient({
@@ -16,7 +16,8 @@ class ReverseProxyHttpClient implements HttpClient {
     List<Pattern>? allowHosts,
     List<String>? allowMethods,
     SecurityContext? context,
-  })  : _inner = HttpClient(context: context),
+    HttpClient? innerClient,
+  })  : _inner = innerClient ?? HttpClient(context: context),
         _upstreamBaseUrl = upstreamBaseUrl,
         _proxyBaseUrl = _ensureHttpScheme(proxyBaseUrl),
         _proxyHttpPath =
@@ -40,10 +41,10 @@ class ReverseProxyHttpClient implements HttpClient {
 
   final List<Pattern>? _skipPaths;
   final List<Pattern>? _skipHosts;
-  final List<String>? _skipMethods; // в верхнем регистре
+  final List<String>? _skipMethods; // uppercase
   final List<Pattern>? _allowPaths;
   final List<Pattern>? _allowHosts;
-  final List<String>? _allowMethods; // в верхнем регистре
+  final List<String>? _allowMethods; // uppercase
 
   @override
   Future<HttpClientRequest> open(
@@ -120,7 +121,7 @@ class ReverseProxyHttpClient implements HttpClient {
   @override
   Future<HttpClientRequest> headUrl(Uri url) => openUrl('HEAD', url);
 
-  // Делегируем прочие свойства/методы
+  // Delegate other properties/methods
   @override
   set authenticate(
     Future<bool> Function(Uri url, String scheme, String? realm)? f,

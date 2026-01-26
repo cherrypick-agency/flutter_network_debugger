@@ -1,7 +1,17 @@
 # Changelog
 
+## 0.2.0
+
+- Added comprehensive e2e tests with real Go proxy
+- Added `HttpDebuggerClient.wrap()` for package:http integration
+- Added `HttpDebugger.runZonedWithReverseProxy()` for scoped execution
+- Fixed Stack Overflow issue in HttpOverrides
+- Improved documentation
+- Code comments translated to English
+
 ## 0.1.0
-- Initial release: global HTTP interceptor via HttpOverrides
-- Supports both reverse proxy and forward proxy modes
-- Automatic proxy detection from environment variables
-- Compatible with `package:http` and other HTTP clients built on `dart:io`
+
+- Initial release
+- Global HttpOverrides for dart:io
+- Forward and reverse proxy modes
+- Skip/allow rules for paths, hosts, methods

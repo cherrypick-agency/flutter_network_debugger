@@ -9,7 +9,7 @@ String ensureHttpScheme(String value) {
 }
 
 String buildEngineIoTarget(String baseUrl, String path) {
-  // ws(s) -> http(s), плюс EIO=4&transport=websocket
+  // ws(s) -> http(s), plus EIO=4&transport=websocket
   var base = baseUrl.trim();
   final lower = base.toLowerCase();
   if (lower.startsWith('wss://')) base = 'https://' + base.substring(6);
@@ -17,12 +17,15 @@ String buildEngineIoTarget(String baseUrl, String path) {
   final pathWithSlash = path.startsWith('/') ? path : '/$path';
   final uri = Uri.parse(base);
   final scheme = (uri.scheme == 'https') ? 'https' : 'http';
-  final authority = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+  // socket_io_client uses uri.port even if port is not specified (returns 0 in that case),
+  // so it's important to always explicitly set 80/443.
+  final port = uri.hasPort ? uri.port : (scheme == 'https' ? 443 : 80);
+  final authority = '${uri.host}:$port';
   final p = '$pathWithSlash?EIO=4&transport=websocket';
   return '$scheme://$authority$p';
 }
 
 String maybeAppendEngineIoPath(String path) {
-  // Ничего не дописываем: путь прокси может быть без '/socket.io'
+  // Don't append anything: proxy path may not include '/socket.io'
   return path;
 }

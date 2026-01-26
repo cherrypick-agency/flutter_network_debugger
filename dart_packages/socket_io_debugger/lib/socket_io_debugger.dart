@@ -1,5 +1,6 @@
 library socket_io_debugger;
 
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:socket_io_debugger/src/env/env_reader_stub.dart'
@@ -25,6 +26,13 @@ const String _kDefineDioDebuggerEnabled =
     String.fromEnvironment('DIO_DEBUGGER_ENABLED');
 const String _kDefineSocketProxyAllowBadCerts =
     String.fromEnvironment('SOCKET_PROXY_ALLOW_BAD_CERTS');
+
+void _debugLog(String message) {
+  assert(() {
+    developer.log(message, name: 'socket_io_debugger');
+    return true;
+  }());
+}
 
 class SocketIoConfig {
   const SocketIoConfig({
@@ -75,11 +83,11 @@ class SocketIoDebugger {
           readEnvVar('SOCKET_PROXY_PATH'),
         ]) ??
         '/wsproxy');
+    final effectiveProxyPath = _normalizeProxyPath(proxyPath);
 
-    // Диагностика (dev): печатаем ключевые параметры
-    // ignore: avoid_print
-    print(
-        '[SocketIoDebugger] mode=$mode baseUrl=$baseUrl path=$path proxy=$proxy proxyPath=$proxyPath');
+    _debugLog(
+      '[SocketIoDebugger] mode=$mode baseUrl=$baseUrl path=$path proxy=$proxy proxyPath=$effectiveProxyPath',
+    );
 
     if (mode == 'forward') {
       if (proxy.isEmpty) {
@@ -109,13 +117,13 @@ class SocketIoDebugger {
         );
       }
       final proxyBase = ensureHttpScheme(proxy);
-      final effectivePath = proxyPath; // используем ровно указанный путь прокси
-      // Сохраняем namespace из исходного baseUrl (например, '/chat')
+      final effectivePath = effectiveProxyPath;
+      // Preserve namespace from original baseUrl (e.g. '/chat')
       final srcNsPath = Uri.tryParse(ensureHttpScheme(baseUrl))?.path ?? '';
       final effectiveBaseWithNs =
           proxyBase + (srcNsPath.isNotEmpty ? srcNsPath : '');
-      // целевой engine.io URL (ws->http)
-      // Если baseUrl указывает на сам proxy (host:port совпадает) — пытаемся взять реальный upstream из defines/ENV
+      // Target engine.io URL (ws->http)
+      // If baseUrl points to the proxy itself (host:port match), try to get real upstream from defines/ENV
       var upstream = baseUrl;
       final proxyHost = _hostPort(proxyBase);
       final upstreamHost = _hostPort(ensureHttpScheme(upstream));
@@ -128,17 +136,16 @@ class SocketIoDebugger {
           upstream = envUpstream;
         }
       }
-      // Если переданный path относится к прокси (содержит wsproxy), пытаемся взять апстрим path/target из ENV
+      // If passed path belongs to proxy (contains wsproxy), try to get upstream path/target from ENV
       var upstreamPath = path;
-      // Полный target из ENV имеет приоритет
+      // Full target from ENV takes priority
       final explicitTarget = _firstNonEmpty([
         _kDefineSocketUpstreamTarget,
         readEnvVar('SOCKET_UPSTREAM_TARGET'),
       ]);
       if (explicitTarget != null && explicitTarget.trim().isNotEmpty) {
         final t = explicitTarget.trim();
-        // ignore: avoid_print
-        print('[SocketIoDebugger] reverse (explicit target): $t');
+        _debugLog('[SocketIoDebugger] reverse (explicit target): $t');
         return SocketIoConfig(
           effectiveBaseUrl: effectiveBaseWithNs,
           effectivePath: effectivePath,
@@ -154,9 +161,9 @@ class SocketIoDebugger {
             '/socket.io/';
       }
       final target = buildEngineIoTarget(upstream, upstreamPath);
-      // ignore: avoid_print
-      print(
-          '[SocketIoDebugger] reverse: proxyBase=$proxyBase effectiveBaseUrl=$effectiveBaseWithNs effectivePath=$effectivePath upstream=$upstream upstreamPath=$upstreamPath target=$target');
+      _debugLog(
+        '[SocketIoDebugger] reverse: proxyBase=$proxyBase effectiveBaseUrl=$effectiveBaseWithNs effectivePath=$effectivePath upstream=$upstream upstreamPath=$upstreamPath target=$target',
+      );
       return SocketIoConfig(
         effectiveBaseUrl: effectiveBaseWithNs,
         effectivePath: effectivePath,
@@ -181,7 +188,7 @@ class SocketIoDebugger {
       readEnvVar('SOCKET_PROXY_ENABLED'),
       readEnvVar('DIO_DEBUGGER_ENABLED'),
     ]);
-    if (v == null) return true; // включено в dev по умолчанию
+    if (v == null) return true; // enabled by default in dev
     final sv = v.trim().toLowerCase();
     return sv == '1' || sv == 'true' || sv == 'yes' || sv == 'on';
   }
@@ -227,5 +234,26 @@ class SocketIoDebugger {
     final port =
         parsed.hasPort ? parsed.port : (parsed.scheme == 'https' ? 443 : 80);
     return '${parsed.host}:$port';
+  }
+
+  // Protect against invalid proxyPath values: strip scheme/host, trim after '?',
+  // ensure leading '/'. This prevents sequences like "?%3F_target=..." in requests.
+  static String _normalizeProxyPath(String value) {
+    var v = value.trim();
+    if (v.isEmpty) return '/wsproxy';
+    if (v.startsWith('http://') ||
+        v.startsWith('https://') ||
+        v.startsWith('ws://') ||
+        v.startsWith('wss://')) {
+      final u = Uri.parse(v);
+      v = u.path;
+    }
+    final q = v.indexOf('?');
+    if (q >= 0) v = v.substring(0, q);
+    if (!v.startsWith('/')) v = '/$v';
+    while (v.contains('//')) {
+      v = v.replaceAll('//', '/');
+    }
+    return v.isEmpty ? '/wsproxy' : v;
   }
 }

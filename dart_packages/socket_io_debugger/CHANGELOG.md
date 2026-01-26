@@ -1,29 +1,22 @@
 # Changelog
 
+## 1.1.0
+
+- Added comprehensive e2e tests with real Go Socket.IO upstream
+- Added edge-case contract tests
+- Fixed socket_io_client port bug (explicit port 80/443 in target URL)
+- Replaced `print()` with `dart:developer.log` (stripped in release builds)
+- Updated socket_io_client dependency to ^3.1.4
+- Comprehensive documentation for path vs namespace
+- Code comments translated to English
+
 ## 1.0.0
-- **BREAKING CHANGE**: Migrated to `socket_io_client` ^3.0.0
-- **BREAKING CHANGE**: Now supports Socket.IO server v4.7+ (Engine.IO v4)
-- **IMPORTANT**: For Socket.IO server v2.*/v3.*/v4.6 compatibility, use `socket_io_debugger: ^0.1.0` instead
-- Updated: Minimum Dart SDK remains `>=3.0.0 <4.0.0`
-- Compatible: socket_io_client v3.x API (no code changes required in user code)
-- Docs: Added version compatibility information to README
 
-## 0.1.2
-- Docs: Complete README rewrite with comprehensive documentation
-- Docs: Added "Part of network_debugger ecosystem" reference
-- Docs: Added Features, Installation, and "Starting the Proxy" sections
-- Docs: Added Quick start with full code example
-- Docs: Added Advanced options (reverse/forward proxy, Android emulator)
-- Docs: Added Configuration examples (--dart-define, ENV)
-- Docs: Added Environment variables reference
-- Docs: Added cross-references to network_debugger package
-
-## 0.1.1
-- Docs: small fixes in examples and configuration description.
+- Breaking: Updated for socket_io_client ^3.x and Socket.IO server v4.7+
+- Engine.IO v4 parameters in target URL
 
 ## 0.1.0
-- Initial release.
-- One-call proxy attachment for Socket.IO client (reverse/forward).
-- Env/--dart-define configuration, forward proxy overrides via HttpClient.
 
-
+- Initial release
+- Reverse and forward proxy modes
+- Support for socket_io_client ^2.x

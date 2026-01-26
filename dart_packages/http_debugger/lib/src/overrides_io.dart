@@ -1,16 +1,16 @@
 import 'dart:io';
 import 'reverse_http_client_io.dart';
 
-/// Конфигурация глобального форвард‑прокси через HttpOverrides.
+/// Global forward-proxy configuration via HttpOverrides.
 class HttpDebuggerConfig {
-  /// host:port — то, что ждёт HttpClient.findProxy (без схемы)
+  /// host:port - what HttpClient.findProxy expects (without scheme)
   final String proxyHostPort;
 
-  /// Разрешать самоподписанные/битые сертификаты — удобно в dev.
+  /// Allow self-signed/bad certificates - useful in dev.
   final bool allowBadCertificates;
 
-  /// Список хостов, для которых прокси отключается (DIRECT).
-  /// Можно задавать как точные строки, так и RegExp.
+  /// List of hosts for which proxy is disabled (DIRECT).
+  /// Can be specified as exact strings or RegExp.
   final List<Pattern> bypassHosts;
 
   const HttpDebuggerConfig({
@@ -20,11 +20,11 @@ class HttpDebuggerConfig {
   });
 }
 
-/// Конфигурация reverse‑proxy для глобального перехвата через HttpOverrides.
+/// Reverse-proxy configuration for global interception via HttpOverrides.
 class HttpReverseProxyConfig {
   final String upstreamBaseUrl;
-  final String proxyBaseUrl; // может быть без схемы; нормализуем
-  final String proxyHttpPath; // по умолчанию /httpproxy
+  final String proxyBaseUrl; // can be without scheme; normalized
+  final String proxyHttpPath; // default /httpproxy
   final bool allowBadCertificates;
 
   final List<Pattern>? skipPaths;
@@ -48,36 +48,36 @@ class HttpReverseProxyConfig {
   });
 }
 
-/// Включает глобальный форвард‑прокси для всего HTTP‑трафика (dart:io).
-/// Все клиенты, которые используют стандартный HttpClient (включая package:http, Dio по умолчанию и т.д.),
-/// начнут ходить через заданный прокси.
+/// Enables global forward-proxy for all HTTP traffic (dart:io).
+/// All clients using standard HttpClient (including package:http, Dio by default, etc.)
+/// will start routing through the specified proxy.
 class HttpDebugger {
   HttpDebugger._();
 
   static HttpOverrides? _previous;
 
-  /// Включить глобальный прокси. Повторный вызов перезапишет настройки.
+  /// Enable global proxy. Repeated calls will overwrite settings.
   static void enableForwardProxy(HttpDebuggerConfig config) {
     _previous ??= HttpOverrides.current;
     HttpOverrides.global = _ForwardProxyOverrides(config);
   }
 
-  /// Включить глобальный reverse‑proxy.
+  /// Enable global reverse-proxy.
   static void enableReverseProxy(HttpReverseProxyConfig config) {
     _previous ??= HttpOverrides.current;
     HttpOverrides.global = _ReverseProxyOverrides(config);
   }
 
-  /// Отключить глобальный прокси и восстановить предыдущие overrides (если были).
+  /// Disable global proxy and restore previous overrides (if any).
   static void disable() {
     HttpOverrides.global = _previous;
     _previous = null;
   }
 
-  /// Универсальный способ включить прокси.
+  /// Universal way to enable proxy.
   ///
-  /// По умолчанию mode = 'reverse'. Если [upstreamBaseUrl] не задан —
-  /// автоматически используем forward‑proxy с локальным proxy.
+  /// By default mode = 'reverse'. If [upstreamBaseUrl] is not set,
+  /// automatically uses forward-proxy with local proxy.
   static void enable({
     String mode = 'reverse',
     String? upstreamBaseUrl,
@@ -150,7 +150,7 @@ class HttpDebugger {
     return HttpOverrides.runZoned(
       action,
       createHttpClient: (SecurityContext? context) {
-        final client = HttpClient(context: context);
+        final client = _RawHttpOverrides().createRawHttpClient(context);
         _configureClient(client, config);
         return client;
       },
@@ -177,6 +177,9 @@ class HttpDebugger {
           allowHosts: config.allowHosts,
           allowMethods: config.allowMethods,
           context: context,
+          // Важно: внутренний клиент создаём через super.createHttpClient,
+          // иначе получаем бесконечную рекурсию из-за HttpOverrides.runZoned.
+          innerClient: _RawHttpOverrides().createRawHttpClient(context),
         );
       },
     );
@@ -315,7 +318,19 @@ class _ReverseProxyOverrides extends HttpOverrides {
       allowHosts: _config.allowHosts,
       allowMethods: _config.allowMethods,
       context: context,
+      // Важно: внутренний HttpClient должен создаваться БЕЗ текущих overrides,
+      // иначе получаем бесконечную рекурсию (stack overflow).
+      innerClient: super.createHttpClient(context),
     );
+  }
+}
+
+/// Техническая обёртка, чтобы из обычной функции можно было безопасно вызвать
+/// `super.createHttpClient()` (это создаёт "сырой" HttpClient без применения
+/// текущих overrides).
+class _RawHttpOverrides extends HttpOverrides {
+  HttpClient createRawHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context);
   }
 }
 

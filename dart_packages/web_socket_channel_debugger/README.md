@@ -5,20 +5,24 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
 </p>
 
-Инструмент для быстрого подключения прокси network-debugger к `package:web_socket_channel` (reverse/forward режимы) для локальной отладки и перехвата трафика.
+A helper package to attach network-debugger proxy to `package:web_socket_channel` for local debugging and WebSocket traffic interception.
 
-## Установка
+## Installation
 
-Добавьте в `pubspec.yaml` вашего проекта зависимость на `web_socket_channel` и этот пакет.
+```yaml
+dependencies:
+  web_socket_channel: ^3.0.3
+  web_socket_channel_debugger: ^0.1.0
+```
 
-## Быстрый старт
+## Quick Start
 
 ```dart
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel_debugger/web_socket_channel_debugger.dart';
 
 void main() async {
   const upstream = 'wss://echo.websocket.events';
+  
   final cfg = WebSocketChannelDebugger.attach(
     baseUrl: upstream,
     proxyBaseUrl: 'http://localhost:9091',
@@ -26,35 +30,61 @@ void main() async {
   );
 
   final channel = WebSocketChannelDebugger.connect(config: cfg);
-  channel.stream.listen((m) => print('> $m'));
+  await channel.ready;
+  
+  channel.stream.listen((message) => print('Received: \$message'));
   channel.sink.add('hello');
 }
 ```
 
-## Режимы
+## API
 
-- reverse (по умолчанию): трафик идёт на `http://<proxy>/<proxyPath>?_target=<ws target>`
-- forward: использует `HttpClient.findProxy`, не меняет URL подключения
+### `WebSocketChannelDebugger.attach()`
 
-Выбор через `--dart-define=SOCKET_PROXY_MODE=reverse|forward|none` или ENV `SOCKET_PROXY_MODE`.
+Creates a configuration for connecting through the proxy.
 
-## Переменные окружения
+| Parameter      | Type      | Default                 | Description                                |
+| -------------- | --------- | ----------------------- | ------------------------------------------ |
+| `baseUrl`      | `String`  | required                | Target WebSocket URL (`ws://` or `wss://`) |
+| `proxyBaseUrl` | `String`  | `http://localhost:9091` | Proxy server address                       |
+| `proxyPath`    | `String`  | `/wsproxy`              | Proxy WebSocket endpoint path              |
+| `enabled`      | `bool?`   | `true`                  | Enable/disable proxy                       |
+| `mode`         | `String?` | `reverse`               | Mode: `reverse`, `forward`, `none`         |
 
-- `SOCKET_PROXY` — URL прокси (`http://localhost:9091`)
-- `SOCKET_PROXY_PATH` — путь WS-прокси (обычно `/wsproxy`)
-- `SOCKET_PROXY_ENABLED` — включить/выключить (`true|false`)
-- `SOCKET_PROXY_MODE` — `reverse|forward|none`
-- `SOCKET_PROXY_ALLOW_BAD_CERTS` — разрешить self-signed в forward
-- `SOCKET_UPSTREAM_URL` — исходный WS, если baseUrl указывает на сам прокси
-- `SOCKET_UPSTREAM_TARGET` — явный полный target для `_target`
+### `WebSocketChannelDebugger.connect()`
 
-## Ссылки
+| Parameter | Type                    | Description                 |
+| --------- | ----------------------- | --------------------------- |
+| `config`  | `WscProxyConfig`        | Config from `attach()`      |
+| `headers` | `Map<String, dynamic>?` | HTTP headers (dart:io only) |
 
-- web_socket_channel на pub.dev: `https://pub.dev/packages/web_socket_channel`
-- web_socket_channel исходники: `https://github.com/dart-lang/http/tree/master/pkgs/web_socket_channel`
+## Platform Behavior
 
-## Лицензия
+| Feature           | dart:io (mobile/desktop) | Web (dart:js_interop)     |
+| ----------------- | ------------------------ | ------------------------- |
+| Reverse mode      | yes                      | yes                       |
+| Forward mode      | yes                      | no (no HttpOverrides)     |
+| Custom headers    | yes                      | no (browser limitation)   |
+| Self-signed certs | yes (with flag)          | no                        |
+| Read ENV          | yes                      | no (`--dart-define` only) |
+
+## Environment Variables
+
+| Variable                       | Description                           |
+| ------------------------------ | ------------------------------------- |
+| `SOCKET_PROXY`                 | Proxy server URL                      |
+| `SOCKET_PROXY_PATH`            | WS endpoint path (usually `/wsproxy`) |
+| `SOCKET_PROXY_MODE`            | `reverse` / `forward` / `none`        |
+| `SOCKET_PROXY_ENABLED`         | `true` / `false`                      |
+| `SOCKET_PROXY_ALLOW_BAD_CERTS` | Allow self-signed (forward mode)      |
+| `SOCKET_UPSTREAM_URL`          | Explicit upstream URL                 |
+| `SOCKET_UPSTREAM_TARGET`       | Full `_target` for reverse mode       |
+
+## Links
+
+- [web_socket_channel on pub.dev](https://pub.dev/packages/web_socket_channel)
+- [network_debugger](https://pub.dev/packages/network_debugger)
+
+## License
 
 Apache-2.0
-
-

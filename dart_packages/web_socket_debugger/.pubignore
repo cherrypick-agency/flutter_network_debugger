@@ -1,0 +1,3 @@
+# Exclude e2e tests that require nd_test_support and Go proxy
+test/e2e_*
+test/test_helpers/

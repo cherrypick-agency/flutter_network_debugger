@@ -1,0 +1,21 @@
+{
+  "roots": [
+    "nd_test_support"
+  ],
+  "packages": [
+    {
+      "name": "nd_test_support",
+      "version": "0.0.1",
+      "dependencies": [],
+      "devDependencies": [
+        "lints"
+      ]
+    },
+    {
+      "name": "lints",
+      "version": "3.0.0",
+      "dependencies": []
+    }
+  ],
+  "configVersion": 1
+}

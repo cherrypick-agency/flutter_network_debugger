@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 
-/// Клиент-обёртка для package:http, переписывающий URL в reverse‑proxy вид:
+/// Client wrapper for package:http that rewrites URL to reverse-proxy format:
 ///   {proxyBaseUrl}{proxyHttpPath}?_target=<FULL_UPSTREAM_URL>
-/// Работает на Web и IO, т.к. перепись происходит до отправки запроса.
+/// Works on Web and IO since rewriting happens before sending the request.
 class HttpReverseProxyClient extends http.BaseClient {
   HttpReverseProxyClient({
     required http.Client inner,
@@ -61,7 +61,7 @@ class HttpReverseProxyClient extends http.BaseClient {
 
     final Uri proxy = _buildProxyUri(target);
 
-    // Базовый случай: сконструируем новый Request, скопируем тело и заголовки
+    // Base case: construct new Request, copy body and headers
     final bodyBytes = await request.finalize().toBytes();
     final rq = http.Request(method, proxy)
       ..headers.addAll(request.headers)
@@ -155,7 +155,7 @@ class HttpReverseProxyClient extends http.BaseClient {
   }
 }
 
-/// Утилита для удобного создания клиента.
+/// Utility for convenient client creation.
 class HttpDebuggerClient {
   static http.Client wrap(
     http.Client inner, {

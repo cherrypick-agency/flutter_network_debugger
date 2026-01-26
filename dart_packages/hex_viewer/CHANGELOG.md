@@ -1,11 +1,15 @@
+# Changelog
+
+## 0.2.0
+
+- Documentation improvements
+- Code cleanup
+
 ## 0.1.0
 
-* Initial release
-* Zero-dependency hex viewer widget
-* Virtualized scrolling for large files
-* Byte selection (click + Shift+click)
-* Copy to clipboard (hex, text, binary)
-* Configurable byte grouping (4-4-4-4, 8-8)
-* Color coding for different byte types
-* Dark/light theme support
-* Keyboard navigation
+- Initial release
+- Hexadecimal viewer widget for Flutter
+- Selection support
+- Copy to clipboard
+- Configurable byte grouping
+- Zero dependencies (Flutter SDK only)

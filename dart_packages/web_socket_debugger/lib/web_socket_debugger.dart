@@ -1,5 +1,7 @@
 library web_socket_debugger;
 
+import 'dart:developer' as developer;
+
 import 'package:web_socket/web_socket.dart' as ws;
 
 import 'src/env/env_reader_stub.dart'
@@ -20,6 +22,13 @@ const String _kDefineUpstreamUrl =
     String.fromEnvironment('SOCKET_UPSTREAM_URL');
 const String _kDefineUpstreamTarget =
     String.fromEnvironment('SOCKET_UPSTREAM_TARGET');
+
+void _debugLog(String message) {
+  assert(() {
+    developer.log(message, name: 'web_socket_debugger');
+    return true;
+  }());
+}
 
 class WebSocketProxyConfig {
   const WebSocketProxyConfig({
@@ -65,9 +74,9 @@ class WebSocketDebugger {
             '/wsproxy');
     final path = _normalizeProxyPath(rawPath);
 
-    // ignore: avoid_print
-    print(
-        '[WebSocketDebugger] mode=$modeEffective base=$baseUrl proxy=$proxy path=$path');
+    _debugLog(
+      '[WebSocketDebugger] mode=$modeEffective base=$baseUrl proxy=$proxy path=$path',
+    );
 
     if (modeEffective == 'forward') {
       if (proxy.isEmpty) {
@@ -96,7 +105,7 @@ class WebSocketDebugger {
       }
       final proxyHttp = ensureHttpScheme(proxy);
 
-      // Если baseUrl указывает на сам proxy — попробуем взять реальный upstream из ENV/define
+      // If baseUrl points to the proxy itself, try to get real upstream from ENV/define
       var upstream = baseUrl;
       if (hostPort(proxyHttp) == hostPort(ensureHttpScheme(upstream))) {
         final envUp = _firstNonEmpty(
@@ -131,7 +140,7 @@ class WebSocketDebugger {
     required WebSocketProxyConfig config,
     Map<String, dynamic>? headers,
   }) async {
-    // Собираем query вручную, чтобы не ломать ws:// схему и не добавлять '#'
+    // Build query manually to preserve ws:// scheme and avoid adding '#'
     Uri uri;
     if (config.query.isEmpty) {
       uri = config.connectUrl;
@@ -143,8 +152,8 @@ class WebSocketDebugger {
       final encodedQuery = Uri(queryParameters: merged).query;
       uri = config.connectUrl.replace(query: encodedQuery, fragment: null);
     }
-    // В IO окружении пробрасываем заголовки (Authorization/Cookie и т.п.),
-    // в web – заголовки игнорируются на уровне транспорта
+    // In IO environment pass headers (Authorization/Cookie etc.),
+    // on web headers are ignored at transport level
     return connectWS(uri, headers: headers);
   }
 
@@ -180,9 +189,8 @@ class WebSocketDebugger {
     return null;
   }
 
-  // Защита от кривых значений пути прокси: убираем схему/хост, обрезаем всё после '?',
-  // приводим к виду с ведущим '/'. Без этого в окончательном URL может появляться
-  // последовательность вида '%3F_target'.
+  // Protect against invalid proxy path values: strip scheme/host, trim everything after '?',
+  // ensure leading '/'. Without this the final URL may contain sequences like '%3F_target'.
   static String _normalizeProxyPath(String value) {
     var v = value.trim();
     if (v.isEmpty) return '/wsproxy';

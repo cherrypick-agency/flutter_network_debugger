@@ -32,5 +32,5 @@ String buildWsTarget(String baseUrl) {
   final lower = base.toLowerCase();
   if (lower.startsWith('http://')) return 'ws://' + base.substring(7);
   if (lower.startsWith('https://')) return 'wss://' + base.substring(8);
-  return base; // предполагаем ws:// или wss:// уже передан
+  return base; // assume ws:// or wss:// already provided
 }

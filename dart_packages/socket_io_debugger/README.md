@@ -1,85 +1,57 @@
 # socket_io_debugger
 
-> Part of the [network_debugger](https://pub.dev/packages/network_debugger) ecosystem
+<p align="left">
+  <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/socket_io_debugger.yml"><img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/socket_io_debugger.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
+</p>
 
-One-call helper to attach a proxy to a Socket.IO client (reverse/forward modes). Useful for local debugging, traffic interception, and bypassing CORS/certificates via your local proxy.
+A helper package to attach network-debugger proxy to `socket_io_client` for local debugging and Socket.IO traffic interception.
 
 ## Version Compatibility
 
-**IMPORTANT**: Choose the correct version based on your Socket.IO server version:
+**Important**: Choose the version based on your Socket.IO server:
 
 | socket_io_debugger | socket_io_client | Socket.IO Server | Engine.IO |
-|-------------------|------------------|------------------|-----------|
-| **1.0.0+** | ^3.0.0 | v4.7+ | v4 |
-| **^0.1.0** | ^2.0.3 | v2.*/v3.*/v4.6 | v3/v4 |
-
-**How to choose:**
-- If your server uses Socket.IO **v4.7 or higher** → use `socket_io_debugger: ^1.0.0`
-- If your server uses Socket.IO **v2, v3, or v4.6 and below** → use `socket_io_debugger: ^0.1.0`
-
-**Note**: The API remains the same between versions, so migration only requires updating dependencies.
-
-## Features
-
-- One-liner attach: `SocketIoDebugger.attach()`
-- Supports reverse and forward proxy modes
-- Config sources (priority):
-  1) `attach` arguments
-  2) `--dart-define` (`HTTP_PROXY_MODE`, `HTTP_PROXY`, `SOCKET_PROXY`, `HTTP_PROXY_PATH`, `SOCKET_PROXY_PATH`, `HTTP_PROXY_ALLOW_BAD_CERTS`, `HTTP_PROXY_ENABLED`)
-  3) OS ENV (via conditional import; web-safe)
-- Automatic HTTP client factory for forward proxy mode
-- Support for self-signed certificates
-- Zero-config for quick setup
+| ------------------ | ---------------- | ---------------- | --------- |
+| **1.0.0+**         | ^3.1.4           | v4.7+            | v4        |
+| **^0.1.0**         | ^2.0.3           | v2.*/v3.*/v4.6   | v3/v4     |
 
 ## Installation
 
-Add to your `pubspec.yaml`:
-
-### For Socket.IO server v4.7+
-
 ```yaml
 dependencies:
-  socket_io_client: ^3.0.0
+  socket_io_client: ^3.1.4
   socket_io_debugger: ^1.0.0
-```
-
-### For Socket.IO server v2.*/v3.*/v4.6 and below
-
-```yaml
-dependencies:
-  socket_io_client: ^2.0.3
-  socket_io_debugger: ^0.1.0
 ```
 
 ## Starting the Proxy
 
-Before using `socket_io_debugger`, you need to start the network debugger proxy server. Install and run it with:
+Before using, start the network-debugger:
 
 ```bash
-# Install the CLI globally
+# Install CLI globally
 dart pub global activate network_debugger
 
-# Start the proxy (proxy port 9091, UI opens on 9092)
+# Start proxy (port 9091, UI on 9092)
 network_debugger
 ```
 
-Proxy base will be `http://localhost:9091`. The web UI opens on `http://localhost:9092`.
-
-For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
-
-## Quick start
+## Quick Start
 
 ```dart
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:socket_io_debugger/socket_io_debugger.dart';
 
-// Configure the proxy (path parameter is optional, defaults to '/socket.io/')
+void main() {
+  // Configure proxy
 final cfg = SocketIoDebugger.attach(
   baseUrl: 'https://example.com',
-  // path: '/socket.io/',  // Optional: Socket.IO path (default)
+    path: '/socket.io/',  // Socket.IO path on server
+    proxyBaseUrl: 'http://localhost:9091',
+    proxyHttpPath: '/wsproxy',
 );
 
-// Create socket with proxy configuration
+  // Create socket with config from attach()
 final socket = io.io(
   cfg.effectiveBaseUrl,
   io.OptionBuilder()
@@ -89,155 +61,168 @@ final socket = io.io(
     .build(),
 );
 
-// Connect (with HttpOverrides if forward proxy mode)
+  socket.onConnect((_) => print('Connected!'));
+  socket.on('message', (data) => print('Message: $data'));
+  
+  // Forward mode requires HttpOverrides
 if (cfg.useForwardOverrides) {
-  await HttpOverrides.runZoned(
+    HttpOverrides.runZoned(
     () => socket.connect(),
     createHttpClient: (_) => cfg.httpClientFactory!(),
   );
 } else {
   socket.connect();
+  }
 }
 ```
 
-## Understanding Socket.IO Path and Namespace
+## API
 
-Socket.IO has two separate concepts that are often confused:
+### `SocketIoDebugger.attach()`
+
+Creates a configuration for connecting through the proxy.
+
+| Parameter       | Type      | Default                 | Description                          |
+| --------------- | --------- | ----------------------- | ------------------------------------ |
+| `baseUrl`       | `String`  | required                | Server URL (with namespace in path)  |
+| `path`          | `String`  | `/socket.io/`           | Engine.IO endpoint path              |
+| `proxyBaseUrl`  | `String?` | `http://localhost:9091` | Proxy address                        |
+| `proxyHttpPath` | `String?` | `/wsproxy`              | Proxy WS endpoint path               |
+| `enabled`       | `bool?`   | `true`                  | Enable/disable                       |
+
+### Returned `SocketIoConfig`
+
+| Field                 | Type                       | Description                            |
+| --------------------- | -------------------------- | -------------------------------------- |
+| `effectiveBaseUrl`    | `String`                   | URL to connect (proxy or original)     |
+| `effectivePath`       | `String`                   | Path for `setPath()`                   |
+| `query`               | `Map<String, dynamic>`     | Query params (including `_target`)     |
+| `useForwardOverrides` | `bool`                     | Whether `HttpOverrides` is needed      |
+| `httpClientFactory`   | `HttpClient Function()?`   | Factory for forward mode               |
+
+## Path vs Namespace
+
+These are different concepts in Socket.IO:
 
 ### Path (the `path` parameter)
 
-The **path** is the HTTP endpoint where Socket.IO protocol communication occurs.
+**Path** is the HTTP endpoint where Engine.IO handshake occurs.
 
-- **Default**: `"/socket.io/"`
-- **Must match** between client and server
-- Set via `path` parameter in `SocketIoDebugger.attach()`
-- Example: `path: "/my-custom-path/"`
+- Default: `/socket.io/`
+- Must match between client and server
+- Example: `path: '/my-custom-path/'`
 
 ### Namespace (part of `baseUrl`)
 
-The **namespace** is a logical channel for organizing application logic.
+**Namespace** is a logical channel for organizing events.
 
-- **Default**: `"/"`
+- Default: `/`
 - Specified as **part of the baseUrl path**
-- Example: `baseUrl: "https://example.com/admin"` (namespace = `/admin`)
-
-### Complete Example
-
-```dart
-// Connect to the '/order' namespace with custom Socket.IO path
-final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com/order',  // namespace: /order
-  path: '/my-custom-path/',              // Socket.IO path option
-);
-// Results in: GET https://example.com/my-custom-path/?EIO=4&transport=websocket
-// Connected to namespace: /order
-```
+- Example: `baseUrl: 'https://example.com/admin'` -> namespace `/admin`
 
 ### Examples
 
-**Default namespace, default path:**
 ```dart
+// Default namespace (/), default path
 final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com',     // namespace: / (default)
+  baseUrl: 'https://example.com',
   // path defaults to '/socket.io/'
 );
-```
 
-**Custom namespace, default path:**
-```dart
+// Custom namespace /chat, default path
 final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com/admin',  // namespace: /admin
-  // path defaults to '/socket.io/'
+  baseUrl: 'https://example.com/chat',
+);
+
+// Custom namespace /admin, custom path
+final cfg = SocketIoDebugger.attach(
+  baseUrl: 'https://example.com/admin',
+  path: '/_api/v1/ws/',
 );
 ```
 
-**Custom namespace, custom path:**
-```dart
-final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com/chat',  // namespace: /chat
-  path: '/_api/v1/monitor/io/',         // custom Socket.IO path
-);
+## Modes
+
+### Reverse (default)
+
+Client connects to proxy, proxy forwards to upstream:
+
+```
+Client -> ws://proxy:9091/wsproxy?_target=http://example.com/socket.io/?EIO=4&transport=websocket -> Proxy -> example.com
 ```
 
-## Advanced options
+### Forward
 
-### Reverse proxy mode (default)
+Client connects directly, traffic goes through system proxy (dart:io only).
 
-Reverse proxy mode routes traffic through the proxy's HTTP endpoint:
+## Platform Behavior
 
-```dart
-final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com',
-  path: '/socket.io/',  // Socket.IO path (with trailing slash)
-  proxyBaseUrl: 'http://localhost:9092',
-  proxyHttpPath: '/wsproxy',  // WebSocket proxy endpoint
-);
-```
+| Feature                 | dart:io (mobile/desktop) | Web (dart:js_interop)     |
+| ----------------------- | ------------------------ | ------------------------- |
+| Reverse mode            | yes                      | yes                       |
+| Forward mode            | yes                      | no (no HttpOverrides)     |
+| Custom headers          | yes                      | no (browser limitation)   |
+| Self-signed certs       | yes (with flag)          | no                        |
+| Read ENV                | yes                      | no (`--dart-define` only) |
 
-### Forward proxy mode
-
-Forward proxy mode uses `HttpOverrides` to route traffic:
-
-```dart
-final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com',
-  path: '/socket.io/',  // Socket.IO path (with trailing slash)
-  proxyBaseUrl: 'http://localhost:9091',
-);
-```
-
-### Android emulator
-
-When testing on Android emulator, use `10.0.2.2` instead of `localhost`:
-
-```dart
-final cfg = SocketIoDebugger.attach(
-  baseUrl: 'https://example.com',
-  path: '/socket.io/',  // Socket.IO path (with trailing slash)
-  proxyBaseUrl: Platform.isAndroid
-    ? 'http://10.0.2.2:9092'
-    : 'http://localhost:9092',
-);
-```
-
-## Configuration examples
+## Configuration
 
 ### Via `--dart-define`
 
 ```bash
---dart-define=HTTP_PROXY_MODE=reverse \
---dart-define=SOCKET_PROXY=http://localhost:9092 \
+flutter run \
+  --dart-define=SOCKET_PROXY=http://localhost:9091 \
 --dart-define=SOCKET_PROXY_PATH=/wsproxy \
---dart-define=HTTP_PROXY_ENABLED=true
+  --dart-define=SOCKET_PROXY_MODE=reverse \
+  --dart-define=SOCKET_PROXY_ENABLED=true
 ```
 
-### Via OS ENV (on platforms with `dart:io`)
+### Via ENV (dart:io only)
 
 ```bash
-HTTP_PROXY_MODE=reverse
-SOCKET_PROXY=http://localhost:9092
-SOCKET_PROXY_PATH=/wsproxy
-HTTP_PROXY_ENABLED=true
-HTTP_PROXY_ALLOW_BAD_CERTS=true
+export SOCKET_PROXY=http://localhost:9091
+export SOCKET_PROXY_MODE=reverse
 ```
 
-## Environment variables
+### Environment Variables
 
-- `HTTP_PROXY_MODE` — Proxy mode: `reverse`, `forward`, or `none`
-- `HTTP_PROXY` — HTTP proxy URL (fallback for `SOCKET_PROXY`)
-- `SOCKET_PROXY` — Socket.IO proxy URL
-- `HTTP_PROXY_PATH` — HTTP proxy path (fallback for `SOCKET_PROXY_PATH`)
-- `SOCKET_PROXY_PATH` — Socket.IO proxy path
-- `HTTP_PROXY_ALLOW_BAD_CERTS` — Allow self-signed certificates: `true`, `1`, `yes`, `on`
-- `HTTP_PROXY_ENABLED` — Enable/disable proxy: `true`, `1`, `yes`, `on`
+| Variable                       | Description                           |
+| ------------------------------ | ------------------------------------- |
+| `SOCKET_PROXY`                 | Proxy server URL                      |
+| `SOCKET_PROXY_PATH`            | WS endpoint path (usually `/wsproxy`) |
+| `SOCKET_PROXY_MODE`            | `reverse` / `forward` / `none`        |
+| `SOCKET_PROXY_ENABLED`         | `true` / `false`                      |
+| `SOCKET_PROXY_ALLOW_BAD_CERTS` | Allow self-signed (forward mode)      |
+| `SOCKET_UPSTREAM_URL`          | Explicit upstream URL                 |
+| `SOCKET_UPSTREAM_PATH`         | Socket.IO path on upstream            |
+| `SOCKET_UPSTREAM_TARGET`       | Full `_target` value                  |
 
-## Notes
+## Android Emulator
 
-- The proxy must expose a WebSocket proxy endpoint (e.g., `/wsproxy`) that accepts `_target` query and forwards the WebSocket connection
-- If `proxyBaseUrl` is empty or `HTTP_PROXY_ENABLED=false`, the package is a no-op (safe for prod)
-- Forward proxy mode requires `dart:io` and won't work on web platform
-- If the proxy is provided without scheme and with port `:443`, `https` will be used automatically
+On Android emulator `localhost` doesn't work — use `10.0.2.2`:
+
+```dart
+import 'dart:io' show Platform;
+
+final cfg = SocketIoDebugger.attach(
+  baseUrl: 'https://example.com',
+  proxyBaseUrl: Platform.isAndroid 
+    ? 'http://10.0.2.2:9091' 
+    : 'http://localhost:9091',
+);
+```
+
+## Known Issues
+
+### Port 0 in socket_io_client
+
+There's a bug in `socket_io_client`: if no port is specified in URL, `Uri.port` returns `0`, and the client doesn't set default 80/443. This package **automatically adds explicit port** in `_target` to avoid the issue.
+
+## Links
+
+- [socket_io_client on pub.dev](https://pub.dev/packages/socket_io_client)
+- [network_debugger](https://pub.dev/packages/network_debugger)
 
 ## License
 
-MIT
+Apache-2.0
