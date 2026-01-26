@@ -20,6 +20,14 @@ func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial ws: %v", err)
 	}
+	// ждём пока клиент зарегистрируется в hub
+	deadline := time.Now().Add(2 * time.Second)
+	for hub.ClientCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if hub.ClientCount() == 0 {
+		t.Fatal("client not registered in hub")
+	}
 	// после подключения пошлём событие и убедимся, что оно доезжает
 	hub.Broadcast(domain.MonitorEvent{Type: "test", ID: "1"})
 	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))

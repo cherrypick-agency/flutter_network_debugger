@@ -103,3 +103,10 @@ func (h *MonitorHub) Unsubscribe(ch chan domain.MonitorEvent) {
 	}
 	h.lmu.Unlock()
 }
+
+// ClientCount returns the number of connected WebSocket clients.
+func (h *MonitorHub) ClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
