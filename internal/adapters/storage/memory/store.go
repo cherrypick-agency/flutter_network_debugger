@@ -320,25 +320,8 @@ func (s *Store) SetClosed(ctx context.Context, id string, ts time.Time, errMsg *
 	if e, ok := s.items[id]; ok {
 		e.session.ClosedAt = &ts
 		e.session.Error = errMsg
-		// cleanup tracked spool files when session closes
-		for _, p := range e.spoolFiles {
-			_ = os.Remove(p)
-		}
-		e.spoolFiles = nil
-		// also cleanup per-frame and http tx body files
-		for _, f := range e.frames {
-			if f.BodyFile != "" {
-				_ = os.Remove(f.BodyFile)
-			}
-		}
-		for _, tx := range e.httpTxs {
-			if tx.ReqBodyFile != "" {
-				_ = os.Remove(tx.ReqBodyFile)
-			}
-			if tx.RespBodyFile != "" {
-				_ = os.Remove(tx.RespBodyFile)
-			}
-		}
+		// NOTE: Do NOT cleanup body files here - session is still viewable after closing.
+		// Body files are cleaned up in DeleteSession (explicit user action) or by GC (TTL-based).
 	}
 	return nil
 }

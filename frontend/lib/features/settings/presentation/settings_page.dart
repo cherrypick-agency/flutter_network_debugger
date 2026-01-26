@@ -3,6 +3,7 @@ import '../application/settings_service.dart';
 import '../../../services/prefs.dart';
 import '../application/throttle_service.dart';
 import '../../../theme/font_scale.dart';
+import '../../../theme/visual_density_notifier.dart';
 import 'widgets/graphql_highlight_preview.dart';
 import '../../custom_fonts/presentation/providers/font_provider.dart';
 import '../../custom_fonts/presentation/widgets/custom_font_selector.dart';
@@ -45,6 +46,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // custom fonts
   late final FontProvider _fontProvider;
+
+  // компактность UI
+  String _visualDensity = 'standard';
+
+  // темы подсветки кода
+  String? _highlightThemeLight;
+  String? _highlightThemeDark;
 
   Future<void> _showAddProfileDialog(BuildContext context) async {
     final nameCtrl = TextEditingController();
@@ -199,6 +207,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    // Отменяем несохранённые изменения шрифтов
+    _fontProvider.cancelPendingChanges();
     _delayCtrl.dispose();
     _adminTokenCtrl.dispose();
     _socksUserCtrl.dispose();
@@ -239,6 +249,14 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       _fontScale = await PrefsService().loadFontScale();
       FontScale.value.value = _fontScale;
+    } catch (_) {}
+
+    // load visual density
+    try {
+      final density = await PrefsService().loadVisualDensity();
+      setState(() {
+        _visualDensity = density;
+      });
     } catch (_) {}
 
     // load proxy config
@@ -287,6 +305,25 @@ class _SettingsPageState extends State<SettingsPage> {
         packetLossPct: _thOffline ? 0 : _thLoss,
         offline: _thOffline,
       );
+      // применить и сохранить font scale
+      FontScale.value.value = _fontScale;
+      await SettingsService().saveFontScale(_fontScale);
+      // применить и сохранить visual density
+      VisualDensityNotifier.value.value = VisualDensityNotifier.fromString(
+        _visualDensity,
+      );
+      await PrefsService().saveVisualDensity(_visualDensity);
+      // сохранить темы подсветки кода (если были изменены)
+      if (_highlightThemeLight != null) {
+        await SettingsService().saveHighlightThemeLight(_highlightThemeLight!);
+      }
+      if (_highlightThemeDark != null) {
+        await SettingsService().saveHighlightThemeDark(_highlightThemeDark!);
+      }
+      // сохранить изменения кастомных шрифтов
+      if (_fontProvider.hasPendingChanges) {
+        await _fontProvider.commitPendingChanges();
+      }
       if (mounted) Navigator.of(context).pop();
     } finally {
       if (mounted)
@@ -486,14 +523,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               runSpacing: 8,
                               children: [
                                 OutlinedButton(
-                                  onPressed: () async {
-                                    await ThrottleService().apply(
-                                      enabled: true,
-                                      downKbps: 400,
-                                      upKbps: 400,
-                                      packetLossPct: 0,
-                                      offline: false,
-                                    );
+                                  onPressed: () {
                                     setState(() {
                                       _thEnabled = true;
                                       _thDown = 400;
@@ -505,14 +535,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   child: const Text('3G'),
                                 ),
                                 OutlinedButton(
-                                  onPressed: () async {
-                                    await ThrottleService().apply(
-                                      enabled: true,
-                                      downKbps: 1500,
-                                      upKbps: 1500,
-                                      packetLossPct: 0,
-                                      offline: false,
-                                    );
+                                  onPressed: () {
                                     setState(() {
                                       _thEnabled = true;
                                       _thDown = 1500;
@@ -524,14 +547,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   child: const Text('Slow 4G'),
                                 ),
                                 OutlinedButton(
-                                  onPressed: () async {
-                                    await ThrottleService().apply(
-                                      enabled: true,
-                                      downKbps: 3000,
-                                      upKbps: 3000,
-                                      packetLossPct: 0,
-                                      offline: false,
-                                    );
+                                  onPressed: () {
                                     setState(() {
                                       _thEnabled = true;
                                       _thDown = 3000;
@@ -688,12 +704,11 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           const Spacer(),
                           TextButton(
-                            onPressed: () async {
+                            onPressed: () {
                               setState(() {
                                 _fontScale = 1.0;
+                                _visualDensity = 'standard';
                               });
-                              FontScale.value.value = 1.0;
-                              await SettingsService().saveFontScale(1.0);
                             },
                             child: const Text('Reset'),
                           ),
@@ -717,10 +732,37 @@ class _SettingsPageState extends State<SettingsPage> {
                                     v.toStringAsFixed(2),
                                   );
                                 });
-                                FontScale.value.value = _fontScale;
                               },
-                              onChangeEnd: (v) async {
-                                await SettingsService().saveFontScale(v);
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Text('UI compactness'),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: 'comfortable',
+                                  label: Text('Comfortable'),
+                                ),
+                                ButtonSegment(
+                                  value: 'standard',
+                                  label: Text('Standard'),
+                                ),
+                                ButtonSegment(
+                                  value: 'compact',
+                                  label: Text('Compact'),
+                                ),
+                              ],
+                              selected: {_visualDensity},
+                              onSelectionChanged: (Set<String> v) {
+                                setState(() {
+                                  _visualDensity = v.first;
+                                });
                               },
                             ),
                           ),
@@ -745,7 +787,12 @@ class _SettingsPageState extends State<SettingsPage> {
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
-                      const GraphqlHighlightPreview(),
+                      GraphqlHighlightPreview(
+                        onThemesChanged: (light, dark) {
+                          _highlightThemeLight = light;
+                          _highlightThemeDark = dark;
+                        },
+                      ),
                     ],
                   ),
                 ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme/app_theme.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -39,6 +39,7 @@ import 'features/compose/presentation/pages/compose_page.dart';
 import 'features/scripts/presentation/pages/scripts_page_full.dart';
 import 'features/scripts/application/stores/scripts_store.dart';
 import 'core/hotkeys/hotkeys_service.dart';
+import 'core/hotkeys/keyboard_state_resetter.dart';
 import 'features/compiler_management/presentation/pages/compilers_page.dart';
 import 'features/compiler_management/presentation/stores/compiler_list_store.dart';
 import 'features/compiler_management/presentation/stores/installation_progress_store.dart';
@@ -51,8 +52,9 @@ import 'features/performance/presentation/pages/performance_page.dart';
 
 import 'features/inspector/presentation/pages/home/widgets/sessions_pane.dart';
 import 'theme/font_scale.dart';
+import 'theme/visual_density_notifier.dart';
 import 'features/custom_fonts/application/font_service.dart';
-import 'package:http_debugger/http_debugger.dart';
+// import 'package:http_debugger/http_debugger.dart';
 import 'core/desktop/desktop_bootstrap.dart';
 import 'dart:io' show exit;
 import 'dart:async' show StreamController;
@@ -104,6 +106,7 @@ class _MyAppState extends State<MyApp> {
   bool _themeToggled = false;
   double _fontScale = 1.0;
   String? _fontFamily;
+  VisualDensity _visualDensity = VisualDensity.standard;
   late final VoidCallback _fontListener;
 
   @override
@@ -111,10 +114,17 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     _loadTheme();
     _loadFontScale();
+    _loadVisualDensity();
     FontScale.value.addListener(() {
       if (!mounted) return;
       setState(() {
         _fontScale = FontScale.value.value;
+      });
+    });
+    VisualDensityNotifier.value.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _visualDensity = VisualDensityNotifier.value.value;
       });
     });
     // Listen to custom font changes
@@ -190,15 +200,21 @@ class _MyAppState extends State<MyApp> {
       child: Builder(
         builder: (context) {
           return MaterialApp(
-            theme: buildLightTheme(fontFamily: _fontFamily),
-            darkTheme: buildDarkTheme(fontFamily: _fontFamily),
+            theme: buildLightTheme(
+              fontFamily: _fontFamily,
+              visualDensity: _visualDensity,
+            ),
+            darkTheme: buildDarkTheme(
+              fontFamily: _fontFamily,
+              visualDensity: _visualDensity,
+            ),
             themeMode: _mode,
             builder: (context, child) {
               final mq = MediaQuery.of(context);
               // Применяем глобальный масштаб текста
               return MediaQuery(
                 data: mq.copyWith(textScaler: TextScaler.linear(_fontScale)),
-                child: child!,
+                child: KeyboardStateResetter(child: child!),
               );
             },
             routes: {
@@ -230,6 +246,18 @@ class _MyAppState extends State<MyApp> {
         _fontScale = v;
       });
       FontScale.value.value = v;
+    } catch (_) {}
+  }
+
+  Future<void> _loadVisualDensity() async {
+    try {
+      final density = await PrefsService().loadVisualDensity();
+      if (!mounted) return;
+      final vd = VisualDensityNotifier.fromString(density);
+      setState(() {
+        _visualDensity = vd;
+      });
+      VisualDensityNotifier.value.value = vd;
     } catch (_) {}
   }
 

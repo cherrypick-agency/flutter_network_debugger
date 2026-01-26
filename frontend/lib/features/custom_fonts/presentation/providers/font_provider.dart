@@ -16,8 +16,34 @@ class FontProvider extends ChangeNotifier {
   bool get hasCustomFont => _fontService.hasCustomFont();
   String? get fontFamily => _fontService.getCurrentFontFamily();
 
+  /// Pending font for preview (not yet saved)
+  CustomFont? get pendingFont => _fontService.pendingFont;
+
+  /// Check if font marked for removal
+  bool get hasPendingRemove => _fontService.hasPendingRemove;
+
+  /// Check if there are pending changes
+  bool get hasPendingChanges => _fontService.hasPendingChanges;
+
+  /// Effective font family for preview (pending or current)
+  String? get previewFontFamily {
+    if (_fontService.hasPendingRemove) return null;
+    return _fontService.pendingFont?.familyName ?? currentFont?.familyName;
+  }
+
+  /// Effective font for display (pending or current)
+  CustomFont? get effectiveFont {
+    if (_fontService.hasPendingRemove) return null;
+    return _fontService.pendingFont ?? currentFont;
+  }
+
+  /// Check if effectively has a custom font (for preview)
+  bool get effectivelyHasCustomFont {
+    if (_fontService.hasPendingRemove) return false;
+    return _fontService.pendingFont != null || hasCustomFont;
+  }
+
   FontProvider() {
-    // Listen to font changes from service
     _fontService.currentFont.addListener(_onFontChanged);
   }
 
@@ -25,8 +51,8 @@ class FontProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Load a custom font from file
-  Future<void> loadCustomFont({
+  /// Load font for preview (not saved yet)
+  Future<void> loadFontForPreview({
     required Uint8List fontData,
     required String fileName,
     required String familyName,
@@ -35,11 +61,12 @@ class FontProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      await _fontService.saveCustomFont(
+      await _fontService.loadFontForPreview(
         fontData: fontData,
         fileName: fileName,
         familyName: familyName,
       );
+      notifyListeners();
     } catch (e) {
       _setError('Failed to load font: $e');
       rethrow;
@@ -48,19 +75,32 @@ class FontProvider extends ChangeNotifier {
     }
   }
 
-  /// Remove custom font and revert to system font
-  Future<void> removeCustomFont() async {
+  /// Mark font for removal (will be removed on commit)
+  void markFontForRemoval() {
+    _fontService.markFontForRemoval();
+    notifyListeners();
+  }
+
+  /// Commit pending changes (save or remove font)
+  Future<void> commitPendingChanges() async {
     _setLoading(true);
     _clearError();
 
     try {
-      await _fontService.removeCustomFont();
+      await _fontService.commitPendingChanges();
+      notifyListeners();
     } catch (e) {
-      _setError('Failed to remove font: $e');
+      _setError('Failed to save font changes: $e');
       rethrow;
     } finally {
       _setLoading(false);
     }
+  }
+
+  /// Cancel pending changes
+  void cancelPendingChanges() {
+    _fontService.cancelPendingChanges();
+    notifyListeners();
   }
 
   void _setLoading(bool value) {

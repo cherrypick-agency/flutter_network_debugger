@@ -117,4 +117,23 @@ void main() {
     // Последнее сохранение берём как истинное состояние
     expect(await prefs.loadRecentWindowMinutes(), 1440);
   });
+
+  test(
+    'saveVisualDensity/loadVisualDensity: дефолт standard и запись значения',
+    () async {
+      // Arrange
+      final prefs = PrefsService();
+
+      // Act / Assert дефолт
+      expect(await prefs.loadVisualDensity(), 'standard');
+
+      // Сохраняем compact
+      await prefs.saveVisualDensity('compact');
+      expect(await prefs.loadVisualDensity(), 'compact');
+
+      // Сохраняем comfortable
+      await prefs.saveVisualDensity('comfortable');
+      expect(await prefs.loadVisualDensity(), 'comfortable');
+    },
+  );
 }

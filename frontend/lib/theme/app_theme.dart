@@ -101,12 +101,13 @@ class AppTextStyles extends ThemeExtension<AppTextStyles> {
   }
 }
 
-ThemeData buildLightTheme({String? fontFamily}) {
+ThemeData buildLightTheme({String? fontFamily, VisualDensity? visualDensity}) {
   final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF3F51B5));
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
     fontFamily: fontFamily,
+    visualDensity: visualDensity ?? VisualDensity.standard,
     extensions: [
       AppColors(
         background: scheme.background,
@@ -137,7 +138,7 @@ ThemeData buildLightTheme({String? fontFamily}) {
   );
 }
 
-ThemeData buildDarkTheme({String? fontFamily}) {
+ThemeData buildDarkTheme({String? fontFamily, VisualDensity? visualDensity}) {
   final scheme = ColorScheme.fromSeed(
     seedColor: const Color(0xFF90CAF9),
     brightness: Brightness.dark,
@@ -146,6 +147,7 @@ ThemeData buildDarkTheme({String? fontFamily}) {
     colorScheme: scheme,
     useMaterial3: true,
     fontFamily: fontFamily,
+    visualDensity: visualDensity ?? VisualDensity.standard,
     extensions: [
       AppColors(
         background: scheme.background,

@@ -97,7 +97,8 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
         familyName = fileName.replaceAll(RegExp(r'\.(ttf|otf)$'), '');
       }
 
-      await provider.loadCustomFont(
+      // Загружаем для превью (не сохраняем)
+      await provider.loadFontForPreview(
         fontData: fontData,
         fileName: fileName,
         familyName: familyName,
@@ -106,8 +107,8 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Custom font "$familyName" loaded successfully'),
-            backgroundColor: Colors.green,
+            content: Text('Font "$familyName" loaded for preview'),
+            backgroundColor: Colors.blue,
           ),
         );
       }
@@ -116,43 +117,16 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
     }
   }
 
-  Future<void> _removeFont() async {
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove Custom Font'),
-        content: const Text(
-          'Are you sure you want to remove the custom font and revert to the system font? '
-          'This action cannot be undone.',
+  void _removeFont() {
+    // Помечаем шрифт для удаления (удалится при Save)
+    provider.markFontForRemoval();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Font marked for removal (save to apply)'),
+          backgroundColor: Colors.orange,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await provider.removeCustomFont();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Custom font removed, using system font'),
-          ),
-        );
-      }
-    } catch (e) {
-      _showError('Failed to remove font: $e');
+      );
     }
   }
 
@@ -197,6 +171,11 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final hasFont = provider.effectivelyHasCustomFont;
+    final font = provider.effectiveFont;
+    final fontFamily = provider.previewFontFamily;
+    final isPending = provider.hasPendingChanges;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -204,12 +183,38 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
           children: [
             const Text('Custom font'),
             const SizedBox(width: 12),
-            if (provider.hasCustomFont) ...[
+            if (hasFont) ...[
               Expanded(
-                child: Text(
-                  provider.currentFont?.name ?? '',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        font?.name ?? '',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isPending) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'unsaved',
+                          style: TextStyle(fontSize: 10, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -218,10 +223,31 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
                 child: const Text('Remove'),
               ),
             ] else ...[
-              const Expanded(
-                child: Text(
-                  'System font',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+              Expanded(
+                child: Row(
+                  children: [
+                    const Text(
+                      'System font',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    if (isPending) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'unsaved',
+                          style: TextStyle(fontSize: 10, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -233,7 +259,7 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
             ],
           ],
         ),
-        if (provider.hasCustomFont) ...[
+        if (hasFont) ...[
           const SizedBox(height: 12),
           const Text(
             'Preview:',
@@ -249,17 +275,17 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
             children: [
               Text(
                 'Small (12px) - The quick brown fox',
-                style: TextStyle(fontFamily: provider.fontFamily, fontSize: 12),
+                style: TextStyle(fontFamily: fontFamily, fontSize: 12),
               ),
               const SizedBox(height: 2),
               Text(
                 'Medium (14px) - The quick brown fox',
-                style: TextStyle(fontFamily: provider.fontFamily, fontSize: 14),
+                style: TextStyle(fontFamily: fontFamily, fontSize: 14),
               ),
               const SizedBox(height: 2),
               Text(
                 'Large (18px) - The quick brown fox',
-                style: TextStyle(fontFamily: provider.fontFamily, fontSize: 18),
+                style: TextStyle(fontFamily: fontFamily, fontSize: 18),
               ),
             ],
           ),

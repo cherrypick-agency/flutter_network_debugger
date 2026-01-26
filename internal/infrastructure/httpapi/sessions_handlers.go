@@ -1376,6 +1376,11 @@ func (d *Deps) handleFrameBody(w http.ResponseWriter, r *http.Request, sessionID
 	// Check file size before reading to prevent OOM
 	fileInfo, err := os.Stat(targetFrame.BodyFile)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// File was cleaned up by GC or DeleteSession
+			writeError(w, http.StatusGone, "BODY_FILE_EXPIRED", "Body file no longer available (cleaned up)", map[string]any{"frameId": frameID})
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "BODY_STAT_FAILED", err.Error(), map[string]any{"frameId": frameID, "bodyFile": targetFrame.BodyFile})
 		return
 	}

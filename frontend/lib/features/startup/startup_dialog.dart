@@ -71,7 +71,7 @@ class _StartupDialogState extends State<_StartupDialog> {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted && !_checking) {
-        _checkPorts();
+        _checkPorts(silent: true);
       }
     });
   }
@@ -102,8 +102,10 @@ class _StartupDialogState extends State<_StartupDialog> {
     super.dispose();
   }
 
-  Future<void> _checkPorts() async {
-    setState(() => _checking = true);
+  Future<void> _checkPorts({bool silent = false}) async {
+    if (!silent) {
+      setState(() => _checking = true);
+    }
 
     final apiPort = int.tryParse(_apiPortCtrl.text) ?? 9092;
     final proxyPort = int.tryParse(_proxyPortCtrl.text) ?? 9091;
@@ -111,6 +113,11 @@ class _StartupDialogState extends State<_StartupDialog> {
     final status = await checkPorts(apiPort: apiPort, proxyPort: proxyPort);
 
     if (mounted) {
+      // Показать снэкбар при изменении статуса (только для silent режима)
+      if (silent && _portStatus != null) {
+        _showStatusChangeSnackbar(_portStatus!, status);
+      }
+
       setState(() {
         _portStatus = status;
         _checking = false;
@@ -120,6 +127,49 @@ class _StartupDialogState extends State<_StartupDialog> {
       if (status.bothRunning) {
         _onNext();
       }
+    }
+  }
+
+  void _showStatusChangeSnackbar(PortStatus oldStatus, PortStatus newStatus) {
+    if (!context.mounted) return;
+
+    String? message;
+    Color? backgroundColor;
+
+    // Оба запустились
+    if (!oldStatus.bothRunning && newStatus.bothRunning) {
+      message = 'All servers are ready!';
+      backgroundColor = Colors.green;
+    }
+    // API сервер запустился
+    else if (!oldStatus.apiRunning && newStatus.apiRunning) {
+      message = 'API server is now running';
+      backgroundColor = Colors.green;
+    }
+    // Proxy сервер запустился
+    else if (!oldStatus.proxyRunning && newStatus.proxyRunning) {
+      message = 'Proxy server is now running';
+      backgroundColor = Colors.green;
+    }
+    // API сервер упал
+    else if (oldStatus.apiRunning && !newStatus.apiRunning) {
+      message = 'API server stopped';
+      backgroundColor = Colors.orange;
+    }
+    // Proxy сервер упал
+    else if (oldStatus.proxyRunning && !newStatus.proxyRunning) {
+      message = 'Proxy server stopped';
+      backgroundColor = Colors.orange;
+    }
+
+    if (message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: backgroundColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 

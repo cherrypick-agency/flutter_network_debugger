@@ -5,7 +5,10 @@ import 'package:highlight_selectable/theme_map.dart';
 import '../../application/settings_service.dart';
 
 class GraphqlHighlightPreview extends StatefulWidget {
-  const GraphqlHighlightPreview({super.key});
+  /// Callback при изменении тем (для отложенного сохранения)
+  final void Function(String lightTheme, String darkTheme)? onThemesChanged;
+
+  const GraphqlHighlightPreview({super.key, this.onThemesChanged});
 
   @override
   State<GraphqlHighlightPreview> createState() =>
@@ -134,10 +137,10 @@ console.log(u);''';
                     (k) => DropdownMenuItem<String>(value: k, child: Text(k)),
                   )
                   .toList(),
-              onChanged: (v) async {
+              onChanged: (v) {
                 final next = v ?? _lightTheme;
                 setState(() => _lightTheme = next);
-                await SettingsService().saveHighlightThemeLight(_lightTheme);
+                widget.onThemesChanged?.call(_lightTheme, _darkTheme);
               },
             ),
             const SizedBox(width: 12),
@@ -149,10 +152,10 @@ console.log(u);''';
                     (k) => DropdownMenuItem<String>(value: k, child: Text(k)),
                   )
                   .toList(),
-              onChanged: (v) async {
+              onChanged: (v) {
                 final next = v ?? _darkTheme;
                 setState(() => _darkTheme = next);
-                await SettingsService().saveHighlightThemeDark(_darkTheme);
+                widget.onThemesChanged?.call(_lightTheme, _darkTheme);
               },
             ),
             const SizedBox(width: 12),

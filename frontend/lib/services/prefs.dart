@@ -283,3 +283,19 @@ extension PrefsServiceAdmin on PrefsService {
     return p.getString(PrefsService._keyAdminToken) ?? '';
   }
 }
+
+extension PrefsServiceVisualDensity on PrefsService {
+  static const _keyVisualDensity = 'visual_density';
+
+  /// Сохраняет уровень компактности UI: 'standard', 'comfortable', 'compact'
+  Future<void> saveVisualDensity(String density) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_keyVisualDensity, density);
+  }
+
+  /// Загружает уровень компактности UI
+  Future<String> loadVisualDensity() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_keyVisualDensity) ?? 'standard';
+  }
+}

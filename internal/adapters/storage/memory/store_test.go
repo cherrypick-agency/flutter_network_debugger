@@ -807,18 +807,19 @@ func TestSetClosed_WithSpoolFiles(t *testing.T) {
 	tempFile, _ := os.CreateTemp("", "spool-closed-*.bin")
 	tempFile.Close()
 	spoolPath := tempFile.Name()
+	defer os.Remove(spoolPath) // cleanup after test
 	store.AddSpoolFile(ctx, sess.ID, spoolPath)
 
-	// Close session - should cleanup spool files
+	// Close session - should NOT cleanup spool files (session is still viewable)
 	ts := time.Now()
 	err := store.SetClosed(ctx, sess.ID, ts, nil)
 	if err != nil {
 		t.Fatalf("SetClosed failed: %v", err)
 	}
 
-	// Verify spool file is deleted
-	if _, err := os.Stat(spoolPath); !os.IsNotExist(err) {
-		t.Error("spool file should be deleted on close")
+	// Verify spool file is NOT deleted (body files needed for viewing closed sessions)
+	if _, err := os.Stat(spoolPath); os.IsNotExist(err) {
+		t.Error("spool file should NOT be deleted on close - it's needed for viewing")
 	}
 }
 
@@ -833,19 +834,20 @@ func TestSetClosed_WithFrameBodyFiles(t *testing.T) {
 	tempFile, _ := os.CreateTemp("", "frame-closed-*.bin")
 	tempFile.Close()
 	bodyPath := tempFile.Name()
+	defer os.Remove(bodyPath) // cleanup after test
 	frame := domain.Frame{ID: "frame1", BodyFile: bodyPath}
 	store.AppendFrame(ctx, sess.ID, frame)
 
-	// Close session
+	// Close session - should NOT cleanup body files (session is still viewable)
 	ts := time.Now()
 	err := store.SetClosed(ctx, sess.ID, ts, nil)
 	if err != nil {
 		t.Fatalf("SetClosed failed: %v", err)
 	}
 
-	// Verify body file is deleted
-	if _, err := os.Stat(bodyPath); !os.IsNotExist(err) {
-		t.Error("frame body file should be deleted on close")
+	// Verify body file is NOT deleted (needed for viewing closed sessions)
+	if _, err := os.Stat(bodyPath); os.IsNotExist(err) {
+		t.Error("frame body file should NOT be deleted on close - it's needed for viewing")
 	}
 }
 
@@ -863,6 +865,8 @@ func TestSetClosed_WithHTTPTxBodyFiles(t *testing.T) {
 	respFile.Close()
 	reqPath := reqFile.Name()
 	respPath := respFile.Name()
+	defer os.Remove(reqPath)  // cleanup after test
+	defer os.Remove(respPath) // cleanup after test
 
 	tx := domain.HTTPTransaction{
 		ID:           "tx1",
@@ -872,19 +876,19 @@ func TestSetClosed_WithHTTPTxBodyFiles(t *testing.T) {
 	}
 	store.AppendHTTPTransaction(ctx, tx)
 
-	// Close session
+	// Close session - should NOT cleanup body files (session is still viewable)
 	ts := time.Now()
 	err := store.SetClosed(ctx, sess.ID, ts, nil)
 	if err != nil {
 		t.Fatalf("SetClosed failed: %v", err)
 	}
 
-	// Verify body files are deleted
-	if _, err := os.Stat(reqPath); !os.IsNotExist(err) {
-		t.Error("request body file should be deleted on close")
+	// Verify body files are NOT deleted (needed for viewing closed sessions)
+	if _, err := os.Stat(reqPath); os.IsNotExist(err) {
+		t.Error("request body file should NOT be deleted on close - it's needed for viewing")
 	}
-	if _, err := os.Stat(respPath); !os.IsNotExist(err) {
-		t.Error("response body file should be deleted on close")
+	if _, err := os.Stat(respPath); os.IsNotExist(err) {
+		t.Error("response body file should NOT be deleted on close - it's needed for viewing")
 	}
 }
 
