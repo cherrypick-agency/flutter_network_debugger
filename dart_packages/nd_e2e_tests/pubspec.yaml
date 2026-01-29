@@ -1,0 +1,26 @@
+name: nd_e2e_tests
+publish_to: none
+
+description: "Internal e2e tests for network_debugger mono-repo."
+version: 0.0.1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  dio_debugger:
+    path: ../dio_debugger
+  http_debugger:
+    path: ../http_debugger
+  socket_io_debugger:
+    path: ../socket_io_debugger
+  web_socket_debugger:
+    path: ../web_socket_debugger
+  web_socket_channel_debugger:
+    path: ../web_socket_channel_debugger
+  nd_test_support:
+    path: ../nd_test_support
+
+dev_dependencies:
+  lints: ^3.0.0
+  test: ^1.24.0

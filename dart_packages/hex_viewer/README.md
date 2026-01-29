@@ -4,14 +4,14 @@
 
 Zero-dependency hexadecimal viewer widget for Flutter with advanced features:
 
-✅ **Zero dependencies** - only Flutter SDK
-✅ **Virtualized scrolling** - handles files of any size
-✅ **Byte selection** - click to select, Shift+click to extend
-✅ **Copy support** - hex, text, or binary format
-✅ **Configurable grouping** - 4-4-4-4, 8-8, or no grouping
-✅ **Color coding** - different colors for null bytes, ASCII, control chars
-✅ **Dark/light themes** - automatic theme adaptation
-✅ **Keyboard support** - Shift+click for range selection
+- **Zero dependencies** - only Flutter SDK
+- **Virtualized scrolling** - handles files of any size
+- **Byte selection** - click to select, Shift+click to extend
+- **Copy support** - hex, text, or binary format
+- **Configurable grouping** - 4-4-4-4, 8-8, or no grouping
+- **Color coding** - different colors for null bytes, ASCII, control chars
+- **Dark/light themes** - automatic theme adaptation
+- **Keyboard support** - Shift+click for range selection
 
 ## Installation
 
@@ -19,7 +19,7 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  hex_viewer: ^0.1.0
+  hex_viewer: ^0.2.0
 ```
 
 Then run:

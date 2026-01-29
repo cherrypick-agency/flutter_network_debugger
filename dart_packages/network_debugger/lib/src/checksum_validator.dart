@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
@@ -119,42 +120,91 @@ class ChecksumValidator {
     String archiveUrl,
     List<String> availableAssetUrls,
   ) async {
-    // Try common checksum file patterns
-    final checksumPatterns = [
-      '$archiveUrl.sha256',
-      '${archiveUrl.replaceAll('.tar.gz', '')}.sha256',
-      '${archiveUrl.replaceAll('.zip', '')}.sha256',
-    ];
+    final archiveName = p.basename(Uri.parse(archiveUrl).path);
 
-    // Find matching checksum URL
-    String? checksumUrl;
-    for (final pattern in checksumPatterns) {
-      if (availableAssetUrls.any((url) => url == pattern)) {
-        checksumUrl = pattern;
-        break;
+    String? findByBasename(Set<String> basenames) {
+      for (final u in availableAssetUrls) {
+        final bn = p.basename(Uri.parse(u).path);
+        if (basenames.contains(bn)) return u;
       }
+      return null;
     }
 
-    // If no checksum file found, return false (not an error)
-    if (checksumUrl == null) {
-      return false;
-    }
+    // Common patterns for per-asset checksum files.
+    final directChecksumUrl = findByBasename({
+      '$archiveName.sha256',
+      '$archiveName.sha256.txt',
+      '${archiveName.replaceAll('.tar.gz', '')}.sha256',
+      '${archiveName.replaceAll('.zip', '')}.sha256',
+    });
 
-    // Validate using found checksum
-    try {
-      final isValid = await validateFileFromUrl(filePath, checksumUrl);
-      if (!isValid) {
+    if (directChecksumUrl != null) {
+      final ok = await validateFileFromUrl(filePath, directChecksumUrl);
+      if (!ok) {
         throw ChecksumValidationException(
-          'Checksum validation failed for $filePath',
+          'Checksum validation failed for $archiveName',
         );
       }
       return true;
-    } catch (e) {
-      if (e is ChecksumValidationException) rethrow;
+    }
+
+    // Fallback: consolidated checksum files.
+    final sumsUrl = findByBasename({
+      'SHA256SUMS',
+      'SHA256SUMS.txt',
+      'checksums.sha256',
+    });
+    if (sumsUrl == null) return false;
+
+    final sums = await _downloadText(sumsUrl);
+    final expected = _parseChecksumFromSums(sums, archiveName);
+    if (expected == null) return false;
+
+    final ok = await validateFile(filePath, expected);
+    if (!ok) {
       throw ChecksumValidationException(
-        'Error validating checksum: $e',
+        'Checksum validation failed for $archiveName',
       );
     }
+    return true;
+  }
+
+  Future<String> _downloadText(String url) async {
+    try {
+      final response = await client.get(Uri.parse(url)).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw ChecksumValidationException(
+            'Timeout downloading checksums from $url',
+          );
+        },
+      );
+      if (response.statusCode != 200) {
+        throw ChecksumValidationException(
+          'Failed to download checksums: ${response.statusCode} ${response.reasonPhrase}',
+        );
+      }
+      return response.body;
+    } catch (e) {
+      if (e is ChecksumValidationException) rethrow;
+      throw ChecksumValidationException('Failed to download checksums: $e');
+    }
+  }
+
+  String? _parseChecksumFromSums(String content, String archiveName) {
+    for (final raw in content.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty) continue;
+      if (line.startsWith('#')) continue;
+      final parts = line.split(RegExp(r'\s+'));
+      if (parts.length < 2) continue;
+      final checksum = parts[0].toLowerCase();
+      final filename = parts.last;
+      if (filename != archiveName) continue;
+      if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(checksum)) continue;
+      return checksum;
+    }
+    return null;
   }
 }
 

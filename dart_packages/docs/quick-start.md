@@ -28,7 +28,7 @@ Choose the package that matches your networking library:
 # pubspec.yaml
 dependencies:
   dio: ^5.0.0
-  dio_debugger: ^0.1.0
+  dio_debugger: ^0.2.0
 ```
 
 ```dart
@@ -51,7 +51,7 @@ final response = await dio.get('https://api.example.com/users');
 ```yaml
 dependencies:
   http: ^1.0.0
-  http_debugger: ^0.1.0
+  http_debugger: ^0.2.0
 ```
 
 ```dart
@@ -73,7 +73,7 @@ final response = await client.get(Uri.parse('https://api.example.com/users'));
 ```yaml
 dependencies:
   web_socket_channel: ^3.0.0
-  web_socket_channel_debugger: ^0.1.0
+  web_socket_channel_debugger: ^0.2.0
 ```
 
 ```dart
@@ -96,7 +96,7 @@ channel.stream.listen((message) => print('Received: $message'));
 ```yaml
 dependencies:
   socket_io_client: ^3.1.4
-  socket_io_debugger: ^1.0.0
+  socket_io_debugger: ^1.1.0
 ```
 
 ```dart

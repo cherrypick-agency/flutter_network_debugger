@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed Web compatibility (removed deprecated dart:html usage)
+- Repo hygiene: moved e2e tests to dedicated internal package
+- Documentation fixes (versions, license)
+
 ## 0.2.0
 
 - Added comprehensive e2e tests with real Go proxy

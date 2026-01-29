@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed CLI version mismatch and improved CLI UX
+- Added support for GITHUB_TOKEN when calling GitHub API (rate limit mitigation)
+- Improved checksum lookup logic (supports consolidated checksum files)
+
 ## 0.2.0
 
 - Improved binary download reliability

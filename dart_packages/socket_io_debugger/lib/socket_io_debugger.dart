@@ -1,12 +1,16 @@
 library socket_io_debugger;
 
 import 'dart:developer' as developer;
-import 'dart:io';
 
 import 'package:socket_io_debugger/src/env/env_reader_stub.dart'
     if (dart.library.io) 'package:socket_io_debugger/src/env/env_reader_io.dart';
 import 'package:socket_io_debugger/src/forward_proxy_stub.dart'
     if (dart.library.io) 'package:socket_io_debugger/src/forward_proxy_io.dart';
+import 'package:socket_io_debugger/src/io_types_io.dart'
+    if (dart.library.html) 'package:socket_io_debugger/src/io_types_stub.dart';
+import 'package:socket_io_debugger/src/platform_io.dart'
+    if (dart.library.html) 'package:socket_io_debugger/src/platform_stub.dart'
+    as platform;
 import 'package:socket_io_debugger/src/utils/url_tools.dart';
 
 const String _kDefineSocketProxy = String.fromEnvironment('SOCKET_PROXY');
@@ -76,7 +80,7 @@ class SocketIoDebugger {
           _kDefineSocketProxy,
           readEnvVar('SOCKET_PROXY'),
         ]) ??
-        (Platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091');
+        (platform.isAndroid ? 'http://10.0.2.2:9091' : 'http://localhost:9091');
     final proxyPath = (proxyHttpPath ??
         _firstNonEmpty([
           _kDefineSocketProxyPath,

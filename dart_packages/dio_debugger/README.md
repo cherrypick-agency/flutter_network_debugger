@@ -29,7 +29,7 @@ Add to your `pubspec.yaml`:
 ```yaml
 dependencies:
   dio: ^5.4.0
-  dio_debugger: ^0.1.2
+  dio_debugger: ^0.2.0
 ```
 
 ## Starting the Proxy
@@ -131,4 +131,4 @@ If `options.path` is already an absolute `http(s)://…`, it is proxied without 
 - If the proxy is provided without scheme and with port `:443`, `https` will be used automatically.
 
 ## License
-MIT
+Apache-2.0

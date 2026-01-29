@@ -7,7 +7,7 @@ Socket.IO debugging for [package:socket_io_client](https://pub.dev/packages/sock
 ```yaml
 dependencies:
   socket_io_client: ^3.1.4
-  socket_io_debugger: ^1.0.0
+  socket_io_debugger: ^1.1.0
 ```
 
 ## Version Compatibility

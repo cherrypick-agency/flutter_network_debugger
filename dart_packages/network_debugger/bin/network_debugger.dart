@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:network_debugger/network_debugger.dart';
 
-const String version = '0.1.3';
+const String version = '0.2.1';
 
 void main(List<String> arguments) async {
   final parser = ArgParser()
@@ -31,6 +31,15 @@ void main(List<String> arguments) async {
       'no-browser',
       negatable: false,
       help: 'Do not automatically open browser',
+    )
+    ..addFlag(
+      'clear-cache',
+      negatable: false,
+      help: 'Clear cached binaries and exit',
+    )
+    ..addOption(
+      'clear-cache-version',
+      help: 'Clear cache for a specific version and exit (e.g., v1.0.0)',
     )
     ..addFlag(
       'verbose',
@@ -75,6 +84,19 @@ void main(List<String> arguments) async {
     exit(0);
   }
 
+  final clearCache = args['clear-cache'] as bool;
+  final clearCacheVersion = args['clear-cache-version'] as String?;
+  if (clearCacheVersion != null && clearCacheVersion.trim().isNotEmpty) {
+    await NetworkDebugger.clearCache(version: clearCacheVersion.trim());
+    print('Cache cleared for version: ${clearCacheVersion.trim()}');
+    exit(0);
+  }
+  if (clearCache) {
+    await NetworkDebugger.clearCache();
+    print('Cache cleared');
+    exit(0);
+  }
+
   // Configure logging based on flags
   final verbose = args['verbose'] as bool;
   final quiet = args['quiet'] as bool;
@@ -98,7 +120,7 @@ void main(List<String> arguments) async {
   final binaryVersion = args['binary-version'] as String?;
   final noBrowser = args['no-browser'] as bool;
 
-  print('🚀 Network Debugger Launcher v$version\n');
+  print('Network Debugger Launcher v$version\n');
   print('Platform: ${NetworkDebugger.getPlatformInfo()}');
   print('Port: $port');
   print('Browser: ${noBrowser ? 'disabled' : 'auto-open'}');
@@ -111,7 +133,7 @@ void main(List<String> arguments) async {
 
   // Setup signal handlers for graceful shutdown
   ProcessSignal.sigint.watch().listen((signal) async {
-    print('\n\n⏹️  Shutting down...');
+    print('\n\nShutting down...');
     if (debugger != null) {
       await debugger.stop();
     }
@@ -119,7 +141,7 @@ void main(List<String> arguments) async {
   });
 
   ProcessSignal.sigterm.watch().listen((signal) async {
-    print('\n\n⏹️  Shutting down...');
+    print('\n\nShutting down...');
     if (debugger != null) {
       await debugger.stop();
     }
@@ -128,26 +150,26 @@ void main(List<String> arguments) async {
 
   try {
     // Launch the debugger
-    print('📥 Checking cache and downloading if needed...');
+    print('Checking cache and downloading if needed...');
     debugger = await NetworkDebugger.launch(
       port: port,
       version: binaryVersion,
       autoOpenBrowser: !noBrowser,
       onProgress: (received, total) {
         final percent = ((received / total) * 100).toStringAsFixed(1);
-        stdout.write('\r📦 Download progress: $percent%');
+        stdout.write('\rDownload progress: $percent%');
         if (received == total) {
           stdout.write('\n');
         }
       },
     );
 
-    print('✅ Network debugger is running!');
+    print('Network debugger is running!');
     print('');
-    print('🌐 Web UI: ${debugger.url}');
-    print('🔌 Process ID: ${debugger.pid}');
+    print('Web UI: ${debugger.url}');
+    print('Process ID: ${debugger.pid}');
     print('');
-    print('💡 Press Ctrl+C to stop');
+    print('Press Ctrl+C to stop');
     print('');
 
     // Subscribe to output

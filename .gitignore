@@ -3,6 +3,12 @@
 /web/downloads/
 /dist/
 */.dart_tool/*
+/dart_packages/**/.dart_tool/
+/dart_packages/**/pubspec.lock
+/dart_packages/**/build/
+/dart_packages/**/pubspec_overrides.yaml
+/dart_packages/**/data/
+
 /cache/
 
 .clinerules/byterover-rules.md

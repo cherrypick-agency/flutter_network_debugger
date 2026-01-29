@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed Web compilation (removed unconditional dart:io imports)
+- Repo hygiene: moved e2e tests to dedicated internal package
+- Documentation fixes
+
 ## 1.1.0
 
 - Added comprehensive e2e tests with real Go Socket.IO upstream

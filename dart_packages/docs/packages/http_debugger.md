@@ -7,7 +7,7 @@ HTTP debugging for [package:http](https://pub.dev/packages/http) and `dart:io Ht
 ```yaml
 dependencies:
   http: ^1.0.0
-  http_debugger: ^0.1.0
+  http_debugger: ^0.2.0
 ```
 
 ## Usage Options

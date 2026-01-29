@@ -1,7 +1,5 @@
 library dio_debugger;
 
-import 'dart:io' if (dart.library.html) 'dart:html';
-
 import 'package:dio/dio.dart';
 
 import 'package:dio_debugger/src/reverse_proxy_interceptor.dart';
@@ -12,6 +10,9 @@ import 'package:dio_debugger/src/env/env_reader_stub.dart'
     if (dart.library.io) 'package:dio_debugger/src/env/env_reader_io.dart';
 import 'package:dio_debugger/src/forward_proxy_stub.dart'
     if (dart.library.io) 'package:dio_debugger/src/forward_proxy_io.dart';
+import 'package:dio_debugger/src/platform_stub.dart'
+    if (dart.library.io) 'package:dio_debugger/src/platform_io.dart'
+    as platform;
 
 // Значения compile-time из --dart-define, при сборке Flutter/Dart
 const String _kDefineUpstream = String.fromEnvironment('UPSTREAM_BASE_URL');
@@ -201,14 +202,8 @@ class DioDebugger {
   /// Android emulator: 10.0.2.2 (special IP for host machine)
   /// Other platforms: localhost
   static String _getDefaultProxyUrl() {
-    try {
-      // Try to access Platform.isAndroid (only available on dart:io platforms)
-      return Platform.isAndroid
-          ? 'http://10.0.2.2:9091'
-          : 'http://localhost:9091';
-    } catch (_) {
-      // On web or if Platform is not available, return localhost
-      return 'http://localhost:9091';
-    }
+    return platform.isAndroid
+        ? 'http://10.0.2.2:9091'
+        : 'http://localhost:9091';
   }
 }

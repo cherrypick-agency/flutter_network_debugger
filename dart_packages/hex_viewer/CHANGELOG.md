@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Improved default dark theme readability
+- Repo hygiene: removed generated artifacts from git
+
 ## 0.2.0
 
 - Documentation improvements

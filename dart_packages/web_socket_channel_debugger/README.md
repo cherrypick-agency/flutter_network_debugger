@@ -12,7 +12,7 @@ A helper package to attach network-debugger proxy to `package:web_socket_channel
 ```yaml
 dependencies:
   web_socket_channel: ^3.0.3
-  web_socket_channel_debugger: ^0.1.0
+  web_socket_channel_debugger: ^0.2.0
 ```
 
 ## Quick Start

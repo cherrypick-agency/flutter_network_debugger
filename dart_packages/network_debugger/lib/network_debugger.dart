@@ -52,6 +52,7 @@ class NetworkDebugger {
     RetryCallback? onRetry,
     ChecksumCallback? onChecksum,
     bool skipChecksumValidation = false,
+    String? githubToken,
     String owner = _defaultOwner,
     String repo = _defaultRepo,
     Map<String, String>? environment,
@@ -75,7 +76,10 @@ class NetworkDebugger {
       );
 
       // Determine version to use
-      final githubClient = GitHubRelease(owner: owner, repo: repo);
+      final token =
+          (githubToken ?? Platform.environment['GITHUB_TOKEN'])?.trim();
+      final githubClient =
+          GitHubRelease(owner: owner, repo: repo, token: token);
       logger.debug('Fetching release information...');
       final release = version == null
           ? await githubClient.getLatestRelease()

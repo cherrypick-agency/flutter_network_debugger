@@ -7,7 +7,7 @@ WebSocket debugging for [package:web_socket](https://pub.dev/packages/web_socket
 ```yaml
 dependencies:
   web_socket: ^1.0.1
-  web_socket_debugger: ^0.1.0
+  web_socket_debugger: ^0.2.0
 ```
 
 ## Basic Usage

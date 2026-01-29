@@ -17,7 +17,7 @@ through a local proxy (e.g. `network-debugger` on `http://localhost:9091`).
 
 ```yaml
 dependencies:
-  http_debugger: ^0.1.0
+  http_debugger: ^0.2.0
 ```
 
 ## Starting the Proxy

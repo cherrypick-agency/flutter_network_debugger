@@ -6,16 +6,29 @@ import 'logger.dart';
 class GitHubRelease {
   final String owner;
   final String repo;
+  final String? token;
   final http.Client? _client;
   final Logger _logger = Logger('GitHubRelease');
 
   GitHubRelease({
     required this.owner,
     required this.repo,
+    this.token,
     http.Client? client,
   }) : _client = client;
 
   http.Client get client => _client ?? http.Client();
+
+  Map<String, String> _headers() {
+    final headers = <String, String>{
+      'Accept': 'application/vnd.github.v3+json',
+    };
+    final t = token?.trim();
+    if (t != null && t.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $t';
+    }
+    return headers;
+  }
 
   /// Fetches the latest release from GitHub.
   Future<ReleaseInfo> getLatestRelease({
@@ -28,12 +41,12 @@ class GitHubRelease {
     );
 
     try {
-      final response = await client.get(
+      final response = await client
+          .get(
         url,
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-        },
-      ).timeout(
+        headers: _headers(),
+      )
+          .timeout(
         timeout,
         onTimeout: () {
           _logger.error('Timeout fetching latest release');
@@ -73,12 +86,12 @@ class GitHubRelease {
     );
 
     try {
-      final response = await client.get(
+      final response = await client
+          .get(
         url,
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-        },
-      ).timeout(
+        headers: _headers(),
+      )
+          .timeout(
         timeout,
         onTimeout: () {
           throw GitHubReleaseException(

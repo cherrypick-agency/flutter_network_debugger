@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/byte_selection.dart';
 import '../models/hex_config.dart';
+import '../models/byte_color_scheme.dart';
 import '../formatting/hex_formatter.dart';
 import 'hex_header.dart';
 import 'hex_row.dart';
@@ -131,6 +132,11 @@ class HexViewer extends StatefulWidget {
       ];
     }
 
+    final effectiveConfig = _resolveDefaultColorScheme(
+      context: context,
+      config: config,
+    );
+
     final monoStyle = TextStyle(
       fontFamily: monospaceFontFamily ?? 'monospace',
       fontSize: 13,
@@ -144,7 +150,7 @@ class HexViewer extends StatefulWidget {
     return [
       // Header
       SliverToBoxAdapter(
-        child: HexHeader(config: config, monoStyle: monoStyle),
+        child: HexHeader(config: effectiveConfig, monoStyle: monoStyle),
       ),
 
       const SliverToBoxAdapter(child: Divider(height: 1)),
@@ -152,12 +158,12 @@ class HexViewer extends StatefulWidget {
       // Hex rows as SliverList (virtualized, no scroll conflict)
       SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
-          final offset = index * config.bytesPerLine;
-          final line = HexFormatter.formatLine(data, offset, config);
+          final offset = index * effectiveConfig.bytesPerLine;
+          final line = HexFormatter.formatLine(data, offset, effectiveConfig);
 
           return HexRow(
             line: line,
-            config: config,
+            config: effectiveConfig,
             selection: null, // Read-only mode, no selection
             monoStyle: monoStyle,
             onBytePressed: null, // Read-only mode, no interaction
@@ -165,6 +171,22 @@ class HexViewer extends StatefulWidget {
         }, childCount: lineCount),
       ),
     ];
+  }
+
+  static HexConfig _resolveDefaultColorScheme({
+    required BuildContext context,
+    required HexConfig config,
+  }) {
+    final isDefaultStandard = identical(
+      config.colorScheme,
+      const ByteColorScheme.standard(),
+    );
+    if (!isDefaultStandard) return config;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (!isDark) return config;
+
+    return config.copyWith(colorScheme: const ByteColorScheme.dark());
   }
 }
 
@@ -251,6 +273,11 @@ class _HexViewerState extends State<HexViewer> {
       );
     }
 
+    final effectiveConfig = HexViewer._resolveDefaultColorScheme(
+      context: context,
+      config: _effectiveConfig,
+    );
+
     final monoStyle = TextStyle(
       fontFamily: widget.monospaceFontFamily ?? 'monospace',
       fontSize: 13,
@@ -261,7 +288,7 @@ class _HexViewerState extends State<HexViewer> {
       children: [
         // Controls
         HexControls(
-          config: _effectiveConfig,
+          config: effectiveConfig,
           selection: _selection,
           onCopy: _handleCopy,
           onConfigChanged: _handleConfigChange,
@@ -270,7 +297,7 @@ class _HexViewerState extends State<HexViewer> {
         const Divider(height: 1),
 
         // Header
-        HexHeader(config: _effectiveConfig, monoStyle: monoStyle),
+        HexHeader(config: effectiveConfig, monoStyle: monoStyle),
 
         const Divider(height: 1),
 
@@ -287,12 +314,12 @@ class _HexViewerState extends State<HexViewer> {
                 final line = HexFormatter.formatLine(
                   widget.data,
                   offset,
-                  _effectiveConfig,
+                  effectiveConfig,
                 );
 
                 return HexRow(
                   line: line,
-                  config: _effectiveConfig,
+                  config: effectiveConfig,
                   selection: _selection,
                   monoStyle: monoStyle,
                   onBytePressed: (byteOffset, {bool isShiftHeld = false}) {
@@ -356,6 +383,11 @@ class _HexViewerState extends State<HexViewer> {
       ];
     }
 
+    final effectiveConfig = HexViewer._resolveDefaultColorScheme(
+      context: context,
+      config: _effectiveConfig,
+    );
+
     final monoStyle = TextStyle(
       fontFamily: widget.monospaceFontFamily ?? 'monospace',
       fontSize: 13,
@@ -365,7 +397,7 @@ class _HexViewerState extends State<HexViewer> {
       // Controls
       SliverToBoxAdapter(
         child: HexControls(
-          config: _effectiveConfig,
+          config: effectiveConfig,
           selection: _selection,
           onCopy: _handleCopy,
           onConfigChanged: _handleConfigChange,
@@ -377,7 +409,7 @@ class _HexViewerState extends State<HexViewer> {
 
       // Header
       SliverToBoxAdapter(
-        child: HexHeader(config: _effectiveConfig, monoStyle: monoStyle),
+        child: HexHeader(config: effectiveConfig, monoStyle: monoStyle),
       ),
 
       // Divider
@@ -386,16 +418,16 @@ class _HexViewerState extends State<HexViewer> {
       // Hex rows as SliverList (virtualized, no scroll conflict)
       SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
-          final offset = index * _effectiveConfig.bytesPerLine;
+          final offset = index * effectiveConfig.bytesPerLine;
           final line = HexFormatter.formatLine(
             widget.data,
             offset,
-            _effectiveConfig,
+            effectiveConfig,
           );
 
           return HexRow(
             line: line,
-            config: _effectiveConfig,
+            config: effectiveConfig,
             selection: _selection,
             monoStyle: monoStyle,
             onBytePressed: (byteOffset, {bool isShiftHeld = false}) {

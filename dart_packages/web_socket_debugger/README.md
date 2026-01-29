@@ -12,7 +12,7 @@ A helper package to attach network-debugger proxy to `package:web_socket` for lo
 ```yaml
 dependencies:
   web_socket: ^1.0.1
-  web_socket_debugger: ^0.1.0
+  web_socket_debugger: ^0.2.0
 ```
 
 ## Quick Start

@@ -7,7 +7,7 @@ HTTP debugging interceptor for [package:dio](https://pub.dev/packages/dio).
 ```yaml
 dependencies:
   dio: ^5.0.0
-  dio_debugger: ^0.1.0
+  dio_debugger: ^0.2.0
 ```
 
 ## Basic Usage

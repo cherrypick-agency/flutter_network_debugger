@@ -21,7 +21,7 @@ A helper package to attach network-debugger proxy to `socket_io_client` for loca
 ```yaml
 dependencies:
   socket_io_client: ^3.1.4
-  socket_io_debugger: ^1.0.0
+  socket_io_debugger: ^1.1.0
 ```
 
 ## Starting the Proxy

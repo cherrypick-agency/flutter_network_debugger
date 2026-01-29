@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Repo hygiene: moved e2e tests to dedicated internal package
+- Documentation fixes
+
 ## 0.2.0
 
 - Added comprehensive e2e tests with real Go proxy

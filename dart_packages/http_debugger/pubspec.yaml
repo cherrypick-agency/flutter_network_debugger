@@ -1,6 +1,6 @@
 name: http_debugger
 description: "Global HTTP interceptor via HttpOverrides to proxy all traffic through local network debugger."
-version: 0.2.0
+version: 0.2.1
 repository: https://github.com/cherrypick-agency/flutter_network_debugger
 homepage: https://github.com/cherrypick-agency/flutter_network_debugger
 issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues
@@ -19,5 +19,4 @@ dependencies:
 dev_dependencies:
   lints: ^3.0.0
   test: ^1.24.0
-
 

@@ -247,15 +247,6 @@ class BinaryDownloader {
           }
           onChecksum(validated, checksum);
         }
-
-        if (!validated &&
-            availableAssetUrls.any((u) => u.contains('.sha256'))) {
-          // Checksum file exists but validation failed - this is an error
-          _logger.error('Checksum validation FAILED');
-          throw DownloadException(
-            'Checksum validation failed for $archiveName. File may be corrupted or tampered with.',
-          );
-        }
       } on ChecksumValidationException {
         // Clean up downloaded file on checksum failure
         _logger.error('Checksum validation exception - cleaning up');
