@@ -1745,6 +1745,89 @@ func TestScriptService_FilterMatchingScripts_RelativeURL(t *testing.T) {
 	}
 }
 
+// Composer 1.
+func TestScriptService_FilterMatchingScripts_InvalidURL_DoesNotSkipMethodOnlyScriptAfterHostScript(t *testing.T) {
+	repo := &mockScriptRepository{}
+	service := NewScriptService(repo)
+
+	scripts := []*domain.Script{
+		{
+			ID:          "script-1",
+			Name:        "Host rule",
+			Runtime:     domain.RuntimeExtism,
+			TriggerType: domain.TriggerRequest,
+			Code:        []byte{1},
+			Language:    "rust",
+			Enabled:     true,
+			MatchRules: domain.MatchRules{
+				HostPattern: "example.com",
+				PatternType: domain.PatternExact,
+			},
+		},
+		{
+			ID:          "script-2",
+			Name:        "Method only",
+			Runtime:     domain.RuntimeExtism,
+			TriggerType: domain.TriggerRequest,
+			Code:        []byte{2},
+			Language:    "rust",
+			Enabled:     true,
+			MatchRules: domain.MatchRules{
+				Methods:     []string{"GET"},
+				PatternType: domain.PatternExact,
+			},
+		},
+	}
+
+	req := &domain.HTTPRequest{
+		Method: "GET",
+		URL:    "://invalid-url",
+	}
+
+	matched := service.filterMatchingScripts(scripts, req)
+	if len(matched) != 1 {
+		t.Fatalf("filterMatchingScripts() length = %d, want 1", len(matched))
+	}
+	if matched[0].ID != "script-2" {
+		t.Fatalf("matched[0].ID = %q, want %q", matched[0].ID, "script-2")
+	}
+}
+
+// Composer 1.
+func TestScriptService_FilterMatchingScripts_HostPattern_IgnoresPort(t *testing.T) {
+	repo := &mockScriptRepository{}
+	service := NewScriptService(repo)
+
+	scripts := []*domain.Script{
+		{
+			ID:          "script-1",
+			Name:        "Host with port",
+			Runtime:     domain.RuntimeExtism,
+			TriggerType: domain.TriggerRequest,
+			Code:        []byte{1},
+			Language:    "rust",
+			Enabled:     true,
+			MatchRules: domain.MatchRules{
+				HostPattern: "example.com",
+				PatternType: domain.PatternExact,
+			},
+		},
+	}
+
+	req := &domain.HTTPRequest{
+		Method: "GET",
+		URL:    "https://example.com:443/api/test",
+	}
+
+	matched := service.filterMatchingScripts(scripts, req)
+	if len(matched) != 1 {
+		t.Fatalf("filterMatchingScripts() length = %d, want 1", len(matched))
+	}
+	if matched[0].ID != "script-1" {
+		t.Fatalf("matched[0].ID = %q, want %q", matched[0].ID, "script-1")
+	}
+}
+
 // Mock executors for testing
 type mockExecutorWithError struct {
 	mockExecutor
@@ -1776,6 +1859,24 @@ func (m *mockExecutorWithInvalidJSON) Execute(ctx context.Context, req domain.Ex
 	}, nil
 }
 
+type mockExecutorFunc struct {
+	runtime  domain.ScriptRuntime
+	execFunc func(context.Context, domain.ExecutionRequest) (domain.ExecutionResult, error)
+}
+
+func (m *mockExecutorFunc) Execute(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+	if m.execFunc == nil {
+		return domain.ExecutionResult{Output: []byte(`{"modified":false}`)}, nil
+	}
+	return m.execFunc(ctx, req)
+}
+
+func (m *mockExecutorFunc) Runtime() domain.ScriptRuntime { return m.runtime }
+func (m *mockExecutorFunc) Validate(ctx context.Context, script domain.Script) error {
+	return nil
+}
+func (m *mockExecutorFunc) Close() error { return nil }
+
 type mockExecutorWithModifiedRequest struct {
 	mockExecutor
 	modifiedReq *domain.HTTPRequest
@@ -1790,6 +1891,81 @@ func (m *mockExecutorWithModifiedRequest) Execute(ctx context.Context, req domai
 		Output: resultJSON,
 		Logs:   []string{"modified request"},
 	}, nil
+}
+
+// Composer 1.
+func TestScriptService_ExecuteForRequest_SkipsHugeOutputAndContinues(t *testing.T) {
+	repo := &mockScriptRepository{}
+	service := NewScriptService(repo)
+
+	executor := &mockExecutorFunc{
+		runtime: domain.RuntimeExtism,
+		execFunc: func(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			if req.Script.ID == "script-1" {
+				huge := make([]byte, 2*1024*1024)
+				for i := range huge {
+					huge[i] = 'a'
+				}
+				return domain.ExecutionResult{Output: huge}, nil
+			}
+
+			resultJSON, _ := json.Marshal(domain.ScriptResult{
+				Modified: true,
+				ModifiedRequest: &domain.HTTPRequest{
+					Method:  "POST",
+					URL:     "https://example.com/api/test",
+					Headers: map[string][]string{},
+				},
+			})
+			return domain.ExecutionResult{Output: resultJSON}, nil
+		},
+	}
+	service.RegisterExecutor(executor)
+
+	script1 := &domain.Script{
+		ID:          "script-1",
+		Name:        "Huge output",
+		Runtime:     domain.RuntimeExtism,
+		TriggerType: domain.TriggerRequest,
+		Code:        []byte{1},
+		Language:    "rust",
+		Enabled:     true,
+		MatchRules:  domain.MatchRules{},
+	}
+	script2 := &domain.Script{
+		ID:          "script-2",
+		Name:        "Modifier",
+		Runtime:     domain.RuntimeExtism,
+		TriggerType: domain.TriggerRequest,
+		Code:        []byte{2},
+		Language:    "rust",
+		Enabled:     true,
+		MatchRules:  domain.MatchRules{},
+	}
+
+	repo.listFunc = func(ctx context.Context, filter domain.ScriptFilter) ([]*domain.Script, error) {
+		if filter.TriggerType == domain.TriggerRequest {
+			return []*domain.Script{script1, script2}, nil
+		}
+		return []*domain.Script{}, nil
+	}
+
+	req := &domain.HTTPRequest{
+		Method: "GET",
+		URL:    "https://example.com/api/test",
+	}
+	session := &domain.SessionInfo{
+		ID:         "test-session",
+		ClientAddr: "127.0.0.1",
+	}
+
+	result, err := service.ExecuteForRequest(context.Background(), req, session)
+	if err != nil {
+		t.Fatalf("ExecuteForRequest error: %v", err)
+	}
+	if result.Method != "POST" {
+		t.Fatalf("expected method POST after second script, got %q", result.Method)
+	}
 }
 
 type mockExecutorWithModifiedResponse struct {

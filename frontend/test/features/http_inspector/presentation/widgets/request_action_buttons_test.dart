@@ -5,9 +5,6 @@ import 'package:frontend/features/http_inspector/presentation/widgets/request_ac
 void main() {
   group('RequestActionButtons', () {
     testWidgets('renders all action buttons', (tester) async {
-      bool copyCurlCalled = false;
-      bool repeatCalled = false;
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -16,15 +13,15 @@ void main() {
               method: 'GET',
               headers: const {},
               body: '',
-              onCopyCurl: (curl) => copyCurlCalled = true,
-              onRepeat: () => repeatCalled = true,
+              onCopyCurl: (curl) {},
+              onRepeat: () {},
             ),
           ),
         ),
       );
 
       // Verify buttons exist
-      expect(find.text('Copy as cURL'), findsOneWidget);
+      expect(find.text('cURL'), findsOneWidget);
       expect(find.text('Repeat'), findsOneWidget);
     });
 
@@ -66,7 +63,7 @@ void main() {
       );
 
       // Tap the cURL button to open menu
-      await tester.tap(find.text('Copy as cURL'));
+      await tester.tap(find.text('cURL'));
       await tester.pumpAndSettle();
 
       // Tap Compact option

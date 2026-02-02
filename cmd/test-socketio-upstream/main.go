@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 
 func main() {
 	var addr string
+	var socketPath string
 	flag.StringVar(&addr, "addr", "127.0.0.1:0", "listen address")
+	flag.StringVar(&socketPath, "path", "/socket.io/", "Socket.IO path (e.g. /socket.io/)")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", addr)
@@ -32,9 +35,31 @@ func main() {
 			client.Emit("hello", datas...)
 		})
 	})
+	// Extra namespace for e2e tests.
+	io.Of("/chat", nil).On("connect", func(clients ...any) {
+		client := clients[0].(*socket.Socket)
+		client.On("hello", func(datas ...any) {
+			client.Emit("hello", datas...)
+		})
+	})
+
+	p := strings.TrimSpace(socketPath)
+	if p == "" {
+		p = "/socket.io/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
+	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/socket.io/", io.ServeHandler(nil))
+	mux.Handle(p, io.ServeHandler(nil))
+	// Redirect the non-slashed path to the canonical one.
+	mux.HandleFunc(strings.TrimSuffix(p, "/"), func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, p, http.StatusPermanentRedirect)
+	})
 	srv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,

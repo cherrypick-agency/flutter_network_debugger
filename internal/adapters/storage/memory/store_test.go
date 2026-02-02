@@ -524,14 +524,17 @@ func TestListSessions_CaptureIDExactMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessions failed: %v", err)
 	}
-	if total != 1 {
-		t.Errorf("total = %d, want 1", total)
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
 	}
-	if len(sessions) != 1 {
-		t.Errorf("len(sessions) = %d, want 1", len(sessions))
+	if len(sessions) != 2 {
+		t.Errorf("len(sessions) = %d, want 2", len(sessions))
 	}
 	if sessions[0].ID != "sess1" {
-		t.Errorf("session ID = %s, want sess1", sessions[0].ID)
+		t.Errorf("session[0].ID = %s, want sess1", sessions[0].ID)
+	}
+	if sessions[1].ID != "sess3" {
+		t.Errorf("session[1].ID = %s, want sess3 (unassigned)", sessions[1].ID)
 	}
 }
 
@@ -547,6 +550,10 @@ func TestListSessions_CaptureIDCurrentCapture(t *testing.T) {
 	store.StartCapture()
 	store.CreateSession(ctx, domain.Session{ID: "current", Target: "ws://current.com"})
 
+	// Stop recording and create an unassigned session (should be included when IncludeUnassigned=true)
+	store.StopCapture()
+	store.CreateSession(ctx, domain.Session{ID: "unassigned", Target: "ws://paused.com"})
+
 	// Filter by current capture using -1
 	minusOne := -1
 	sessions, total, err := store.ListSessions(ctx, usecase.SessionFilter{
@@ -557,11 +564,14 @@ func TestListSessions_CaptureIDCurrentCapture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessions failed: %v", err)
 	}
-	if total != 1 {
-		t.Errorf("total = %d, want 1", total)
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
 	}
-	if len(sessions) != 1 || sessions[0].ID != "current" {
-		t.Error("expected only current capture session")
+	if len(sessions) != 2 {
+		t.Errorf("len(sessions) = %d, want 2", len(sessions))
+	}
+	if sessions[0].ID != "current" || sessions[1].ID != "unassigned" {
+		t.Errorf("unexpected sessions order/ids: %+v", []string{sessions[0].ID, sessions[1].ID})
 	}
 }
 

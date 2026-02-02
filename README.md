@@ -155,6 +155,7 @@ Color modes: `auto | always | never`. Body preview default uses `PREVIEW_MAX_BYT
 
 Flags
 - `--cli`: enable CLI mode (disables auto‑open browser)
+- `--open-browser`: open browser on start (opt-in for `network-debugger`, enabled by default for `network-debugger-web`)
 - `--cli-preset`: one of `minimal|basic|advanced|full`
 - `--cli-fields`: comma‑separated list of sections to show (overrides preset)
 - `--cli-body-bytes`: body preview limit (bytes); 0 = use `PREVIEW_MAX_BYTES`
@@ -220,6 +221,7 @@ Main settings (ENV)
 - `ADDR` — server address (default :9092)
 - `DEV_MODE` — development mode (1/true)
 - `NO_BROWSER` — disable automatic browser opening (1/true)
+- `OPEN_BROWSER` — open browser on start for `network-debugger` (1/true); `network-debugger-web` opens by default
 - `DEFAULT_TARGET` — default target upstream
 - `CAPTURE_BODIES` — save request/response bodies (1/true)
 - `RESPONSE_DELAY_MS` — fixed or range, e.g. `1000` or `1000-3000`

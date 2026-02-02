@@ -45,9 +45,11 @@ class MappingRule {
     'patternType': patternType,
     'filePath': filePath,
     'blobPath': blobPath,
-    'statusOverride': statusOverride,
-    'contentTypeOverride': contentTypeOverride,
-    'targetURLTemplate': targetURLTemplate,
+    // Бэк сейчас не принимает null для этих полей, поэтому отправляем безопасные
+    // значения по умолчанию.
+    'statusOverride': statusOverride ?? 200,
+    'contentTypeOverride': contentTypeOverride ?? '',
+    'targetURLTemplate': targetURLTemplate ?? '',
     'preserveHost': preserveHost,
   };
 

@@ -13,6 +13,7 @@ class InterceptQueueStore extends ChangeNotifier {
   List<InterceptItem> _items = const [];
   InterceptItem? _selected;
   MonitorListener? _listener;
+  int _refreshStamp = 0;
 
   List<InterceptItem> get items => _items;
   InterceptItem? get selected => _selected;
@@ -28,7 +29,7 @@ class InterceptQueueStore extends ChangeNotifier {
       try {
         final t = (ev['type'] ?? '').toString();
         if (t.startsWith('intercept_')) {
-          refresh();
+          refresh().catchError((_) {});
         }
       } catch (_) {}
     };
@@ -45,21 +46,42 @@ class InterceptQueueStore extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    _items = await _repo.listPending(limit: 200);
+    final stamp = ++_refreshStamp;
+    List<InterceptItem> nextItems;
+    try {
+      nextItems = await _repo.listPending(limit: 200);
+    } catch (_) {
+      return;
+    }
+    if (stamp != _refreshStamp) return;
+
+    _items = nextItems;
+
+    // Обновляем выбранный элемент из списка pending (getItem здесь не нужен —
+    // listPending уже отдаёт полный снапшот).
     if (_selected != null) {
-      // обновим выбранный элемент, если он ещё есть
-      final id = _selected!.id;
-      try {
-        _selected = await _repo.getItem(id);
-      } catch (_) {}
-    } else if (_items.isNotEmpty) {
+      final selectedId = _selected!.id;
+      final match = _items.where((e) => e.id == selectedId);
+      _selected = match.isEmpty ? null : match.first;
+    }
+
+    if (_selected == null && _items.isNotEmpty) {
       _selected = _items.first;
     }
+
     notifyListeners();
   }
 
   void select(String id) {
-    _selected = _items.firstWhere((e) => e.id == id, orElse: () => _selected!);
+    for (final it in _items) {
+      if (it.id == id) {
+        _selected = it;
+        notifyListeners();
+        return;
+      }
+    }
+    // Если элемента уже нет в списке (например, пришло обновление очереди),
+    // просто оставляем текущее значение.
     notifyListeners();
   }
 

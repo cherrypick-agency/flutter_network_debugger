@@ -74,6 +74,11 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		prefix = "/proxy"
 	}
 	suffix := strings.TrimPrefix(r.URL.Path, prefix)
+	// If client hit /httpproxy/ (or /proxy/) without extra suffix, treat it as /httpproxy.
+	// Otherwise we would incorrectly append an extra "/" to the upstream target.
+	if suffix == "/" {
+		suffix = ""
+	}
 	// Если суффикс пустой — не добавляем завершающий "/" к исходному пути таргета
 	if suffix != "" && !strings.HasPrefix(suffix, "/") {
 		suffix = "/" + suffix
@@ -176,7 +181,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Mapping (Map Remote/Local) — оценим по итоговому upstream URL
 	mappedPreserveHost := false
-	if d.MapRt != nil {
+	if d.Cfg.MappingEnabled && d.MapRt != nil {
 		prevReq := r.Clone(r.Context())
 		u2 := upstream
 		prevReq.URL = &u2
@@ -184,10 +189,40 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		if dec, ok := d.MapRt.EvalRequest(prevReq); ok {
 			if dec.Kind == "local" {
 				var bodyAll []byte
+				var readErr error
 				if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
-					bodyAll, _ = os.ReadFile(*dec.LocalFilePath)
+					bodyAll, readErr = os.ReadFile(*dec.LocalFilePath)
 				} else if dec.LocalBlobPath != nil && *dec.LocalBlobPath != "" {
-					bodyAll, _ = os.ReadFile(*dec.LocalBlobPath)
+					bodyAll, readErr = os.ReadFile(*dec.LocalBlobPath)
+				}
+				if readErr != nil {
+					msg := []byte("mapping local source is not readable")
+					h := http.Header{}
+					h.Set("Content-Type", "text/plain; charset=utf-8")
+					h.Set("X-ND-Mapped", "local")
+					h.Set("X-ND-Rule", dec.RuleID)
+					h.Set("X-ND-Mapping-Error", "read_failed")
+					resp := &http.Response{StatusCode: http.StatusBadGateway, Status: strconv.Itoa(http.StatusBadGateway) + " " + http.StatusText(http.StatusBadGateway), Header: h, Body: io.NopCloser(bytes.NewReader(msg)), ContentLength: int64(len(msg))}
+					basePreview := buildHTTPResponsePreview(resp)
+					preview := augmentPreviewWithTimings(basePreview, 0, durationMs(time.Now(), time.Now()))
+					fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(msg), Preview: preview}
+					_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+					if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+						d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+					}
+					d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+
+					copyHeader(w.Header(), h)
+					w.Header().Set("Connection", "close")
+					w.Header().Set("Content-Length", strconv.Itoa(len(msg)))
+					w.WriteHeader(http.StatusBadGateway)
+					_, _ = w.Write(msg)
+					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+					d.Metrics.ActiveSessions.Dec()
+					return
 				}
 				h := http.Header{}
 				if dec.ContentTypeOverride != "" {
@@ -572,6 +607,20 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			}
 			if dec.Method != "" {
 				r.Method = dec.Method
+			}
+			if dec.URL != "" {
+				if u, err := url.Parse(dec.URL); err == nil {
+					if u.Scheme != "" && u.Host != "" {
+						r.URL = u
+						r.Host = u.Host
+					} else {
+						// относительный путь
+						newURL := *r.URL
+						newURL.Path = u.Path
+						newURL.RawQuery = u.RawQuery
+						r.URL = &newURL
+					}
+				}
 			}
 			if dec.Headers != nil {
 				r.Header = cloneHeader(dec.Headers)

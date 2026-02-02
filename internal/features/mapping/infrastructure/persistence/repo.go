@@ -41,7 +41,30 @@ func (r *Repo) Upsert(ctx context.Context, d mdomain.MapRule) (mdomain.MapRule, 
 	if m.UpdatedAt.IsZero() {
 		m.UpdatedAt = time.Now().UTC()
 	}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(m).Error; err != nil {
+
+	// Важно: created_at нельзя перетирать при апдейтах (иначе любая правка "пересоздаёт" запись).
+	onConflict := clause.OnConflict{
+		Columns: []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"enabled",
+			"priority",
+			"kind",
+			"stop_processing",
+			"methods_json",
+			"host_pattern",
+			"path_pattern",
+			"pattern_type",
+			"file_path",
+			"blob_path",
+			"status_override",
+			"content_type_override",
+			"target_url_template",
+			"preserve_host",
+			"updated_at",
+		}),
+	}
+
+	if err := r.db.WithContext(ctx).Clauses(onConflict).Create(m).Error; err != nil {
 		return mdomain.MapRule{}, err
 	}
 	// перечитаем
@@ -57,16 +80,30 @@ func (r *Repo) Delete(ctx context.Context, rid string) error {
 }
 
 func (r *Repo) Reorder(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
 	// проставим приоритеты с 1..N в переданном порядке
 	now := time.Now().UTC()
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	for i, idv := range ids {
 		prio := i + 1
-		if err := r.db.WithContext(ctx).Model(&MapRuleModel{}).Where("id = ?", idv).Updates(map[string]any{
+		res := tx.Model(&MapRuleModel{}).Where("id = ?", idv).Updates(map[string]any{
 			"priority":   prio,
 			"updated_at": now,
-		}).Error; err != nil {
-			return err
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return mdomain.RuleNotFoundError{ID: idv}
 		}
 	}
-	return nil
+
+	return tx.Commit().Error
 }

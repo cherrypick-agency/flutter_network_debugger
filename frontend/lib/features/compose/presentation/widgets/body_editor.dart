@@ -154,7 +154,7 @@ class _BodyEditorState extends State<BodyEditor> {
   void _validateJson(String s) {
     try {
       if (s.trim().isEmpty) {
-        setState(() => _jsonError = 'Пустой JSON');
+        setState(() => _jsonError = null);
         return;
       }
       // Если парсится — всё ок

@@ -182,6 +182,21 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		if pc, err := d.ProxySvc.Load(contextWithNoCancel()); err == nil {
 			// На порту прокси нужно уметь и forward, и reverse (/httpproxy) для SDK‑пакетов.
 			forwardHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Простой health-check именно на порту прокси (9091 по умолчанию),
+				// чтобы можно было быстро проверить что accept loop живой.
+				// Важно: не перехватываем proxy-style запросы (absolute-URI или CONNECT),
+				// иначе мы сломаем нормальное проксирование апстрима на /healthz.
+				isProxyStyle := r.Method == http.MethodConnect ||
+					isAbsoluteURL(r.RequestURI) ||
+					(r.URL != nil && r.URL.Scheme != "" && r.URL.Host != "")
+				if !isProxyStyle && r.URL != nil {
+					switch r.URL.Path {
+					case "/healthz", "/_health", "/readyz":
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte("ok"))
+						return
+					}
+				}
 				if strings.HasPrefix(r.URL.Path, "/httpproxy") || strings.HasPrefix(r.URL.Path, "/proxy") {
 					d.handleHTTPProxy(w, r)
 					return
@@ -192,7 +207,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 				}
 				d.handleForwardOrNotFound(w, r)
 			})
-			_ = d.ProxyRt.Apply(contextWithNoCancel(), pruntime.ApplyConfig{
+			err := d.ProxyRt.Apply(contextWithNoCancel(), pruntime.ApplyConfig{
 				ForwardEnabled: pc.ForwardEnabled,
 				ForwardAddr:    pc.ForwardAddr,
 				SocksEnabled:   pc.SocksEnabled,
@@ -202,7 +217,22 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 				SocksPass:      pc.SocksPass,
 			}, forwardHandler)
 			if d.Logger != nil {
-				d.Logger.Info().Str("addr", pc.ForwardAddr).Msg("reverse proxy endpoints enabled (/httpproxy,/wsproxy)")
+				if err != nil {
+					d.Logger.Error().Err(err).Msg("failed to apply proxy runtime config")
+				}
+				// Логируем фактическое состояние рантайма, а не "желаемое".
+				d.Logger.Info().
+					Str("forward_addr_cfg", pc.ForwardAddr).
+					Bool("forward_enabled_cfg", pc.ForwardEnabled).
+					Str("socks_addr_cfg", pc.SocksAddr).
+					Bool("socks_enabled_cfg", pc.SocksEnabled).
+					Str("forward_addr_runtime", d.ProxyRt.ForwardAddr()).
+					Str("socks_addr_runtime", d.ProxyRt.SocksAddr()).
+					Msg("proxy runtime state")
+			}
+			// Не пишем "endpoints enabled" если рантайм не поднял forward‑листенер.
+			if d.Logger != nil && d.ProxyRt.ForwardAddr() != "" {
+				d.Logger.Info().Str("addr", d.ProxyRt.ForwardAddr()).Msg("reverse proxy endpoints enabled (/httpproxy,/wsproxy)")
 			}
 		}
 	}
@@ -223,6 +253,42 @@ func NewRouterWithoutForwardProxy(d *Deps) http.Handler {
 // buildBaseMux constructs the mux with all routes, without wrappers.
 func buildBaseMux(d *Deps) *http.ServeMux {
 	mux := http.NewServeMux()
+
+	// Главная страница: этот бинарь — backend/API, и часто его запускают отдельно от web UI.
+	// Раньше `/` отвечал 404, но при авто-открытии браузера это выглядело как “сломалось”.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Не перехватываем неизвестные подпути: пусть остальные хендлеры и 404 работают как обычно.
+		// (ServeMux выберет более специфичный handler по префиксу.)
+		if r.URL.Path != "/" {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>network-debugger backend</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 24px; line-height: 1.45; }
+    code { background: #f4f4f5; padding: 2px 6px; border-radius: 6px; }
+    .box { background: #fafafa; border: 1px solid #eee; padding: 16px; border-radius: 10px; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <h2>network-debugger backend is running</h2>
+  <div class="box">
+    <p>Это API/прокси backend. Если ты ожидаешь Web UI — его обычно запускает отдельный фронтенд/бинарь.</p>
+    <p><b>Проверка здоровья:</b> <a href="/healthz"><code>/healthz</code></a></p>
+    <p><b>Версия API:</b> <a href="/_api/v1/version"><code>/_api/v1/version</code></a></p>
+    <p><b>Важно:</b> чтобы не открывать браузер автоматически, запускай с <code>NO_BROWSER=1</code> или флагом <code>-cli</code>.</p>
+  </div>
+</body>
+</html>`))
+	})
 
 	// Lazy init interceptor
 	if d.Interceptor == nil {

@@ -46,12 +46,13 @@ class MappingApi {
   }
 
   Future<void> reorder(List<String> ids) async {
-    // AppHttpClient типизирован под Map, поэтому обойдём как dynamic
-    final client = _http as dynamic;
-    await client.post<List<dynamic>>(
-      path: '/_api/v1/mapping/rules/reorder',
-      body: ids,
-      headers: await _hdrs(),
+    // AppHttpClient принимает body только как Map<String, dynamic>,
+    // а эндпоинт ждёт JSON-массив. Отправим напрямую через Dio.
+    final dio = Dio();
+    await dio.post<void>(
+      _http.defaultHost + '/_api/v1/mapping/rules/reorder',
+      data: ids,
+      options: Options(headers: await _hdrs()),
     );
   }
 
@@ -63,12 +64,41 @@ class MappingApi {
   }
 
   Future<Map<String, dynamic>> upload(String fileName, List<int> bytes) async {
+    return uploadBytes(fileName, bytes);
+  }
+
+  Future<Map<String, dynamic>> uploadBytes(
+    String fileName,
+    List<int> bytes,
+  ) async {
     // Выполним корректный multipart upload через Dio напрямую
     final dio = Dio();
     final headers = await _hdrs();
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         Uint8List.fromList(bytes),
+        filename: fileName,
+      ),
+    });
+    final resp = await dio.post<Map<String, dynamic>>(
+      _http.defaultHost + '/_api/v1/mapping/upload',
+      data: form,
+      options: Options(headers: headers),
+    );
+    return resp.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> uploadStream({
+    required String fileName,
+    required Stream<List<int>> stream,
+    required int length,
+  }) async {
+    final dio = Dio();
+    final headers = await _hdrs();
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromStream(
+        () => stream,
+        length,
         filename: fileName,
       ),
     });

@@ -31,6 +31,9 @@ class MappingStore extends ChangeNotifier {
     } else {
       _rules = [..._rules, saved];
     }
+    final sorted = _rules.toList()
+      ..sort((a, b) => a.priority.compareTo(b.priority));
+    _rules = sorted;
     notifyListeners();
   }
 

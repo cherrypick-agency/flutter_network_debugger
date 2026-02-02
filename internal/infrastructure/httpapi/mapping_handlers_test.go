@@ -58,7 +58,10 @@ func setupMappingDeps() *Deps {
 	repo := &mockMappingRepo{}
 	return &Deps{
 		Cfg: config.Config{
-			BodySpoolDir: "/tmp/test-spool",
+			AdminToken:         "t",
+			BodySpoolDir:       "/tmp/test-spool",
+			MappingEnabled:     true,
+			MappingUploadMaxMB: 20,
 		},
 		Mapping: mappinguc.NewService(repo),
 		MapRt:   mappingrt.New(),
@@ -68,7 +71,10 @@ func setupMappingDeps() *Deps {
 func setupMappingDepsWithRepo(repo *mockMappingRepo) *Deps {
 	return &Deps{
 		Cfg: config.Config{
-			BodySpoolDir: "/tmp/test-spool",
+			AdminToken:         "t",
+			BodySpoolDir:       "/tmp/test-spool",
+			MappingEnabled:     true,
+			MappingUploadMaxMB: 20,
 		},
 		Mapping: mappinguc.NewService(repo),
 		MapRt:   mappingrt.New(),
@@ -79,6 +85,7 @@ func TestHandleMappingConfig_GET(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/config", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingConfig(w, req)
@@ -107,6 +114,7 @@ func TestHandleMappingConfig_POST(t *testing.T) {
 	body, _ := json.Marshal(input)
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/config", bytes.NewReader(body))
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingConfig(w, req)
@@ -132,6 +140,7 @@ func TestHandleMappingConfig_POST_BadJSON(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/config", strings.NewReader("invalid json"))
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingConfig(w, req)
@@ -145,6 +154,7 @@ func TestHandleMappingConfig_InvalidMethod(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/mapping/config", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingConfig(w, req)
@@ -166,6 +176,7 @@ func TestHandleMappingRules_GET(t *testing.T) {
 	deps := setupMappingDepsWithRepo(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/rules", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -192,6 +203,7 @@ func TestHandleMappingRules_GET_NoService(t *testing.T) {
 	deps.Mapping = nil
 
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/rules", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -210,6 +222,7 @@ func TestHandleMappingRules_GET_ListError(t *testing.T) {
 	deps := setupMappingDepsWithRepo(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/rules", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -232,7 +245,7 @@ func TestHandleMappingRules_POST_Upsert(t *testing.T) {
 	}
 	deps := setupMappingDepsWithRepo(repo)
 
-	input := mapRuleDTO{
+	input := mapRuleInputDTO{
 		ID:       "test-rule",
 		Enabled:  true,
 		Priority: 10,
@@ -241,6 +254,7 @@ func TestHandleMappingRules_POST_Upsert(t *testing.T) {
 	body, _ := json.Marshal(input)
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/rules", bytes.NewReader(body))
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -282,6 +296,7 @@ func TestHandleMappingRules_POST_Reorder(t *testing.T) {
 	body, _ := json.Marshal(ids)
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/rules/reorder", bytes.NewReader(body))
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -303,6 +318,7 @@ func TestHandleMappingRules_POST_ReorderBadJSON(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/rules/reorder", strings.NewReader("bad json"))
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -316,6 +332,7 @@ func TestHandleMappingRules_POST_UpsertBadJSON(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/rules", strings.NewReader("{invalid}"))
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -329,6 +346,7 @@ func TestHandleMappingRules_InvalidMethod(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodPut, "/_api/v1/mapping/rules", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRules(w, req)
@@ -352,6 +370,7 @@ func TestHandleMappingRuleByID_DELETE(t *testing.T) {
 	deps := setupMappingDepsWithRepo(repo)
 
 	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/mapping/rules/test-id-123", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRuleByID(w, req)
@@ -370,6 +389,7 @@ func TestHandleMappingRuleByID_NoService(t *testing.T) {
 	deps.Mapping = nil
 
 	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/mapping/rules/test-id", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRuleByID(w, req)
@@ -383,6 +403,7 @@ func TestHandleMappingRuleByID_InvalidMethod(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/rules/test-id", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRuleByID(w, req)
@@ -396,6 +417,7 @@ func TestHandleMappingRuleByID_MissingID(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/mapping/rules/", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRuleByID(w, req)
@@ -414,6 +436,7 @@ func TestHandleMappingRuleByID_DeleteError(t *testing.T) {
 	deps := setupMappingDepsWithRepo(repo)
 
 	req := httptest.NewRequest(http.MethodDelete, "/_api/v1/mapping/rules/test-id", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingRuleByID(w, req)
@@ -438,6 +461,7 @@ func TestHandleMappingUpload_Success(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingUpload(w, req)
@@ -467,6 +491,7 @@ func TestHandleMappingUpload_InvalidMethod(t *testing.T) {
 	deps := setupMappingDeps()
 
 	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/upload", nil)
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingUpload(w, req)
@@ -481,6 +506,7 @@ func TestHandleMappingUpload_BadMultipart(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/upload", strings.NewReader("not multipart"))
 	req.Header.Set("Content-Type", "multipart/form-data")
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingUpload(w, req)
@@ -501,6 +527,7 @@ func TestHandleMappingUpload_NoFile(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Admin-Token", "t")
 	w := httptest.NewRecorder()
 
 	deps.handleMappingUpload(w, req)

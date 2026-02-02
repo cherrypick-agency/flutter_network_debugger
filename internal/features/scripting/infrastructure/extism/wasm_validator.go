@@ -3,6 +3,8 @@ package extism
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -12,16 +14,18 @@ import (
 
 // ValidateWASMExports validates that a WASM module exports the required "process" function.
 // This is called after compilation to catch errors early, before the script is used.
-func ValidateWASMExports(wasmBytes []byte) error {
+func ValidateWASMExports(ctx context.Context, wasmBytes []byte) error {
 	if len(wasmBytes) == 0 {
 		return fmt.Errorf("WASM binary is empty")
 	}
 
-	ctx := context.Background()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// Create a minimal wazero runtime just for validation (not execution)
 	runtime := wazero.NewRuntime(ctx)
-	defer runtime.Close(ctx)
+	defer runtime.Close(context.Background())
 
 	// Compile the module to inspect its exports
 	// This does NOT instantiate or execute the module
@@ -29,7 +33,7 @@ func ValidateWASMExports(wasmBytes []byte) error {
 	if err != nil {
 		return fmt.Errorf("invalid WASM binary: %w", err)
 	}
-	defer compiled.Close(ctx)
+	defer compiled.Close(context.Background())
 
 	// Check for "process" function export
 	exports := compiled.ExportedFunctions()
@@ -67,14 +71,17 @@ func validateProcessSignature(fn api.FunctionDefinition) error {
 	// 2. () -> i32 - no params, returns i32 (Go/AssemblyScript)
 	// 3. (i64) -> i64 - takes i64, returns i64 (Rust extism-pdk)
 
-	// For now, we just verify it's a function - Extism will handle detailed validation
-	// The important check is that the function exists
+	if len(params) == 0 && len(results) == 0 {
+		return nil
+	}
+	if len(params) == 0 && len(results) == 1 && results[0] == api.ValueTypeI32 {
+		return nil
+	}
+	if len(params) == 1 && params[0] == api.ValueTypeI64 && len(results) == 1 && results[0] == api.ValueTypeI64 {
+		return nil
+	}
 
-	// Log signature for debugging if needed
-	_ = params
-	_ = results
-
-	return nil
+	return fmt.Errorf("invalid process signature (params=%v results=%v)", params, results)
 }
 
 // MissingProcessFunctionError indicates the WASM module doesn't export "process" function
@@ -90,14 +97,18 @@ func (e *MissingProcessFunctionError) Error() string {
 }
 
 // ValidateWASMWithLanguage validates WASM and returns language-specific error messages
-func ValidateWASMWithLanguage(wasmBytes []byte, language string) error {
-	err := ValidateWASMExports(wasmBytes)
+func ValidateWASMWithLanguage(ctx context.Context, wasmBytes []byte, language string) error {
+	err := ValidateWASMExports(ctx, wasmBytes)
 	if err == nil {
 		return nil
 	}
 
 	// Wrap error with language-specific help
 	if _, ok := err.(*MissingProcessFunctionError); ok {
+		return NewWASMValidationError(language, err)
+	}
+	// Также полезно для "неправильной сигнатуры" — ошибка похожа на missing export по UX.
+	if strings.Contains(err.Error(), "invalid process signature") {
 		return NewWASMValidationError(language, err)
 	}
 
@@ -114,7 +125,9 @@ func NewExtismWASMValidator() *ExtismWASMValidator {
 
 // ValidateWASM implements domain.WASMValidator
 func (v *ExtismWASMValidator) ValidateWASM(wasmBytes []byte, language string) error {
-	return ValidateWASMWithLanguage(wasmBytes, language)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return ValidateWASMWithLanguage(ctx, wasmBytes, language)
 }
 
 // Verify ExtismWASMValidator implements domain.WASMValidator

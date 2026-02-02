@@ -120,7 +120,7 @@ type HTTPRequestDecision struct {
 }
 
 type HTTPResponseDecision struct {
-	Action  string      `json:"action"` // continue|drop
+	Action  string      `json:"action"` // continue
 	Status  int         `json:"status,omitempty"`
 	Headers http.Header `json:"headers,omitempty"`
 	Body    []byte      `json:"-"`

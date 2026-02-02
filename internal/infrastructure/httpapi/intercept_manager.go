@@ -48,6 +48,14 @@ func NewInterceptorManager(cfg *config.Config, monitor *MonitorHub, metrics *obs
 	}
 }
 
+func (m *InterceptorManager) interceptTimeout() time.Duration {
+	timeout := time.Duration(m.cfg.InterceptTimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		return 60 * time.Second
+	}
+	return timeout
+}
+
 // UpdateRules полностью заменяет набор правил и сортирует по приоритету
 func (m *InterceptorManager) UpdateRules(rules []InterceptRule) {
 	m.mu.Lock()
@@ -110,10 +118,7 @@ func isLoopback(addr string) bool {
 // enqueue создаёт pending элемент и запускает таймер
 func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 	pe := &pendingEntry{item: it, decisionR: make(chan any, 1)}
-	timeout := time.Duration(m.cfg.InterceptTimeoutMs) * time.Millisecond
-	if timeout <= 0 {
-		timeout = 60 * time.Second
-	}
+	timeout := m.interceptTimeout()
 	pe.timer = time.AfterFunc(timeout, func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -237,7 +242,7 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 	it := InterceptItem{
 		ID:        id.New(),
 		CreatedAt: time.Now().UTC(),
-		Deadline:  time.Now().UTC().Add(time.Duration(m.cfg.InterceptTimeoutMs) * time.Millisecond),
+		Deadline:  time.Now().UTC().Add(m.interceptTimeout()),
 		Direction: DirRequest,
 		SessionID: sessionID,
 		RuleID:    matched.ID,
@@ -309,7 +314,7 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 	it := InterceptItem{
 		ID:        id.New(),
 		CreatedAt: time.Now().UTC(),
-		Deadline:  time.Now().UTC().Add(time.Duration(m.cfg.InterceptTimeoutMs) * time.Millisecond),
+		Deadline:  time.Now().UTC().Add(m.interceptTimeout()),
 		Direction: DirResponse,
 		SessionID: sessionID,
 		RuleID:    matched.ID,

@@ -214,7 +214,10 @@ func (s *SwiftDownloader) extractPkg(pkgPath, targetDir string) error {
 
 	// Extract pkg using pkgutil
 	// pkgutil --expand-full <pkg> <output-dir>
-	cmd := exec.Command("pkgutil", "--expand-full", pkgPath, tmpDir)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "pkgutil", "--expand-full", pkgPath, tmpDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("pkgutil failed: %w (output: %s)", err, string(output))
@@ -302,7 +305,10 @@ func (s *SwiftDownloader) GetMetadata(req domain.DownloadRequest) (*domain.Compi
 
 // getSystemSwiftVersion returns the version of system-installed Swift
 func (s *SwiftDownloader) getSystemSwiftVersion() (string, error) {
-	cmd := exec.Command("swift", "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "swift", "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("swift command not found: %w", err)
@@ -391,6 +397,14 @@ func (s *SwiftDownloader) mapPlatformToSwiftTarget(platform, arch string) (strin
 
 // copyFile copies a file from src to dst
 func (s *SwiftDownloader) copyFile(src, dst string) error {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to copy symlink: %s", src)
+	}
+
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -432,6 +446,10 @@ func (s *SwiftDownloader) copyDir(src, dst string) error {
 	for _, entry := range entries {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to copy symlink: %s", srcPath)
+		}
 
 		if entry.IsDir() {
 			if err := s.copyDir(srcPath, dstPath); err != nil {

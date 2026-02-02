@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Accepts socket path without trailing slash (normalizes to `/socket.io/`)
+
 ## 1.1.1
 
 - Fixed Web compilation (removed unconditional dart:io imports)

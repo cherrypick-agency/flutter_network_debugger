@@ -33,6 +33,16 @@ void main() async {
       final params = request['params'] as Map<String, dynamic>?;
       final id = request['id'];
 
+      if (method == 'ping') {
+        final response = {
+          'jsonrpc': '2.0',
+          'result': {'pong': true},
+          'id': id,
+        };
+        stdout.writeln(json.encode(response));
+        continue;
+      }
+
       if (method == 'execute' && params != null) {
         final code = params['code'] as String;
         final input = params['input'] as String;
@@ -90,12 +100,26 @@ Future<String> executeScript(String code, String input) async {
   // Write code to temporary file
   final tempDir = await Directory.systemTemp.createTemp('dart_script_');
   final scriptFile = File('${tempDir.path}/script.dart');
+  Process? child;
+  var childExited = false;
+  final stderrLines = <String>[];
 
   try {
     await scriptFile.writeAsString(code);
 
     // Run the script as a subprocess
-    final process = await Process.start('dart', ['run', scriptFile.path]);
+    child = await Process.start('dart', [scriptFile.path]);
+
+    // Важно: всегда читаем stderr, иначе процесс может зависнуть, когда буфер забьётся.
+    // Храним только последние N строк для диагностики.
+    child.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
+      (line) {
+        stderrLines.add(line);
+        if (stderrLines.length > 50) {
+          stderrLines.removeAt(0);
+        }
+      },
+    );
 
     // Parse the input (should be ScriptContext JSON)
     final inputData = json.decode(input) as Map<String, dynamic>;
@@ -108,20 +132,18 @@ Future<String> executeScript(String code, String input) async {
       'id': 1,
     };
 
-    process.stdin.writeln(json.encode(rpcRequest));
-    await process.stdin.close();
+    child.stdin.writeln(json.encode(rpcRequest));
+    await child.stdin.close();
 
     // Read response with timeout
-    final outputFuture = process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .first
-        .timeout(const Duration(seconds: 5));
-
-    final output = await outputFuture;
+    final output = await readFirstLineLimited(
+      child.stdout,
+      maxBytes: 1024 * 1024,
+    ).timeout(const Duration(seconds: 5));
 
     // Wait for process to complete
-    await process.exitCode.timeout(const Duration(seconds: 5));
+    await child.exitCode.timeout(const Duration(seconds: 5));
+    childExited = true;
 
     // Parse the response and extract the result
     final rpcResponse = json.decode(output) as Map<String, dynamic>;
@@ -139,8 +161,24 @@ Future<String> executeScript(String code, String input) async {
   } catch (e, stack) {
     stderr.writeln('[script_runner] Error executing script: $e');
     stderr.writeln('[script_runner] Stack: $stack');
+    if (stderrLines.isNotEmpty) {
+      stderr.writeln(
+        '[script_runner] Child stderr (last ${stderrLines.length} lines):',
+      );
+      for (final line in stderrLines) {
+        stderr.writeln('[script_runner] > $line');
+      }
+    }
     return json.encode({'error': 'Script execution failed: $e'});
   } finally {
+    if (child != null && !childExited) {
+      try {
+        // Если скрипт завис/не ответил — обязательно прибиваем процесс, иначе будут "зомби" и утечки ресурсов.
+        child.kill();
+        await child.exitCode.timeout(const Duration(seconds: 1));
+      } catch (_) {}
+    }
+
     // Cleanup temp directory
     try {
       await tempDir.delete(recursive: true);
@@ -148,4 +186,30 @@ Future<String> executeScript(String code, String input) async {
       stderr.writeln('[script_runner] Failed to cleanup temp dir: $e');
     }
   }
+}
+
+Future<String> readFirstLineLimited(
+  Stream<List<int>> stream, {
+  required int maxBytes,
+}) async {
+  final buffer = <int>[];
+  var sawNewline = false;
+
+  await for (final chunk in stream) {
+    for (final b in chunk) {
+      if (buffer.length >= maxBytes) {
+        throw Exception('stdout exceeds ${maxBytes} bytes');
+      }
+      if (b == 10) {
+        sawNewline = true;
+        break;
+      }
+      buffer.add(b);
+    }
+    if (sawNewline) {
+      break;
+    }
+  }
+
+  return utf8.decode(buffer, allowMalformed: true);
 }

@@ -35,7 +35,10 @@ func (c *SwiftCompiler) Language() string {
 // IsAvailable checks if Swift and SwiftWasm SDK are installed (implements domain.Compiler)
 func (c *SwiftCompiler) IsAvailable() bool {
 	// Check system Swift
-	cmd := exec.Command("swift", "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "swift", "--version")
 	if err := cmd.Run(); err != nil {
 		return false
 	}
@@ -108,10 +111,7 @@ func (c *SwiftCompiler) Compile(ctx context.Context, req domain.CompileRequest) 
 	}
 
 	// Compile with Swift
-	cmd := exec.CommandContext(ctx, c.swiftPath, args...)
-	cmd.Dir = ws.Path
-
-	output, err := cmd.CombinedOutput()
+	output, err := ws.ExecuteCommand(ctx, c.swiftPath, args...)
 	if err != nil {
 		return nil, c.parseSwiftError(string(output))
 	}
@@ -174,10 +174,7 @@ func (c *SwiftCompiler) ValidateSyntax(ctx context.Context, req domain.CompileRe
 	}
 
 	// Run swift with -parse for syntax check only
-	cmd := exec.CommandContext(ctx, c.swiftPath, "-frontend", "-parse", "main.swift")
-	cmd.Dir = ws.Path
-
-	output, err := cmd.CombinedOutput()
+	output, err := ws.ExecuteCommand(ctx, c.swiftPath, "-frontend", "-parse", "main.swift")
 	if err != nil {
 		return fmt.Errorf("syntax check failed: %s", string(output))
 	}

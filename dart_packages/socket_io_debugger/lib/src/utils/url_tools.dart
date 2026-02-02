@@ -14,7 +14,13 @@ String buildEngineIoTarget(String baseUrl, String path) {
   final lower = base.toLowerCase();
   if (lower.startsWith('wss://')) base = 'https://' + base.substring(6);
   if (lower.startsWith('ws://')) base = 'http://' + base.substring(5);
-  final pathWithSlash = path.startsWith('/') ? path : '/$path';
+  var rawPath = path.trim();
+  final q = rawPath.indexOf('?');
+  if (q >= 0) rawPath = rawPath.substring(0, q);
+  if (rawPath.isEmpty) rawPath = '/socket.io/';
+  if (!rawPath.startsWith('/')) rawPath = '/$rawPath';
+  if (!rawPath.endsWith('/')) rawPath = '$rawPath/';
+  final pathWithSlash = rawPath;
   final uri = Uri.parse(base);
   final scheme = (uri.scheme == 'https') ? 'https' : 'http';
   // socket_io_client uses uri.port even if port is not specified (returns 0 in that case),

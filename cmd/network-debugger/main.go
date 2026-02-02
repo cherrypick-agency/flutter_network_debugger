@@ -48,6 +48,7 @@ func main() {
 	var cliBodyBytes int
 	var cliColor string
 	var cliFilter string
+	var openBrowserOnStart bool
 	// Флаги для портов (для desktop приложения)
 	var apiPort int
 	var proxyPort int
@@ -59,6 +60,7 @@ func main() {
 	flag.IntVar(&cliBodyBytes, "cli-body-bytes", 0, "body preview limit (bytes); 0 = use PREVIEW_MAX_BYTES")
 	flag.StringVar(&cliColor, "cli-color", "auto", "color mode: auto|always|never")
 	flag.StringVar(&cliFilter, "cli-filter", "", "simple substring filter (URL/method/status)")
+	flag.BoolVar(&openBrowserOnStart, "open-browser", false, "open browser on start (opt-in)")
 	flag.IntVar(&apiPort, "api-port", 0, "API/UI server port (overrides ADDR)")
 	flag.IntVar(&proxyPort, "proxy-port", 0, "forward proxy port (overrides default)")
 	flag.StringVar(&dataDir, "data-dir", "", "data directory for database and files")
@@ -439,19 +441,23 @@ func main() {
 	}
 
 	// Launch browser to downloads page on start (best-effort)
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		if cfg.DevMode || cfg.NoBrowser {
-			return
-		}
-		addr := cfg.Addr
-		if strings.HasPrefix(addr, ":") {
-			addr = "http://localhost" + addr
-		} else if !strings.HasPrefix(addr, "http") {
-			addr = fmt.Sprintf("http://%s", addr)
-		}
-		_ = openBrowser(addr + "/")
-	}()
+	// Важно: `network-debugger` — это backend/proxy без embedded Web UI.
+	// Поэтому auto-open делаем только opt-in (флаг или env).
+	if shouldOpenBrowser(openBrowserOnStart) && !cfg.NoBrowser {
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			if cfg.DevMode {
+				return
+			}
+			addr := cfg.Addr
+			if strings.HasPrefix(addr, ":") {
+				addr = "http://localhost" + addr
+			} else if !strings.HasPrefix(addr, "http") {
+				addr = fmt.Sprintf("http://%s", addr)
+			}
+			_ = openBrowser(addr + "/")
+		}()
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -494,6 +500,14 @@ func openBrowser(url string) error {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Start()
+}
+
+func shouldOpenBrowser(flagValue bool) bool {
+	if flagValue {
+		return true
+	}
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("OPEN_BROWSER")))
+	return v == "1" || v == "true" || v == "yes"
 }
 
 // loadDotEnv loads key=value pairs from a local .env file if present.

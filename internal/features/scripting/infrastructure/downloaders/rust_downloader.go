@@ -169,7 +169,7 @@ func (r *RustDownloader) downloadRustupInit(ctx context.Context, url, dest strin
 	}
 
 	// Execute request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -271,8 +271,11 @@ func (r *RustDownloader) installRust(ctx context.Context, rustupInit, targetDir 
 func (r *RustDownloader) installWasmTarget(installPath string) error {
 	rustupBinary := r.getRustupPath(installPath)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
 	// Run: rustup target add wasm32-unknown-unknown
-	cmd := exec.Command(rustupBinary, "target", "add", "wasm32-unknown-unknown")
+	cmd := exec.CommandContext(ctx, rustupBinary, "target", "add", "wasm32-unknown-unknown")
 
 	// Set environment variables
 	rustupHome := filepath.Join(installPath, "rustup")
@@ -359,7 +362,15 @@ func (r *RustDownloader) GetMetadata(req domain.DownloadRequest) (*domain.Compil
 	}
 
 	// Get size via HEAD request
-	resp, err := http.Head(downloadURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, downloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := r.httpClient.Do(headReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get metadata: %w", err)
 	}

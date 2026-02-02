@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ulikunitz/xz"
@@ -50,6 +51,138 @@ func (e *DownloadError) Unwrap() error {
 // Follows DRY principle - Don't Repeat Yourself
 type BaseDownloader struct {
 	httpClient *http.Client
+}
+
+func readAllLimited(r io.Reader, maxBytes int64) ([]byte, error) {
+	limited := io.LimitReader(r, maxBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("response body exceeds %s", formatBytes(maxBytes))
+	}
+	return data, nil
+}
+
+func sanitizeArchiveFileMode(mode int64) os.FileMode {
+	// В tar/zip могут прилететь странные биты (setuid/setgid/sticky и т.п.).
+	// Нам нужны только обычные rwx-права.
+	m := os.FileMode(mode) & 0o777
+	if m == 0 {
+		return 0o644
+	}
+	return m
+}
+
+func safeExtractPath(targetDir, entryName string) (string, error) {
+	if strings.TrimSpace(entryName) == "" {
+		return "", fmt.Errorf("invalid file path in archive: empty name")
+	}
+
+	cleanName := filepath.Clean(entryName)
+	if filepath.IsAbs(cleanName) {
+		return "", fmt.Errorf("invalid file path in archive: %s", entryName)
+	}
+	if cleanName == "." || cleanName == ".." || strings.HasPrefix(cleanName, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid file path in archive: %s", entryName)
+	}
+
+	targetPath := filepath.Join(targetDir, cleanName)
+	rel, err := filepath.Rel(targetDir, targetPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid file path in archive: %s", entryName)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid file path in archive: %s", entryName)
+	}
+
+	return targetPath, nil
+}
+
+func safeSymlinkTarget(targetDir, linkPath, linkName string) error {
+	if strings.TrimSpace(linkName) == "" {
+		return fmt.Errorf("invalid symlink target in archive: empty link")
+	}
+	if filepath.IsAbs(linkName) {
+		return fmt.Errorf("invalid symlink target in archive: %s", linkName)
+	}
+
+	// Для относительных ссылок цель считается относительно директории ссылки.
+	// Важно: мы проверяем итоговый resolved путь не вылезает за targetDir.
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(linkPath), linkName))
+	rel, err := filepath.Rel(targetDir, resolved)
+	if err != nil {
+		return fmt.Errorf("invalid symlink target in archive: %s", linkName)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("invalid symlink target in archive: %s", linkName)
+	}
+	return nil
+}
+
+func mkdirAllNoSymlink(baseDir, dirPath string, perm os.FileMode) error {
+	rel, err := filepath.Rel(baseDir, dirPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	if rel == "." {
+		return nil
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("path escapes base dir")
+	}
+
+	cur := baseDir
+	for _, part := range strings.Split(rel, string(os.PathSeparator)) {
+		if part == "" || part == "." {
+			continue
+		}
+		cur = filepath.Join(cur, part)
+
+		fi, err := os.Lstat(cur)
+		if err == nil {
+			if fi.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("refusing to follow symlink in path: %s", cur)
+			}
+			if !fi.IsDir() {
+				return fmt.Errorf("path component is not a directory: %s", cur)
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("stat %s: %w", cur, err)
+		}
+		if err := os.Mkdir(cur, perm); err != nil {
+			// Если гонка — перепроверим.
+			if fi2, err2 := os.Lstat(cur); err2 == nil {
+				if fi2.Mode()&os.ModeSymlink != 0 {
+					return fmt.Errorf("refusing to follow symlink in path: %s", cur)
+				}
+				if !fi2.IsDir() {
+					return fmt.Errorf("path component is not a directory: %s", cur)
+				}
+				continue
+			}
+			return fmt.Errorf("mkdir %s: %w", cur, err)
+		}
+	}
+
+	return nil
+}
+
+func ensureNoSymlinkFileTarget(path string) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to write to symlink: %s", path)
+	}
+	return nil
 }
 
 // NewBaseDownloader creates a new BaseDownloader with configured HTTP client
@@ -169,6 +302,11 @@ func (b *BaseDownloader) attemptDownload(
 	destPath string,
 	progressCb func(domain.DownloadProgress),
 ) error {
+	// На некоторых серверах Range может игнорироваться. В таком случае:
+	// - не аппендим к .partial (иначе файл тихо ломается)
+	// - один раз перезапускаем скачивание с нуля
+	const maxResumeFallbacks = 1
+
 	// Check if partial file exists (for resume)
 	var resumeFrom int64
 	partialPath := destPath + ".partial"
@@ -176,43 +314,71 @@ func (b *BaseDownloader) attemptDownload(
 		resumeFrom = stat.Size()
 	}
 
-	// Create HTTP request with context for cancellation
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
+	var resp *http.Response
+	var err error
+	resumeFallbacksUsed := 0
 
-	// Add Range header for resume
-	if resumeFrom > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
-	}
-
-	// Execute request
-	resp, err := b.httpClient.Do(req)
-	if err != nil {
-		return &DownloadError{
-			Type:    "network",
-			Message: "Failed to connect to server",
-			Err:     err,
+	for {
+		// Create HTTP request with context for cancellation
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if reqErr != nil {
+			return fmt.Errorf("failed to create request: %w", reqErr)
 		}
+
+		// Add Range header for resume
+		if resumeFrom > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
+		}
+
+		// Execute request
+		resp, err = b.httpClient.Do(req)
+		if err != nil {
+			return &DownloadError{
+				Type:    "network",
+				Message: "Failed to connect to server",
+				Err:     err,
+			}
+		}
+
+		// Check status code
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+			resp.Body.Close()
+			// If server doesn't support resume, start from beginning
+			if resumeFrom > 0 && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+				resumeFrom = 0
+				_ = os.Remove(partialPath)
+				if stat, statErr := os.Stat(partialPath); statErr == nil {
+					_ = stat
+				}
+				continue
+			}
+
+			return &DownloadError{
+				Type:    "network",
+				Message: fmt.Sprintf("Server returned status code %d", resp.StatusCode),
+				Err:     fmt.Errorf("unexpected status code: %d", resp.StatusCode),
+			}
+		}
+
+		// Server ignored Range header: restart from scratch once.
+		if resumeFrom > 0 && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			if resumeFallbacksUsed >= maxResumeFallbacks {
+				return &DownloadError{
+					Type:    "network",
+					Message: "Server does not support resume (range ignored)",
+					Err:     fmt.Errorf("server ignored Range header"),
+				}
+			}
+			resumeFallbacksUsed++
+			resumeFrom = 0
+			_ = os.Remove(partialPath)
+			continue
+		}
+
+		break
 	}
 	defer resp.Body.Close()
-
-	// Check status code
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		// If server doesn't support resume, start from beginning
-		if resumeFrom > 0 && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
-			resumeFrom = 0
-			_ = os.Remove(partialPath)                               // Remove partial file
-			return b.attemptDownload(ctx, url, destPath, progressCb) // Retry without resume
-		}
-
-		return &DownloadError{
-			Type:    "network",
-			Message: fmt.Sprintf("Server returned status code %d", resp.StatusCode),
-			Err:     fmt.Errorf("unexpected status code: %d", resp.StatusCode),
-		}
-	}
 
 	// Get total size from Content-Length or Content-Range header
 	totalBytes := resp.ContentLength
@@ -221,19 +387,21 @@ func (b *BaseDownloader) attemptDownload(
 	}
 
 	// Check disk space
-	if err := checkDiskSpace(filepath.Dir(destPath), totalBytes); err != nil {
-		return &DownloadError{
-			Type:    "disk_space",
-			Message: fmt.Sprintf("Not enough disk space (need %s)", formatBytes(totalBytes)),
-			Err:     err,
+	if totalBytes > 0 {
+		if err := checkDiskSpace(filepath.Dir(destPath), totalBytes); err != nil {
+			return &DownloadError{
+				Type:    "disk_space",
+				Message: fmt.Sprintf("Not enough disk space (need %s)", formatBytes(totalBytes)),
+				Err:     err,
+			}
 		}
 	}
 
 	// Open/create destination file
 	var out *os.File
-	if resumeFrom > 0 {
+	if resumeFrom > 0 && resp.StatusCode == http.StatusPartialContent {
 		// Resume: open for append
-		out, err = os.OpenFile(partialPath, os.O_WRONLY|os.O_APPEND, 0644)
+		out, err = os.OpenFile(partialPath, os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			return fmt.Errorf("failed to open partial file: %w", err)
 		}
@@ -336,6 +504,16 @@ func (b *BaseDownloader) attemptDownload(
 
 // ExtractTarXz extracts a .tar.xz archive to target directory
 func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
+	// Базовая директория должна существовать, иначе нельзя безопасно создавать вложенные пути.
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+	if fi, err := os.Lstat(targetDir); err != nil {
+		return fmt.Errorf("failed to stat target directory: %w", err)
+	} else if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return fmt.Errorf("target directory is not a real directory: %s", targetDir)
+	}
+
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
@@ -362,28 +540,29 @@ func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
 		}
 
 		// Construct target path
-		targetPath := filepath.Join(targetDir, header.Name)
-
-		// Security check: prevent path traversal
-		if !filepath.HasPrefix(filepath.Clean(targetPath), filepath.Clean(targetDir)) {
-			return fmt.Errorf("invalid file path in archive: %s", header.Name)
+		targetPath, err := safeExtractPath(targetDir, header.Name)
+		if err != nil {
+			return err
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			// Create directory
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
+			// Create directory (не следуем по symlink-цепочкам)
+			if err := mkdirAllNoSymlink(targetDir, targetPath, 0755); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 
 		case tar.TypeReg:
 			// Create parent directory if needed
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			if err := mkdirAllNoSymlink(targetDir, filepath.Dir(targetPath), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
+			}
+			if err := ensureNoSymlinkFileTarget(targetPath); err != nil {
+				return err
 			}
 
 			// Create file
-			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, sanitizeArchiveFileMode(header.Mode))
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
@@ -396,14 +575,19 @@ func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
 			outFile.Close()
 
 		case tar.TypeSymlink:
-			// Create symlink
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			if err := mkdirAllNoSymlink(targetDir, filepath.Dir(targetPath), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
+			}
+			if err := safeSymlinkTarget(targetDir, targetPath, header.Linkname); err != nil {
+				return err
 			}
 			if err := os.Symlink(header.Linkname, targetPath); err != nil {
 				// Ignore symlink errors (may fail on Windows)
 				continue
 			}
+		case tar.TypeLink:
+			// Hard links в архивах нам не нужны и часто создают сюрпризы в безопасности.
+			continue
 		}
 	}
 
@@ -412,6 +596,16 @@ func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
 
 // ExtractTarGz extracts a .tar.gz archive to target directory
 func (b *BaseDownloader) ExtractTarGz(archivePath, targetDir string) error {
+	// Базовая директория должна существовать, иначе нельзя безопасно создавать вложенные пути.
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+	if fi, err := os.Lstat(targetDir); err != nil {
+		return fmt.Errorf("failed to stat target directory: %w", err)
+	} else if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return fmt.Errorf("target directory is not a real directory: %s", targetDir)
+	}
+
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
@@ -438,25 +632,26 @@ func (b *BaseDownloader) ExtractTarGz(archivePath, targetDir string) error {
 			return fmt.Errorf("failed to read tar: %w", err)
 		}
 
-		targetPath := filepath.Join(targetDir, header.Name)
-
-		// Security check
-		if !filepath.HasPrefix(filepath.Clean(targetPath), filepath.Clean(targetDir)) {
-			return fmt.Errorf("invalid file path in archive: %s", header.Name)
+		targetPath, err := safeExtractPath(targetDir, header.Name)
+		if err != nil {
+			return err
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
+			if err := mkdirAllNoSymlink(targetDir, targetPath, 0755); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			if err := mkdirAllNoSymlink(targetDir, filepath.Dir(targetPath), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
+			if err := ensureNoSymlinkFileTarget(targetPath); err != nil {
+				return err
+			}
 
-			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, sanitizeArchiveFileMode(header.Mode))
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
@@ -468,12 +663,17 @@ func (b *BaseDownloader) ExtractTarGz(archivePath, targetDir string) error {
 			outFile.Close()
 
 		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			if err := mkdirAllNoSymlink(targetDir, filepath.Dir(targetPath), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
+			}
+			if err := safeSymlinkTarget(targetDir, targetPath, header.Linkname); err != nil {
+				return err
 			}
 			if err := os.Symlink(header.Linkname, targetPath); err != nil {
 				continue
 			}
+		case tar.TypeLink:
+			continue
 		}
 	}
 
@@ -482,6 +682,16 @@ func (b *BaseDownloader) ExtractTarGz(archivePath, targetDir string) error {
 
 // ExtractZip extracts a .zip archive to target directory
 func (b *BaseDownloader) ExtractZip(archivePath, targetDir string) error {
+	// Базовая директория должна существовать, иначе нельзя безопасно создавать вложенные пути.
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+	if fi, err := os.Lstat(targetDir); err != nil {
+		return fmt.Errorf("failed to stat target directory: %w", err)
+	} else if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return fmt.Errorf("target directory is not a real directory: %s", targetDir)
+	}
+
 	reader, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
@@ -489,24 +699,25 @@ func (b *BaseDownloader) ExtractZip(archivePath, targetDir string) error {
 	defer reader.Close()
 
 	for _, file := range reader.File {
-		targetPath := filepath.Join(targetDir, file.Name)
-
-		// Security check: prevent path traversal
-		if !filepath.HasPrefix(filepath.Clean(targetPath), filepath.Clean(targetDir)) {
-			return fmt.Errorf("invalid file path in archive: %s", file.Name)
+		targetPath, err := safeExtractPath(targetDir, file.Name)
+		if err != nil {
+			return err
 		}
 
 		if file.FileInfo().IsDir() {
 			// Create directory
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
+			if err := mkdirAllNoSymlink(targetDir, targetPath, 0755); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 			continue
 		}
 
 		// Create parent directory
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		if err := mkdirAllNoSymlink(targetDir, filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
+		if err := ensureNoSymlinkFileTarget(targetPath); err != nil {
+			return err
 		}
 
 		// Open source file
@@ -516,7 +727,7 @@ func (b *BaseDownloader) ExtractZip(archivePath, targetDir string) error {
 		}
 
 		// Create destination file
-		dstFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, file.Mode())
+		dstFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, sanitizeArchiveFileMode(int64(file.Mode())))
 		if err != nil {
 			srcFile.Close()
 			return fmt.Errorf("failed to create file: %w", err)

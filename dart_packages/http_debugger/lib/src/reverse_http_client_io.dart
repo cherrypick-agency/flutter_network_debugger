@@ -258,7 +258,31 @@ class ReverseProxyHttpClient implements HttpClient {
     }
     final upstream = Uri.parse(_upstreamBaseUrl);
     final mergedPath = _concatPaths(upstream.path, original.path);
-    return upstream.replace(path: mergedPath, query: original.query);
+    final mergedQuery = _mergeQuery(upstream, original);
+    return upstream.replace(path: mergedPath, query: mergedQuery);
+  }
+
+  static String _mergeQuery(Uri upstream, Uri original) {
+    final merged = <String, List<String>>{};
+
+    for (final e in upstream.queryParametersAll.entries) {
+      final k = e.key.startsWith('?') ? e.key.substring(1) : e.key;
+      merged[k] = e.value;
+    }
+    for (final e in original.queryParametersAll.entries) {
+      final k = e.key.startsWith('?') ? e.key.substring(1) : e.key;
+      merged[k] = e.value;
+    }
+
+    final parts = <String>[];
+    for (final e in merged.entries) {
+      for (final v in e.value) {
+        parts.add(
+          '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(v)}',
+        );
+      }
+    }
+    return parts.join('&');
   }
 
   Uri _buildProxyUri(Uri target) {

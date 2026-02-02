@@ -17,19 +17,52 @@ class GoSocketIoUpstreamProcess {
 
   Uri get httpBase => Uri.parse('http://127.0.0.1:$port');
 
-  static Future<GoSocketIoUpstreamProcess> start({required int port}) async {
+  static Future<String>? _binaryPathFuture;
+
+  static Future<String> _ensureBuiltBinary() {
+    final existing = _binaryPathFuture;
+    if (existing != null) return existing;
+
+    _binaryPathFuture = () async {
+      final repoRoot = findRepoRoot();
+      final outDir = await Directory.systemTemp.createTemp('nd-go-sio-');
+      final exe = Platform.isWindows
+          ? 'test-socketio-upstream.exe'
+          : 'test-socketio-upstream';
+      final outPath = '${outDir.path}${Platform.pathSeparator}$exe';
+
+      final r = await Process.run(
+        'go',
+        [
+          'build',
+          '-o',
+          outPath,
+          './cmd/test-socketio-upstream',
+        ],
+        workingDirectory: repoRoot.path,
+      ).timeout(const Duration(minutes: 2));
+
+      if (r.exitCode != 0) {
+        throw StateError('go build failed: ${r.stderr}');
+      }
+      return outPath;
+    }();
+
+    return _binaryPathFuture!;
+  }
+
+  static Future<GoSocketIoUpstreamProcess> start({
+    required int port,
+    String path = '/socket.io/',
+  }) async {
     final repoRoot = findRepoRoot();
     final env = Map<String, String>.from(Platform.environment);
 
     final stdoutLines = <String>[];
+    final binPath = await _ensureBuiltBinary();
     final p = await Process.start(
-      'go',
-      [
-        'run',
-        './cmd/test-socketio-upstream',
-        '--addr',
-        '127.0.0.1:$port',
-      ],
+      binPath,
+      ['--addr', '127.0.0.1:$port', '--path', path],
       workingDirectory: repoRoot.path,
       environment: env,
     );

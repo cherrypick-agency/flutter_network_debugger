@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,12 +32,60 @@ func TestNewWorkspace(t *testing.T) {
 		t.Fatalf("Workspace directory was not created: %s", ws.Path)
 	}
 
-	// Проверяем что путь содержит scriptID
-	if filepath.Base(ws.Path) != scriptID {
-		// Проверяем что scriptID есть в пути
-		if !filepath.HasPrefix(ws.Path, filepath.Join(os.TempDir(), "go-proxy-compile")) {
-			t.Errorf("Workspace path should be in temp directory: %s", ws.Path)
-		}
+	// Проверяем что путь лежит внутри os.TempDir()
+	rel, err := filepath.Rel(os.TempDir(), ws.Path)
+	if err != nil {
+		t.Fatalf("Rel failed: %v", err)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		t.Errorf("Workspace path should be within temp dir: %s", ws.Path)
+	}
+
+	// Проверяем что директория похожа на наш префикс
+	if !strings.HasPrefix(filepath.Base(ws.Path), "go-proxy-compile-") {
+		t.Errorf("Workspace base should start with go-proxy-compile-: %s", ws.Path)
+	}
+}
+
+// Composer 1.
+func TestWorkspace_WriteFile_PathTraversal(t *testing.T) {
+	ws, err := NewWorkspace("test-traversal")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	if err := ws.WriteFile("../evil.txt", []byte("nope")); err == nil {
+		t.Fatal("WriteFile should fail for path traversal")
+	}
+	if ws.FileExists("../evil.txt") {
+		t.Fatal("FileExists should be false for path traversal")
+	}
+}
+
+// Composer 1.
+func TestWorkspace_ReadFile_PathTraversal(t *testing.T) {
+	ws, err := NewWorkspace("test-traversal-read")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	if _, err := ws.ReadFile("../evil.txt"); err == nil {
+		t.Fatal("ReadFile should fail for path traversal")
+	}
+}
+
+// Composer 1.
+func TestWorkspace_WriteFile_AbsolutePath(t *testing.T) {
+	ws, err := NewWorkspace("test-abs-path")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	if err := ws.WriteFile(filepath.Join(os.TempDir(), "evil.txt"), []byte("nope")); err == nil {
+		t.Fatal("WriteFile should fail for absolute path")
 	}
 }
 
@@ -535,5 +585,58 @@ func TestWorkspace_ExecuteCommand_WithErrorOutput(t *testing.T) {
 	outputStr := string(output)
 	if outputStr == "" {
 		t.Error("Command output should not be empty")
+	}
+}
+
+func TestWorkspace_ExecuteCommand_TruncatesLargeOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/head/tr")
+	}
+
+	ws, err := NewWorkspace("test-exec-truncate")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	ctx := context.Background()
+
+	// 3MB output, should be truncated by maxCommandOutputBytes (2MB) + note.
+	output, err := ws.ExecuteCommand(ctx, "sh", "-c", "head -c 3000000 /dev/zero | tr '\\000' 'a'")
+	if err != nil {
+		t.Fatalf("ExecuteCommand failed: %v", err)
+	}
+	if len(output) <= maxCommandOutputBytes {
+		t.Fatalf("expected truncated output to exceed %d bytes due to note, got %d", maxCommandOutputBytes, len(output))
+	}
+	if !strings.Contains(string(output), "output truncated") {
+		t.Fatal("expected output to include truncation note")
+	}
+}
+
+func TestWorkspace_ReadFile_BlocksSymlinkEscape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks may be unavailable on Windows without special permissions")
+	}
+
+	ws, err := NewWorkspace("test-symlink-escape")
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+	defer ws.Cleanup()
+
+	outsidePath := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outsidePath, []byte("secret"), 0644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+
+	linkPath := filepath.Join(ws.Path, "leak.txt")
+	if err := os.Symlink(outsidePath, linkPath); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err = ws.ReadFile("leak.txt")
+	if err == nil {
+		t.Fatal("expected ReadFile to fail for symlink escape")
 	}
 }

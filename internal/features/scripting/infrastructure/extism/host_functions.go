@@ -2,6 +2,7 @@ package extism
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,57 @@ import (
 	extism "github.com/extism/go-sdk"
 	"github.com/tetratelabs/wazero/api"
 )
+
+var httpFetchTransport = &http.Transport{
+	DialContext: (&net.Dialer{
+		Timeout:   30 * time.Second, // Connection timeout
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   10,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
+func withMaxTimeout(ctx context.Context, max time.Duration) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		return context.WithTimeout(context.Background(), max)
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		// Если и так короче — оставляем как есть, чтобы не "расширять" таймаут.
+		if time.Until(deadline) <= max {
+			return context.WithCancel(ctx)
+		}
+	}
+	return context.WithTimeout(ctx, max)
+}
+
+func newHTTPFetchClient(allowedHosts []string) *http.Client {
+	return &http.Client{
+		Timeout:   0, // управляем таймаутом через контекст запроса
+		Transport: httpFetchTransport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// По умолчанию net/http ограничивает редиректы, но тут добавляем свои проверки.
+			if len(via) >= 10 {
+				return errors.New("too many redirects")
+			}
+			if req.URL == nil {
+				return errors.New("redirect URL is nil")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return fmt.Errorf("redirect to unsupported scheme: %q", req.URL.Scheme)
+			}
+			if strings.TrimSpace(req.URL.Host) == "" {
+				return errors.New("redirect URL host is empty")
+			}
+			if !isHostAllowed(req.URL.Host, allowedHosts) {
+				return fmt.Errorf("redirect to disallowed host: %s", req.URL.Host)
+			}
+			return nil
+		},
+	}
+}
 
 // createHostFunctions creates host functions that scripts can call
 // These functions provide controlled access to system resources from WASM
@@ -81,6 +133,8 @@ func createLogFunction() extism.HostFunction {
 // Security: Respects AllowedHosts from script config
 // allowedHosts: list of allowed hosts (nil/empty means all hosts allowed)
 func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
+	client := newHTTPFetchClient(allowedHosts)
+
 	return extism.NewHostFunctionWithStack(
 		"http_fetch",
 		func(ctx context.Context, plugin *extism.CurrentPlugin, stack []uint64) {
@@ -112,6 +166,30 @@ func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 				return
 			}
 
+			// Ограничиваем протоколы: только HTTP(S)
+			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+				errJSON := fmt.Sprintf(`{"error": "Unsupported URL scheme: %q"}`, parsedURL.Scheme)
+				offset, writeErr := plugin.WriteString(errJSON)
+				if writeErr != nil {
+					log.Printf("[Script Error] Failed to write error response: %v", writeErr)
+					stack[0] = 0
+					return
+				}
+				stack[0] = offset
+				return
+			}
+			if strings.TrimSpace(parsedURL.Host) == "" {
+				errJSON := `{"error": "URL host is empty"}`
+				offset, writeErr := plugin.WriteString(errJSON)
+				if writeErr != nil {
+					log.Printf("[Script Error] Failed to write error response: %v", writeErr)
+					stack[0] = 0
+					return
+				}
+				stack[0] = offset
+				return
+			}
+
 			// Security: Check if host is allowed
 			if !isHostAllowed(parsedURL.Host, allowedHosts) {
 				errJSON := fmt.Sprintf(`{"error": "Host '%s' is not in allowed hosts list"}`, parsedURL.Host)
@@ -127,7 +205,11 @@ func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 			}
 
 			// Create HTTP request with context to respect script timeout
-			req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+			// Даже если ctx без deadline (зависит от Extism), ставим верхний предел.
+			reqCtx, cancel := withMaxTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, urlStr, nil)
 			if err != nil {
 				errJSON := fmt.Sprintf(`{"error": "Failed to create request: %v"}`, err)
 				offset, writeErr := plugin.WriteString(errJSON)
@@ -138,22 +220,6 @@ func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 				}
 				stack[0] = offset
 				return
-			}
-
-			// Create HTTP client with proper context propagation
-			// Configure Transport to respect request context cancellation
-			client := &http.Client{
-				Timeout: 0, // No timeout - request context will handle cancellation
-				Transport: &http.Transport{
-					DialContext: (&net.Dialer{
-						Timeout:   30 * time.Second, // Connection timeout
-						KeepAlive: 30 * time.Second,
-					}).DialContext,
-					MaxIdleConns:          100,
-					IdleConnTimeout:       90 * time.Second,
-					TLSHandshakeTimeout:   10 * time.Second,
-					ExpectContinueTimeout: 1 * time.Second,
-				},
 			}
 
 			resp, err := client.Do(req)
@@ -172,10 +238,21 @@ func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 
 			// Read response body with 10MB limit to prevent DoS
 			const maxBodySize = 10 * 1024 * 1024 // 10 MB
-			limitedBody := io.LimitReader(resp.Body, maxBodySize)
+			limitedBody := io.LimitReader(resp.Body, maxBodySize+1)
 			body, err := io.ReadAll(limitedBody)
 			if err != nil {
 				errJSON := fmt.Sprintf(`{"error": "Failed to read response: %v"}`, err)
+				offset, writeErr := plugin.WriteString(errJSON)
+				if writeErr != nil {
+					log.Printf("[Script Error] Failed to write error response: %v", writeErr)
+					stack[0] = 0
+					return
+				}
+				stack[0] = offset
+				return
+			}
+			if len(body) > maxBodySize {
+				errJSON := fmt.Sprintf(`{"error": "Response body exceeds %d bytes"}`, maxBodySize)
 				offset, writeErr := plugin.WriteString(errJSON)
 				if writeErr != nil {
 					log.Printf("[Script Error] Failed to write error response: %v", writeErr)

@@ -99,10 +99,16 @@ func TestStringArray_Scan(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid JSON string",
+			value:   `["a","b"]`,
+			wantLen: 2,
+			wantErr: false,
+		},
+		{
 			name:    "invalid type",
-			value:   "not bytes",
+			value:   123,
 			wantLen: 0,
-			wantErr: false, // Scan не возвращает ошибку, просто устанавливает пустой массив
+			wantErr: false,
 		},
 		{
 			name:    "invalid JSON",
@@ -218,8 +224,14 @@ func TestStringMap_Scan(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid JSON string",
+			value:   `{"a":"1","b":"2"}`,
+			wantLen: 2,
+			wantErr: false,
+		},
+		{
 			name:    "invalid type",
-			value:   "not bytes",
+			value:   123,
 			wantLen: 0,
 			wantErr: false,
 		},

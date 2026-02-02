@@ -61,7 +61,7 @@ class CopyCurlButton extends StatelessWidget {
             }
           },
           style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             textStyle: const TextStyle(fontSize: 12),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,

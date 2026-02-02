@@ -1,11 +1,13 @@
 package runtime
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	stdpath "path"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -39,6 +41,7 @@ type compiledRule struct {
 	src        mdomain.MapRule
 	methodsSet map[string]struct{}
 	isRegex    bool
+	invalid    bool
 	hostRe     *regexp.Regexp
 	pathRe     *regexp.Regexp
 }
@@ -47,8 +50,13 @@ func New() *Manager { return &Manager{rules: []compiledRule{}, fileMTime: make(m
 
 // Update заменяет набор правил (ожидается отсортированный по priority ASC)
 func (m *Manager) Update(rules []mdomain.MapRule) {
+	// На всякий случай сортируем сами, чтобы рантайм не зависел от порядка списка.
+	sorted := append([]mdomain.MapRule(nil), rules...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].Priority < sorted[j].Priority
+	})
 	cr := make([]compiledRule, 0, len(rules))
-	for _, r := range rules {
+	for _, r := range sorted {
 		c := compiledRule{src: r, methodsSet: make(map[string]struct{})}
 		for _, me := range r.Methods {
 			c.methodsSet[strings.ToUpper(strings.TrimSpace(me))] = struct{}{}
@@ -56,12 +64,18 @@ func (m *Manager) Update(rules []mdomain.MapRule) {
 		if r.PatternType == mdomain.PatternRegex {
 			c.isRegex = true
 			if strings.TrimSpace(r.HostPattern) != "" {
-				if re, err := regexp.Compile(r.HostPattern); err == nil {
+				re, err := regexp.Compile(r.HostPattern)
+				if err != nil {
+					c.invalid = true
+				} else {
 					c.hostRe = re
 				}
 			}
 			if strings.TrimSpace(r.PathPattern) != "" {
-				if re, err := regexp.Compile(r.PathPattern); err == nil {
+				re, err := regexp.Compile(r.PathPattern)
+				if err != nil {
+					c.invalid = true
+				} else {
 					c.pathRe = re
 				}
 			}
@@ -71,7 +85,8 @@ func (m *Manager) Update(rules []mdomain.MapRule) {
 	m.mu.Lock()
 	m.rules = cr
 	// переинициализируем кеш mtime для локальных путей
-	for _, r := range rules {
+	m.fileMTime = make(map[string]int64)
+	for _, r := range sorted {
 		if r.FilePath != nil && *r.FilePath != "" {
 			if fi, err := os.Stat(*r.FilePath); err == nil {
 				m.fileMTime[*r.FilePath] = fi.ModTime().Unix()
@@ -81,19 +96,42 @@ func (m *Manager) Update(rules []mdomain.MapRule) {
 	m.mu.Unlock()
 }
 
-// EvalRequest возвращает решение по первому совпавшему правилу
+// EvalRequest возвращает решение по маппингу.
+//
+// Важно: если remote-правило имеет stopProcessing=false, мы применяем его
+// (как переписывание URL) и продолжаем матчить следующие правила на уже
+// переписанном URL.
 func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 	m.mu.RLock()
 	rules := m.rules
 	m.mu.RUnlock()
+
 	method := strings.ToUpper(r.Method)
+
+	var curURL *url.URL
+	if r.URL != nil {
+		u := *r.URL
+		curURL = &u
+	}
+	curHostHeader := r.Host
+
 	host := ""
 	path := ""
-	if r.URL != nil {
-		host = r.URL.Hostname()
-		path = r.URL.Path
+	if curURL != nil {
+		host = curURL.Hostname()
+		path = curURL.Path
 	}
+	if host == "" && strings.TrimSpace(curHostHeader) != "" {
+		host = hostNoPort(strings.TrimSpace(curHostHeader))
+	}
+
+	var lastRemote Decision
+	haveRemote := false
+
 	for _, cr := range rules {
+		if cr.invalid {
+			continue
+		}
 		if !cr.src.Enabled {
 			continue
 		}
@@ -109,13 +147,12 @@ func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 		if cr.src.Kind == mdomain.KindLocal {
 			// проверим изменение файла (best-effort)
 			if cr.src.FilePath != nil && *cr.src.FilePath != "" {
-				if fi, err := os.Stat(*cr.src.FilePath); err == nil {
+				p := *cr.src.FilePath
+				if fi, err := os.Stat(p); err == nil {
 					mt := fi.ModTime().Unix()
-					if last, ok := m.fileMTime[*cr.src.FilePath]; !ok || last != mt {
-						m.fileMTime[*cr.src.FilePath] = mt
-						if m.onFileChange != nil {
-							m.onFileChange(cr.src.ID, *cr.src.FilePath)
-						}
+					cb, changed := m.maybeUpdateMTime(p, mt)
+					if changed && cb != nil {
+						cb(cr.src.ID, p)
 					}
 				}
 			}
@@ -130,25 +167,54 @@ func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 		}
 		// Remote
 		to := cr.src.TargetURLTemplate
-		if cr.isRegex && cr.pathRe != nil && r.URL != nil {
+		if cr.isRegex && cr.pathRe != nil && curURL != nil {
 			// применим подстановки $1.. по path
-			to = cr.pathRe.ReplaceAllString(r.URL.String(), cr.src.TargetURLTemplate)
+			to = cr.pathRe.ReplaceAllString(curURL.Path, cr.src.TargetURLTemplate)
 		}
+		to = applyTemplateTokens(to, &http.Request{Method: r.Method, URL: curURL, Host: curHostHeader})
 		// нормализуем целевой URL
 		if u, err := url.Parse(to); err == nil {
-			return Decision{
+			lastRemote = Decision{
 				Kind:         mdomain.KindRemote,
 				RuleID:       cr.src.ID,
 				RemoteURL:    u.String(),
 				PreserveHost: cr.src.PreserveHost,
-			}, true
+			}
+			haveRemote = true
+
+			curURL = u
+			curHostHeader = u.Host
+			host = u.Hostname()
+			path = u.Path
+
+			if cr.src.StopProcessing {
+				return lastRemote, true
+			}
+			continue
 		}
 		// если шаблон не распарсился — игнорируем правило
+	}
+	if haveRemote {
+		return lastRemote, true
 	}
 	return Decision{}, false
 }
 
+func (m *Manager) maybeUpdateMTime(path string, mt int64) (func(ruleID string, path string), bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	last, ok := m.fileMTime[path]
+	if ok && last == mt {
+		return m.onFileChange, false
+	}
+	m.fileMTime[path] = mt
+	return m.onFileChange, true
+}
+
 func matchHostPath(cr compiledRule, host, path string) bool {
+	if cr.invalid {
+		return false
+	}
 	// Host
 	if cr.isRegex {
 		if cr.hostRe != nil && !cr.hostRe.MatchString(host) {
@@ -183,6 +249,44 @@ func nonZero(v, def int) int {
 		return def
 	}
 	return v
+}
+
+func hostNoPort(hostport string) string {
+	h, _, err := net.SplitHostPort(hostport)
+	if err == nil && h != "" {
+		return h
+	}
+	// net.SplitHostPort падает на "example.com" без порта — это нормальный кейс.
+	return hostport
+}
+
+func applyTemplateTokens(tpl string, r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return tpl
+	}
+	u := r.URL
+	path := u.EscapedPath()
+	if path == "" {
+		path = u.Path
+	}
+	full := u.String()
+	port := u.Port()
+	portWithColon := ""
+	if port != "" {
+		portWithColon = ":" + port
+	}
+	return strings.NewReplacer(
+		"{scheme}", u.Scheme,
+		"{host}", u.Host,
+		"{hostname}", u.Hostname(),
+		"{port}", port,
+		"{portWithColon}", portWithColon,
+		"{path}", path,
+		"{query}", u.RawQuery,
+		"{rawQuery}", u.RawQuery,
+		"{url}", full,
+		"{full}", full,
+	).Replace(tpl)
 }
 
 // SetOnFileChange регистрирует коллбек на изменения локальных файлов правил

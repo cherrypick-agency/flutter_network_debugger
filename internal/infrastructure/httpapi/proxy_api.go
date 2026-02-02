@@ -64,6 +64,12 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "BAD_AUTH_MODE", "authMode must be none or userpass", nil)
 			return
 		}
+		// Не даём случайно посадить SOCKS и forward на один и тот же порт:
+		// в таком случае клиенты будут успешно подключаться по TCP, но HTTP к proxy-порту работать не будет.
+		if in.Forward.Enabled && in.Socks.Enabled && in.Forward.Port > 0 && in.Forward.Port == in.Socks.Port {
+			writeError(w, http.StatusBadRequest, "PORT_CONFLICT", "forward and socks ports must be different", nil)
+			return
+		}
 
 		pc, err := d.ProxySvc.Load(contextWithNoCancel())
 		if err != nil {
@@ -97,7 +103,7 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "SAVE_FAILED", err.Error(), nil)
 			return
 		}
-		_ = d.ProxyRt.Apply(contextWithNoCancel(), pruntime.ApplyConfig{
+		if err := d.ProxyRt.Apply(contextWithNoCancel(), pruntime.ApplyConfig{
 			ForwardEnabled: saved.ForwardEnabled,
 			ForwardAddr:    saved.ForwardAddr,
 			SocksEnabled:   saved.SocksEnabled,
@@ -105,7 +111,10 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			SocksAuthMode:  saved.SocksAuthMode,
 			SocksUser:      saved.SocksUser,
 			SocksPass:      saved.SocksPass,
-		}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { d.handleForwardOrNotFound(w, r) }))
+		}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { d.handleForwardOrNotFound(w, r) })); err != nil {
+			writeError(w, http.StatusInternalServerError, "APPLY_FAILED", err.Error(), nil)
+			return
+		}
 
 		// Ответим текущей конфигурацией
 		out := proxyCfgDTO{}

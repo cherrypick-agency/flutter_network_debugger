@@ -175,7 +175,7 @@ class _FakeHttp implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) async => throw UnimplementedError();
   @override
   Future<Response<T>> filesPatch<T>({
@@ -216,7 +216,7 @@ class _FakeHttp implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) async => throw UnimplementedError();
   @override
   Future<Response<T>> performRequest<T>({
@@ -224,7 +224,7 @@ class _FakeHttp implements AppHttpClient {
     String path = '',
     Map<String, dynamic>? query,
     Map<String, dynamic>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
     required HttpMethod method,
     Map<String, String>? fields,
   }) async => throw UnimplementedError();
@@ -234,7 +234,7 @@ class _FakeHttp implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) async => throw UnimplementedError();
   @override
   Future<Response<T>> put<T>({
@@ -242,6 +242,6 @@ class _FakeHttp implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) async => throw UnimplementedError();
 }

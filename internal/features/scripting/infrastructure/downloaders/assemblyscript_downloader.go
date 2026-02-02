@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -218,7 +217,10 @@ func (a *AssemblyScriptDownloader) installAssemblyScript(installPath, nodeVersio
 	}
 
 	// Install assemblyscript globally
-	cmd := exec.Command(npmBinary, "install", "-g", "--prefix", installPath, "assemblyscript")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, npmBinary, "install", "-g", "--prefix", installPath, "assemblyscript")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("npm install failed: %w\nOutput: %s", err, string(output))
@@ -276,7 +278,15 @@ func (a *AssemblyScriptDownloader) GetMetadata(req domain.DownloadRequest) (*dom
 	}
 
 	// Get size via HEAD request
-	resp, err := http.Head(downloadURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, downloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := a.httpClient.Do(headReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get metadata: %w", err)
 	}
@@ -305,7 +315,15 @@ func (a *AssemblyScriptDownloader) GetMetadata(req domain.DownloadRequest) (*dom
 // getNodeLTSVersion fetches the current LTS version of Node.js
 func (a *AssemblyScriptDownloader) getNodeLTSVersion() (string, error) {
 	// Fetch from Node.js API
-	resp, err := http.Get("https://nodejs.org/dist/index.json")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://nodejs.org/dist/index.json", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch Node.js releases: %w", err)
 	}
@@ -315,7 +333,7 @@ func (a *AssemblyScriptDownloader) getNodeLTSVersion() (string, error) {
 		return "", fmt.Errorf("Node.js API returned status: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readAllLimited(resp.Body, 10*1024*1024)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}

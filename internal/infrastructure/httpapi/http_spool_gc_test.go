@@ -20,7 +20,7 @@ func TestCleanupSpoolDir_RemovesOldFiles(t *testing.T) {
 	other := filepath.Join(dir, "not-ours.bin")
 	_ = os.WriteFile(other, []byte("z"), 0o644)
 
-	cleanupSpoolDir(dir, time.Hour)
+	cleanupSpoolDir(&Deps{}, dir, time.Hour)
 	if _, err := os.Stat(old); !os.IsNotExist(err) {
 		t.Fatalf("old file must be removed")
 	}

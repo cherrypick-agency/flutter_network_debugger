@@ -32,6 +32,24 @@ class _FakeRepo implements InspectorRepository {
     String? from,
     int limit = 100,
   }) async => <Frame>[];
+
+  @override
+  Future<String> exportHAR({
+    List<String>? sessionIds,
+    bool includeBodies = true,
+    bool includeSensitive = false,
+    bool minify = false,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, dynamic>> importHAR(
+    String harJson, {
+    required String mode,
+  }) async {
+    throw UnimplementedError();
+  }
 }
 
 void main() {

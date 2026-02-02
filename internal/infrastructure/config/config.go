@@ -87,6 +87,10 @@ type Config struct {
 
 	// Compose/Request Builder limits
 	ComposeMaxUploadMB int
+
+	// Mapping (Map Local/Remote)
+	MappingEnabled     bool
+	MappingUploadMaxMB int
 }
 
 // CookiesConfig controls reverse-proxy cookie rewriting behavior
@@ -251,6 +255,14 @@ func FromEnv() Config {
 
 	// Compose defaults
 	cfg.ComposeMaxUploadMB = getEnvInt("COMPOSE_MAX_UPLOAD_MB", 10)
+
+	// Mapping defaults
+	if os.Getenv("MAPPING_ENABLED") == "0" || os.Getenv("MAPPING_ENABLED") == "false" {
+		cfg.MappingEnabled = false
+	} else {
+		cfg.MappingEnabled = true
+	}
+	cfg.MappingUploadMaxMB = getEnvInt("MAPPING_UPLOAD_MAX_MB", 20)
 	return cfg
 }
 

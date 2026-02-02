@@ -80,6 +80,32 @@ func TestScript_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "timeout too large",
+			script: &Script{
+				Name:        "test",
+				Runtime:     RuntimeExtism,
+				TriggerType: TriggerRequest,
+				Code:        []byte{1, 2, 3},
+				Config: ScriptConfig{
+					TimeoutMs: 120000,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "memory limit too large for extism",
+			script: &Script{
+				Name:        "test",
+				Runtime:     RuntimeExtism,
+				TriggerType: TriggerRequest,
+				Code:        []byte{1, 2, 3},
+				Config: ScriptConfig{
+					MemoryLimitMB: 10_000,
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

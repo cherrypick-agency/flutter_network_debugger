@@ -85,7 +85,7 @@ class RequestActionButtons extends StatelessWidget {
     return TextButton.icon(
       onPressed: onRepeat,
       style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         textStyle: const TextStyle(fontSize: 12),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,

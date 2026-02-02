@@ -2,12 +2,15 @@ package extism
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	extismsdk "github.com/extism/go-sdk"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -264,6 +267,38 @@ func TestCircuitBreaker_Open(t *testing.T) {
 
 	t.Logf("Circuit breaker test: %d calls, %d errors, circuit OPEN",
 		metrics.TotalCalls, metrics.ErrorCalls)
+}
+
+func TestCircuitBreaker_Open_OnCreateFailure(t *testing.T) {
+	// Create a pool with failing createFunc (no WASM fixtures needed)
+	script := domain.Script{
+		ID:      "create-fail",
+		Name:    "Create Fail",
+		Runtime: domain.RuntimeExtism,
+	}
+
+	pool := NewPluginPool(script, func(context.Context, domain.Script) (*extismsdk.Plugin, error) {
+		return nil, errors.New("create failed")
+	})
+	defer pool.Close()
+
+	ctx := context.Background()
+	for i := 0; i < 20; i++ {
+		_, _ = pool.Acquire(ctx)
+	}
+
+	metrics := pool.GetMetrics()
+	if metrics.CircuitState != CircuitOpen {
+		t.Fatalf("expected circuit breaker to be OPEN after create failures, got %d", metrics.CircuitState)
+	}
+
+	_, err := pool.Acquire(ctx)
+	if err == nil {
+		t.Fatal("expected error when circuit is open, got nil")
+	}
+	if !contains(err.Error(), "circuit breaker open") {
+		t.Fatalf("expected 'circuit breaker open' error, got: %v", err)
+	}
 }
 
 // TestCircuitBreaker_Recovery verifies circuit breaker recovery (half-open → closed)
@@ -705,18 +740,16 @@ func TestPooledPlugin_SafeClose_DoubleClose(t *testing.T) {
 
 // TestNewPluginPool_NilCreateFunc tests NewPluginPool with nil createFunc
 func TestNewPluginPool_NilCreateFunc(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("NewPluginPool() with nil createFunc should panic")
-		}
-	}()
-
 	script := domain.Script{
 		ID:   "test",
 		Name: "Test",
 	}
+	pool := NewPluginPool(script, nil)
 
-	NewPluginPool(script, nil)
+	_, err := pool.Acquire(context.Background())
+	if err == nil {
+		t.Fatal("Acquire() should fail when createFunc is nil")
+	}
 }
 
 // TestPoolManager_GetPool_Concurrent tests GetPool with concurrent access

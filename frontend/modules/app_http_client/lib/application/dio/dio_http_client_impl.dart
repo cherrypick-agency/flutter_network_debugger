@@ -98,7 +98,7 @@ class DioHttpClientImpl implements AppHttpClient {
     String path = '',
     Map<String, dynamic>? query,
     Map<String, dynamic>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
     required HttpMethod method,
     Map<String, String>? fields,
   }) async {
@@ -203,7 +203,7 @@ class DioHttpClientImpl implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) {
     return performRequest<T>(
       method: HttpMethod.post,
@@ -221,7 +221,7 @@ class DioHttpClientImpl implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) {
     return performRequest<T>(
       method: HttpMethod.put,
@@ -239,7 +239,7 @@ class DioHttpClientImpl implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) {
     return performRequest<T>(
       method: HttpMethod.delete,
@@ -257,7 +257,7 @@ class DioHttpClientImpl implements AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   }) {
     return performRequest<T>(
       method: HttpMethod.patch,

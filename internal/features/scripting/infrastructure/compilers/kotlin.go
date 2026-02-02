@@ -40,7 +40,10 @@ func (c *KotlinCompiler) IsAvailable() bool {
 	kotlincPath, javaHome, err := c.getKotlinSetup()
 	if err != nil {
 		// Try system kotlinc as fallback
-		cmd := exec.Command("kotlinc", "-version")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "kotlinc", "-version")
 		if err := cmd.Run(); err != nil {
 			return false
 		}
@@ -107,11 +110,7 @@ func (c *KotlinCompiler) Compile(ctx context.Context, req domain.CompileRequest)
 	}
 
 	// Compile with Kotlin
-	cmd := exec.CommandContext(ctx, c.kotlincPath, args...)
-	cmd.Dir = ws.Path
-	cmd.Env = env
-
-	output, err := cmd.CombinedOutput()
+	output, err := ws.ExecuteCommandWithEnv(ctx, env, c.kotlincPath, args...)
 	if err != nil {
 		return nil, c.parseKotlinError(string(output))
 	}
@@ -168,7 +167,10 @@ func (c *KotlinCompiler) ValidateSyntax(ctx context.Context, req domain.CompileR
 			return fmt.Errorf("Kotlin compiler not available")
 		}
 		// Try system kotlinc as fallback
-		cmd := exec.Command("kotlinc", "-version")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "kotlinc", "-version")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("Kotlin compiler not available")
 		}
@@ -205,11 +207,7 @@ func (c *KotlinCompiler) ValidateSyntax(ctx context.Context, req domain.CompileR
 		env = append(env, fmt.Sprintf("JAVA_HOME=%s", c.javaHome))
 	}
 
-	cmd := exec.CommandContext(ctx, c.kotlincPath, "-Xskip-runtime-version-check", "Main.kt")
-	cmd.Dir = ws.Path
-	cmd.Env = env
-
-	output, err := cmd.CombinedOutput()
+	output, err := ws.ExecuteCommandWithEnv(ctx, env, c.kotlincPath, "-Xskip-runtime-version-check", "Main.kt")
 	if err != nil {
 		return fmt.Errorf("syntax check failed: %s", string(output))
 	}

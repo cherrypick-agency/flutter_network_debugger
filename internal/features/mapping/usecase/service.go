@@ -19,13 +19,11 @@ func (s *Service) List(ctx context.Context) ([]mdomain.MapRule, error) {
 
 func (s *Service) Upsert(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error) {
 	// нормализация дат
+	now := time.Now().UTC()
 	if r.CreatedAt.IsZero() {
-		now := time.Now().UTC()
 		r.CreatedAt = now
-		r.UpdatedAt = now
-	} else if r.UpdatedAt.IsZero() {
-		r.UpdatedAt = time.Now().UTC()
 	}
+	r.UpdatedAt = now
 	return s.repo.Upsert(ctx, r)
 }
 

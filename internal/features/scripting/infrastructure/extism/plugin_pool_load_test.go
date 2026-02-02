@@ -305,6 +305,7 @@ func TestLoadStabilityMultiScript(t *testing.T) {
 	progressTicker := time.NewTicker(30 * time.Second)
 	defer progressTicker.Stop()
 
+	progressStop := make(chan struct{})
 	progressDone := make(chan struct{})
 	go func() {
 		defer close(progressDone)
@@ -320,6 +321,8 @@ func TestLoadStabilityMultiScript(t *testing.T) {
 				t.Logf("[Multi-Script Progress] Elapsed: %v | Total: %d (%.0f req/s) | Success: %d | Errors: %d",
 					elapsed.Round(time.Second), total, currentRPS, success, errors)
 
+			case <-progressStop:
+				return
 			case <-ctx.Done():
 				return
 			}
@@ -327,7 +330,27 @@ func TestLoadStabilityMultiScript(t *testing.T) {
 	}()
 
 	wg.Wait()
+	close(progressStop)
 	<-progressDone // Wait for progress reporter to finish
+
+	// Дожидаемся завершения всех заспавненных запросов (они запускаются в горутинах).
+	targetTotal := int64(scriptCount * rpsPerScript * int(duration.Seconds()))
+	{
+		deadline := time.After(5 * time.Second)
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			total := totalSuccess.Load() + totalErrors.Load()
+			if total >= targetTotal {
+				break
+			}
+			select {
+			case <-deadline:
+				break
+			case <-ticker.C:
+			}
+		}
+	}
 
 	elapsed := time.Since(start)
 	success := totalSuccess.Load()

@@ -64,7 +64,9 @@ func (e *ExtismExecutor) Execute(ctx context.Context, req domain.ExecutionReques
 		return domain.ExecutionResult{}, fmt.Errorf("failed to acquire plugin: %w", err)
 	}
 
-	// Track execution error for pool metrics
+	// Track execution error for pool metrics.
+	// Важно: при таймауте/отмене мы НЕ возвращаем инстанс обратно в пул, потому что он может быть
+	// в неопределённом состоянии. Это поведение реализовано внутри PluginPool.Release().
 	var execErr error
 	defer func() {
 		pool.Release(instance, execErr)
@@ -166,7 +168,7 @@ func (e *ExtismExecutor) Validate(ctx context.Context, script domain.Script) err
 	}
 
 	// First, validate WASM exports (fast check without creating plugin)
-	if err := ValidateWASMWithLanguage(script.Code, script.Language); err != nil {
+	if err := ValidateWASMWithLanguage(ctx, script.Code, script.Language); err != nil {
 		return err
 	}
 
@@ -177,7 +179,13 @@ func (e *ExtismExecutor) Validate(ctx context.Context, script domain.Script) err
 	}
 
 	// Close the plugin since we only created it for validation
-	plugin.Close(ctx)
+	{
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if closeErr := plugin.Close(closeCtx); closeErr != nil {
+			return fmt.Errorf("failed to close plugin after validation: %w", closeErr)
+		}
+	}
 
 	return nil
 }
@@ -218,7 +226,7 @@ func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script)
 			extism.WasmData{Data: script.Code},
 		},
 		Memory: &extism.ManifestMemory{
-			MaxPages: uint32(script.Config.MemoryLimitMB * 16), // 64KB per page
+			MaxPages: uint32(uint64(script.Config.MemoryLimitMB) * 16), // 64KB per page
 		},
 		AllowedHosts: script.Config.AllowedHosts,
 	}

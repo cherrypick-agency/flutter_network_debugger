@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"network-debugger/internal/features/scripting/domain"
@@ -60,23 +61,30 @@ func (e *DartExecutor) Execute(ctx context.Context, req domain.ExecutionRequest)
 		}, nil
 	}
 
+	execCtx, cancel := context.WithTimeout(ctx, time.Duration(req.Script.Config.TimeoutMs)*time.Millisecond)
+	defer cancel()
+
 	start := time.Now()
 
 	// Get process from pool
-	proc, err := e.processPool.Get(ctx)
+	proc, err := e.processPool.Get(execCtx)
 	if err != nil {
 		log.Printf("[Dart] Failed to get process from pool: %v", err)
 		return domain.ExecutionResult{}, err
 	}
-	defer e.processPool.Release(proc)
 	log.Printf("[Dart] Got process from pool")
 
 	// Create JSON-RPC request
+	code := req.Script.SourceCode
+	if code == "" {
+		code = string(req.Script.Code)
+	}
+
 	rpcReq := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "execute",
 		"params": map[string]any{
-			"code":  string(req.Script.Code),
+			"code":  code,
 			"input": string(req.Input),
 		},
 		"id": time.Now().UnixNano(),
@@ -86,6 +94,7 @@ func (e *DartExecutor) Execute(ctx context.Context, req domain.ExecutionRequest)
 	log.Printf("[Dart] Sending RPC request: %+v", rpcReq)
 	if err := json.NewEncoder(proc.stdin).Encode(rpcReq); err != nil {
 		log.Printf("[Dart] Failed to send request: %v", err)
+		e.processPool.Discard(proc)
 		return domain.ExecutionResult{}, fmt.Errorf("failed to send request: %w", err)
 	}
 	log.Printf("[Dart] Request sent, waiting for response")
@@ -104,8 +113,9 @@ func (e *DartExecutor) Execute(ctx context.Context, req domain.ExecutionRequest)
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-execCtx.Done():
 		log.Printf("[Dart] Execution timed out")
+		e.processPool.Discard(proc)
 		return domain.ExecutionResult{
 			Duration: time.Since(start),
 			Error:    "timeout",
@@ -113,6 +123,11 @@ func (e *DartExecutor) Execute(ctx context.Context, req domain.ExecutionRequest)
 	case resp := <-respChan:
 		resp.result.Duration = time.Since(start)
 		log.Printf("[Dart] Returning result: %+v, err=%v", resp.result, resp.err)
+		if resp.err != nil {
+			e.processPool.Discard(proc)
+		} else {
+			e.processPool.Release(proc)
+		}
 		return resp.result, resp.err
 	}
 }
@@ -147,11 +162,13 @@ func (e *DartExecutor) Validate(ctx context.Context, script domain.Script) error
 	}
 	tmpFile.Close()
 
-	// Run dart analyze with timeout
+	// Для синтаксической проверки достаточно `dart format`:
+	// - не требует pubspec.yaml
+	// - падает на ошибках парсинга
 	analyzeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(analyzeCtx, "dart", "analyze", tmpFile.Name())
+	cmd := exec.CommandContext(analyzeCtx, "dart", "format", "--output", "none", tmpFile.Name())
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -171,7 +188,10 @@ func (e *DartExecutor) Close() error {
 
 // isDartAvailable checks if Dart SDK is installed
 func isDartAvailable() bool {
-	cmd := exec.Command("dart", "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "dart", "--version")
 	err := cmd.Run()
 	return err == nil
 }
@@ -183,6 +203,15 @@ type ProcessPool struct {
 	scriptRunnerPath string
 	currentCount     int // Number of currently active processes
 	mu               sync.Mutex
+	closed           atomic.Bool
+}
+
+func (p *ProcessPool) decrementCount() {
+	p.mu.Lock()
+	if p.currentCount > 0 {
+		p.currentCount--
+	}
+	p.mu.Unlock()
 }
 
 // DartProcess represents a running Dart VM process
@@ -190,6 +219,15 @@ type DartProcess struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout *bufio.Scanner
+}
+
+func killAndWait(proc *DartProcess) {
+	if proc == nil || proc.cmd == nil || proc.cmd.Process == nil {
+		return
+	}
+	_ = proc.cmd.Process.Kill()
+	// Важно: Wait нужен, иначе процесс может остаться зомби на unix.
+	_ = proc.cmd.Wait()
 }
 
 // NewProcessPool creates a new pool of Dart processes
@@ -207,15 +245,29 @@ func NewProcessPool(maxSize int, scriptRunnerPath string) (*ProcessPool, error) 
 
 // Get retrieves a process from the pool, creating one lazily if needed
 func (p *ProcessPool) Get(ctx context.Context) (*DartProcess, error) {
+	if p.closed.Load() {
+		return nil, errors.New("process pool is closed")
+	}
+
 	// Try to get a process from the pool (non-blocking)
 	select {
-	case proc := <-p.processes:
+	case proc, ok := <-p.processes:
+		if !ok {
+			return nil, errors.New("process pool is closed")
+		}
+		if proc == nil {
+			return nil, errors.New("process pool returned nil process")
+		}
 		return proc, nil
 	default:
 	}
 
 	// No process available, try to create a new one if under limit
 	p.mu.Lock()
+	if p.closed.Load() {
+		p.mu.Unlock()
+		return nil, errors.New("process pool is closed")
+	}
 	if p.currentCount < p.maxSize {
 		p.currentCount++
 		p.mu.Unlock()
@@ -234,7 +286,13 @@ func (p *ProcessPool) Get(ctx context.Context) (*DartProcess, error) {
 
 	// Pool exhausted, wait for a process to be returned
 	select {
-	case proc := <-p.processes:
+	case proc, ok := <-p.processes:
+		if !ok {
+			return nil, errors.New("process pool is closed")
+		}
+		if proc == nil {
+			return nil, errors.New("process pool returned nil process")
+		}
 		return proc, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -243,27 +301,54 @@ func (p *ProcessPool) Get(ctx context.Context) (*DartProcess, error) {
 
 // Release returns a process to the pool
 func (p *ProcessPool) Release(proc *DartProcess) {
+	if proc == nil {
+		return
+	}
+	if p.closed.Load() {
+		p.decrementCount()
+		killAndWait(proc)
+		return
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			// Канал могли закрыть на shutdown между Load() и send.
+			p.decrementCount()
+			killAndWait(proc)
+		}
+	}()
 	select {
 	case p.processes <- proc:
 		// Successfully returned to pool
 	default:
 		// Pool full, kill process and decrement counter
-		p.mu.Lock()
-		p.currentCount--
-		p.mu.Unlock()
-		if proc.cmd != nil && proc.cmd.Process != nil {
-			proc.cmd.Process.Kill()
-		}
+		p.decrementCount()
+		killAndWait(proc)
 	}
+}
+
+// Discard kills a process and removes it from the pool accounting.
+// Use this when the process may be in a bad state (timeout/cancel/protocol desync).
+func (p *ProcessPool) Discard(proc *DartProcess) {
+	if proc == nil {
+		return
+	}
+
+	p.decrementCount()
+
+	killAndWait(proc)
 }
 
 // Close shuts down all processes in the pool
 func (p *ProcessPool) Close() error {
+	if !p.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	close(p.processes)
 	for proc := range p.processes {
-		if proc.cmd != nil && proc.cmd.Process != nil {
-			proc.cmd.Process.Kill()
-		}
+		p.decrementCount()
+		killAndWait(proc)
 	}
 	return nil
 }
@@ -295,6 +380,7 @@ func (p *ProcessPool) startProcess() (*DartProcess, error) {
 	// Read stderr in background
 	go func() {
 		scanner := bufio.NewScanner(stderr)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 		for scanner.Scan() {
 			log.Printf("[Dart script_runner stderr] %s", scanner.Text())
 		}
@@ -307,16 +393,81 @@ func (p *ProcessPool) startProcess() (*DartProcess, error) {
 
 	log.Printf("[Dart] Process started successfully (PID: %d)", cmd.Process.Pid)
 
-	return &DartProcess{
-		cmd:    cmd,
-		stdin:  stdin,
-		stdout: bufio.NewScanner(stdout),
-	}, nil
+	proc := &DartProcess{
+		cmd:   cmd,
+		stdin: stdin,
+		stdout: func() *bufio.Scanner {
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
+			return scanner
+		}(),
+	}
+
+	// Ping handshake: если dart run завис/не поднялся, не возвращаем процесс в пул.
+	{
+		pingReq := map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "ping",
+			"id":      time.Now().UnixNano(),
+		}
+
+		pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := json.NewEncoder(proc.stdin).Encode(pingReq); err != nil {
+			killAndWait(proc)
+			return nil, fmt.Errorf("failed to send ping to Dart process: %w", err)
+		}
+
+		type pingResp struct {
+			err error
+		}
+		ch := make(chan pingResp, 1)
+		go func() {
+			if !proc.stdout.Scan() {
+				if err := proc.stdout.Err(); err != nil {
+					ch <- pingResp{err: fmt.Errorf("failed to read ping response: %w", err)}
+					return
+				}
+				ch <- pingResp{err: errors.New("no ping response")}
+				return
+			}
+			var resp struct {
+				Result any `json:"result"`
+				Error  any `json:"error"`
+			}
+			if err := json.Unmarshal(proc.stdout.Bytes(), &resp); err != nil {
+				ch <- pingResp{err: fmt.Errorf("invalid ping response: %w", err)}
+				return
+			}
+			if resp.Error != nil {
+				ch <- pingResp{err: errors.New("ping returned error")}
+				return
+			}
+			ch <- pingResp{err: nil}
+		}()
+
+		select {
+		case <-pingCtx.Done():
+			killAndWait(proc)
+			return nil, fmt.Errorf("dart process ping timeout: %w", pingCtx.Err())
+		case r := <-ch:
+			if r.err != nil {
+				killAndWait(proc)
+				return nil, r.err
+			}
+		}
+	}
+
+	return proc, nil
 }
 
 // readResponse reads a JSON-RPC response from the Dart process
 func (p *DartProcess) readResponse() (domain.ExecutionResult, error) {
 	if !p.stdout.Scan() {
+		if err := p.stdout.Err(); err != nil {
+			return domain.ExecutionResult{}, fmt.Errorf("failed to read response from Dart process: %w", err)
+		}
 		return domain.ExecutionResult{}, errors.New("no response from Dart process")
 	}
 

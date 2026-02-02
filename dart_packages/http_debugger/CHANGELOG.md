@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Reverse proxy now preserves query parameters from upstreamBaseUrl (merged with request query)
+
 ## 0.2.1
 
 - Repo hygiene: moved e2e tests to dedicated internal package

@@ -26,6 +26,9 @@ type RuntimeSettingsModel struct {
 	FontScale      float64
 	HighlightTheme string `gorm:"type:text"`
 
+	MappingEnabled     bool
+	MappingUploadMaxMB int
+
 	UpdatedAt time.Time
 }
 
@@ -62,6 +65,8 @@ func toSettingsModel(s sdomain.RuntimeSettings) *RuntimeSettingsModel {
 		ThrottleOffline:       s.ThrottleOffline,
 		FontScale:             s.FontScale,
 		HighlightTheme:        s.HighlightTheme,
+		MappingEnabled:        s.MappingEnabled,
+		MappingUploadMaxMB:    s.MappingUploadMaxMB,
 		UpdatedAt:             s.UpdatedAt,
 	}
 }
@@ -84,6 +89,8 @@ func toSettingsDomain(m *RuntimeSettingsModel) sdomain.RuntimeSettings {
 		ThrottleOffline:       m.ThrottleOffline,
 		FontScale:             m.FontScale,
 		HighlightTheme:        m.HighlightTheme,
+		MappingEnabled:        m.MappingEnabled,
+		MappingUploadMaxMB:    m.MappingUploadMaxMB,
 		UpdatedAt:             m.UpdatedAt,
 	}
 }

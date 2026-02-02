@@ -22,6 +22,10 @@ type RuntimeSettings struct {
 
 	HighlightTheme string
 
+	// Mapping (Map Local/Remote)
+	MappingEnabled     bool
+	MappingUploadMaxMB int
+
 	UpdatedAt time.Time
 }
 

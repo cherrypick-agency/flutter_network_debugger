@@ -103,10 +103,10 @@ func TestManager_InvalidRegex(t *testing.T) {
 	m.Update(rules) // Should not panic with invalid regex
 	u, _ := url.Parse("https://api.example.com/test")
 	req := &http.Request{Method: http.MethodGet, URL: u}
-	dec, ok := m.EvalRequest(req)
-	// Invalid regex is treated as no pattern, so it should match
-	if !ok || dec.RuleID != "r1" {
-		t.Fatal("invalid regex is treated as no pattern and should match")
+	_, ok := m.EvalRequest(req)
+	// Невалидные regex мы игнорируем, чтобы случайно не схватить "match everything".
+	if ok {
+		t.Fatal("invalid regex should be ignored and must not match")
 	}
 }
 
@@ -141,6 +141,77 @@ func TestManager_InvalidTargetURL(t *testing.T) {
 	}
 }
 
+func TestManager_RemoteTemplatePathToken(t *testing.T) {
+	m := New()
+	rules := []mdomain.MapRule{{
+		ID: "r1", Enabled: true, Priority: 1, Kind: mdomain.KindRemote,
+		HostPattern: "api.example.com", PathPattern: "/test", PatternType: mdomain.PatternGlob,
+		TargetURLTemplate: "https://target.example.com{path}?x=1",
+	}}
+	m.Update(rules)
+	u, _ := url.Parse("https://api.example.com/test")
+	req := &http.Request{Method: http.MethodGet, URL: u}
+	dec, ok := m.EvalRequest(req)
+	if !ok || dec.Kind != mdomain.KindRemote {
+		t.Fatalf("expected remote decision, got %+v ok=%v", dec, ok)
+	}
+	if dec.RemoteURL != "https://target.example.com/test?x=1" {
+		t.Fatalf("RemoteURL=%q want %q", dec.RemoteURL, "https://target.example.com/test?x=1")
+	}
+}
+
+func TestManager_RemoteTemplatePortWithColonToken_EmptyWhenNoPort(t *testing.T) {
+	m := New()
+	rules := []mdomain.MapRule{{
+		ID:                  "r1",
+		Enabled:             true,
+		Priority:            1,
+		Kind:                mdomain.KindRemote,
+		HostPattern:         "api.example.com",
+		PathPattern:         "/test",
+		PatternType:         mdomain.PatternGlob,
+		TargetURLTemplate:   "https://target.example.com{portWithColon}{path}?x=1",
+		StopProcessing:      true,
+		PreserveHost:        false,
+		ContentTypeOverride: "",
+	}}
+	m.Update(rules)
+	u, _ := url.Parse("https://api.example.com/test")
+	req := &http.Request{Method: http.MethodGet, URL: u}
+	dec, ok := m.EvalRequest(req)
+	if !ok || dec.Kind != mdomain.KindRemote {
+		t.Fatalf("expected remote decision, got %+v ok=%v", dec, ok)
+	}
+	if dec.RemoteURL != "https://target.example.com/test?x=1" {
+		t.Fatalf("RemoteURL=%q want %q", dec.RemoteURL, "https://target.example.com/test?x=1")
+	}
+}
+
+func TestManager_RemoteTemplatePortWithColonToken_IncludesPortWhenPresent(t *testing.T) {
+	m := New()
+	rules := []mdomain.MapRule{{
+		ID:                "r1",
+		Enabled:           true,
+		Priority:          1,
+		Kind:              mdomain.KindRemote,
+		HostPattern:       "api.example.com",
+		PathPattern:       "/test",
+		PatternType:       mdomain.PatternGlob,
+		TargetURLTemplate: "https://target.example.com{portWithColon}{path}",
+		StopProcessing:    true,
+	}}
+	m.Update(rules)
+	u, _ := url.Parse("https://api.example.com:8443/test")
+	req := &http.Request{Method: http.MethodGet, URL: u}
+	dec, ok := m.EvalRequest(req)
+	if !ok || dec.Kind != mdomain.KindRemote {
+		t.Fatalf("expected remote decision, got %+v ok=%v", dec, ok)
+	}
+	if dec.RemoteURL != "https://target.example.com:8443/test" {
+		t.Fatalf("RemoteURL=%q want %q", dec.RemoteURL, "https://target.example.com:8443/test")
+	}
+}
+
 func TestManager_MultipleRulesPriority(t *testing.T) {
 	m := New()
 	rules := []mdomain.MapRule{
@@ -158,8 +229,49 @@ func TestManager_MultipleRulesPriority(t *testing.T) {
 	u, _ := url.Parse("https://api.example.com/test")
 	req := &http.Request{Method: http.MethodGet, URL: u}
 	dec, ok := m.EvalRequest(req)
-	if !ok || dec.RuleID != "r1" {
-		t.Fatal("first rule should match (rules processed in order)")
+	if !ok || dec.RuleID != "r2" {
+		t.Fatal("rule with меньшим priority должен матчиться первым")
+	}
+}
+
+func TestManager_RemoteChaining_StopProcessingFalse(t *testing.T) {
+	m := New()
+	rules := []mdomain.MapRule{
+		{
+			ID:                "r1",
+			Enabled:           true,
+			Priority:          1,
+			Kind:              mdomain.KindRemote,
+			StopProcessing:    false,
+			HostPattern:       "api.example.com",
+			PathPattern:       "/v1/*",
+			PatternType:       mdomain.PatternGlob,
+			TargetURLTemplate: "https://stage.example.com{path}",
+		},
+		{
+			ID:                "r2",
+			Enabled:           true,
+			Priority:          2,
+			Kind:              mdomain.KindRemote,
+			StopProcessing:    true,
+			HostPattern:       "stage.example.com",
+			PathPattern:       "/v1/*",
+			PatternType:       mdomain.PatternGlob,
+			TargetURLTemplate: "https://final.example.com{path}",
+		},
+	}
+	m.Update(rules)
+	u, _ := url.Parse("https://api.example.com/v1/users")
+	req := &http.Request{Method: http.MethodGet, URL: u}
+	dec, ok := m.EvalRequest(req)
+	if !ok || dec.Kind != mdomain.KindRemote {
+		t.Fatalf("expected remote decision, got %+v ok=%v", dec, ok)
+	}
+	if dec.RuleID != "r2" {
+		t.Fatalf("expected last rule r2, got %q", dec.RuleID)
+	}
+	if dec.RemoteURL != "https://final.example.com/v1/users" {
+		t.Fatalf("RemoteURL=%q want %q", dec.RemoteURL, "https://final.example.com/v1/users")
 	}
 }
 

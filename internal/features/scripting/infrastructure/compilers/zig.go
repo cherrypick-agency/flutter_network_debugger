@@ -39,7 +39,10 @@ func (c *ZigCompiler) IsAvailable() bool {
 	zigPath, err := c.getZigBinary()
 	if err != nil {
 		// Try system zig as fallback
-		cmd := exec.Command("zig", "version")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "zig", "version")
 		if err := cmd.Run(); err != nil {
 			return false
 		}

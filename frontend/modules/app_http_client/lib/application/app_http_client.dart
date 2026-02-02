@@ -28,7 +28,7 @@ abstract class AppHttpClient {
     String path = '',
     Map<String, dynamic>? query,
     Map<String, dynamic>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
     required HttpMethod method,
     Map<String, String>? fields,
   });
@@ -45,7 +45,7 @@ abstract class AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   });
 
   Future<Response<T>> put<T>({
@@ -53,7 +53,7 @@ abstract class AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   });
 
   Future<Response<T>> delete<T>({
@@ -61,7 +61,7 @@ abstract class AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   });
 
   Future<Response<T>> patch<T>({
@@ -69,7 +69,7 @@ abstract class AppHttpClient {
     String path = '',
     Map<String, String>? query,
     Map<String, String>? headers,
-    Map<String, dynamic>? body,
+    Object? body,
   });
 
   Future<Response<T>> filesPost<T>({

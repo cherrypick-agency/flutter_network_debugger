@@ -2,7 +2,18 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
+)
+
+const (
+	// maxScriptTimeoutMs - верхняя граница, чтобы скрипты не могли "повесить" запрос/процесс.
+	// Если нужно больше — лучше делать это осознанно через отдельную настройку на уровне сервиса.
+	maxScriptTimeoutMs = 60_000 // 60s
+
+	// maxWASMMemoryLimitMB - ограничение памяти для WASM (Extism/Wazero), чтобы не словить OOM.
+	// 1024MB = 1GB; выше почти всегда ошибка конфигурации или DoS-вектор.
+	maxWASMMemoryLimitMB = 1024
 )
 
 // Script is the aggregate root entity for scripting feature
@@ -88,6 +99,16 @@ func (s *Script) Validate() error {
 	}
 	if s.Config.MemoryLimitMB <= 0 {
 		s.Config.MemoryLimitMB = 10 // default 10MB
+	}
+
+	if s.Config.TimeoutMs > maxScriptTimeoutMs {
+		return fmt.Errorf("script timeout is too large: %dms (max %dms)", s.Config.TimeoutMs, maxScriptTimeoutMs)
+	}
+
+	// Ограничение по памяти актуально только для WASM-runtime'ов, но держим в домене,
+	// чтобы не разъезжались ожидания между слоями.
+	if s.Runtime == RuntimeExtism && s.Config.MemoryLimitMB > maxWASMMemoryLimitMB {
+		return fmt.Errorf("script memory limit is too large: %dMB (max %dMB)", s.Config.MemoryLimitMB, maxWASMMemoryLimitMB)
 	}
 
 	// Set default compilation status
@@ -194,17 +215,21 @@ type ScriptContext struct {
 
 // HTTPRequest represents an HTTP request for scripts
 type HTTPRequest struct {
-	Method  string              `json:"method"`
-	URL     string              `json:"url"`
-	Headers map[string][]string `json:"headers"`
-	Body    []byte              `json:"body"`
+	Method           string              `json:"method"`
+	URL              string              `json:"url"`
+	Headers          map[string][]string `json:"headers"`
+	Body             []byte              `json:"body"`
+	BodyTruncated    bool                `json:"body_truncated,omitempty"`
+	OriginalBodySize int                 `json:"original_body_size,omitempty"`
 }
 
 // HTTPResponse represents an HTTP response for scripts
 type HTTPResponse struct {
-	Status  int                 `json:"status"`
-	Headers map[string][]string `json:"headers"`
-	Body    []byte              `json:"body"`
+	Status           int                 `json:"status"`
+	Headers          map[string][]string `json:"headers"`
+	Body             []byte              `json:"body"`
+	BodyTruncated    bool                `json:"body_truncated,omitempty"`
+	OriginalBodySize int                 `json:"original_body_size,omitempty"`
 }
 
 // SessionInfo contains session metadata

@@ -1,11 +1,15 @@
 package proxyruntime
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	socks5 "github.com/armon/go-socks5"
@@ -40,7 +44,17 @@ func (m *Manager) StartForward(addr string, handler http.Handler) error {
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		if errors.Is(err, syscall.EADDRINUSE) {
+			health := probeHTTPHealth(addrsForPortProbe(addr))
+			if health.ok {
+				return fmt.Errorf("forward listen %s: %w (port is already in use; existing service answers /healthz: %s)", addr, err, health.summary)
+			}
+			if health.summary != "" {
+				return fmt.Errorf("forward listen %s: %w (port is already in use; existing service does NOT answer /healthz: %s)", addr, err, health.summary)
+			}
+			return fmt.Errorf("forward listen %s: %w (port is already in use; existing service does NOT answer /healthz)", addr, err)
+		}
+		return fmt.Errorf("forward listen %s: %w", addr, err)
 	}
 	m.fwdLn = ln
 	m.fwdSrv = &http.Server{
@@ -54,10 +68,23 @@ func (m *Manager) StartForward(addr string, handler http.Handler) error {
 	// Захватим ссылку локально, чтобы избежать гонки при StopForward()
 	srv := m.fwdSrv
 	go func() {
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		err := srv.Serve(ln)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			if m.log != nil {
 				m.log.Error().Err(err).Msg("forward proxy server error")
 			}
+			// Если Serve внезапно завершился, порт может остаться "слушать" без accept loop,
+			// и клиенты будут успешно коннектиться по TCP, но никогда не получат HTTP-ответ.
+			// Закрываем листенер и чистим состояние, чтобы проблема была заметна и лечилась рестартом.
+			_ = ln.Close()
+			m.mu.Lock()
+			if m.fwdLn == ln {
+				m.fwdLn = nil
+			}
+			if m.fwdSrv == srv {
+				m.fwdSrv = nil
+			}
+			m.mu.Unlock()
 		}
 	}()
 	if m.log != nil {
@@ -119,7 +146,17 @@ func (m *Manager) StartSocks(addr, authMode, user, pass string) error {
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		if errors.Is(err, syscall.EADDRINUSE) {
+			health := probeHTTPHealth(addrsForPortProbe(addr))
+			if health.ok {
+				return fmt.Errorf("socks listen %s: %w (port is already in use; existing service answers /healthz: %s)", addr, err, health.summary)
+			}
+			if health.summary != "" {
+				return fmt.Errorf("socks listen %s: %w (port is already in use; existing service does NOT answer /healthz: %s)", addr, err, health.summary)
+			}
+			return fmt.Errorf("socks listen %s: %w (port is already in use; existing service does NOT answer /healthz)", addr, err)
+		}
+		return fmt.Errorf("socks listen %s: %w", addr, err)
 	}
 	m.socksSrv = srv
 	m.socksLn = ln
@@ -204,4 +241,59 @@ func (m *Manager) Apply(ctx context.Context, cfg ApplyConfig, forwardHandler htt
 		_ = m.StopSocks(ctx)
 	}
 	return nil
+}
+
+type healthProbeResult struct {
+	ok      bool
+	summary string
+}
+
+func addrsForPortProbe(listenAddr string) []string {
+	// listenAddr can be ":9091", "127.0.0.1:9091", "[::]:9091"
+	// For probes we try loopback v4/v6 with the same port.
+	port := ""
+	if strings.HasPrefix(listenAddr, ":") {
+		port = strings.TrimPrefix(listenAddr, ":")
+	} else {
+		_, p, err := net.SplitHostPort(listenAddr)
+		if err == nil {
+			port = p
+		}
+	}
+	if port == "" {
+		return nil
+	}
+	return []string{
+		net.JoinHostPort("127.0.0.1", port),
+		net.JoinHostPort("::1", port),
+	}
+}
+
+func probeHTTPHealth(addrs []string) healthProbeResult {
+	const deadline = 300 * time.Millisecond
+	const req = "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+	if len(addrs) == 0 {
+		return healthProbeResult{ok: false, summary: "no probe addr"}
+	}
+	for _, a := range addrs {
+		c, err := net.DialTimeout("tcp", a, deadline)
+		if err != nil {
+			continue
+		}
+		_ = c.SetDeadline(time.Now().Add(deadline))
+		_, _ = c.Write([]byte(req))
+		br := bufio.NewReader(c)
+		line, _ := br.ReadString('\n')
+		_ = c.Close()
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Example: "HTTP/1.1 200 OK"
+		if strings.Contains(line, " 200 ") {
+			return healthProbeResult{ok: true, summary: fmt.Sprintf("%s -> %s", a, line)}
+		}
+		return healthProbeResult{ok: false, summary: fmt.Sprintf("%s -> %s", a, line)}
+	}
+	return healthProbeResult{ok: false, summary: "dial ok, but no http status line (or timeout)"}
 }

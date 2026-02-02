@@ -389,14 +389,37 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
 			// Mapping (MITM): оценим и применим до отправки апстриму
-			if d.MapRt != nil {
+			if d.Cfg.MappingEnabled && d.MapRt != nil {
 				if dec, ok := d.MapRt.EvalRequest(req); ok {
 					if dec.Kind == "local" {
 						var bodyAll []byte
+						var readErr error
 						if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
-							bodyAll, _ = os.ReadFile(*dec.LocalFilePath)
+							bodyAll, readErr = os.ReadFile(*dec.LocalFilePath)
 						} else if dec.LocalBlobPath != nil && *dec.LocalBlobPath != "" {
-							bodyAll, _ = os.ReadFile(*dec.LocalBlobPath)
+							bodyAll, readErr = os.ReadFile(*dec.LocalBlobPath)
+						}
+						if readErr != nil {
+							msg := []byte("mapping local source is not readable")
+							h := http.Header{}
+							h.Set("Content-Type", "text/plain; charset=utf-8")
+							h.Set("X-ND-Mapped", "local")
+							h.Set("X-ND-Rule", dec.RuleID)
+							h.Set("X-ND-Mapping-Error", "read_failed")
+							resp := &http.Response{
+								StatusCode:    http.StatusBadGateway,
+								Status:        strconv.Itoa(http.StatusBadGateway) + " " + http.StatusText(http.StatusBadGateway),
+								Header:        h,
+								Body:          io.NopCloser(bytes.NewReader(msg)),
+								ContentLength: int64(len(msg)),
+							}
+							preview := buildHTTPResponsePreview(resp)
+							fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(msg), Preview: preview}
+							_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+							d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+							d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+							_ = resp.Write(tlsSrv)
+							continue
 						}
 						h := http.Header{}
 						if dec.ContentTypeOverride != "" {
@@ -601,15 +624,47 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Mapping: Map Remote/Local
-	if d.MapRt != nil {
+	if d.Cfg.MappingEnabled && d.MapRt != nil {
 		if dec, ok := d.MapRt.EvalRequest(outReq); ok {
 			if dec.Kind == "local" {
 				// Прочитаем файл/блоб
 				var bodyAll []byte
+				var readErr error
 				if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
-					bodyAll, _ = os.ReadFile(*dec.LocalFilePath)
+					bodyAll, readErr = os.ReadFile(*dec.LocalFilePath)
 				} else if dec.LocalBlobPath != nil && *dec.LocalBlobPath != "" {
-					bodyAll, _ = os.ReadFile(*dec.LocalBlobPath)
+					bodyAll, readErr = os.ReadFile(*dec.LocalBlobPath)
+				}
+				if readErr != nil {
+					msg := []byte("mapping local source is not readable")
+					headers := http.Header{}
+					headers.Set("Content-Type", "text/plain; charset=utf-8")
+					headers.Set("X-ND-Mapped", "local")
+					headers.Set("X-ND-Rule", dec.RuleID)
+					headers.Set("X-ND-Mapping-Error", "read_failed")
+					resp := &http.Response{StatusCode: http.StatusBadGateway, Status: strconv.Itoa(http.StatusBadGateway) + " " + http.StatusText(http.StatusBadGateway), Header: headers, Body: io.NopCloser(bytes.NewReader(msg)), ContentLength: int64(len(msg))}
+					if shouldMonitor {
+						preview := buildHTTPResponsePreview(resp)
+						fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: len(msg), Preview: preview}
+						_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
+						d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
+						d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
+						if d.Metrics != nil && d.Metrics.MappingAppliedTotal != nil {
+							d.Metrics.MappingAppliedTotal.WithLabelValues("local").Inc()
+						}
+						d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
+					}
+					copyHeader(w.Header(), headers)
+					w.Header().Set("Connection", "close")
+					w.Header().Set("Content-Length", strconv.Itoa(len(msg)))
+					w.WriteHeader(http.StatusBadGateway)
+					_, _ = w.Write(msg)
+					if shouldMonitor {
+						_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
+						d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+						d.Metrics.ActiveSessions.Dec()
+					}
+					return
 				}
 				// Сформируем ответ
 				headers := http.Header{}

@@ -748,9 +748,9 @@ func TestProcessPool_StartProcess_Failure(t *testing.T) {
 	}
 
 	_, err := pool.startProcess()
-	// startProcess может не вернуть ошибку сразу, но процесс не запустится
-	// Проверяем что функция выполнилась (может вернуть nil или ошибку)
-	_ = err
+	if err == nil {
+		t.Fatal("expected startProcess to fail for nonexistent script_runner.dart")
+	}
 }
 
 // TestDartProcess_ReadResponse_InvalidJSON tests readResponse with invalid JSON

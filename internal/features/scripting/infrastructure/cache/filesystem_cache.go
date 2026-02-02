@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -43,10 +44,52 @@ func (f *FileSystemCache) GetCacheDir() string {
 	return filepath.Join(f.baseDir, "compilers")
 }
 
+func sanitizeCompilerKey(language string) (string, error) {
+	key := strings.TrimSpace(language)
+	if key == "" {
+		return "", fmt.Errorf("invalid compiler key: empty")
+	}
+
+	// Нам нужен ровно один сегмент директории внутри cacheDir.
+	// Запрещаем любые разделители и volume-часть.
+	if strings.ContainsAny(key, `/\:`) {
+		return "", fmt.Errorf("invalid compiler key: %q", language)
+	}
+	clean := filepath.Clean(key)
+	if clean != key || clean == "." || clean == ".." {
+		return "", fmt.Errorf("invalid compiler key: %q", language)
+	}
+
+	return key, nil
+}
+
+func (f *FileSystemCache) compilerPath(language string) (string, error) {
+	key, err := sanitizeCompilerKey(language)
+	if err != nil {
+		return "", err
+	}
+
+	cacheDir := f.GetCacheDir()
+	path := filepath.Join(cacheDir, key)
+
+	rel, err := filepath.Rel(cacheDir, path)
+	if err != nil {
+		return "", fmt.Errorf("invalid compiler key: %q", language)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid compiler key: %q", language)
+	}
+
+	return path, nil
+}
+
 // GetCompilerPath returns the path to a specific compiler in cache
 // Returns error if compiler not in cache
 func (f *FileSystemCache) GetCompilerPath(language string) (string, error) {
-	compilerPath := filepath.Join(f.GetCacheDir(), language)
+	compilerPath, err := f.compilerPath(language)
+	if err != nil {
+		return "", err
+	}
 
 	// Check if compiler directory exists
 	info, err := os.Stat(compilerPath)
@@ -79,10 +122,13 @@ func (f *FileSystemCache) EnsureCacheDir() error {
 
 // Clear removes a specific compiler from cache
 func (f *FileSystemCache) Clear(language string) error {
-	compilerPath := filepath.Join(f.GetCacheDir(), language)
+	compilerPath, err := f.compilerPath(language)
+	if err != nil {
+		return err
+	}
 
 	// Check if compiler exists
-	_, err := os.Stat(compilerPath)
+	_, err = os.Stat(compilerPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Already removed, no error
@@ -163,10 +209,13 @@ func (f *FileSystemCache) GetCacheSize() (int64, error) {
 // GetCompilerSize returns size of specific compiler in bytes
 // Returns 0 if not in cache
 func (f *FileSystemCache) GetCompilerSize(language string) (int64, error) {
-	compilerPath := filepath.Join(f.GetCacheDir(), language)
+	compilerPath, err := f.compilerPath(language)
+	if err != nil {
+		return 0, err
+	}
 
 	// Check if compiler exists
-	_, err := os.Stat(compilerPath)
+	_, err = os.Stat(compilerPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil // Not in cache
@@ -195,7 +244,10 @@ func (f *FileSystemCache) GetCompilerSize(language string) (int64, error) {
 
 // IsCompilerCached checks if a specific compiler is in cache
 func (f *FileSystemCache) IsCompilerCached(language string) bool {
-	compilerPath := filepath.Join(f.GetCacheDir(), language)
+	compilerPath, err := f.compilerPath(language)
+	if err != nil {
+		return false
+	}
 
 	info, err := os.Stat(compilerPath)
 	if err != nil {
@@ -208,6 +260,9 @@ func (f *FileSystemCache) IsCompilerCached(language string) bool {
 // GetCompilerBinaryPath returns the path to the compiler binary executable
 // This is a helper method for finding the actual compiler binary within the cached directory
 func (f *FileSystemCache) GetCompilerBinaryPath(language string) (string, error) {
+	if _, err := sanitizeCompilerKey(language); err != nil {
+		return "", err
+	}
 	compilerPath, err := f.GetCompilerPath(language)
 	if err != nil {
 		return "", err

@@ -31,17 +31,26 @@ class _MappingDialogState extends State<MappingDialog>
   }
 
   @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final http = sl<app_http.AppHttpClient>();
     final repo = MappingRepositoryImpl(MappingApi(http));
+    final mq = MediaQuery.sizeOf(context);
+    final w = (mq.width - 48).clamp(320.0, 900.0).toDouble();
+    final h = (mq.height - 48).clamp(320.0, 600.0).toDouble();
     return Center(
       child: Material(
         color: Theme.of(context).colorScheme.surface,
         elevation: 8,
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: 900,
-          height: 600,
+          width: w,
+          height: h,
           child: MultiProvider(
             providers: [
               ChangeNotifierProvider(create: (_) => MappingStore(repo)..load()),
@@ -127,6 +136,7 @@ class _RulesPanel extends StatelessWidget {
                 onPressed: () async {
                   await showDialog<bool>(
                     context: context,
+                    useRootNavigator: false,
                     builder: (_) => const Dialog(child: MappingRuleEditor()),
                   );
                 },
@@ -251,6 +261,7 @@ class _RuleTile extends StatelessWidget {
             onPressed: () async {
               await showDialog<bool>(
                 context: context,
+                useRootNavigator: false,
                 builder: (_) => Dialog(child: MappingRuleEditor(initial: r)),
               );
             },
@@ -299,18 +310,33 @@ class _ConfigPanel extends StatefulWidget {
 
 class _ConfigPanelState extends State<_ConfigPanel> {
   late final TextEditingController _uploadCtrl;
+  late final FocusNode _uploadFocus;
+  late final MappingConfigStore _store;
 
   @override
   void initState() {
     super.initState();
-    final cfg = context.read<MappingConfigStore>().config;
-    _uploadCtrl = TextEditingController(
-      text: (cfg?.uploadMaxMB ?? 20).toString(),
-    );
+    _uploadFocus = FocusNode();
+    _uploadCtrl = TextEditingController(text: '20');
+    _store = context.read<MappingConfigStore>();
+    _store.addListener(_syncFromStore);
+    _syncFromStore();
+  }
+
+  void _syncFromStore() {
+    final cfg = _store.config;
+    if (cfg == null) return;
+    if (_uploadFocus.hasFocus) return;
+    final desired = cfg.uploadMaxMB.toString();
+    if (_uploadCtrl.text != desired) {
+      _uploadCtrl.text = desired;
+    }
   }
 
   @override
   void dispose() {
+    _store.removeListener(_syncFromStore);
+    _uploadFocus.dispose();
     _uploadCtrl.dispose();
     super.dispose();
   }
@@ -319,6 +345,7 @@ class _ConfigPanelState extends State<_ConfigPanel> {
   Widget build(BuildContext context) {
     final store = context.watch<MappingConfigStore>();
     final cfg = store.config;
+    final canEdit = !store.loading && cfg != null;
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -333,20 +360,22 @@ class _ConfigPanelState extends State<_ConfigPanel> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Enabled'),
                   value: cfg?.enabled ?? true,
-                  onChanged: (v) async {
-                    try {
-                      final c = MappingConfig(
-                        enabled: v,
-                        uploadMaxMB: int.tryParse(_uploadCtrl.text) ?? 20,
-                      );
-                      await store.save(c);
-                    } catch (e) {
-                      sl<NotificationsService>().error(
-                        'Save failed',
-                        e.toString(),
-                      );
-                    }
-                  },
+                  onChanged: !canEdit
+                      ? null
+                      : (v) async {
+                          try {
+                            final c = MappingConfig(
+                              enabled: v,
+                              uploadMaxMB: int.tryParse(_uploadCtrl.text) ?? 20,
+                            );
+                            await store.save(c);
+                          } catch (e) {
+                            sl<NotificationsService>().error(
+                              'Save failed',
+                              e.toString(),
+                            );
+                          }
+                        },
                 ),
               ),
               const Spacer(),
@@ -370,38 +399,49 @@ class _ConfigPanelState extends State<_ConfigPanel> {
             width: 220,
             child: TextField(
               controller: _uploadCtrl,
+              focusNode: _uploadFocus,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.done,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onSubmitted: (_) async {
-                try {
-                  final val = int.tryParse(_uploadCtrl.text.trim()) ?? 20;
-                  final c = MappingConfig(
-                    enabled: cfg?.enabled ?? true,
-                    uploadMaxMB: val,
-                  );
-                  await store.save(c);
-                } catch (e) {
-                  sl<NotificationsService>().error('Save failed', e.toString());
-                }
-              },
+              onSubmitted: !canEdit
+                  ? null
+                  : (_) async {
+                      try {
+                        final val = int.tryParse(_uploadCtrl.text.trim()) ?? 20;
+                        final c = MappingConfig(
+                          enabled: cfg.enabled,
+                          uploadMaxMB: val,
+                        );
+                        await store.save(c);
+                      } catch (e) {
+                        sl<NotificationsService>().error(
+                          'Save failed',
+                          e.toString(),
+                        );
+                      }
+                    },
               decoration: const InputDecoration(labelText: 'Upload max (MB)'),
             ),
           ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
-            onPressed: () async {
-              try {
-                final val = int.tryParse(_uploadCtrl.text.trim()) ?? 20;
-                final c = MappingConfig(
-                  enabled: cfg?.enabled ?? true,
-                  uploadMaxMB: val,
-                );
-                await store.save(c);
-              } catch (e) {
-                sl<NotificationsService>().error('Save failed', e.toString());
-              }
-            },
+            onPressed: !canEdit
+                ? null
+                : () async {
+                    try {
+                      final val = int.tryParse(_uploadCtrl.text.trim()) ?? 20;
+                      final c = MappingConfig(
+                        enabled: cfg.enabled,
+                        uploadMaxMB: val,
+                      );
+                      await store.save(c);
+                    } catch (e) {
+                      sl<NotificationsService>().error(
+                        'Save failed',
+                        e.toString(),
+                      );
+                    }
+                  },
             icon: const Icon(Icons.save),
             label: const Text('Save'),
           ),

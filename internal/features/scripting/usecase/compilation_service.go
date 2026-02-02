@@ -79,7 +79,9 @@ func (s *CompilationService) CompileScript(ctx context.Context, scriptID string,
 	if err != nil {
 		// Mark compilation as failed (domain behavior)
 		script.MarkCompilationError(err)
-		s.repo.Save(ctx, script)
+		if saveErr := s.repo.Save(ctx, script); saveErr != nil {
+			return nil, fmt.Errorf("compilation failed: %w (also failed to persist error state: %v)", err, saveErr)
+		}
 		return nil, fmt.Errorf("compilation failed: %w", err)
 	}
 
@@ -88,7 +90,9 @@ func (s *CompilationService) CompileScript(ctx context.Context, scriptID string,
 		if err := s.wasmValidator.ValidateWASM(result.WASMBinary, script.Language); err != nil {
 			script.MarkCompilationError(err)
 			script.MarkValidationError(err)
-			s.repo.Save(ctx, script)
+			if saveErr := s.repo.Save(ctx, script); saveErr != nil {
+				return nil, fmt.Errorf("WASM validation failed: %w (also failed to persist error state: %v)", err, saveErr)
+			}
 			return nil, fmt.Errorf("WASM validation failed: %w", err)
 		}
 	}

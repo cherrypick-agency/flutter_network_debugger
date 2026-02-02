@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -319,7 +318,15 @@ func (z *ZigDownloader) GetMetadata(req domain.DownloadRequest) (*domain.Compile
 
 // fetchIndex fetches and parses Zig's download index.json
 func (z *ZigDownloader) fetchIndex() (*zigIndex, error) {
-	resp, err := http.Get(z.indexURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, z.indexURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := z.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch index: %w", err)
 	}
@@ -330,7 +337,7 @@ func (z *ZigDownloader) fetchIndex() (*zigIndex, error) {
 	}
 
 	// Read and parse JSON
-	body, err := io.ReadAll(resp.Body)
+	body, err := readAllLimited(resp.Body, 15*1024*1024)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read index: %w", err)
 	}

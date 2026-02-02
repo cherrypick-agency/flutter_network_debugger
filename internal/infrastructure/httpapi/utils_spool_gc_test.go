@@ -11,7 +11,7 @@ func TestCleanupSpoolDir_EmptyDir(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Should not panic with empty directory
-	cleanupSpoolDir(tempDir, 24*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 24*time.Hour)
 
 	// Directory should still exist
 	if _, err := os.Stat(tempDir); os.IsNotExist(err) {
@@ -31,7 +31,7 @@ func TestCleanupSpoolDir_NoMatchingFiles(t *testing.T) {
 		}
 	}
 
-	cleanupSpoolDir(tempDir, 1*time.Second)
+	cleanupSpoolDir(&Deps{}, tempDir, 1*time.Second)
 
 	// All files should still exist (not matching pattern)
 	for _, f := range files {
@@ -60,7 +60,7 @@ func TestCleanupSpoolDir_OldFilesRemoved(t *testing.T) {
 	}
 
 	// Clean up files older than 1 hour
-	cleanupSpoolDir(tempDir, 1*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 1*time.Hour)
 
 	// All old files should be deleted
 	for _, f := range oldFiles {
@@ -85,7 +85,7 @@ func TestCleanupSpoolDir_RecentFilesKept(t *testing.T) {
 	}
 
 	// Clean up files older than 1 hour (these files are recent)
-	cleanupSpoolDir(tempDir, 1*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 1*time.Hour)
 
 	// All recent files should still exist
 	for _, f := range recentFiles {
@@ -115,7 +115,7 @@ func TestCleanupSpoolDir_MixedFiles(t *testing.T) {
 	}
 
 	// Clean up files older than 1 hour
-	cleanupSpoolDir(tempDir, 1*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 1*time.Hour)
 
 	// Old file should be deleted
 	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
@@ -130,12 +130,12 @@ func TestCleanupSpoolDir_MixedFiles(t *testing.T) {
 
 func TestCleanupSpoolDir_DefaultDir(t *testing.T) {
 	// Should not panic with empty string (uses os.TempDir())
-	cleanupSpoolDir("", 24*time.Hour)
+	cleanupSpoolDir(&Deps{}, "", 24*time.Hour)
 }
 
 func TestCleanupSpoolDir_NonexistentDir(t *testing.T) {
 	// Should not panic with nonexistent directory
-	cleanupSpoolDir("/nonexistent/directory/path", 24*time.Hour)
+	cleanupSpoolDir(&Deps{}, "/nonexistent/directory/path", 24*time.Hour)
 }
 
 func TestCleanupSpoolDir_WithSubdirectories(t *testing.T) {
@@ -158,7 +158,7 @@ func TestCleanupSpoolDir_WithSubdirectories(t *testing.T) {
 	}
 
 	// Clean up files older than 1 hour
-	cleanupSpoolDir(tempDir, 1*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 1*time.Hour)
 
 	// Old file in subdirectory should be deleted
 	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
@@ -188,7 +188,7 @@ func TestCleanupSpoolDir_AllPatterns(t *testing.T) {
 	}
 
 	// Clean up files older than 1 hour
-	cleanupSpoolDir(tempDir, 1*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 1*time.Hour)
 
 	// All pattern files should be deleted
 	for _, prefix := range patterns {
@@ -215,7 +215,7 @@ func TestCleanupSpoolDir_ZeroDuration(t *testing.T) {
 	}
 
 	// Clean up with zero duration (everything older than "now" is deleted)
-	cleanupSpoolDir(tempDir, 0)
+	cleanupSpoolDir(&Deps{}, tempDir, 0)
 
 	// File should be deleted
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
@@ -237,7 +237,7 @@ func TestCleanupSpoolDir_VeryLongDuration(t *testing.T) {
 	}
 
 	// Clean up with very long duration (nothing is old enough)
-	cleanupSpoolDir(tempDir, 1000*time.Hour)
+	cleanupSpoolDir(&Deps{}, tempDir, 1000*time.Hour)
 
 	// File should still exist
 	if _, err := os.Stat(oldFile); os.IsNotExist(err) {

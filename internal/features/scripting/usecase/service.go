@@ -19,6 +19,18 @@ type ScriptService struct {
 	repo      domain.ScriptRepository
 }
 
+const maxScriptBodyBytes = 64 * 1024
+const maxScriptContextJSONBytes = 1024 * 1024
+const maxScriptResultJSONBytes = 1024 * 1024
+
+func trimBodyForScript(body []byte) (trimmed []byte, originalSize int, truncated bool) {
+	originalSize = len(body)
+	if originalSize <= maxScriptBodyBytes {
+		return body, originalSize, false
+	}
+	return body[:maxScriptBodyBytes], originalSize, true
+}
+
 // NewScriptService creates a new script service
 func NewScriptService(repo domain.ScriptRepository) *ScriptService {
 	return &ScriptService{
@@ -71,18 +83,37 @@ func (s *ScriptService) ExecuteForRequest(ctx context.Context, req *domain.HTTPR
 		}
 		log.Printf("[ScriptService] Found executor for runtime %s", script.Runtime)
 
-		// Skip scripts without compiled code (early validation)
-		if len(script.Code) == 0 {
+		// Skip scripts without executable code (early validation)
+		if script.Runtime == domain.RuntimeExtism && len(script.Code) == 0 {
 			log.Printf("[ScriptService] Skipping script '%s' (ID: %s) - no compiled code available", script.Name, script.ID)
+			continue
+		}
+		if script.Runtime == domain.RuntimeDart && len(script.Code) == 0 && script.SourceCode == "" {
+			log.Printf("[ScriptService] Skipping script '%s' (ID: %s) - no source code available", script.Name, script.ID)
 			continue
 		}
 
 		// Prepare script context
+		reqForScript := currentReq
+		if currentReq != nil {
+			r := *currentReq
+			r.Body, r.OriginalBodySize, r.BodyTruncated = trimBodyForScript(r.Body)
+			reqForScript = &r
+		}
+
 		scriptCtx := domain.ScriptContext{
-			Request: currentReq,
+			Request: reqForScript,
 			Session: session,
 		}
-		input, _ := json.Marshal(scriptCtx)
+		input, err := json.Marshal(scriptCtx)
+		if err != nil {
+			log.Printf("[ScriptService] Failed to marshal script context for %s: %v", script.Name, err)
+			continue
+		}
+		if len(input) > maxScriptContextJSONBytes {
+			log.Printf("[ScriptService] Script context is too large for %s: %d bytes", script.Name, len(input))
+			continue
+		}
 
 		// Execute script
 		result, err := executor.Execute(ctx, domain.ExecutionRequest{
@@ -97,6 +128,10 @@ func (s *ScriptService) ExecuteForRequest(ctx context.Context, req *domain.HTTPR
 
 		if result.Error != "" {
 			log.Printf("[ScriptService] Script %s returned error: %s", script.Name, result.Error)
+			continue
+		}
+		if len(result.Output) > maxScriptResultJSONBytes {
+			log.Printf("[ScriptService] Script %s output is too large: %d bytes", script.Name, len(result.Output))
 			continue
 		}
 
@@ -151,18 +186,43 @@ func (s *ScriptService) ExecuteForResponse(ctx context.Context, req *domain.HTTP
 			continue
 		}
 
-		// Skip scripts without compiled code (early validation)
-		if len(script.Code) == 0 {
+		// Skip scripts without executable code (early validation)
+		if script.Runtime == domain.RuntimeExtism && len(script.Code) == 0 {
 			log.Printf("[ScriptService] Skipping script '%s' (ID: %s) - no compiled code available", script.Name, script.ID)
 			continue
 		}
+		if script.Runtime == domain.RuntimeDart && len(script.Code) == 0 && script.SourceCode == "" {
+			log.Printf("[ScriptService] Skipping script '%s' (ID: %s) - no source code available", script.Name, script.ID)
+			continue
+		}
+
+		reqForScript := req
+		if req != nil {
+			r := *req
+			r.Body, r.OriginalBodySize, r.BodyTruncated = trimBodyForScript(r.Body)
+			reqForScript = &r
+		}
+		respForScript := currentResp
+		if currentResp != nil {
+			r := *currentResp
+			r.Body, r.OriginalBodySize, r.BodyTruncated = trimBodyForScript(r.Body)
+			respForScript = &r
+		}
 
 		scriptCtx := domain.ScriptContext{
-			Request:     req,
-			Response:    currentResp,
+			Request:     reqForScript,
+			Response:    respForScript,
 			Transaction: tx,
 		}
-		input, _ := json.Marshal(scriptCtx)
+		input, err := json.Marshal(scriptCtx)
+		if err != nil {
+			log.Printf("[ScriptService] Failed to marshal script context for %s: %v", script.Name, err)
+			continue
+		}
+		if len(input) > maxScriptContextJSONBytes {
+			log.Printf("[ScriptService] Script context is too large for %s: %d bytes", script.Name, len(input))
+			continue
+		}
 
 		result, err := executor.Execute(ctx, domain.ExecutionRequest{
 			Script: *script,
@@ -171,6 +231,10 @@ func (s *ScriptService) ExecuteForResponse(ctx context.Context, req *domain.HTTP
 
 		if err != nil || result.Error != "" {
 			log.Printf("[ScriptService] Script %s failed: %v %s", script.Name, err, result.Error)
+			continue
+		}
+		if len(result.Output) > maxScriptResultJSONBytes {
+			log.Printf("[ScriptService] Script %s output is too large: %d bytes", script.Name, len(result.Output))
 			continue
 		}
 
@@ -197,6 +261,7 @@ func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *dom
 	// Parse URL once if needed for host/path matching
 	var parsedURL *url.URL
 	var parseErr error
+	var parseAttempted bool
 
 	for _, script := range scripts {
 		// If no match rules defined, script matches everything
@@ -222,18 +287,29 @@ func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *dom
 		}
 
 		// Parse URL lazily (only if needed for host or path matching)
-		if (script.MatchRules.HostPattern != "" || script.MatchRules.PathPattern != "") && parsedURL == nil {
-			parsedURL, parseErr = url.Parse(req.URL)
-			if parseErr != nil {
-				log.Printf("[ScriptService] Failed to parse URL %s: %v", req.URL, parseErr)
-				// If URL parsing fails, no scripts will match host/path patterns
-				break
+		if script.MatchRules.HostPattern != "" || script.MatchRules.PathPattern != "" {
+			if !parseAttempted {
+				parsedURL, parseErr = url.Parse(req.URL)
+				parseAttempted = true
+				if parseErr != nil {
+					log.Printf("[ScriptService] Failed to parse URL %s: %v", req.URL, parseErr)
+				}
+			}
+
+			// Если URL не распарсился — просто не матчим host/path правила, но продолжаем цикл.
+			if parseErr != nil || parsedURL == nil {
+				continue
 			}
 		}
 
 		// Check host pattern match
 		if script.MatchRules.HostPattern != "" {
-			hostMatched := s.matchPattern(parsedURL.Host, script.MatchRules.HostPattern, script.MatchRules.PatternType)
+			hostToMatch := parsedURL.Hostname()
+			if hostToMatch == "" {
+				// На всякий случай: если Hostname пустой, то host-правило не матчит.
+				continue
+			}
+			hostMatched := s.matchPattern(hostToMatch, script.MatchRules.HostPattern, script.MatchRules.PatternType)
 			if !hostMatched {
 				continue
 			}
@@ -417,8 +493,15 @@ func (s *ScriptService) TestScript(ctx context.Context, script *domain.Script, t
 	}
 
 	// Create test script context
+	reqForScript := testReq
+	if testReq != nil {
+		r := *testReq
+		r.Body, r.OriginalBodySize, r.BodyTruncated = trimBodyForScript(r.Body)
+		reqForScript = &r
+	}
+
 	scriptCtx := domain.ScriptContext{
-		Request: testReq,
+		Request: reqForScript,
 		Session: &domain.SessionInfo{
 			ID:         "test-session",
 			ClientAddr: "127.0.0.1",
@@ -429,6 +512,9 @@ func (s *ScriptService) TestScript(ctx context.Context, script *domain.Script, t
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal context: %w", err)
 	}
+	if len(input) > maxScriptContextJSONBytes {
+		return nil, nil, fmt.Errorf("script context is too large: %d bytes", len(input))
+	}
 
 	// Execute script
 	result, err := executor.Execute(ctx, domain.ExecutionRequest{
@@ -438,6 +524,9 @@ func (s *ScriptService) TestScript(ctx context.Context, script *domain.Script, t
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("execution failed: %w", err)
+	}
+	if len(result.Output) > maxScriptResultJSONBytes {
+		return nil, result.Logs, fmt.Errorf("script output is too large: %d bytes", len(result.Output))
 	}
 
 	// Parse script result

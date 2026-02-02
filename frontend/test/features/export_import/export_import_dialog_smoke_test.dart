@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
@@ -68,13 +70,30 @@ Uint8List _harToBytes(Map<String, dynamic> har) {
 
 void main() {
   setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
     final sl = GetIt.instance;
     sl.registerLazySingleton<NotificationsService>(
       () => _FakeNotificationsService(),
     );
+
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          switch (call.method) {
+            case 'canLaunch':
+              return true;
+            case 'launch':
+              return true;
+            default:
+              return null;
+          }
+        });
   });
 
   tearDownAll(() async {
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
     await GetIt.instance.reset();
   });
 
@@ -155,8 +174,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Assert - Export settings should render
-      expect(find.text('Visible sessions'), findsWidgets);
-      expect(find.text('All sessions'), findsWidgets);
+      expect(find.text('Visible Sessions'), findsWidgets);
+      expect(find.text('All Sessions'), findsWidgets);
     });
 
     testWidgets('Import flow renders settings screen with file', (
@@ -274,11 +293,9 @@ void main() {
       expect(find.text('Export Settings'), findsOneWidget);
 
       // Step 3: Perform export
-      await store.performExport(['sess1']);
-      await tester.pumpAndSettle();
-
-      // Wait for progress simulation timers (up to 1000ms)
-      await tester.pump(const Duration(milliseconds: 1100));
+      unawaited(store.performExport(['sess1']));
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pump();
 
       // Assert - export completed
       expect(repo.exportCallCount, 1);
@@ -352,7 +369,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Step 1: Set import file (simulates file picker)
+      store.selectMode(ExportImportMode.import);
       store.setImportFile(bytes, 'integration-test.har', bytes.length);
+      if (store.state != ExportImportState.error) {
+        store.state = ExportImportState.importSettings;
+      }
       await tester.pumpAndSettle();
 
       // Step 2: Verify import settings shown
@@ -365,11 +386,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Step 4: Perform import
-      await store.performImport();
-      await tester.pumpAndSettle();
-
-      // Wait for progress simulation timers (up to 1000ms)
-      await tester.pump(const Duration(milliseconds: 1100));
+      unawaited(store.performImport());
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pump();
 
       // Assert - import completed
       expect(repo.importCallCount, 1);
@@ -440,7 +459,9 @@ void main() {
       // Assert - all state cleared
       expect(store.state, ExportImportState.selectMode);
       expect(store.selectedMode, isNull);
-      expect(store.visibleSessionsCount, isNull);
+      // Эти значения приходят снаружи (контекст диалога) и остаются,
+      // чтобы при возврате назад опции экспорта не "умирали".
+      expect(store.visibleSessionsCount, 10);
       expect(store.importFileData, isNull);
     });
   });

@@ -96,71 +96,92 @@ const (
 	CircuitOpen     uint32 = 2 // Failing, rejecting requests
 )
 
-// init validates configuration constants at startup
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func clampDuration(v, min, max time.Duration) time.Duration {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func clampFloat64(v, min, max float64) float64 {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+var (
+	effectiveMaxConcurrentPerScript = clampInt(MaxConcurrentPerScript, 1, 1000)
+	effectiveInstanceTTL            = clampDuration(InstanceTTL, 10*time.Second, time.Hour)
+	effectiveMaxUseCount            = int64(clampInt(MaxUseCount, 1, 10000))
+	effectiveMaxIdlePerScript       = clampInt(MaxIdlePerScript, 0, 100)
+	effectiveCircuitErrorThreshold  = clampFloat64(CircuitErrorThreshold, 0.000001, 1)
+	effectiveCircuitMinSamples      = int64(clampInt(CircuitMinSamples, 1, 1_000_000))
+	effectiveCircuitRecoveryTime    = clampDuration(CircuitRecoveryTime, time.Second, 30*time.Minute)
+	effectiveCleanupInterval        = clampDuration(CleanupInterval, 10*time.Second, 30*time.Minute)
+)
+
+// init validates configuration constants at startup (без паники: используем безопасные значения)
 func init() {
-	// Validate concurrency limits
-	if MaxConcurrentPerScript < 1 {
-		panic("MaxConcurrentPerScript must be >= 1")
+	if effectiveMaxConcurrentPerScript != MaxConcurrentPerScript ||
+		effectiveInstanceTTL != InstanceTTL ||
+		effectiveMaxUseCount != MaxUseCount ||
+		effectiveMaxIdlePerScript != MaxIdlePerScript ||
+		effectiveCircuitErrorThreshold != CircuitErrorThreshold ||
+		effectiveCircuitMinSamples != CircuitMinSamples ||
+		effectiveCircuitRecoveryTime != CircuitRecoveryTime ||
+		effectiveCleanupInterval != CleanupInterval {
+		log.Printf(
+			"[PluginPool] Configuration adjusted to safe values: MaxConcurrent=%d, TTL=%v, MaxUse=%d, MaxIdle=%d, CircuitThreshold=%.3f, CircuitMinSamples=%d, CircuitRecovery=%v, CleanupInterval=%v",
+			effectiveMaxConcurrentPerScript,
+			effectiveInstanceTTL,
+			effectiveMaxUseCount,
+			effectiveMaxIdlePerScript,
+			effectiveCircuitErrorThreshold,
+			effectiveCircuitMinSamples,
+			effectiveCircuitRecoveryTime,
+			effectiveCleanupInterval,
+		)
+	} else {
+		log.Printf(
+			"[PluginPool] Configuration validated: MaxConcurrent=%d, TTL=%v, MaxUse=%d, MaxIdle=%d",
+			effectiveMaxConcurrentPerScript,
+			effectiveInstanceTTL,
+			effectiveMaxUseCount,
+			effectiveMaxIdlePerScript,
+		)
 	}
-	if MaxConcurrentPerScript > 1000 {
-		panic("MaxConcurrentPerScript must be <= 1000 (prevents resource exhaustion)")
-	}
-
-	// Validate TTL
-	if InstanceTTL < 10*time.Second {
-		panic("InstanceTTL must be >= 10s (prevents excessive churn)")
-	}
-	if InstanceTTL > 1*time.Hour {
-		panic("InstanceTTL must be <= 1h (prevents stale instances)")
-	}
-
-	// Validate use count
-	if MaxUseCount < 1 {
-		panic("MaxUseCount must be >= 1")
-	}
-	if MaxUseCount > 10000 {
-		panic("MaxUseCount must be <= 10000 (prevents memory leaks)")
-	}
-
-	// Validate pool size
-	if MaxIdlePerScript < 0 {
-		panic("MaxIdlePerScript must be >= 0")
-	}
-	if MaxIdlePerScript > 100 {
-		panic("MaxIdlePerScript must be <= 100 (prevents memory exhaustion)")
-	}
-
-	// Validate circuit breaker
-	if CircuitErrorThreshold <= 0 || CircuitErrorThreshold > 1 {
-		panic("CircuitErrorThreshold must be in range (0, 1]")
-	}
-	if CircuitMinSamples < 1 {
-		panic("CircuitMinSamples must be >= 1")
-	}
-	if CircuitRecoveryTime < 1*time.Second {
-		panic("CircuitRecoveryTime must be >= 1s")
-	}
-
-	// Validate cleanup interval
-	if CleanupInterval < 10*time.Second {
-		panic("CleanupInterval must be >= 10s (prevents excessive CPU usage)")
-	}
-
-	log.Printf("[PluginPool] Configuration validated: MaxConcurrent=%d, TTL=%v, MaxUse=%d, MaxIdle=%d",
-		MaxConcurrentPerScript, InstanceTTL, MaxUseCount, MaxIdlePerScript)
 }
 
 // NewPluginPool creates a new plugin pool for a script
 func NewPluginPool(script domain.Script, createFunc func(context.Context, domain.Script) (*extism.Plugin, error)) *PluginPool {
 	if createFunc == nil {
-		panic("createFunc cannot be nil")
+		createFunc = func(context.Context, domain.Script) (*extism.Plugin, error) {
+			return nil, errors.New("plugin createFunc is nil")
+		}
 	}
 
 	pool := &PluginPool{
 		scriptID:    script.ID,
 		script:      script,
 		active:      make(map[*pooledPlugin]struct{}),
-		semaphore:   make(chan struct{}, MaxConcurrentPerScript),
+		semaphore:   make(chan struct{}, effectiveMaxConcurrentPerScript),
 		closedCh:    make(chan struct{}),
 		stopCleanup: make(chan struct{}),
 		createFunc:  createFunc,
@@ -194,7 +215,7 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 			lastError = time.Time{}
 		}
 
-		if time.Since(lastError) > CircuitRecoveryTime {
+		if time.Since(lastError) > effectiveCircuitRecoveryTime {
 			// Atomically transition OPEN → HALF_OPEN
 			// CompareAndSwap ensures only one goroutine does the transition
 			if p.circuitState.CompareAndSwap(CircuitOpen, CircuitHalfOpen) {
@@ -202,7 +223,7 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 			}
 			// Continue execution in half-open state (allow test request)
 		} else {
-			return nil, fmt.Errorf("circuit breaker open (wait %v)", CircuitRecoveryTime-time.Since(lastError))
+			return nil, fmt.Errorf("circuit breaker open (wait %v)", effectiveCircuitRecoveryTime-time.Since(lastError))
 		}
 	}
 
@@ -244,7 +265,7 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 		age := time.Since(instance.createdAt)
 		uses := instance.useCount.Load()
 
-		if age > InstanceTTL || uses >= MaxUseCount {
+		if age > effectiveInstanceTTL || uses >= effectiveMaxUseCount {
 			// Expired, close and force recreation
 			p.mu.Unlock()
 			_ = instance.safeClose(context.Background())
@@ -275,6 +296,29 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 
 		plugin, createErr := p.createFunc(ctx, p.script)
 		if createErr != nil {
+			// Учитываем ошибку создания в circuit breaker, иначе можно бесконечно жечь CPU на компиляции.
+			total := p.totalCount.Add(1)
+			errors := p.errorCount.Add(1)
+			p.lastErrorTime.Store(time.Now())
+
+			errorRate := float64(errors) / float64(total)
+			if total >= effectiveCircuitMinSamples {
+				for {
+					currentState := p.circuitState.Load()
+					if errorRate > effectiveCircuitErrorThreshold {
+						if currentState == CircuitClosed || currentState == CircuitHalfOpen {
+							if p.circuitState.CompareAndSwap(currentState, CircuitOpen) {
+								log.Printf("[PluginPool:%s] Circuit breaker OPEN (%.1f%% errors, %d/%d failures)",
+									p.scriptID, errorRate*100, errors, total)
+								break
+							}
+							continue
+						}
+					}
+					break
+				}
+			}
+
 			// Log detailed error with circuit breaker state
 			currentState := p.circuitState.Load()
 			stateStr := "CLOSED"
@@ -282,12 +326,6 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 				stateStr = "HALF-OPEN"
 			} else if currentState == CircuitOpen {
 				stateStr = "OPEN"
-			}
-			total := p.totalCount.Load()
-			errors := p.errorCount.Load()
-			errorRate := float64(0)
-			if total > 0 {
-				errorRate = float64(errors) / float64(total)
 			}
 			log.Printf("[PluginPool:%s] Failed to create plugin: %v (circuit: %s, errors: %d/%d = %.1f%%)",
 				p.scriptID, createErr, stateStr, errors, total, errorRate*100)
@@ -363,14 +401,14 @@ func (p *PluginPool) Release(instance *pooledPlugin, execErr error) {
 			p.scriptID, execErr, total, errors, errorRate*100)
 
 		// Check if should open circuit
-		if total >= CircuitMinSamples {
+		if total >= effectiveCircuitMinSamples {
 			// CAS retry loop to handle concurrent state changes correctly
 			// Prevents TOCTOU race where state changes between Load() and CAS
 			for {
 				currentState := p.circuitState.Load()
 
 				// Check if error rate exceeds threshold
-				if errorRate > CircuitErrorThreshold {
+				if errorRate > effectiveCircuitErrorThreshold {
 					// Can open from CLOSED or HALF_OPEN (not if already OPEN)
 					if currentState == CircuitClosed || currentState == CircuitHalfOpen {
 						// Try atomic transition to OPEN
@@ -434,7 +472,8 @@ func (p *PluginPool) Release(instance *pooledPlugin, execErr error) {
 	uses := instance.useCount.Load()
 	poolClosed := p.closed.Load()
 
-	shouldDiscard := age > InstanceTTL || uses >= MaxUseCount || poolClosed
+	ctxErr := execErr != nil && (errors.Is(execErr, context.DeadlineExceeded) || errors.Is(execErr, context.Canceled))
+	shouldDiscard := age > effectiveInstanceTTL || uses >= effectiveMaxUseCount || poolClosed || ctxErr
 
 	if shouldDiscard {
 		p.mu.Unlock()
@@ -460,7 +499,7 @@ func (p *PluginPool) Release(instance *pooledPlugin, execErr error) {
 	}
 
 	// Check pool size limit
-	if len(p.idle) >= MaxIdlePerScript {
+	if len(p.idle) >= effectiveMaxIdlePerScript {
 		// Evict oldest (first in slice)
 		oldest := p.idle[0]
 		p.idle = p.idle[1:]
@@ -616,7 +655,7 @@ skipBackgroundWait:
 func (p *PluginPool) cleanupLoop() {
 	defer p.wg.Done()
 
-	ticker := time.NewTicker(CleanupInterval)
+	ticker := time.NewTicker(effectiveCleanupInterval)
 	defer ticker.Stop()
 
 	for {
@@ -652,7 +691,7 @@ func (p *PluginPool) cleanup() {
 		age := now.Sub(instance.createdAt)
 		uses := instance.useCount.Load()
 
-		if age > InstanceTTL || uses >= MaxUseCount {
+		if age > effectiveInstanceTTL || uses >= effectiveMaxUseCount {
 			// Expired - close it
 			p.backgroundCloseOps.Add(1)
 			go func(inst *pooledPlugin) {

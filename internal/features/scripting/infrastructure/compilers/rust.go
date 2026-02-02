@@ -43,13 +43,19 @@ func (c *RustCompiler) IsAvailable() bool {
 	cargoPath, rustupPath, err := c.getRustPaths()
 	if err != nil {
 		// Try system cargo as fallback
-		cmd := exec.Command("cargo", "--version")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "cargo", "--version")
 		if err := cmd.Run(); err != nil {
 			return false
 		}
 
 		// Check wasm32 target with system rustup
-		cmd = exec.Command("rustup", "target", "list", "--installed")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel2()
+
+		cmd = exec.CommandContext(ctx2, "rustup", "target", "list", "--installed")
 		output, err := cmd.Output()
 		if err != nil {
 			return false
@@ -69,7 +75,10 @@ func (c *RustCompiler) IsAvailable() bool {
 	c.rustupPath = rustupPath
 
 	// Verify wasm32 target is installed
-	cmd := exec.Command(rustupPath, "target", "list", "--installed")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, rustupPath, "target", "list", "--installed")
 	cmd.Env = c.getRustEnv()
 	output, err := cmd.Output()
 	if err != nil {
@@ -137,13 +146,12 @@ func (c *RustCompiler) Compile(ctx context.Context, req domain.CompileRequest) (
 	}
 
 	// Compile with Cargo (with Rust env vars if using cached Rust)
-	cmd := exec.CommandContext(ctx, c.cargoPath, args...)
-	cmd.Dir = ws.Path
+	var env []string
 	if c.rustupHome != "" && c.cargoHome != "" {
-		cmd.Env = c.getRustEnv()
+		env = c.getRustEnv()
 	}
 
-	output, err := cmd.CombinedOutput()
+	output, err := ws.ExecuteCommandWithEnv(ctx, env, c.cargoPath, args...)
 	if err != nil {
 		return nil, c.parseRustError(string(output))
 	}
@@ -204,13 +212,12 @@ func (c *RustCompiler) ValidateSyntax(ctx context.Context, req domain.CompileReq
 	}
 
 	// Run cargo check for fast syntax validation
-	cmd := exec.CommandContext(ctx, c.cargoPath, "check", "--target", "wasm32-unknown-unknown")
-	cmd.Dir = ws.Path
+	var env []string
 	if c.rustupHome != "" && c.cargoHome != "" {
-		cmd.Env = c.getRustEnv()
+		env = c.getRustEnv()
 	}
 
-	output, err := cmd.CombinedOutput()
+	output, err := ws.ExecuteCommandWithEnv(ctx, env, c.cargoPath, "check", "--target", "wasm32-unknown-unknown")
 	if err != nil {
 		return fmt.Errorf("syntax check failed: %s", string(output))
 	}

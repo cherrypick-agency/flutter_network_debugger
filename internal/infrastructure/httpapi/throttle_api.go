@@ -73,18 +73,18 @@ func (d *Deps) handleV1Throttle(w http.ResponseWriter, r *http.Request) {
 		d.Cfg.ThrottleLatencyJitter = in.LatencyJitter
 		d.Cfg.ThrottleOffline = in.Offline
 		if d.Settings != nil {
-			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), sdomain.RuntimeSettings{
-				ThrottleEnabled:       d.Cfg.ThrottleEnabled,
-				ThrottleDownKbps:      d.Cfg.ThrottleDownKbps,
-				ThrottleUpKbps:        d.Cfg.ThrottleUpKbps,
-				ThrottlePacketLoss:    d.Cfg.ThrottlePacketLoss,
-				ThrottleLatencyMs:     d.Cfg.ThrottleLatencyMs,
-				ThrottleLatencyJitter: d.Cfg.ThrottleLatencyJitter,
-				ThrottleOffline:       d.Cfg.ThrottleOffline,
-				ResponseDelayMs:       d.Cfg.ResponseDelayMs,
-				ResponseDelayMinMs:    d.Cfg.ResponseDelayMinMs,
-				ResponseDelayMaxMs:    d.Cfg.ResponseDelayMaxMs,
-			})
+			cur, _ := d.Settings.Load(contextWithNoCancel())
+			cur.ThrottleEnabled = d.Cfg.ThrottleEnabled
+			cur.ThrottleDownKbps = d.Cfg.ThrottleDownKbps
+			cur.ThrottleUpKbps = d.Cfg.ThrottleUpKbps
+			cur.ThrottlePacketLoss = d.Cfg.ThrottlePacketLoss
+			cur.ThrottleLatencyMs = d.Cfg.ThrottleLatencyMs
+			cur.ThrottleLatencyJitter = d.Cfg.ThrottleLatencyJitter
+			cur.ThrottleOffline = d.Cfg.ThrottleOffline
+			cur.ResponseDelayMs = d.Cfg.ResponseDelayMs
+			cur.ResponseDelayMinMs = d.Cfg.ResponseDelayMinMs
+			cur.ResponseDelayMaxMs = d.Cfg.ResponseDelayMaxMs
+			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), cur)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(throttleDTO{

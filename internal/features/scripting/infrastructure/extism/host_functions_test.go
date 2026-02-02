@@ -1,7 +1,11 @@
 package extism
 
 import (
+	"context"
+	"net/http"
+	"net/url"
 	"testing"
+	"time"
 )
 
 // TestIsHostAllowed verifies the host allowlist security feature
@@ -167,4 +171,56 @@ func TestCreateHostFunctions_NilAllowedHosts(t *testing.T) {
 	if len(hostFns) == 0 {
 		t.Error("createHostFunctions() should return at least one function")
 	}
+}
+
+func TestNewHTTPFetchClient_CheckRedirectBlocksDisallowedHost(t *testing.T) {
+	client := newHTTPFetchClient([]string{"example.com"})
+
+	req := &http.Request{
+		URL: mustParseURL(t, "https://evil.com/"),
+	}
+
+	if err := client.CheckRedirect(req, []*http.Request{{URL: mustParseURL(t, "https://example.com/")}}); err == nil {
+		t.Fatal("expected redirect check to fail for disallowed host")
+	}
+}
+
+func TestNewHTTPFetchClient_CheckRedirectAllowsAllowedHost(t *testing.T) {
+	client := newHTTPFetchClient([]string{"example.com"})
+
+	req := &http.Request{
+		URL: mustParseURL(t, "https://example.com/next"),
+	}
+
+	if err := client.CheckRedirect(req, []*http.Request{{URL: mustParseURL(t, "https://example.com/")}}); err != nil {
+		t.Fatalf("expected redirect check to pass, got: %v", err)
+	}
+}
+
+func TestWithMaxTimeoutDoesNotExtendDeadline(t *testing.T) {
+	ctx, cancel := withMaxTimeout(withDeadline(t, 100*time.Millisecond), 30*time.Second)
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected deadline")
+	}
+	if time.Until(deadline) > time.Second {
+		t.Fatal("deadline was unexpectedly extended")
+	}
+}
+
+func withDeadline(t *testing.T, d time.Duration) (ctx context.Context) {
+	t.Helper()
+	ctx, _ = context.WithTimeout(context.Background(), d)
+	return ctx
+}
+
+func mustParseURL(t *testing.T, s string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(s)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	return u
 }

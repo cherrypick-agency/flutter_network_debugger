@@ -98,6 +98,43 @@ func TestFileSystemCache_GetCompilerPath(t *testing.T) {
 }
 
 // Composer 1.
+func TestFileSystemCache_GetCompilerPath_PathTraversalBlocked(t *testing.T) {
+	cache, err := NewFileSystemCache(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileSystemCache error: %v", err)
+	}
+
+	_, err = cache.GetCompilerPath("../evil")
+	if err == nil {
+		t.Fatal("expected error for traversal compiler key")
+	}
+}
+
+// Composer 1.
+func TestFileSystemCache_Clear_PathTraversalBlocked(t *testing.T) {
+	cache, err := NewFileSystemCache(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileSystemCache error: %v", err)
+	}
+
+	if err := cache.Clear("../evil"); err == nil {
+		t.Fatal("expected error for traversal compiler key")
+	}
+}
+
+// Composer 1.
+func TestFileSystemCache_IsCompilerCached_PathTraversalBlocked(t *testing.T) {
+	cache, err := NewFileSystemCache(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileSystemCache error: %v", err)
+	}
+
+	if cache.IsCompilerCached("../evil") {
+		t.Fatal("expected IsCompilerCached to return false for traversal compiler key")
+	}
+}
+
+// Composer 1.
 func TestFileSystemCache_GetCompilerPath_NotExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	cache, err := NewFileSystemCache(tmpDir)

@@ -82,11 +82,13 @@ func TestToDTO(t *testing.T) {
 }
 
 func TestFromDTO(t *testing.T) {
-	now := time.Now()
 	filePath := "/path/to/file"
 	blobPath := "blob123"
+	status := 404
+	contentType := "text/plain"
+	targetURL := "https://target.com"
 
-	dto := mapRuleDTO{
+	dto := mapRuleInputDTO{
 		ID:                  "test-1",
 		Enabled:             true,
 		Priority:            1,
@@ -98,12 +100,10 @@ func TestFromDTO(t *testing.T) {
 		PatternType:         "regex",
 		FilePath:            &filePath,
 		BlobPath:            &blobPath,
-		StatusOverride:      404,
-		ContentTypeOverride: "text/plain",
-		TargetURLTemplate:   "https://target.com",
+		StatusOverride:      &status,
+		ContentTypeOverride: &contentType,
+		TargetURLTemplate:   &targetURL,
 		PreserveHost:        false,
-		CreatedAt:           now,
-		UpdatedAt:           now,
 	}
 
 	rule := fromDTO(dto)
@@ -163,7 +163,7 @@ func TestFromDTO(t *testing.T) {
 }
 
 func TestFromDTO_EmptyMethods(t *testing.T) {
-	dto := mapRuleDTO{
+	dto := mapRuleInputDTO{
 		ID:      "test-1",
 		Methods: []string{},
 	}
@@ -176,7 +176,7 @@ func TestFromDTO_EmptyMethods(t *testing.T) {
 }
 
 func TestFromDTO_NilPointers(t *testing.T) {
-	dto := mapRuleDTO{
+	dto := mapRuleInputDTO{
 		ID:       "test-1",
 		FilePath: nil,
 		BlobPath: nil,

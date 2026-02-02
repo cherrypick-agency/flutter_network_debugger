@@ -64,4 +64,10 @@ func ApplyOverlay(cfg *config.Config, rs sdomain.RuntimeSettings) {
 	cfg.ThrottleUpKbps = rs.ThrottleUpKbps
 	cfg.ThrottlePacketLoss = rs.ThrottlePacketLoss
 	cfg.ThrottleOffline = rs.ThrottleOffline
+
+	// mapping
+	cfg.MappingEnabled = rs.MappingEnabled
+	if rs.MappingUploadMaxMB > 0 {
+		cfg.MappingUploadMaxMB = rs.MappingUploadMaxMB
+	}
 }

@@ -250,6 +250,35 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     );
   }
 
+  /// Копирует сводку запроса и ответа для AI
+  void _copyForAi(BuildContext context, Map<String, dynamic> req) {
+    final resp = _findByType(widget.frames, 'http_response');
+    final method = (req['method'] ?? 'GET').toString();
+    final url = (req['url'] ?? '').toString();
+    final reqBody = _normalizeMaybeQuotedJson((req['body'] ?? '').toString());
+    final respBody = resp != null
+        ? _normalizeMaybeQuotedJson((resp['body'] ?? '').toString())
+        : null;
+    final fullRespBody = _fullRespBody ?? respBody;
+
+    final buf = StringBuffer();
+    buf.writeln('$method $url');
+    if (reqBody.isNotEmpty) {
+      buf.writeln('Request body:');
+      buf.writeln(reqBody);
+    }
+    if (fullRespBody != null && fullRespBody.isNotEmpty) {
+      buf.writeln();
+      buf.writeln('Response body:');
+      buf.writeln(fullRespBody);
+    }
+    final text = buf.toString().trimRight();
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Copied for AI')));
+  }
+
   /// Открывает Compose с данными текущего запроса для редактирования
   void _openComposeWithRequest(Map<String, dynamic> req) {
     final headersRaw =
@@ -648,6 +677,14 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
                 },
                 icon: const Icon(Icons.copy, size: 18),
                 tooltip: 'Copy URL',
+                iconSize: 18,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+              ),
+              IconButton(
+                onPressed: () => _copyForAi(context, req),
+                icon: const Icon(Icons.smart_toy, size: 18),
+                tooltip: 'Copy request & response for AI',
                 iconSize: 18,
                 padding: const EdgeInsets.all(8),
                 constraints: const BoxConstraints(),

@@ -289,7 +289,10 @@ func (k *KotlinDownloader) findOrInstallJRE(
 // Returns empty string if not found
 func (k *KotlinDownloader) findSystemJRE() string {
 	// Try 'java -version' command
-	cmd := exec.Command("java", "-version")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "java", "-version")
 	err := cmd.Run()
 	if err == nil {
 		// Java is available in PATH
@@ -300,9 +303,12 @@ func (k *KotlinDownloader) findSystemJRE() string {
 		}
 
 		// Try to find java location
-		cmd := exec.Command("which", "java")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel2()
+
+		cmd := exec.CommandContext(ctx2, "which", "java")
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("where", "java")
+			cmd = exec.CommandContext(ctx2, "where", "java")
 		}
 
 		output, err := cmd.Output()

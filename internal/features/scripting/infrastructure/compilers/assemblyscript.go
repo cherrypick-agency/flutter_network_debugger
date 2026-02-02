@@ -42,13 +42,19 @@ func (c *AssemblyScriptCompiler) IsAvailable() bool {
 	ascPath, npmPath, err := c.getAssemblyScriptPaths()
 	if err != nil {
 		// Try system asc as fallback
-		cmd := exec.Command("asc", "--version")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "asc", "--version")
 		if err := cmd.Run(); err != nil {
 			return false
 		}
 
 		// Check system npm
-		cmd = exec.Command("npm", "--version")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel2()
+
+		cmd = exec.CommandContext(ctx2, "npm", "--version")
 		if err := cmd.Run(); err != nil {
 			return false
 		}

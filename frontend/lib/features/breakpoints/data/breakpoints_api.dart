@@ -34,12 +34,11 @@ class BreakpointsApi {
 
   Future<void> replaceRules(List<dynamic> rules) async {
     final hdrs = await _hdrs();
-    // В AppHttpClient body типизирован как Map<String,dynamic>, обходим через dynamic
-    final client = _http as dynamic;
-    await client.post<List<dynamic>>(
+    // Бэк ожидает массив правил, а не объект.
+    await _http.post<void>(
       path: '/_api/v1/intercept/rules',
-      body: rules,
       headers: hdrs,
+      body: rules,
     );
   }
 

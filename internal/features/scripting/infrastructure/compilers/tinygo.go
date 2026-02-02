@@ -41,7 +41,10 @@ func (c *TinyGoCompiler) IsAvailable() bool {
 	tinygoPath, err := c.getTinyGoBinary()
 	if err != nil {
 		// Try system tinygo as fallback
-		cmd := exec.Command("tinygo", "version")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "tinygo", "version")
 		if err := cmd.Run(); err != nil {
 			return false
 		}

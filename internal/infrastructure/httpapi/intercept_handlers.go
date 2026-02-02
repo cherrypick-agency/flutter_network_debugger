@@ -164,15 +164,15 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 				Method  string      `json:"method"`
 				URL     string      `json:"url"`
 				Headers http.Header `json:"headers"`
-				BodyB64 string      `json:"bodyBase64"`
+				BodyB64 *string     `json:"bodyBase64"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				writeError(w, http.StatusBadRequest, "BAD_JSON", err.Error(), nil)
 				return
 			}
 			var body []byte
-			if payload.BodyB64 != "" {
-				if b, err := base64.StdEncoding.DecodeString(payload.BodyB64); err == nil {
+			if payload.BodyB64 != nil {
+				if b, err := base64.StdEncoding.DecodeString(*payload.BodyB64); err == nil {
 					body = b
 				}
 			}
@@ -189,15 +189,15 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 			Action  string      `json:"action"`
 			Status  int         `json:"status"`
 			Headers http.Header `json:"headers"`
-			BodyB64 string      `json:"bodyBase64"`
+			BodyB64 *string     `json:"bodyBase64"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", err.Error(), nil)
 			return
 		}
 		var body []byte
-		if payload.BodyB64 != "" {
-			if b, err := base64.StdEncoding.DecodeString(payload.BodyB64); err == nil {
+		if payload.BodyB64 != nil {
+			if b, err := base64.StdEncoding.DecodeString(*payload.BodyB64); err == nil {
 				body = b
 			}
 		}

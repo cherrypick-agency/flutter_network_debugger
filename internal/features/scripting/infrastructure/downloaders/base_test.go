@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1257,6 +1258,129 @@ func TestBaseDownloader_ExtractTarXz_Symlink(t *testing.T) {
 	targetPath := filepath.Join(targetDir, "target.txt")
 	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
 		t.Error("Target file was not created")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarXz_SymlinkEscapeBlocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks may be unavailable on Windows without special permissions")
+	}
+
+	downloader := NewBaseDownloader()
+
+	tmpDir := t.TempDir()
+	tarXzFile := filepath.Join(tmpDir, "test.tar.xz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.xz с символической ссылкой-директорией и файлом внутри неё
+	file, err := os.Create(tarXzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.xz file: %v", err)
+	}
+	defer file.Close()
+
+	xzWriter, err := xz.NewWriter(file)
+	if err != nil {
+		t.Fatalf("Failed to create xz writer: %v", err)
+	}
+	defer xzWriter.Close()
+
+	tarWriter := tar.NewWriter(xzWriter)
+	defer tarWriter.Close()
+
+	// symlink dir -> ".." (вылезает из targetDir при записи)
+	symlinkHeader := &tar.Header{
+		Name:     "dir",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "..",
+		Mode:     0o777,
+	}
+	if err := tarWriter.WriteHeader(symlinkHeader); err != nil {
+		t.Fatalf("Failed to write symlink header: %v", err)
+	}
+
+	// file under symlinked dir
+	content := []byte("evil")
+	fileHeader := &tar.Header{
+		Name: "dir/evil.txt",
+		Size: int64(len(content)),
+		Mode: 0o644,
+	}
+	if err := tarWriter.WriteHeader(fileHeader); err != nil {
+		t.Fatalf("Failed to write file header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write file content: %v", err)
+	}
+
+	tarWriter.Close()
+	xzWriter.Close()
+	file.Close()
+
+	err = downloader.ExtractTarXz(tarXzFile, targetDir)
+	if err == nil {
+		t.Fatal("ExtractTarXz should fail when archive tries to escape via symlink parent")
+	}
+}
+
+// Composer 1.
+func TestBaseDownloader_ExtractTarGz_SymlinkEscapeBlocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks may be unavailable on Windows without special permissions")
+	}
+
+	downloader := NewBaseDownloader()
+
+	tmpDir := t.TempDir()
+	tarGzFile := filepath.Join(tmpDir, "test.tar.gz")
+	targetDir := filepath.Join(tmpDir, "extracted")
+
+	// Создаем tar.gz с символической ссылкой-директорией и файлом внутри неё
+	file, err := os.Create(tarGzFile)
+	if err != nil {
+		t.Fatalf("Failed to create tar.gz file: %v", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// symlink dir -> ".." (вылезает из targetDir при записи)
+	symlinkHeader := &tar.Header{
+		Name:     "dir",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "..",
+		Mode:     0o777,
+	}
+	if err := tarWriter.WriteHeader(symlinkHeader); err != nil {
+		t.Fatalf("Failed to write symlink header: %v", err)
+	}
+
+	// file under symlinked dir
+	content := []byte("evil")
+	fileHeader := &tar.Header{
+		Name: "dir/evil.txt",
+		Size: int64(len(content)),
+		Mode: 0o644,
+	}
+	if err := tarWriter.WriteHeader(fileHeader); err != nil {
+		t.Fatalf("Failed to write file header: %v", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("Failed to write file content: %v", err)
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	file.Close()
+
+	err = downloader.ExtractTarGz(tarGzFile, targetDir)
+	if err == nil {
+		t.Fatal("ExtractTarGz should fail when archive tries to escape via symlink parent")
 	}
 }
 

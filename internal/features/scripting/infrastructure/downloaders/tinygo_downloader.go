@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -275,7 +274,15 @@ func (t *TinyGoDownloader) getLatestRelease(version string) (*tinygoRelease, err
 		apiURL = fmt.Sprintf("https://api.github.com/repos/tinygo-org/tinygo/releases/tags/v%s", version)
 	}
 
-	resp, err := http.Get(apiURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch release: %w", err)
 	}
@@ -285,7 +292,7 @@ func (t *TinyGoDownloader) getLatestRelease(version string) (*tinygoRelease, err
 		return nil, fmt.Errorf("GitHub API returned status: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readAllLimited(resp.Body, 10*1024*1024)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}

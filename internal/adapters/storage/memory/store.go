@@ -235,15 +235,22 @@ func (s *Store) ListSessions(ctx context.Context, f usecase.SessionFilter) ([]do
 		}
 		// capture filter
 		if f.CaptureID != nil {
-			if *f.CaptureID >= 0 {
-				// exact capture id
-				if e.session.CaptureID == nil || *e.session.CaptureID != *f.CaptureID {
-					continue
-				}
+			// Если клиент явно попросил includeUnassigned, добавляем сюда и "paused/unassigned" сессии.
+			// Это нужно, чтобы UI мог показать сессии, которые появились пока запись была остановлена,
+			// не теряя при этом фокус на текущем captureId.
+			if f.IncludeUnassigned && e.session.CaptureID == nil {
+				// ok
 			} else {
-				// -1 treated as current
-				if e.session.CaptureID == nil || *e.session.CaptureID != s.currentCapture {
-					continue
+				if *f.CaptureID >= 0 {
+					// exact capture id
+					if e.session.CaptureID == nil || *e.session.CaptureID != *f.CaptureID {
+						continue
+					}
+				} else {
+					// -1 treated as current
+					if e.session.CaptureID == nil || *e.session.CaptureID != s.currentCapture {
+						continue
+					}
 				}
 			}
 		} else {

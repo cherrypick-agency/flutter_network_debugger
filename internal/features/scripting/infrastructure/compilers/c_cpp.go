@@ -47,11 +47,15 @@ func (c *CCPPCompiler) IsAvailable() bool {
 		}
 
 		for _, path := range paths {
-			cmd := exec.Command(path, "--version")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cmd := exec.CommandContext(ctx, path, "--version")
 			if err := cmd.Run(); err == nil {
+				cancel()
 				// Check if it supports wasm32-wasi target
-				cmd = exec.Command(path, "--print-targets")
+				ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+				cmd = exec.CommandContext(ctx2, path, "--print-targets")
 				output, err := cmd.Output()
+				cancel2()
 				if err == nil && strings.Contains(string(output), "wasm32") {
 					c.clangPath = path
 					return true
@@ -60,6 +64,7 @@ func (c *CCPPCompiler) IsAvailable() bool {
 				c.clangPath = path
 				return true
 			}
+			cancel()
 		}
 
 		return false
