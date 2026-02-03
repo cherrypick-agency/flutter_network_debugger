@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/intercept_item.dart';
 import '../../domain/entities/decisions.dart';
@@ -9,31 +8,11 @@ class InterceptEditorStore extends ChangeNotifier {
   final BreakpointsRepository _repo;
 
   InterceptItem? _item;
-  String _headersError = '';
-  String _bodyJsonError = '';
 
   InterceptItem? get item => _item;
-  String get headersError => _headersError;
-  String get bodyJsonError => _bodyJsonError;
 
   void setItem(InterceptItem? it) {
     _item = it;
-    _headersError = '';
-    _bodyJsonError = '';
-    notifyListeners();
-  }
-
-  void validateJson(String? text) {
-    _bodyJsonError = '';
-    if (text == null || text.trim().isEmpty) {
-      notifyListeners();
-      return;
-    }
-    try {
-      json.decode(text);
-    } catch (e) {
-      _bodyJsonError = 'Некорректный JSON';
-    }
     notifyListeners();
   }
 

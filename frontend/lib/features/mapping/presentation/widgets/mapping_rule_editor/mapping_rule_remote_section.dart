@@ -35,11 +35,21 @@ class MappingRuleRemoteSection extends StatelessWidget {
           onChanged: onTargetURLTemplateChanged,
         ),
         const SizedBox(height: 6),
-        Text(
-          'Токены: {path} {host} {hostname} {url} {scheme} {port} {portWithColon}',
-          style: context.appText.body.copyWith(
-            color: context.appColors.textSecondary,
-          ),
+        ExpansionTile(
+          title: const Text('Tokens'),
+          subtitle: const Text('URL template reference'),
+          childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '{path} {host} {hostname} {url} {scheme} {port} {portWithColon}',
+                style: context.appText.body.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         SwitchListTile(

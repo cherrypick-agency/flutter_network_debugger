@@ -44,7 +44,6 @@ class MappingRuleLocalSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,7 +80,10 @@ class MappingRuleLocalSection extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Uploaded: $blobPath',
-                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  style: context.appText.body.copyWith(
+                    fontSize: 12,
+                    color: cs.onSurfaceVariant,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -103,41 +105,48 @@ class MappingRuleLocalSection extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        Row(
+        ExpansionTile(
+          title: const Text('Overrides'),
+          subtitle: const Text('Status and Content-Type (optional)'),
+          childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
           children: [
-            Expanded(
-              child: TextField(
-                controller: statusOverrideController,
-                enabled: !saving,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'HTTP status override (optional)',
-                  errorText: statusOverrideErrorText,
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: statusOverrideController,
+                    enabled: !saving,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: 'HTTP status override',
+                      errorText: statusOverrideErrorText,
+                    ),
+                    onChanged: onStatusOverrideChanged,
+                  ),
                 ),
-                onChanged: onStatusOverrideChanged,
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: contentTypeOverrideController,
+                    enabled: !saving,
+                    decoration: InputDecoration(
+                      labelText: 'Content-Type override',
+                      errorText: contentTypeOverrideErrorText,
+                    ),
+                    onChanged: onContentTypeOverrideChanged,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: contentTypeOverrideController,
-                enabled: !saving,
-                decoration: InputDecoration(
-                  labelText: 'Content-Type override (optional)',
-                  errorText: contentTypeOverrideErrorText,
-                ),
-                onChanged: onContentTypeOverrideChanged,
+            const SizedBox(height: 6),
+            Text(
+              'If a file path is set, the uploaded blob is ignored.',
+              style: context.appText.body.copyWith(
+                color: context.appColors.textSecondary,
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Если указан file path — blob не используется.',
-          style: context.appText.body.copyWith(
-            color: context.appColors.textSecondary,
-          ),
         ),
       ],
     );

@@ -150,17 +150,17 @@ class _InterceptConfigFormState extends State<InterceptConfigForm> {
         _timeoutCtrl.text.trim().isEmpty ||
             _parsePositiveInt(_timeoutCtrl.text) != null
         ? null
-        : 'Должно быть > 0';
+        : 'Must be > 0';
     final queueErr =
         _queueMaxCtrl.text.trim().isEmpty ||
             _parseNonNegativeInt(_queueMaxCtrl.text) != null
         ? null
-        : 'Должно быть >= 0';
+        : 'Must be >= 0';
     final bodyErr =
         _bodyMaxCtrl.text.trim().isEmpty ||
             _parsePositiveInt(_bodyMaxCtrl.text) != null
         ? null
-        : 'Должно быть > 0';
+        : 'Must be > 0';
 
     return Wrap(
       spacing: 12,
@@ -255,7 +255,7 @@ class _InterceptConfigFormState extends State<InterceptConfigForm> {
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            'timeout/bodyMaxBytes принимаются бэком только если > 0, queueMax — если >= 0.',
+            'timeout/bodyMaxBytes are accepted only if > 0, queueMax only if >= 0.',
             style: context.appText.body.copyWith(
               color: context.appColors.textSecondary,
             ),

@@ -11,4 +11,10 @@ abstract class MappingRepository {
   Future<void> delete(String id);
 
   Future<Map<String, dynamic>> uploadFile(String fileName, List<int> bytes);
+
+  Future<Map<String, dynamic>> uploadStream({
+    required String fileName,
+    required Stream<List<int>> stream,
+    required int length,
+  });
 }

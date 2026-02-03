@@ -1,15 +1,18 @@
 import 'dart:typed_data';
-import 'package:dio/dio.dart';
 import 'package:app_http_client/application/app_http_client.dart';
+import 'package:dio/dio.dart';
 import '../../../services/prefs.dart';
 
 class MappingApi {
   MappingApi(this._http);
   final AppHttpClient _http;
 
-  Future<Map<String, String>> _hdrs() async {
-    final token = await PrefsService().loadAdminToken();
-    return token.isEmpty ? const {} : <String, String>{'X-Admin-Token': token};
+  Future<Map<String, String>?> _hdrs() async {
+    try {
+      final token = await PrefsService().loadAdminToken();
+      if (token.isNotEmpty) return <String, String>{'X-Admin-Token': token};
+    } catch (_) {}
+    return null;
   }
 
   Future<Map<String, dynamic>> getConfig() async {
@@ -46,13 +49,11 @@ class MappingApi {
   }
 
   Future<void> reorder(List<String> ids) async {
-    // AppHttpClient принимает body только как Map<String, dynamic>,
-    // а эндпоинт ждёт JSON-массив. Отправим напрямую через Dio.
-    final dio = Dio();
-    await dio.post<void>(
-      _http.defaultHost + '/_api/v1/mapping/rules/reorder',
-      data: ids,
-      options: Options(headers: await _hdrs()),
+    // Эндпоинт ждёт JSON-массив. AppHttpClient спокойно умеет отправлять List.
+    await _http.post<void>(
+      path: '/_api/v1/mapping/rules/reorder',
+      body: ids,
+      headers: await _hdrs(),
     );
   }
 
@@ -71,19 +72,17 @@ class MappingApi {
     String fileName,
     List<int> bytes,
   ) async {
-    // Выполним корректный multipart upload через Dio напрямую
-    final dio = Dio();
-    final headers = await _hdrs();
+    final headers = await _hdrs() ?? const <String, String>{};
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         Uint8List.fromList(bytes),
         filename: fileName,
       ),
     });
-    final resp = await dio.post<Map<String, dynamic>>(
-      _http.defaultHost + '/_api/v1/mapping/upload',
-      data: form,
-      options: Options(headers: headers),
+    final resp = await _http.post<Map<String, dynamic>>(
+      path: '/_api/v1/mapping/upload',
+      body: form,
+      headers: headers,
     );
     return resp.data ?? <String, dynamic>{};
   }
@@ -93,8 +92,7 @@ class MappingApi {
     required Stream<List<int>> stream,
     required int length,
   }) async {
-    final dio = Dio();
-    final headers = await _hdrs();
+    final headers = await _hdrs() ?? const <String, String>{};
     final form = FormData.fromMap({
       'file': MultipartFile.fromStream(
         () => stream,
@@ -102,10 +100,10 @@ class MappingApi {
         filename: fileName,
       ),
     });
-    final resp = await dio.post<Map<String, dynamic>>(
-      _http.defaultHost + '/_api/v1/mapping/upload',
-      data: form,
-      options: Options(headers: headers),
+    final resp = await _http.post<Map<String, dynamic>>(
+      path: '/_api/v1/mapping/upload',
+      body: form,
+      headers: headers,
     );
     return resp.data ?? <String, dynamic>{};
   }

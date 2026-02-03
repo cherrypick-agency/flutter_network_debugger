@@ -4,6 +4,8 @@ import '../../domain/entities/intercept_item.dart';
 import '../../domain/repositories/breakpoints_repository.dart';
 import '../../../inspector/application/services/monitor_service.dart';
 import '../../../../core/di/di.dart';
+import '../../../../core/notifications/notifications_service.dart';
+import '../../../../core/utils/debouncer.dart';
 import '../../domain/entities/decisions.dart';
 
 class InterceptQueueStore extends ChangeNotifier {
@@ -14,9 +16,16 @@ class InterceptQueueStore extends ChangeNotifier {
   InterceptItem? _selected;
   MonitorListener? _listener;
   int _refreshStamp = 0;
+  final Debouncer _debounced = Debouncer(const Duration(milliseconds: 200));
+  bool _loading = false;
+  String? _lastError;
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
 
   List<InterceptItem> get items => _items;
   InterceptItem? get selected => _selected;
+  bool get loading => _loading;
+  String? get lastError => _lastError;
 
   Future<void> init() async {
     await refresh();
@@ -29,7 +38,9 @@ class InterceptQueueStore extends ChangeNotifier {
       try {
         final t = (ev['type'] ?? '').toString();
         if (t.startsWith('intercept_')) {
-          refresh().catchError((_) {});
+          _debounced.run(() {
+            refresh().catchError((_) {});
+          });
         }
       } catch (_) {}
     };
@@ -37,6 +48,9 @@ class InterceptQueueStore extends ChangeNotifier {
   }
 
   void detach() {
+    _debounced.dispose();
+    _retryTimer?.cancel();
+    _retryTimer = null;
     if (_listener != null) {
       try {
         sl<MonitorService>().removeListener(_listener!);
@@ -47,10 +61,22 @@ class InterceptQueueStore extends ChangeNotifier {
 
   Future<void> refresh() async {
     final stamp = ++_refreshStamp;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (!_loading) {
+      _loading = true;
+      notifyListeners();
+    }
     List<InterceptItem> nextItems;
     try {
       nextItems = await _repo.listPending(limit: 200);
-    } catch (_) {
+    } catch (e) {
+      if (stamp != _refreshStamp) return;
+      _lastError = e.toString();
+      _loading = false;
+      // На ошибке оставляем старый список/выбор — так UX стабильнее при сетевых глюках.
+      notifyListeners();
+      _scheduleRetry();
       return;
     }
     if (stamp != _refreshStamp) return;
@@ -69,7 +95,21 @@ class InterceptQueueStore extends ChangeNotifier {
       _selected = _items.first;
     }
 
+    _retryAttempt = 0;
+    _lastError = null;
+    _loading = false;
     notifyListeners();
+  }
+
+  void _scheduleRetry() {
+    if (_listener == null) return; // если диалог уже закрыли — не ретраим
+    _retryTimer?.cancel();
+    final attempt = _retryAttempt.clamp(0, 6);
+    final delayMs = (500 * (1 << attempt)).clamp(500, 10000);
+    _retryAttempt = attempt + 1;
+    _retryTimer = Timer(Duration(milliseconds: delayMs), () {
+      refresh().catchError((_) {});
+    });
   }
 
   void select(String id) {
@@ -99,14 +139,18 @@ class InterceptQueueStore extends ChangeNotifier {
           const ResponseDecision(action: 'continue'),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      sl<NotificationsService>().error('Continue', e.toString());
+    }
     await refresh();
   }
 
   Future<void> quickCancel(String id) async {
     try {
       await _repo.cancel(id);
-    } catch (_) {}
+    } catch (e) {
+      sl<NotificationsService>().error('Cancel', e.toString());
+    }
     await refresh();
   }
 

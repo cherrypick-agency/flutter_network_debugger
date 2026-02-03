@@ -50,4 +50,17 @@ class MappingRepositoryImpl implements MappingRepository {
   ) async {
     return _api.upload(fileName, bytes);
   }
+
+  @override
+  Future<Map<String, dynamic>> uploadStream({
+    required String fileName,
+    required Stream<List<int>> stream,
+    required int length,
+  }) async {
+    return _api.uploadStream(
+      fileName: fileName,
+      stream: stream,
+      length: length,
+    );
+  }
 }

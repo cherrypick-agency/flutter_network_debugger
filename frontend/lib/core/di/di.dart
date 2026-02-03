@@ -31,6 +31,11 @@ import '../../features/breakpoints/domain/repositories/breakpoints_repository.da
 import '../../features/breakpoints/application/stores/breakpoints_store.dart';
 import '../../features/breakpoints/application/stores/intercept_queue_store.dart';
 import '../../features/breakpoints/application/stores/intercept_editor_store.dart';
+import '../../features/mapping/data/mapping_api.dart';
+import '../../features/mapping/data/mapping_repository_impl.dart';
+import '../../features/mapping/domain/repositories/mapping_repository.dart';
+import '../../features/mapping/application/stores/mapping_store.dart';
+import '../../features/mapping/application/stores/mapping_config_store.dart';
 import '../../features/updates/data/datasources/github_api_datasource.dart';
 import '../../features/updates/data/datasources/updates_local_datasource.dart';
 import '../../features/updates/data/repositories/updates_repository_impl.dart';
@@ -170,6 +175,18 @@ Future<void> setupDI({
   );
   sl.registerLazySingleton<InterceptEditorStore>(
     () => InterceptEditorStore(sl<BreakpointsRepository>()),
+  );
+
+  // Mapping feature
+  sl.registerLazySingleton<MappingApi>(() => MappingApi(sl<AppHttpClient>()));
+  sl.registerLazySingleton<MappingRepository>(
+    () => MappingRepositoryImpl(sl<MappingApi>()),
+  );
+  sl.registerLazySingleton<MappingStore>(
+    () => MappingStore(sl<MappingRepository>()),
+  );
+  sl.registerLazySingleton<MappingConfigStore>(
+    () => MappingConfigStore(sl<MappingRepository>()),
   );
 
   // Updates feature

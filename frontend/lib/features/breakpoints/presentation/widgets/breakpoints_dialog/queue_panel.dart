@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../../core/widgets/inline_status_banner.dart';
 import '../../../../../theme/context_ext.dart';
-import '../../../application/stores/intercept_editor_store.dart';
 import '../../../application/stores/intercept_queue_store.dart';
 
 class QueuePanel extends StatefulWidget {
@@ -15,18 +15,16 @@ class QueuePanel extends StatefulWidget {
 
 class _QueuePanelState extends State<QueuePanel>
     with SingleTickerProviderStateMixin {
-  String? _lastSelectedId;
   late final Ticker _ticker;
   Duration _lastRedraw = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker((_) {
+    _ticker = createTicker((elapsed) {
       if (!mounted) return;
-      final now = _ticker.lastElapsedDuration ?? Duration.zero;
-      if (now - _lastRedraw >= const Duration(milliseconds: 250)) {
-        _lastRedraw = now;
+      if (elapsed - _lastRedraw >= const Duration(milliseconds: 250)) {
+        _lastRedraw = elapsed;
         setState(() {});
       }
     })..start();
@@ -43,14 +41,8 @@ class _QueuePanelState extends State<QueuePanel>
     final store = context.watch<InterceptQueueStore>();
     final items = store.items;
     final selectedId = store.selected?.id;
-
-    if (selectedId != _lastSelectedId) {
-      _lastSelectedId = selectedId;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.read<InterceptEditorStore>().setItem(store.selected);
-      });
-    }
+    final loading = store.loading;
+    final err = store.lastError;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,8 +56,16 @@ class _QueuePanelState extends State<QueuePanel>
             ),
           ),
         ),
+        InlineStatusBanner(
+          loading: loading && items.isNotEmpty,
+          loadingText: 'Refreshing queue…',
+          errorText: err,
+          onRetry: () => store.refresh(),
+        ),
         Expanded(
-          child: items.isEmpty
+          child: loading && items.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : items.isEmpty
               ? const Center(child: Text('Queue is empty'))
               : ListView.separated(
                   padding: const EdgeInsets.all(12),
@@ -105,7 +105,6 @@ class _QueuePanelState extends State<QueuePanel>
                       ),
                       onTap: () {
                         store.select(it.id);
-                        context.read<InterceptEditorStore>().setItem(it);
                       },
                       trailing: Wrap(
                         spacing: 4,

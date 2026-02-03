@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../../core/di/di.dart';
+import '../../../../../core/notifications/notifications_service.dart';
 import '../../../../../theme/context_ext.dart';
 import '../../../application/stores/breakpoints_store.dart';
 import '../../../domain/entities/intercept_config.dart';
 import '../../../domain/entities/intercept_rule.dart';
 import 'intercept_rule_card.dart';
 import 'intercept_config_form.dart';
+import 'section_card.dart';
 
 class RulesPanel extends StatefulWidget {
   const RulesPanel({super.key});
@@ -79,6 +82,18 @@ class _RulesPanelState extends State<RulesPanel> {
     });
   }
 
+  void _resetConfigFromStore(BreakpointsStore bp) {
+    setState(() {
+      _draftConfig = bp.config;
+    });
+  }
+
+  void _resetRulesFromStore(BreakpointsStore bp) {
+    setState(() {
+      _draftRules = _cloneRules(bp.rules);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final bp = context.watch<BreakpointsStore>();
@@ -93,119 +108,148 @@ class _RulesPanelState extends State<RulesPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Config', style: context.appText.subtitle),
-          const SizedBox(height: 8),
-          if (bp.loading && cfg == null)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: LinearProgressIndicator(),
+          BreakpointsSectionCard(
+            title: 'Config',
+            subtitle:
+                'Global intercept behavior: timeouts, queue size, and body limits.',
+            actions: Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: bp.config == null
+                      ? null
+                      : () => _resetConfigFromStore(bp),
+                  child: const Text('Reset'),
+                ),
+                ElevatedButton(
+                  onPressed: _savingCfg || cfg == null
+                      ? null
+                      : () async {
+                          setState(() => _savingCfg = true);
+                          try {
+                            await bp.saveConfig(cfg);
+                            if (!mounted) return;
+                            setState(() => _draftConfig = bp.config);
+                            sl<NotificationsService>().info(
+                              'Breakpoints',
+                              'Config saved',
+                            );
+                          } catch (e) {
+                            sl<NotificationsService>().error(
+                              'Breakpoints',
+                              'Failed to save config: $e',
+                            );
+                          } finally {
+                            if (mounted) setState(() => _savingCfg = false);
+                          }
+                        },
+                  child: Text(_savingCfg ? 'Saving…' : 'Save'),
+                ),
+              ],
             ),
-          if (cfg != null)
-            InterceptConfigForm(
-              cfg: cfg,
-              onChanged: (c) => setState(() => _draftConfig = c),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (bp.loading && cfg == null)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: LinearProgressIndicator(),
+                  ),
+                if (cfg != null)
+                  InterceptConfigForm(
+                    cfg: cfg,
+                    onChanged: (c) => setState(() => _draftConfig = c),
+                  ),
+              ],
             ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              ElevatedButton(
-                onPressed: _savingCfg || cfg == null
-                    ? null
-                    : () async {
-                        setState(() => _savingCfg = true);
-                        try {
-                          await bp.saveConfig(cfg);
-                          if (!mounted) return;
-                          setState(() => _draftConfig = bp.config);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Config saved')),
-                          );
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to save config: $e'),
-                            ),
-                          );
-                        } finally {
-                          if (mounted) setState(() => _savingCfg = false);
-                        }
-                      },
-                child: Text(_savingCfg ? 'Saving…' : 'Save Config'),
-              ),
-            ],
           ),
-          const SizedBox(height: 24),
-          Text('Rules', style: context.appText.subtitle),
-          const SizedBox(height: 8),
-          if (rules == null)
-            Text(
-              bp.loading ? 'Loading rules…' : 'No rules',
-              style: context.appText.body.copyWith(
-                color: context.appColors.textSecondary,
-              ),
+          const SizedBox(height: 12),
+          BreakpointsSectionCard(
+            title: 'Rules',
+            subtitle:
+                'Match traffic and pause it for inspection or modification.',
+            actions: Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: bp.rules.isEmpty
+                      ? null
+                      : () => _resetRulesFromStore(bp),
+                  child: const Text('Reset'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: rules == null ? null : _addRule,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add'),
+                ),
+                ElevatedButton(
+                  onPressed: _savingRules || rules == null
+                      ? null
+                      : () async {
+                          setState(() => _savingRules = true);
+                          try {
+                            await bp.replaceRules(rules);
+                            await bp.load();
+                            if (!mounted) return;
+                            setState(() {
+                              _draftRules = _cloneRules(bp.rules);
+                              _draftConfig ??= bp.config;
+                            });
+                            sl<NotificationsService>().info(
+                              'Breakpoints',
+                              'Rules saved',
+                            );
+                          } catch (e) {
+                            sl<NotificationsService>().error(
+                              'Breakpoints',
+                              'Failed to save rules: $e',
+                            );
+                          } finally {
+                            if (mounted) setState(() => _savingRules = false);
+                          }
+                        },
+                  child: Text(_savingRules ? 'Saving…' : 'Save'),
+                ),
+              ],
             ),
-          if (rules != null)
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: rules.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (ctx, i) {
-                final r = rules[i];
-                return InterceptRuleCard(
-                  key: ValueKey('rule-$i-${r.id}'),
-                  rule: r,
-                  onChanged: (nr) {
-                    setState(() {
-                      rules[i] = nr;
-                      _draftRules = rules;
-                    });
-                  },
-                  onDelete: () {
-                    setState(() {
-                      rules.removeAt(i);
-                      _draftRules = rules;
-                    });
-                  },
-                );
-              },
-            ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: rules == null ? null : _addRule,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Rule'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _savingRules || rules == null
-                    ? null
-                    : () async {
-                        setState(() => _savingRules = true);
-                        try {
-                          await bp.replaceRules(rules);
-                          await bp.load();
-                          if (!mounted) return;
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (rules == null)
+                  Text(
+                    bp.loading ? 'Loading rules…' : 'No rules',
+                    style: context.appText.body.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                if (rules != null)
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: rules.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (ctx, i) {
+                      final r = rules[i];
+                      return InterceptRuleCard(
+                        key: ValueKey('rule-$i-${r.id}'),
+                        rule: r,
+                        onChanged: (nr) {
                           setState(() {
-                            _draftRules = _cloneRules(bp.rules);
-                            _draftConfig ??= bp.config;
+                            rules[i] = nr;
+                            _draftRules = rules;
                           });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Rules saved')),
-                          );
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed to save rules: $e')),
-                          );
-                        } finally {
-                          if (mounted) setState(() => _savingRules = false);
-                        }
-                      },
-                child: Text(_savingRules ? 'Saving…' : 'Save Rules'),
-              ),
-            ],
+                        },
+                        onDelete: () {
+                          setState(() {
+                            rules.removeAt(i);
+                            _draftRules = rules;
+                          });
+                        },
+                      );
+                    },
+                  ),
+              ],
+            ),
           ),
         ],
       ),

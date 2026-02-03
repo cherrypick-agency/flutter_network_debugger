@@ -3,11 +3,16 @@ import '../domain/entities/intercept_config.dart';
 import '../domain/entities/intercept_item.dart';
 import '../domain/entities/intercept_rule.dart';
 import '../domain/repositories/breakpoints_repository.dart';
+import '../../../core/utils/json_cast.dart';
 import 'breakpoints_api.dart';
 
 class BreakpointsRepositoryImpl implements BreakpointsRepository {
   BreakpointsRepositoryImpl(this._api);
   final BreakpointsApi _api;
+
+  bool _asBool(dynamic v, {required bool fallback}) {
+    return JsonCast.asBool(v, fallback: fallback);
+  }
 
   String? _nonEmptyString(dynamic v) {
     if (v == null) return null;
@@ -16,10 +21,7 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   }
 
   int _asInt(dynamic v, {required int fallback}) {
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    if (v is String) return int.tryParse(v) ?? fallback;
-    return fallback;
+    return JsonCast.asInt(v, fallback: fallback);
   }
 
   List<int> _asIntList(dynamic v) {
@@ -45,15 +47,18 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   @override
   Future<InterceptConfig> getConfig() async {
     final m = await _api.getConfig();
+    final timeoutMs = _asInt(m['timeoutMs'], fallback: 60000);
+    final bodyMaxBytes = _asInt(m['bodyMaxBytes'], fallback: 1048576);
+    final queueMax = _asInt(m['queueMax'], fallback: 200);
     return InterceptConfig(
-      enabled: (m['enabled'] ?? false) as bool,
-      requests: (m['requests'] ?? true) as bool,
-      responses: (m['responses'] ?? true) as bool,
-      timeoutMs: _asInt(m['timeoutMs'], fallback: 60000),
-      queueMax: _asInt(m['queueMax'], fallback: 200),
-      bodyMaxBytes: _asInt(m['bodyMaxBytes'], fallback: 1048576),
-      reencode: (m['reencode'] ?? true) as bool,
-      overflow: (m['overflow'] ?? 'auto-continue-oldest') as String,
+      enabled: _asBool(m['enabled'], fallback: false),
+      requests: _asBool(m['requests'], fallback: true),
+      responses: _asBool(m['responses'], fallback: true),
+      timeoutMs: timeoutMs > 0 ? timeoutMs : 60000,
+      queueMax: queueMax >= 0 ? queueMax : 200,
+      bodyMaxBytes: bodyMaxBytes > 0 ? bodyMaxBytes : 1048576,
+      reencode: _asBool(m['reencode'], fallback: true),
+      overflow: (m['overflow'] ?? 'auto-continue-oldest').toString(),
     );
   }
 
@@ -74,7 +79,10 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   @override
   Future<List<InterceptRule>> listRules() async {
     final list = await _api.listRules();
-    return list.map((e) => _mapRule(e as Map<String, dynamic>)).toList();
+    return list
+        .whereType<Map>()
+        .map((e) => _mapRule(JsonCast.asMap(e)))
+        .toList();
   }
 
   @override
@@ -85,7 +93,10 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   @override
   Future<List<InterceptItem>> listPending({int? limit}) async {
     final list = await _api.listPending(limit: limit);
-    return list.map((e) => _mapItem(e as Map<String, dynamic>)).toList();
+    return list
+        .whereType<Map>()
+        .map((e) => _mapItem(JsonCast.asMap(e)))
+        .toList();
   }
 
   @override
@@ -122,15 +133,13 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
 
   InterceptRule _mapRule(Map<String, dynamic> m) {
     return InterceptRule(
-      id: (m['id'] ?? '') as String,
-      enabled: (m['enabled'] ?? true) as bool,
+      id: (m['id'] ?? '').toString(),
+      enabled: _asBool(m['enabled'], fallback: true),
       priority: _asInt(m['priority'], fallback: 0),
-      action: (m['action'] ?? 'both') as String,
-      once: (m['once'] ?? false) as bool,
-      stopProcessing: (m['stopProcessing'] ?? true) as bool,
-      when: _mapWhen(
-        (m['when'] ?? const <String, dynamic>{}) as Map<String, dynamic>,
-      ),
+      action: (m['action'] ?? 'both').toString(),
+      once: _asBool(m['once'], fallback: false),
+      stopProcessing: _asBool(m['stopProcessing'], fallback: true),
+      when: _mapWhen(JsonCast.asMap(m['when'])),
     );
   }
 
@@ -145,6 +154,11 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   };
 
   InterceptWhen _mapWhen(Map<String, dynamic> m) {
+    Map<String, dynamic>? _mapOrNull(dynamic v) {
+      final out = JsonCast.asMap(v);
+      return out.isEmpty ? null : out;
+    }
+
     RuleStringMatch? _r(Map<String, dynamic>? x) => x == null
         ? null
         : () {
@@ -153,12 +167,9 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
             final suffix = _nonEmptyString(x['suffix']);
             final contains = _nonEmptyString(x['contains']);
             final regex = _nonEmptyString(x['regex']);
-            final anyOf =
-                (x['anyOf'] as List<dynamic>?)
-                    ?.map((e) => _nonEmptyString(e))
-                    .whereType<String>()
-                    .toList(growable: false) ??
-                const <String>[];
+            final anyOf = JsonCast.asList(
+              x['anyOf'],
+            ).map(_nonEmptyString).whereType<String>().toList(growable: false);
             final isEmpty =
                 equals == null &&
                 prefix == null &&
@@ -179,8 +190,8 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
     RuleHeaderMatch? _h(Map<String, dynamic>? x) => x == null
         ? null
         : () {
-            final name = _r((x['name'] as Map<String, dynamic>?));
-            final value = _r(x['value'] as Map<String, dynamic>?);
+            final name = _r(_mapOrNull(x['name']));
+            final value = _r(_mapOrNull(x['value']));
             if (name == null) return null;
             // Если name пустой (или невалидный) — не создаём фантомный header match.
             return RuleHeaderMatch(name: name, value: value);
@@ -189,14 +200,16 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
         ? null
         : () {
             final equals = _asIntList(x['equals']);
-            final from = (x['from'] is num)
-                ? (x['from'] as num).toInt()
-                : (x['from'] as int?);
-            final to = (x['to'] is num)
-                ? (x['to'] as num).toInt()
-                : (x['to'] as int?);
-            final is4xx = (x['is4xx'] ?? false) as bool;
-            final is5xx = (x['is5xx'] ?? false) as bool;
+            final rawFrom = x['from'];
+            final rawTo = x['to'];
+            final from = rawFrom == null
+                ? null
+                : JsonCast.asInt(rawFrom, fallback: 0);
+            final to = rawTo == null
+                ? null
+                : JsonCast.asInt(rawTo, fallback: 0);
+            final is4xx = _asBool(x['is4xx'], fallback: false);
+            final is5xx = _asBool(x['is5xx'], fallback: false);
             final normalizedFrom = (from == null || from <= 0) ? null : from;
             final normalizedTo = (to == null || to <= 0) ? null : to;
             final isEmpty =
@@ -215,17 +228,15 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
             );
           }();
     return InterceptWhen(
-      method: (m['method'] as List<dynamic>?)?.cast<String>() ?? const [],
-      scheme: (m['scheme'] as List<dynamic>?)?.cast<String>() ?? const [],
-      host: _r(m['host'] as Map<String, dynamic>?),
-      port: _r(m['port'] as Map<String, dynamic>?),
-      path: _r(m['path'] as Map<String, dynamic>?),
-      contentType: _r(m['contentType'] as Map<String, dynamic>?),
-      responseStatus: _s(m['responseStatus'] as Map<String, dynamic>?),
-      header: _h(m['header'] as Map<String, dynamic>?),
-      bodyContains: (m['bodyContains'] as String?)?.trim().isEmpty == true
-          ? null
-          : (m['bodyContains'] as String?),
+      method: JsonCast.asStringList(m['method']),
+      scheme: JsonCast.asStringList(m['scheme']),
+      host: _r(_mapOrNull(m['host'])),
+      port: _r(_mapOrNull(m['port'])),
+      path: _r(_mapOrNull(m['path'])),
+      contentType: _r(_mapOrNull(m['contentType'])),
+      responseStatus: _s(_mapOrNull(m['responseStatus'])),
+      header: _h(_mapOrNull(m['header'])),
+      bodyContains: JsonCast.asTrimmedStringOrNull(m['bodyContains']),
     );
   }
 
@@ -302,41 +313,45 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
   };
 
   InterceptItem _mapItem(Map<String, dynamic> m) {
+    String? _stringOrNull(dynamic v) => v is String ? v : null;
+
     HTTPRequestSnapshot? req;
-    final rq = m['req'] as Map<String, dynamic>?;
-    if (rq != null) {
+    final rqAny = m['req'];
+    if (rqAny is Map) {
+      final rq = JsonCast.asMap(rqAny);
       req = HTTPRequestSnapshot(
-        method: (rq['method'] ?? '') as String,
-        url: (rq['url'] ?? '') as String,
+        method: JsonCast.asString(rq['method'], fallback: ''),
+        url: JsonCast.asString(rq['url'], fallback: ''),
         headers: _headersMap(rq['headers']),
-        bodyBase64: rq['bodyBase64'] as String?,
-        bodyTruncated: (rq['bodyTruncated'] ?? false) as bool,
-        contentType: rq['contentType'] as String?,
+        bodyBase64: _stringOrNull(rq['bodyBase64']),
+        bodyTruncated: _asBool(rq['bodyTruncated'], fallback: false),
+        contentType: _stringOrNull(rq['contentType']),
       );
     }
     HTTPResponseSnapshot? res;
-    final rs = m['res'] as Map<String, dynamic>?;
-    if (rs != null) {
+    final rsAny = m['res'];
+    if (rsAny is Map) {
+      final rs = JsonCast.asMap(rsAny);
       res = HTTPResponseSnapshot(
         status: _asInt(rs['status'], fallback: 0),
         headers: _headersMap(rs['headers']),
-        bodyBase64: rs['bodyBase64'] as String?,
-        bodyTruncated: (rs['bodyTruncated'] ?? false) as bool,
-        contentType: rs['contentType'] as String?,
+        bodyBase64: _stringOrNull(rs['bodyBase64']),
+        bodyTruncated: _asBool(rs['bodyTruncated'], fallback: false),
+        contentType: _stringOrNull(rs['contentType']),
       );
     }
     return InterceptItem(
-      id: (m['id'] ?? '') as String,
+      id: JsonCast.asString(m['id'], fallback: ''),
       createdAt:
-          DateTime.tryParse((m['createdAt'] ?? '') as String) ??
+          DateTime.tryParse(JsonCast.asString(m['createdAt'], fallback: '')) ??
           DateTime.now().toUtc(),
       deadline:
-          DateTime.tryParse((m['deadline'] ?? '') as String) ??
+          DateTime.tryParse(JsonCast.asString(m['deadline'], fallback: '')) ??
           DateTime.now().toUtc(),
-      direction: (m['direction'] ?? 'request') as String,
-      sessionId: (m['sessionId'] ?? '') as String,
-      state: (m['state'] ?? 'PENDING') as String,
-      ruleId: m['ruleId'] as String?,
+      direction: JsonCast.asString(m['direction'], fallback: 'request'),
+      sessionId: JsonCast.asString(m['sessionId'], fallback: ''),
+      state: JsonCast.asString(m['state'], fallback: 'PENDING'),
+      ruleId: JsonCast.asTrimmedStringOrNull(m['ruleId']),
       req: req,
       res: res,
     );

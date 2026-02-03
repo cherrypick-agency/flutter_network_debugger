@@ -8,15 +8,21 @@ class MappingConfigStore extends ChangeNotifier {
 
   MappingConfig? _config;
   bool _loading = false;
+  String? _lastError;
 
   MappingConfig? get config => _config;
   bool get loading => _loading;
+  String? get lastError => _lastError;
 
   Future<void> load() async {
     _loading = true;
+    _lastError = null;
     notifyListeners();
     try {
       _config = await _repo.getConfig();
+    } catch (e) {
+      _lastError = e.toString();
+      rethrow;
     } finally {
       _loading = false;
       notifyListeners();
@@ -24,6 +30,7 @@ class MappingConfigStore extends ChangeNotifier {
   }
 
   Future<void> save(MappingConfig c) async {
+    _lastError = null;
     await _repo.setConfig(c);
     _config = c;
     notifyListeners();

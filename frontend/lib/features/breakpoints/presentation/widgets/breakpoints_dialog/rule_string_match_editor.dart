@@ -129,7 +129,7 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
         });
       }
     } catch (e) {
-      final next = 'Похоже, regex некорректный: $e';
+      final next = 'Regex looks invalid: $e';
       if (_regexError != next || _regexWarning != null) {
         setState(() {
           _regexError = next;
@@ -143,14 +143,14 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
     // Бэкенд — Go/RE2. Эти конструкции там не поддерживаются.
     // Мы не пытаемся полноценно валидировать RE2, а даём быстрые подсказки.
     final s = raw;
-    if (s.contains('(?<=')) return 'RE2 не поддерживает lookbehind (?<=...)';
-    if (s.contains('(?<!')) return 'RE2 не поддерживает lookbehind (?<!...)';
+    if (s.contains('(?<=')) return 'RE2 does not support lookbehind (?<=...)';
+    if (s.contains('(?<!')) return 'RE2 does not support lookbehind (?<!...)';
     if (RegExp(r'\\[1-9]').hasMatch(s)) {
-      return 'RE2 не поддерживает backreferences (\\1, \\2, …)';
+      return 'RE2 does not support backreferences (\\1, \\2, …)';
     }
-    if (s.contains('(?>')) return 'RE2 не поддерживает atomic groups (?>...)';
+    if (s.contains('(?>')) return 'RE2 does not support atomic groups (?>...)';
     if (RegExp(r'\(\?\(.+\)').hasMatch(s)) {
-      return 'RE2 не поддерживает conditional groups (?(...))';
+      return 'RE2 does not support conditional groups (?(...))';
     }
     return null;
   }
@@ -195,7 +195,7 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
               errorText: _regexError,
               helperText: _kind == _MatchKind.regex
                   ? (_regexWarning ??
-                        'На бэке используется RE2; если regex невалидный — правило просто не сработает.')
+                        'Backend uses RE2; if the regex is invalid, the rule will not match.')
                   : null,
               suffixIcon: (_ctrl.text.trim().isEmpty)
                   ? null

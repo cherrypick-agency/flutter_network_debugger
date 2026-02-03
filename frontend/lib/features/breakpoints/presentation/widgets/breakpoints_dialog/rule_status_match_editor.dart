@@ -117,7 +117,7 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
     final from = int.tryParse(_fromCtrl.text.trim());
     final to = int.tryParse(_toCtrl.text.trim());
     if (from != null && to != null && from > 0 && to > 0 && from > to) {
-      final next = 'From не может быть больше To';
+      final next = '"From" cannot be greater than "To"';
       if (_rangeError != next) setState(() => _rangeError = next);
       return;
     }

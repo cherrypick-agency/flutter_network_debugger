@@ -7,6 +7,12 @@ import 'rule_status_match_editor.dart';
 import 'rule_string_match_editor.dart';
 import 'string_list_editor.dart';
 
+class _Unset {
+  const _Unset();
+}
+
+const _unset = _Unset();
+
 class InterceptWhenEditor extends StatelessWidget {
   const InterceptWhenEditor({
     required this.value,
@@ -16,8 +22,6 @@ class InterceptWhenEditor extends StatelessWidget {
 
   final InterceptWhen value;
   final ValueChanged<InterceptWhen> onChanged;
-
-  static final Object _unset = Object();
 
   void _emit({
     List<String>? method,
@@ -120,7 +124,7 @@ class InterceptWhenEditor extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Условия применяются через AND (в MVP). Пустое поле = не фильтруем.',
+              'Conditions are combined with AND (MVP). Empty field = no filter.',
               style: context.appText.body.copyWith(
                 color: context.appColors.textSecondary,
               ),

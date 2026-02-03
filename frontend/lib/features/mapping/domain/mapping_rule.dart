@@ -1,3 +1,5 @@
+import '../../../core/utils/json_cast.dart';
+
 class MappingRule {
   MappingRule({
     required this.id,
@@ -54,23 +56,25 @@ class MappingRule {
   };
 
   static MappingRule fromJson(Map<String, dynamic> j) => MappingRule(
-    id: (j['id'] ?? '') as String,
-    enabled: (j['enabled'] ?? true) as bool,
-    priority: (j['priority'] ?? 0) as int,
-    kind: (j['kind'] ?? 'remote') as String,
-    stopProcessing: (j['stopProcessing'] ?? true) as bool,
+    id: (j['id'] ?? '').toString(),
+    enabled: JsonCast.asBool(j['enabled'], fallback: true),
+    priority: JsonCast.asInt(j['priority'], fallback: 0),
+    kind: (j['kind'] ?? 'remote').toString(),
+    stopProcessing: JsonCast.asBool(j['stopProcessing'], fallback: true),
     methods: ((j['methods'] as List<dynamic>?) ?? const <dynamic>[])
         .map((e) => (e ?? '').toString())
         .where((e) => e.isNotEmpty)
         .toList(),
-    hostPattern: (j['hostPattern'] ?? '') as String,
-    pathPattern: (j['pathPattern'] ?? '') as String,
-    patternType: (j['patternType'] ?? 'glob') as String,
+    hostPattern: (j['hostPattern'] ?? '').toString(),
+    pathPattern: (j['pathPattern'] ?? '').toString(),
+    patternType: (j['patternType'] ?? 'glob').toString(),
     filePath: (j['filePath'] as String?),
     blobPath: (j['blobPath'] as String?),
-    statusOverride: (j['statusOverride'] as int?),
+    statusOverride: j['statusOverride'] == null
+        ? null
+        : JsonCast.asInt(j['statusOverride'], fallback: 0),
     contentTypeOverride: (j['contentTypeOverride'] as String?),
     targetURLTemplate: (j['targetURLTemplate'] as String?),
-    preserveHost: (j['preserveHost'] ?? false) as bool,
+    preserveHost: JsonCast.asBool(j['preserveHost'], fallback: false),
   );
 }

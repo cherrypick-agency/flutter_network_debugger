@@ -6,14 +6,14 @@ import 'package:provider/provider.dart';
 import '../../../../../core/di/di.dart';
 import '../../../../../core/hotkeys/hotkeys_service.dart';
 import '../../../../../core/notifications/notifications_service.dart';
-import '../../../../../theme/context_ext.dart';
 import '../../../application/stores/breakpoints_store.dart';
 import '../../../application/stores/intercept_editor_store.dart';
 import '../../../application/stores/intercept_queue_store.dart';
 import '../../../domain/entities/intercept_item.dart';
-import '../../../../compose/presentation/widgets/body_editor.dart';
-import '../../../../compose/presentation/widgets/key_value_editor.dart';
 import '../../../../compose/presentation/widgets/kv.dart';
+import 'editor_panel_body_section.dart';
+import 'editor_panel_headers_editor.dart';
+import 'editor_panel_toolbar.dart';
 
 class EditorPanel extends StatefulWidget {
   const EditorPanel({super.key});
@@ -36,17 +36,22 @@ class _EditorPanelState extends State<EditorPanel> {
   String? _contentType;
   bool _submitting = false;
   String? _lastItemId;
-  String? _lastSelectedId;
   InterceptItem? _lastItemRef;
   bool _suppressDirty = false;
   bool _headersDirty = false;
   bool _bodyDirty = false;
+  bool _methodDirty = false;
+  bool _urlDirty = false;
+  bool _statusDirty = false;
 
   @override
   void initState() {
     super.initState();
     _rawCtrl.addListener(_markBodyDirty);
     _jsonCtrl.addListener(_markBodyDirty);
+    _methodCtrl.addListener(_markMethodDirty);
+    _urlCtrl.addListener(_markUrlDirty);
+    _statusCtrl.addListener(_markStatusDirty);
   }
 
   @override
@@ -62,6 +67,21 @@ class _EditorPanelState extends State<EditorPanel> {
   void _markBodyDirty() {
     if (_suppressDirty) return;
     _bodyDirty = true;
+  }
+
+  void _markMethodDirty() {
+    if (_suppressDirty) return;
+    _methodDirty = true;
+  }
+
+  void _markUrlDirty() {
+    if (_suppressDirty) return;
+    _urlDirty = true;
+  }
+
+  void _markStatusDirty() {
+    if (_suppressDirty) return;
+    _statusDirty = true;
   }
 
   void _populateFromItem(InterceptItem it) {
@@ -87,6 +107,9 @@ class _EditorPanelState extends State<EditorPanel> {
       _isTruncated = it.req?.bodyTruncated == true;
       _headersDirty = false;
       _bodyDirty = false;
+      _methodDirty = false;
+      _urlDirty = false;
+      _statusDirty = false;
       _suppressDirty = false;
       return;
     }
@@ -108,28 +131,27 @@ class _EditorPanelState extends State<EditorPanel> {
     _isTruncated = it.res?.bodyTruncated == true;
     _headersDirty = false;
     _bodyDirty = false;
+    _methodDirty = false;
+    _urlDirty = false;
+    _statusDirty = false;
     _suppressDirty = false;
   }
 
   @override
   Widget build(BuildContext context) {
     final ed = context.watch<InterceptEditorStore>();
-    final queue = context.watch<InterceptQueueStore>();
-    final selectedId = queue.selected?.id;
-    if (selectedId != _lastSelectedId) {
-      _lastSelectedId = selectedId;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.read<InterceptEditorStore>().setItem(queue.selected);
-      });
-    }
-
     final it = ed.item;
     if (it == null) {
       return const Center(child: Text('Queue is empty'));
     }
 
-    final canAutoSyncFromItem = !_submitting && !_headersDirty && !_bodyDirty;
+    final canAutoSyncFromItem =
+        !_submitting &&
+        !_headersDirty &&
+        !_bodyDirty &&
+        !_methodDirty &&
+        !_urlDirty &&
+        !_statusDirty;
     if (_lastItemId != it.id) {
       _populateFromItem(it);
       _lastItemId = it.id;
@@ -145,7 +167,7 @@ class _EditorPanelState extends State<EditorPanel> {
     final bindings = hk.buildHandlers({
       'breakpoints.applyContinue': () => _applyAndContinue(ed, it),
       'breakpoints.applyContinue.ctrl': () => _applyAndContinue(ed, it),
-      'breakpoints.cancel': () => ed.cancel(),
+      'breakpoints.cancel': () => _cancelItem(ed),
     });
 
     return CallbackShortcuts(
@@ -157,173 +179,51 @@ class _EditorPanelState extends State<EditorPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  if (isReq)
-                    SizedBox(
-                      width: 100,
-                      child: TextField(
-                        controller: _methodCtrl,
-                        decoration: const InputDecoration(labelText: 'Method'),
-                      ),
-                    ),
-                  if (isReq) const SizedBox(width: 8),
-                  if (isReq)
-                    Expanded(
-                      child: TextField(
-                        controller: _urlCtrl,
-                        decoration: const InputDecoration(labelText: 'URL'),
-                      ),
-                    ),
-                  if (!isReq)
-                    SizedBox(
-                      width: 120,
-                      child: TextField(
-                        controller: _statusCtrl,
-                        decoration: const InputDecoration(labelText: 'Status'),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                  if (!isReq) const SizedBox(width: 8),
-                  if (!isReq)
-                    Expanded(
-                      child: Text(
-                        it.res?.contentType ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.appText.body,
-                      ),
-                    ),
-                  const SizedBox(width: 12),
-                  TextButton(
-                    onPressed: () =>
-                        _addOrUpdateHeader('Authorization', 'Bearer '),
-                    child: const Text('+Auth'),
-                  ),
-                  const SizedBox(width: 4),
-                  TextButton(
-                    onPressed: _ensureContentTypeForMode,
-                    child: const Text('+JSON'),
-                  ),
-                  if (isReq)
-                    FilledButton(
-                      onPressed: _submitting ? null : () => _dropRequest(ed),
-                      child: const Text('Drop'),
-                    ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: _submitting ? null : () => _cancelItem(ed),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _submitting
-                        ? null
-                        : () => _applyAndContinue(ed, it),
-                    child: const Text('Continue'),
-                  ),
-                ],
+              EditorPanelToolbar(
+                isRequest: isReq,
+                methodController: _methodCtrl,
+                urlController: _urlCtrl,
+                statusController: _statusCtrl,
+                responseContentType: it.res?.contentType,
+                submitting: _submitting,
+                onAddAuth: () => _addOrUpdateHeader('Authorization', 'Bearer '),
+                onAddJson: _ensureContentTypeForMode,
+                onDrop: () => _dropRequest(ed),
+                onCancel: () => _cancelItem(ed),
+                onContinue: () => _applyAndContinue(ed, it),
               ),
               const SizedBox(height: 12),
               Expanded(
                 child: Row(
                   children: [
                     Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: context.appColors.border),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: KeyValueEditor(
-                          items: _headers,
-                          onChanged: (v) {
-                            setState(() {
-                              _headers = v;
-                              _headersDirty = true;
-                              _updateContentInfo();
-                            });
-                          },
-                          labelKey: 'Header',
-                        ),
+                      child: EditorPanelHeadersEditor(
+                        headers: _headers,
+                        onChanged: (v) {
+                          setState(() {
+                            _headers = v;
+                            _headersDirty = true;
+                            _updateContentInfo();
+                          });
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: context.appColors.border),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Wrap(
-                                spacing: 8,
-                                children: [
-                                  if (_contentType != null &&
-                                      _contentType!.isNotEmpty)
-                                    Chip(
-                                      label: Text(_contentType!.toLowerCase()),
-                                    ),
-                                  if (context
-                                          .read<BreakpointsStore>()
-                                          .config
-                                          ?.reencode ==
-                                      true)
-                                    const Chip(label: Text('Re-encode')),
-                                  if (_isBinary)
-                                    const Chip(label: Text('Binary')),
-                                  if (_isTruncated)
-                                    const Chip(label: Text('Truncated')),
-                                ],
-                              ),
-                            ),
-                            if (_isBinary || _isTruncated)
-                              Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      if (_isBinary)
-                                        const Chip(
-                                          label: Text(
-                                            'Binary body — editing disabled',
-                                          ),
-                                        ),
-                                      if (_isTruncated)
-                                        const Chip(
-                                          label: Text('Truncated preview'),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            Expanded(
-                              child: (_isBinary || _isTruncated)
-                                  ? const Center(
-                                      child: Text(
-                                        'Body preview is not editable',
-                                      ),
-                                    )
-                                  : BodyEditor(
-                                      mode: _mode,
-                                      onModeChanged: (m) {
-                                        setState(() => _mode = m);
-                                        _ensureContentTypeForMode();
-                                      },
-                                      rawCtrl: _rawCtrl,
-                                      jsonCtrl: _jsonCtrl,
-                                      form: const [],
-                                      multipart: const [],
-                                      allowedModes: const ['raw', 'json'],
-                                    ),
-                            ),
-                          ],
-                        ),
+                      child: EditorPanelBodySection(
+                        contentType: _contentType,
+                        reencode:
+                            context.read<BreakpointsStore>().config?.reencode ==
+                            true,
+                        isBinary: _isBinary,
+                        isTruncated: _isTruncated,
+                        mode: _mode,
+                        onModeChanged: (m) {
+                          setState(() => _mode = m);
+                          _ensureContentTypeForMode();
+                        },
+                        rawController: _rawCtrl,
+                        jsonController: _jsonCtrl,
                       ),
                     ),
                   ],
@@ -363,19 +263,30 @@ class _EditorPanelState extends State<EditorPanel> {
     final queue = context.read<InterceptQueueStore>();
 
     setState(() => _submitting = true);
+    var success = false;
     try {
       if (isReq) {
+        final method = _methodCtrl.text.trim();
+        final url = _urlCtrl.text.trim();
         await ed.continueRequest(
-          method: _methodCtrl.text.trim().isEmpty
-              ? null
-              : _methodCtrl.text.trim(),
-          url: _urlCtrl.text.trim().isEmpty ? null : _urlCtrl.text.trim(),
+          method: _methodDirty ? (method.isEmpty ? null : method) : null,
+          url: _urlDirty ? (url.isEmpty ? null : url) : null,
           // Пустая map означает "очистить заголовки", null означает "не менять".
           headers: hdrs,
           bodyBase64: bodyB64,
         );
       } else {
-        final status = int.tryParse(_statusCtrl.text.trim());
+        int? status;
+        if (_statusDirty) {
+          status = int.tryParse(_statusCtrl.text.trim());
+          if (status == null || status < 100 || status > 599) {
+            sl<NotificationsService>().error(
+              'Invalid status',
+              'Must be a number in range 100..599',
+            );
+            return;
+          }
+        }
         await ed.continueResponse(
           status: status,
           // Пустая map означает "очистить заголовки", null означает "не менять".
@@ -383,6 +294,7 @@ class _EditorPanelState extends State<EditorPanel> {
           bodyBase64: bodyB64,
         );
       }
+      success = true;
       try {
         await queue.refresh();
       } catch (_) {}
@@ -393,11 +305,19 @@ class _EditorPanelState extends State<EditorPanel> {
         await queue.refresh();
       } catch (_) {}
     } finally {
+      if (success) {
+        _headersDirty = false;
+        _bodyDirty = false;
+        _methodDirty = false;
+        _urlDirty = false;
+        _statusDirty = false;
+      }
       if (mounted) setState(() => _submitting = false);
     }
   }
 
   Future<void> _cancelItem(InterceptEditorStore ed) async {
+    if (_submitting) return;
     final queue = context.read<InterceptQueueStore>();
     setState(() => _submitting = true);
     try {
@@ -417,6 +337,7 @@ class _EditorPanelState extends State<EditorPanel> {
   }
 
   Future<void> _dropRequest(InterceptEditorStore ed) async {
+    if (_submitting) return;
     final queue = context.read<InterceptQueueStore>();
     setState(() => _submitting = true);
     try {
@@ -505,22 +426,6 @@ class _EditorPanelState extends State<EditorPanel> {
       if (i.key.toLowerCase() == name) return i.value;
     }
     return null;
-  }
-
-  void _reloadBodyFromSnapshot(InterceptItem? it) {
-    if (it == null) return;
-    final b64 = it.direction == 'request'
-        ? it.req?.bodyBase64
-        : it.res?.bodyBase64;
-    final bodyStr = _safeB64Decode(b64) ?? '';
-    setState(() {
-      _suppressDirty = true;
-      _jsonCtrl.text = _looksLikeJson(bodyStr) ? bodyStr : '';
-      _rawCtrl.text = !_looksLikeJson(bodyStr) ? bodyStr : '';
-      _mode = _looksLikeJson(bodyStr) ? 'json' : 'raw';
-      _bodyDirty = false;
-      _suppressDirty = false;
-    });
   }
 
   void _updateContentInfo() {

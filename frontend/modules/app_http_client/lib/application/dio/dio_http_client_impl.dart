@@ -108,8 +108,11 @@ class DioHttpClientImpl implements AppHttpClient {
               key.toLowerCase() == HttpHeaders.contentTypeHeader.toLowerCase(),
         ) ??
         false;
+    final isFormData = body is FormData;
     final internalHeaders = <String, dynamic>{
-      if (!haveContentTypeHeader)
+      // Для FormData нельзя подставлять application/json, иначе ломается multipart.
+      // Dio сам проставит корректный content-type с boundary.
+      if (!haveContentTypeHeader && !isFormData)
         HttpHeaders.contentTypeHeader:
             ContentType('application', 'json', charset: 'utf-8').toString(),
       if (token != null && token!.isNotEmpty)

@@ -8,15 +8,21 @@ class MappingStore extends ChangeNotifier {
 
   List<MappingRule> _rules = const [];
   bool _loading = false;
+  String? _lastError;
 
   List<MappingRule> get rules => _rules;
   bool get loading => _loading;
+  String? get lastError => _lastError;
 
   Future<void> load() async {
     _loading = true;
+    _lastError = null;
     notifyListeners();
     try {
       _rules = await _repo.listRules();
+    } catch (e) {
+      _lastError = e.toString();
+      rethrow;
     } finally {
       _loading = false;
       notifyListeners();
@@ -24,6 +30,7 @@ class MappingStore extends ChangeNotifier {
   }
 
   Future<void> upsert(MappingRule r) async {
+    _lastError = null;
     final saved = await _repo.upsert(r);
     final i = _rules.indexWhere((e) => e.id == saved.id);
     if (i >= 0) {
@@ -38,16 +45,16 @@ class MappingStore extends ChangeNotifier {
   }
 
   Future<void> delete(String id) async {
+    _lastError = null;
     await _repo.delete(id);
     _rules = _rules.where((e) => e.id != id).toList();
     notifyListeners();
   }
 
   Future<void> reorder(List<String> ids) async {
+    _lastError = null;
     await _repo.reorder(ids);
-    // локально переставим под тот же порядок
-    final map = {for (final r in _rules) r.id: r};
-    _rules = ids.map((e) => map[e]).whereType<MappingRule>().toList();
-    notifyListeners();
+    // После reorder приоритеты на бэке меняются. Проще и надёжнее перечитать.
+    await load();
   }
 }
