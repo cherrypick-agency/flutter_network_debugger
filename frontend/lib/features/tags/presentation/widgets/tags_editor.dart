@@ -77,7 +77,7 @@ class _TagsEditorState extends State<TagsEditor> {
   Future<void> _addTag(String tagName) async {
     if (tagName.trim().isEmpty) {
       setState(() {
-        _errorText = 'Введите имя тега';
+        _errorText = 'Enter tag name';
       });
       _focusNode.requestFocus();
       return;

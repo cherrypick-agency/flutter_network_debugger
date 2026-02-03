@@ -39,10 +39,9 @@ class _FormEditorState extends State<FormEditor> {
                           controller: k,
                           decoration: InputDecoration(
                             labelText: 'Key',
-                            errorText:
-                                keyEmpty
-                                    ? 'Пустой ключ'
-                                    : (isDup ? 'Дубликат ключа' : null),
+                            errorText: keyEmpty
+                                ? 'Empty key'
+                                : (isDup ? 'Duplicate key' : null),
                           ),
                           onChanged: (s) {
                             widget.items[index] = ComposeFormFieldDTO(

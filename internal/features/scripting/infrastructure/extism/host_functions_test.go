@@ -212,7 +212,8 @@ func TestWithMaxTimeoutDoesNotExtendDeadline(t *testing.T) {
 
 func withDeadline(t *testing.T, d time.Duration) (ctx context.Context) {
 	t.Helper()
-	ctx, _ = context.WithTimeout(context.Background(), d)
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	t.Cleanup(cancel)
 	return ctx
 }
 

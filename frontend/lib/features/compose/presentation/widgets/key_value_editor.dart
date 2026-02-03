@@ -52,10 +52,9 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
                         controller: keyCtrl,
                         decoration: InputDecoration(
                           labelText: '${widget.labelKey} key',
-                          errorText:
-                              isKeyEmpty
-                                  ? 'Пустой ключ'
-                                  : (isDup ? 'Дубликат ключа' : null),
+                          errorText: isKeyEmpty
+                              ? 'Empty key'
+                              : (isDup ? 'Duplicate key' : null),
                         ),
                         onChanged: (v) {
                           widget.items[index] = widget.items[index].copyWith(

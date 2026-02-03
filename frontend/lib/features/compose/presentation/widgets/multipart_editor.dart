@@ -52,8 +52,8 @@ class _MultipartEditorState extends State<MultipartEditor> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
                       _hovering
-                          ? 'Отпустите файлы, чтобы добавить'
-                          : 'Перетащите файлы сюда, чтобы добавить как части',
+                          ? 'Drop files to add'
+                          : 'Drag files here to add as parts',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -121,15 +121,14 @@ class _MultipartEditorState extends State<MultipartEditor> {
                           value: item.isFile,
                           onChanged: (v) {
                             setState(
-                              () =>
-                                  widget.items[index] = ComposePartDTO(
-                                    name: item.name,
-                                    isFile: v ?? false,
-                                    fileName: item.fileName,
-                                    contentType: item.contentType,
-                                    base64: item.base64,
-                                    value: item.value,
-                                  ),
+                              () => widget.items[index] = ComposePartDTO(
+                                name: item.name,
+                                isFile: v ?? false,
+                                fileName: item.fileName,
+                                contentType: item.contentType,
+                                base64: item.base64,
+                                value: item.value,
+                              ),
                             );
                             widget.onChanged?.call(widget.items);
                           },
@@ -139,15 +138,14 @@ class _MultipartEditorState extends State<MultipartEditor> {
                           style: Theme.of(
                             context,
                           ).textTheme.bodyMedium?.copyWith(fontSize: 12),
-                          items:
-                              const [false, true]
-                                  .map(
-                                    (v) => DropdownMenuItem(
-                                      value: v,
-                                      child: Text(v ? 'File' : 'Text'),
-                                    ),
-                                  )
-                                  .toList(),
+                          items: const [false, true]
+                              .map(
+                                (v) => DropdownMenuItem(
+                                  value: v,
+                                  child: Text(v ? 'File' : 'Text'),
+                                ),
+                              )
+                              .toList(),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -214,10 +212,9 @@ class _MultipartEditorState extends State<MultipartEditor> {
                               TextField(
                                 decoration: InputDecoration(
                                   labelText: 'Base64',
-                                  errorText:
-                                      fileTooLarge
-                                          ? 'Размер > ${widget.maxUploadMB}MB'
-                                          : null,
+                                  errorText: fileTooLarge
+                                      ? 'Size > ${widget.maxUploadMB}MB'
+                                      : null,
                                 ),
                                 controller: b64Ctrl,
                                 onChanged: (s) {
@@ -236,8 +233,9 @@ class _MultipartEditorState extends State<MultipartEditor> {
                                 children: [
                                   Text(
                                     '~ ${_calcMB(item.base64)}MB',
-                                    style:
-                                        Theme.of(context).textTheme.labelSmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelSmall,
                                   ),
                                   const SizedBox(width: 8),
                                   TextButton(
@@ -250,7 +248,7 @@ class _MultipartEditorState extends State<MultipartEditor> {
                                       });
                                       widget.onChanged?.call(widget.items);
                                     },
-                                    child: const Text('Очистить файл'),
+                                    child: const Text('Clear file'),
                                   ),
                                   const SizedBox(width: 8),
                                   TextButton(
@@ -265,22 +263,21 @@ class _MultipartEditorState extends State<MultipartEditor> {
                                             picked.bytes!,
                                           );
                                           setState(() {
-                                            widget
-                                                .items[index] = ComposePartDTO(
-                                              name:
-                                                  item.name.isEmpty
+                                            widget.items[index] =
+                                                ComposePartDTO(
+                                                  name: item.name.isEmpty
                                                       ? picked.name
                                                       : item.name,
-                                              isFile: true,
-                                              fileName: picked.name,
-                                              base64: b64,
-                                            );
+                                                  isFile: true,
+                                                  fileName: picked.name,
+                                                  base64: b64,
+                                                );
                                           });
                                           widget.onChanged?.call(widget.items);
                                         }
                                       } catch (_) {}
                                     },
-                                    child: const Text('Выбрать файл'),
+                                    child: const Text('Select file'),
                                   ),
                                 ],
                               ),
@@ -297,17 +294,16 @@ class _MultipartEditorState extends State<MultipartEditor> {
                               Container(
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color:
-                                        _hovering
-                                            ? cs.primary
-                                            : cs.outlineVariant,
+                                    color: _hovering
+                                        ? cs.primary
+                                        : cs.outlineVariant,
                                   ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 alignment: Alignment.center,
                                 child: Text(
                                   _hovering
-                                      ? 'Отпустите для загрузки'
+                                      ? 'Drop to upload'
                                       : 'Drop file here',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
@@ -319,14 +315,13 @@ class _MultipartEditorState extends State<MultipartEditor> {
                                 onDrop: (bytes, filename) {
                                   final b64 = base64Encode(bytes);
                                   setState(
-                                    () =>
-                                        widget.items[index] = ComposePartDTO(
-                                          name: item.name,
-                                          isFile: true,
-                                          fileName: filename,
-                                          contentType: item.contentType,
-                                          base64: b64,
-                                        ),
+                                    () => widget.items[index] = ComposePartDTO(
+                                      name: item.name,
+                                      isFile: true,
+                                      fileName: filename,
+                                      contentType: item.contentType,
+                                      base64: b64,
+                                    ),
                                   );
                                   widget.onChanged?.call(widget.items);
                                 },
@@ -336,14 +331,13 @@ class _MultipartEditorState extends State<MultipartEditor> {
                                   final first = files.first;
                                   final b64 = base64Encode(first.bytes);
                                   setState(
-                                    () =>
-                                        widget.items[index] = ComposePartDTO(
-                                          name: item.name,
-                                          isFile: true,
-                                          fileName: first.filename,
-                                          contentType: item.contentType,
-                                          base64: b64,
-                                        ),
+                                    () => widget.items[index] = ComposePartDTO(
+                                      name: item.name,
+                                      isFile: true,
+                                      fileName: first.filename,
+                                      contentType: item.contentType,
+                                      base64: b64,
+                                    ),
                                   );
                                   for (var i = 1; i < files.length; i++) {
                                     final fi = files[i];
@@ -377,7 +371,7 @@ class _MultipartEditorState extends State<MultipartEditor> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Лимит файла ~ ${widget.maxUploadMB}MB',
+              'File limit ~ ${widget.maxUploadMB}MB',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),

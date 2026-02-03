@@ -120,7 +120,7 @@ class _BodyEditorState extends State<BodyEditor> {
                         widget.jsonCtrl.text = sample;
                         setState(() => _jsonError = null);
                       },
-                      child: const Text('Вставить JSON пример'),
+                      child: const Text('Insert JSON example'),
                     ),
                 ],
               ),
@@ -161,7 +161,7 @@ class _BodyEditorState extends State<BodyEditor> {
       jsonDecode(s);
       setState(() => _jsonError = null);
     } catch (e) {
-      setState(() => _jsonError = 'Ошибка JSON: ${e.toString()}');
+      setState(() => _jsonError = 'JSON Error: ${e.toString()}');
     }
   }
 }

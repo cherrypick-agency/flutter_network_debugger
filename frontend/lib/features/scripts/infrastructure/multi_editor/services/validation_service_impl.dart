@@ -72,7 +72,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Имя файла не может быть пустым',
+          reason: 'File name cannot be empty',
         ),
       );
     }
@@ -81,7 +81,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Слишком длинное имя файла (макс. 255 символов)',
+          reason: 'File name too long (max 255 characters)',
         ),
       );
     }
@@ -91,7 +91,7 @@ class ValidationServiceImpl implements ValidationService {
         DomainFailure.validationError(
           field: 'name',
           reason:
-              'Недопустимые символы (разрешены буквы/цифры, точка, дефис, подчёркивание)',
+              'Invalid characters (allowed: letters, digits, dot, dash, underscore)',
         ),
       );
     }
@@ -100,7 +100,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Имя файла не должно начинаться с точки или дефиса',
+          reason: 'File name must not start with dot or dash',
         ),
       );
     }
@@ -114,7 +114,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'path',
-          reason: 'Путь не может быть пустым',
+          reason: 'Path cannot be empty',
         ),
       );
     }
@@ -123,7 +123,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'path',
-          reason: 'Слишком длинный путь (макс. 4096 символов)',
+          reason: 'Path too long (max 4096 characters)',
         ),
       );
     }
@@ -132,7 +132,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'path',
-          reason: 'Путь содержит недопустимые символы',
+          reason: 'Path contains invalid characters',
         ),
       );
     }
@@ -146,7 +146,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Имя папки не может быть пустым',
+          reason: 'Folder name cannot be empty',
         ),
       );
     }
@@ -155,7 +155,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Слишком длинное имя папки (макс. 255 символов)',
+          reason: 'Folder name too long (max 255 characters)',
         ),
       );
     }
@@ -165,7 +165,7 @@ class ValidationServiceImpl implements ValidationService {
         DomainFailure.validationError(
           field: 'name',
           reason:
-              'Недопустимые символы (разрешены буквы/цифры, точка, дефис, подчёркивание)',
+              'Invalid characters (allowed: letters, digits, dot, dash, underscore)',
         ),
       );
     }
@@ -174,7 +174,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Имя папки не должно начинаться с точки или дефиса',
+          reason: 'Folder name must not start with dot or dash',
         ),
       );
     }
@@ -188,7 +188,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Имя проекта не может быть пустым',
+          reason: 'Project name cannot be empty',
         ),
       );
     }
@@ -197,7 +197,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Имя проекта должно быть не короче 3 символов',
+          reason: 'Project name must be at least 3 characters',
         ),
       );
     }
@@ -206,7 +206,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'name',
-          reason: 'Слишком длинное имя проекта (макс. 100 символов)',
+          reason: 'Project name too long (max 100 characters)',
         ),
       );
     }
@@ -216,7 +216,7 @@ class ValidationServiceImpl implements ValidationService {
         DomainFailure.validationError(
           field: 'name',
           reason:
-              'Недопустимые символы (разрешены буквы/цифры, пробел, дефис, подчёркивание)',
+              'Invalid characters (allowed: letters, digits, space, dash, underscore)',
         ),
       );
     }
@@ -231,7 +231,7 @@ class ValidationServiceImpl implements ValidationService {
       return Left(
         DomainFailure.validationError(
           field: 'content',
-          reason: 'Содержимое файла слишком большое (макс. 10MB)',
+          reason: 'File content too large (max 10MB)',
         ),
       );
     }

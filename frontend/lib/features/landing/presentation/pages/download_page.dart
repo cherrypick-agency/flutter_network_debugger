@@ -43,16 +43,15 @@ class DownloadPage extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            card('Рекомендуемая сборка', [
+            card('Recommended build', [
               // Для Safari на macOS точную архитектуру получаем асинхронно
               FutureBuilder<String?>(
                 future: osd.detectArchPrecise(),
                 builder: (context, snap) {
                   final effectiveArch = (snap.data ?? arch);
-                  final note =
-                      os == 'mac'
-                          ? ' (${osd.macArchLabel(effectiveArch)})'
-                          : '';
+                  final note = os == 'mac'
+                      ? ' (${osd.macArchLabel(effectiveArch)})'
+                      : '';
 
                   String pickWith(String name) {
                     if (os == 'win')
@@ -66,7 +65,7 @@ class DownloadPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Определено: $os/$effectiveArch$note',
+                        'Detected: $os/$effectiveArch$note',
                         style: theme.textTheme.bodySmall,
                       ),
                       const SizedBox(height: 8),
@@ -76,12 +75,12 @@ class DownloadPage extends StatelessWidget {
                         children: [
                           ElevatedButton(
                             onPressed: () => dl(pickWith('network-debugger')),
-                            child: const Text('Скачать network-debugger'),
+                            child: const Text('Download network-debugger'),
                           ),
                           OutlinedButton(
-                            onPressed:
-                                () => dl(pickWith('network-debugger-web')),
-                            child: const Text('Скачать network-debugger-web'),
+                            onPressed: () =>
+                                dl(pickWith('network-debugger-web')),
+                            child: const Text('Download network-debugger-web'),
                           ),
                         ],
                       ),
@@ -91,7 +90,7 @@ class DownloadPage extends StatelessWidget {
               ),
             ]),
             const SizedBox(height: 12),
-            card('Выбрать вручную', [
+            card('Choose manually', [
               _Section(
                 title: 'Windows (.zip)',
                 items: const [
@@ -128,7 +127,7 @@ class DownloadPage extends StatelessWidget {
               ),
             ]),
             const SizedBox(height: 12),
-            card('Как запускать', [
+            card('How to run', [
               const SelectableText('''
 tar -xzf network-debugger_<os>_<arch>.tar.gz
 ./network-debugger
@@ -166,10 +165,9 @@ class _Section extends StatelessWidget {
           children: [
             for (final f in items)
               OutlinedButton(
-                onPressed:
-                    () => onTap(
-                      'assets/downloads/$f'.split('assets/downloads/').last,
-                    ),
+                onPressed: () => onTap(
+                  'assets/downloads/$f'.split('assets/downloads/').last,
+                ),
                 child: Text(f, style: const TextStyle(fontSize: 12)),
               ),
           ],
