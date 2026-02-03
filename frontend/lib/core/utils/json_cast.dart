@@ -1,7 +1,7 @@
-/// Утилиты для безопасного приведения значений из JSON.
+/// Utilities for safe JSON value casting.
 ///
-/// В реальных ответах бэка часто встречаются "плавающие" типы (0/1 вместо bool,
-/// числа как строки и т.п.). Эти методы помогают не падать на `as T`.
+/// Real backend responses often contain "floating" types (0/1 instead of bool,
+/// numbers as strings, etc.). These methods help avoid crashes on `as T`.
 class JsonCast {
   static bool asBool(dynamic v, {required bool fallback}) {
     if (v is bool) return v;

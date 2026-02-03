@@ -83,9 +83,9 @@ Future<void> setupDI({
   required String githubRepo,
   required String currentVersion,
 }) async {
-  // init http module (как в qovo_flutter)
+  // init http module
   final container = ContainerDI(sl);
-  // tokens storage внутри модуля; baseURL как лямбда
+  // tokens storage inside module; baseURL as lambda
   final module = module_entry.AppHttpClientModule(
     () => baseUrl,
     (_) {},
@@ -153,7 +153,7 @@ Future<void> setupDI({
   sl.registerSingleton<HotkeysService>(hk);
   // Settings service
   sl.registerLazySingleton<SettingsService>(() => SettingsService());
-  // Первичная синхронизация настроек (задержка ответа)
+  // Initial settings sync (delayed response)
   // ignore: unawaited_futures
   sl<SettingsService>().syncPrefsToBackend();
   // Recent window init

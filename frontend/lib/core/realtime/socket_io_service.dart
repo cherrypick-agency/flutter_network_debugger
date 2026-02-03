@@ -19,9 +19,9 @@ class SocketIoService {
       print('[SocketIO] connect() starting...');
       await Future.microtask(() async {
         final base = sl<http_client.AppHttpClient>().defaultHost;
-        // Socket.IO конфигурация:
-        // baseUrl - только хост (http://localhost:9092)
-        // path - полный HTTP путь к Socket.IO endpoint (/_api/v1/monitor/io/socket.io/)
+        // Socket.IO configuration:
+        // baseUrl - host only (http://localhost:9092)
+        // path - full HTTP path to Socket.IO endpoint (/_api/v1/monitor/io/socket.io/)
         final cfg = SocketIoDebugger.attach(
           enabled: false,
           baseUrl: base, // Только хост
@@ -47,7 +47,7 @@ class SocketIoService {
               .build(),
         );
 
-        // Универсальный обработчик ВСЕХ событий для debug
+        // Universal handler for ALL events for debug
         socket.onAny((event, data) {
           print('[SocketIO] ⬇️ Received event: "$event" with data: $data');
         });

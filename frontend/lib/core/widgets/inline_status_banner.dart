@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../theme/context_ext.dart';
 
-/// Компактный баннер для состояния загрузки/ошибки внутри панелей.
+/// Compact banner for displaying loading/error state inside panels.
 ///
-/// Идея простая: не спамить глобальными нотификациями на фоновых запросах,
-/// а показывать состояние прямо там, где пользователь сейчас смотрит.
+/// The idea is simple: avoid spamming global notifications on background requests,
+/// and show the state right where the user is currently looking.
 class InlineStatusBanner extends StatelessWidget {
   const InlineStatusBanner({
     super.key,

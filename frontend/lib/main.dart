@@ -75,8 +75,8 @@ void main() async {
     setUrlStrategy(const HashUrlStrategy());
   }
 
-  // Для desktop - покажем bootstrap app который запросит конфигурацию
-  // Для web - сразу setupDI и запускаем
+  // For desktop - show bootstrap app that will request configuration
+  // For web - setupDI and run immediately
   if (!kIsWeb && DesktopBootstrap.isDesktop()) {
     runApp(const BootstrapApp());
   } else {
@@ -211,7 +211,7 @@ class _MyAppState extends State<MyApp> {
             themeMode: _mode,
             builder: (context, child) {
               final mq = MediaQuery.of(context);
-              // Применяем глобальный масштаб текста
+              // Apply global text scale
               return MediaQuery(
                 data: mq.copyWith(textScaler: TextScaler.linear(_fontScale)),
                 child: KeyboardStateResetter(child: child!),
@@ -307,7 +307,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // Prevents deadlock between setState() and context.read()
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _restorePrefs().then((_) async {
-        // Синхронизируем реальное состояние записи с бэкендом (перезапишет префы при расхождении)
+        // Sync actual recording state with backend (will overwrite prefs if they differ)
         await _syncRecordingStateFromBackend();
         // Setup search controller listener AFTER preferences are restored
         // This prevents cascade of resubscribe calls during initialization
@@ -317,10 +317,10 @@ class _MyHomePageState extends State<MyHomePage> {
           sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
         });
 
-        // После восстановления фильтров сразу подписываемся на realtime
+        // After restoring filters, immediately subscribe to realtime
         // ignore: discarded_futures
         sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
-        // Ресабскрайб при изменении ключевых фильтров
+        // Resubscribe on key filter changes
         final ui = sl<HomeUiStore>();
         final f = context.read<SessionsFiltersStore>();
         _reactions.add(
@@ -412,7 +412,7 @@ class _MyHomePageState extends State<MyHomePage> {
         final ui = sl<HomeUiStore>();
         final t = (ev['type'] ?? '').toString();
         if (t == 'sessions_cleared') {
-          // мгновенно очищаем стора и мету, чтобы список не восстанавливался от фонового поллинга
+          // instantly clear store and meta so list doesn't restore from background polling
           try {
             context.read<SessionsStore>().clear();
           } catch (_) {}
@@ -422,18 +422,18 @@ class _MyHomePageState extends State<MyHomePage> {
           ui.setSelectedSessionId(null);
           ui.setSelectedRange(null);
           ui.setWfFitAll(true);
-          // выровняем since на сейчас, чтобы повторная подгрузка не схватила старые
+          // align since to now so reloading won't catch old ones
           ui.setSince(DateTime.now().toUtc());
-          // realtime: пересоберём подписку
+          // realtime: rebuild subscription
           // ignore: discarded_futures
           sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
           return;
         }
-        // список обновляется по сокету — перезагрузка не нужна
+        // list is updated via socket — reload not needed
         if (!ui.isRecording.value && t == 'session_started') {
           return; // paused: don't pick up updates
         }
-        // frames/events приходят по SSE, доп. поллинг не нужен
+        // frames/events come via SSE, additional polling not needed
         if (t == 'session_error') {
           // Display user-friendly error notification
           final errorData = ev['error'] as Map<String, dynamic>?;
@@ -475,7 +475,7 @@ class _MyHomePageState extends State<MyHomePage> {
               title,
               '$method $displayTarget\n$message\nSession: $sessionDisplay...',
             );
-            // realtime обновит список автоматически
+            // realtime will update list automatically
           }
         }
       } catch (_) {}
@@ -567,7 +567,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _loadSessions() async {
-    // realtime подписка заменяет REST-загрузку списка/агрегатов
+    // realtime subscription replaces REST loading of list/aggregates
     // ignore: discarded_futures
     sl<RealtimeInspectorService>().resubscribeWithCurrentFilters();
   }
@@ -654,7 +654,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // no-op retained for compatibility with shortcuts (kept for future keyboard shortcuts)
 
   void _startAutoRefresh() {
-    // отключено: детали обновляет SSE-stream
+    // disabled: details are updated by SSE-stream
     _pollTimer?.cancel();
   }
 
@@ -878,7 +878,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       '[ToggleRecording] effectiveRec=$effectiveRec (backendRec=$backendRec)',
                                     );
                                     ui.setIsRecording(effectiveRec);
-                                    // При остановке записи скрываем «непривязанные» (новые) сессии
+                                    // When stopping recording, hide "unbound" (new) sessions
                                     if (!ui.isRecording.value) {
                                       ui.setIncludePaused(false);
                                       ui.setPausedSince(DateTime.now().toUtc());
@@ -946,7 +946,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             },
                           ),
                           const SizedBox(height: 6),
-                          // Быстрая панель фильтров по типам/статусам
+                          // Quick filters panel by types/statuses
                           const QuickFiltersBar(),
                           const SizedBox(height: 8),
                           Observer(
@@ -1255,7 +1255,7 @@ class _SessionPlaceholder extends StatelessWidget {
   }
 }
 
-/// Helper widget для инициализации внутри MaterialApp context
+/// Helper widget for initialization inside MaterialApp context
 class _BootstrapInitializer extends StatefulWidget {
   final Future<void> Function(BuildContext) onInitialize;
   final VoidCallback onInitialized;
@@ -1273,7 +1273,7 @@ class _BootstrapInitializerState extends State<_BootstrapInitializer> {
   @override
   void initState() {
     super.initState();
-    // Показываем dialog после первого build когда MaterialApp context доступен
+    // Show dialog after first build when MaterialApp context is available
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await widget.onInitialize(context);
@@ -1322,8 +1322,8 @@ class _BootstrapInitializerState extends State<_BootstrapInitializer> {
   }
 }
 
-/// Bootstrap приложение для desktop платформ
-/// Показывает startup dialog, запускает Go сервер, затем показывает MyApp
+/// Bootstrap application for desktop platforms
+/// Shows startup dialog, starts Go server, then shows MyApp
 class BootstrapApp extends StatefulWidget {
   const BootstrapApp({super.key});
 
@@ -1337,8 +1337,8 @@ class _BootstrapAppState extends State<BootstrapApp> {
   @override
   void initState() {
     super.initState();
-    // Инициализация будет происходить внутри MaterialApp context
-    // через BootstrapInitializer widget
+    // Initialization will happen inside MaterialApp context
+    // via BootstrapInitializer widget
   }
 
   Future<void> _initialize(BuildContext context) async {
@@ -1347,8 +1347,8 @@ class _BootstrapAppState extends State<BootstrapApp> {
     final apiPort = await DesktopBootstrap.bootstrap(context);
 
     if (apiPort == null) {
-      // Пользователь отменил запуск или произошла ошибка
-      // Закрываем приложение
+      // User cancelled startup or an error occurred
+      // Close application
       if (mounted) {
         // ignore: use_build_context_synchronously
         await showDialog(
@@ -1372,12 +1372,12 @@ class _BootstrapAppState extends State<BootstrapApp> {
       return;
     }
 
-    // Инициализируем DI с правильным портом
+    // Initialize DI with correct port
     PackageInfo packageInfo;
     try {
       packageInfo = await PackageInfo.fromPlatform();
     } catch (e) {
-      // Fallback если package_info не сработал
+      // Fallback if package_info didn't work
       packageInfo = PackageInfo(
         appName: 'Network Debugger',
         packageName: 'com.example.app',
@@ -1401,12 +1401,12 @@ class _BootstrapAppState extends State<BootstrapApp> {
         _initialized = true;
       });
 
-      // Проверяем обновления после успешной инициализации
+      // Check for updates after successful initialization
       _checkForUpdates();
     }
   }
 
-  /// Проверяет наличие обновлений и показывает диалог если доступны
+  /// Checks for updates and shows dialog if available
   Future<void> _checkForUpdates() async {
     if (!mounted) return;
 
@@ -1420,7 +1420,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
 
         switch (result) {
           case UpdateDialogResult.download:
-            // Запускаем загрузку с прогрессом
+            // Start download with progress
             await _downloadAndInstall(updateInfo);
             break;
           case UpdateDialogResult.skip:
@@ -1428,23 +1428,23 @@ class _BootstrapAppState extends State<BootstrapApp> {
             await updatesService.skipVersion(updateInfo.version);
             break;
           case UpdateDialogResult.viewAllReleases:
-            // Открываем страницу со всеми релизами
+            // Open page with all releases
             // ignore: use_build_context_synchronously
             Navigator.of(context).pushNamed('/updates');
             break;
           case UpdateDialogResult.remindLater:
           case null:
-            // Ничего не делаем
+            // Do nothing
             break;
         }
       }
     } catch (e) {
-      // Тихо игнорируем ошибки проверки обновлений
-      // чтобы не мешать работе приложения
+      // Silently ignore update check errors
+      // to not interfere with app operation
     }
   }
 
-  /// Загружает и устанавливает обновление
+  /// Downloads and installs update
   Future<void> _downloadAndInstall(UpdateInfo updateInfo) async {
     if (!mounted) return;
 
@@ -1452,7 +1452,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
     final cancelToken = CancelToken();
 
     try {
-      // Показываем диалог прогресса
+      // Show progress dialog
       // ignore: use_build_context_synchronously
       final updatesService = getIt<UpdatesService>();
       final downloadFuture = updatesService.downloadUpdate(
@@ -1469,19 +1469,19 @@ class _BootstrapAppState extends State<BootstrapApp> {
       );
 
       try {
-        // Ждем завершения загрузки
+        // Wait for download completion
         final filePath = await downloadFuture;
 
-        // Ждем закрытия диалога прогресса (диалог может еще использовать stream)
+        // Wait for progress dialog to close (dialog might still be using stream)
         final downloadResult = await downloadDialogFuture;
 
         if (downloadResult == DownloadDialogResult.cancelled) {
-          // Пользователь отменил загрузку
+          // User cancelled download
           return;
         }
 
         if (downloadResult == DownloadDialogResult.error || filePath == null) {
-          // Ошибка загрузки
+          // Download error
           if (mounted) {
             // ignore: use_build_context_synchronously
             await showDialog(
@@ -1509,7 +1509,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
           return;
         }
 
-        // Загрузка успешна - показываем диалог установки
+        // Download successful - show installation dialog
         if (mounted) {
           // ignore: use_build_context_synchronously
           final shouldInstall = await showDialog<bool>(
@@ -1579,12 +1579,12 @@ class _BootstrapAppState extends State<BootstrapApp> {
           );
 
           if (shouldInstall == true) {
-            // Открываем установщик
+            // Open installer
             final installerResult = await openInstaller(filePath);
 
             if (mounted) {
               if (installerResult.success) {
-                // Показываем инструкции если есть
+                // Show instructions if available
                 if (installerResult.instructions != null) {
                   // ignore: use_build_context_synchronously
                   await showDialog(
@@ -1604,7 +1604,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
                   );
                 }
               } else {
-                // Показываем ошибку
+                // Show error
                 // ignore: use_build_context_synchronously
                 await showDialog(
                   context: context,
@@ -1633,14 +1633,14 @@ class _BootstrapAppState extends State<BootstrapApp> {
           }
         }
       } finally {
-        // CRITICAL: Всегда закрываем stream после того как диалог закрылся
-        // Это предотвращает memory leak
+        // CRITICAL: Always close stream after dialog is closed
+        // This prevents memory leak
         if (!progressController.isClosed) {
           await progressController.close();
         }
       }
     } catch (e) {
-      // Показываем ошибку пользователю
+      // Show error to user
       if (mounted) {
         // ignore: use_build_context_synchronously
         await showDialog(
@@ -1658,8 +1658,8 @@ class _BootstrapAppState extends State<BootstrapApp> {
         );
       }
     } finally {
-      // Финальная очистка - закрываем stream если еще не закрыт
-      // (на случай если что-то пошло не так в catch блоке)
+      // Final cleanup - close stream if not closed yet
+      // (in case something went wrong in catch block)
       if (!progressController.isClosed) {
         await progressController.close();
       }
@@ -1668,9 +1668,9 @@ class _BootstrapAppState extends State<BootstrapApp> {
 
   @override
   void dispose() {
-    // Останавливаем сервер при закрытии приложения
+    // Stop server on app close
     DesktopBootstrap.shutdown();
-    // Освобождаем ресурсы UpdatesService
+    // Release UpdatesService resources
     try {
       getIt<UpdatesService>().dispose();
     } catch (e) {
@@ -1681,9 +1681,9 @@ class _BootstrapAppState extends State<BootstrapApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Всегда оборачиваем в MaterialApp для Material виджетов
+    // Always wrap in MaterialApp for Material widgets
     if (!_initialized) {
-      // Показываем splash screen пока инициализируемся
+      // Show splash screen while initializing
       return MaterialApp(
         theme: buildLightTheme(),
         darkTheme: buildDarkTheme(),
@@ -1712,7 +1712,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
       );
     }
 
-    // После инициализации показываем основное приложение
+    // After initialization show main application
     return const MyApp();
   }
 }

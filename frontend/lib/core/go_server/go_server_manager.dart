@@ -41,7 +41,7 @@ class GoServerManager {
   String? get lastError => _lastError;
   List<String> get recentLogs => List.unmodifiable(_recentLogs);
 
-  /// Запускает Go сервер с указанной конфигурацией
+  /// Starts Go server with specified configuration
   Future<bool> start(GoServerConfig config) async {
     if (_status == ServerStatus.running || _status == ServerStatus.starting) {
       _log.warning('Server is already running or starting');
@@ -64,8 +64,8 @@ class GoServerManager {
         'Config: API port=${config.apiPort}, Proxy port=${config.forwardProxyPort}',
       );
 
-      // Для десктопного приложения отключаем авто‑открытие браузера
-      // у bundled Go-сервера через переменную окружения NO_BROWSER.
+      // For desktop app, disable auto-opening browser
+      // in bundled Go server via NO_BROWSER environment variable.
       final environment = <String, String>{
         ...Platform.environment,
         'NO_BROWSER': '1',
@@ -78,7 +78,7 @@ class GoServerManager {
         mode: ProcessStartMode.normal,
       );
 
-      // Слушаем stdout для логов и определения готовности
+      // Listen to stdout for logs and readiness detection
       _process!.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
@@ -89,7 +89,7 @@ class GoServerManager {
               _recentLogs.add(line);
               if (_recentLogs.length > 50) _recentLogs.removeAt(0);
 
-              // Проверяем готовность сервера по логам
+              // Check server readiness by logs
               if (line.contains('started') ||
                   line.contains('listening') ||
                   line.contains('ready')) {
@@ -104,7 +104,7 @@ class GoServerManager {
             },
           );
 
-      // Слушаем stderr для ошибок
+      // Listen to stderr for errors
       _process!.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
@@ -115,7 +115,7 @@ class GoServerManager {
               _recentLogs.add('[ERROR] $line');
               if (_recentLogs.length > 50) _recentLogs.removeAt(0);
 
-              // Сохраняем последнюю ошибку
+              // Save last error
               if (line.toLowerCase().contains('error') ||
                   line.toLowerCase().contains('failed') ||
                   line.toLowerCase().contains('address already in use') ||
@@ -129,10 +129,10 @@ class GoServerManager {
             },
           );
 
-      // Мониторим завершение процесса
+      // Monitor process completion
       _process!.exitCode.then((exitCode) {
         _log.info('Server exited with code: $exitCode');
-        // Не меняем статус если идет graceful shutdown
+        // Don't change status if graceful shutdown is in progress
         if (_status != ServerStatus.stopping) {
           if (exitCode != 0) {
             _updateStatus(ServerStatus.error);
@@ -143,8 +143,8 @@ class GoServerManager {
         _process = null;
       });
 
-      // Проверяем health endpoint с retry logic (exponential backoff)
-      // Попытки: 500ms, 1s, 2s
+      // Check health endpoint with retry logic (exponential backoff)
+      // Attempts: 500ms, 1s, 2s
       bool isHealthy = false;
       for (final delayMs in [500, 1000, 2000]) {
         await Future.delayed(Duration(milliseconds: delayMs));
@@ -159,7 +159,7 @@ class GoServerManager {
         _log.fine('Health check attempt failed, retrying...');
       }
 
-      // Если health check не прошел, но процесс жив, все равно считаем running
+      // If health check failed but process is alive, still consider it running
       if (_process != null) {
         _updateStatus(ServerStatus.running);
         _log.warning('Server started but health check failed after retries');
@@ -177,7 +177,7 @@ class GoServerManager {
     }
   }
 
-  /// Останавливает Go сервер
+  /// Stops Go server
   Future<void> stop() async {
     if (_status == ServerStatus.stopped || _status == ServerStatus.stopping) {
       return;
@@ -192,10 +192,10 @@ class GoServerManager {
       _updateStatus(ServerStatus.stopping);
       _log.info('Stopping Go server...');
 
-      // Graceful shutdown через SIGTERM
+      // Graceful shutdown via SIGTERM
       _process!.kill(ProcessSignal.sigterm);
 
-      // Ждем завершения процесса (макс 5 сек)
+      // Wait for process completion (max 5 sec)
       final exitCode = await _process!.exitCode.timeout(
         const Duration(seconds: 5),
         onTimeout: () {
@@ -215,14 +215,14 @@ class GoServerManager {
     }
   }
 
-  /// Перезапускает сервер с новой конфигурацией
+  /// Restarts server with new configuration
   Future<bool> restart(GoServerConfig config) async {
     await stop();
     await Future.delayed(const Duration(milliseconds: 500));
     return await start(config);
   }
 
-  /// Проверяет health endpoint сервера
+  /// Checks server health endpoint
   Future<bool> _checkHealth(int apiPort) async {
     try {
       final client = HttpClient();
@@ -248,7 +248,7 @@ class GoServerManager {
     }
   }
 
-  /// Очистка ресурсов
+  /// Resource cleanup
   Future<void> dispose() async {
     try {
       await stop();

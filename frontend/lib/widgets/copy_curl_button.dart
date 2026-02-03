@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Режим экспорта cURL команды
+/// cURL command export mode
 enum CurlExportMode {
-  /// Компактный однострочный формат
+  /// Compact single-line format
   compact,
 
-  /// Многострочный формат с backslash
+  /// Multiline format with backslash
   multiline,
 
-  /// Многострочный с доп. опциями (--location, --insecure)
+  /// Multiline with additional options (--location, --insecure)
   withOptions,
 }
 
-/// Кнопка копирования cURL с выпадающим меню форматов.
-/// Переиспользуется в Inspector и Compose.
+/// cURL copy button with dropdown menu for formats.
+/// Reused in Inspector and Compose.
 class CopyCurlButton extends StatelessWidget {
   const CopyCurlButton({
     super.key,
@@ -27,25 +27,25 @@ class CopyCurlButton extends StatelessWidget {
     this.showSnackBar = true,
   });
 
-  /// URL запроса
+  /// Request URL
   final String url;
 
-  /// HTTP метод (GET, POST, etc.)
+  /// HTTP method (GET, POST, etc.)
   final String method;
 
-  /// Заголовки запроса
+  /// Request headers
   final Map<String, String> headers;
 
-  /// Тело запроса (raw string)
+  /// Request body (raw string)
   final String body;
 
-  /// Form data (для multipart/urlencoded)
+  /// Form data (for multipart/urlencoded)
   final Map<String, dynamic>? form;
 
-  /// Callback после копирования (опционально)
+  /// Callback after copying (optional)
   final void Function(String curl)? onCopied;
 
-  /// Показывать SnackBar после копирования
+  /// Show SnackBar after copying
   final bool showSnackBar;
 
   @override
@@ -120,8 +120,8 @@ class CopyCurlButton extends StatelessWidget {
     }
   }
 
-  /// Генерация cURL команды из данных запроса.
-  /// Статический метод для возможности использования без виджета.
+  /// Generate cURL command from request data.
+  /// Static method for use without widget.
   static String buildCurl({
     required String url,
     required String method,
@@ -134,7 +134,7 @@ class CopyCurlButton extends StatelessWidget {
       return '# Error: URL is empty';
     }
 
-    // Извлекаем cookies из заголовков
+    // Extract cookies from headers
     String? cookieValue;
     final headersToInclude = <String, String>{};
     headers.forEach((k, v) {
@@ -145,7 +145,7 @@ class CopyCurlButton extends StatelessWidget {
       }
     });
 
-    // Проверяем нужен ли form-data формат
+    // Check if form-data format is needed
     final contentType =
         headers['Content-Type'] ?? headers['content-type'] ?? '';
     final useFormData =
@@ -162,9 +162,9 @@ class CopyCurlButton extends StatelessWidget {
     buffer.write(_escapeShellArg(url));
     buffer.write("'");
 
-    // Добавляем заголовки
+    // Add headers
     headersToInclude.forEach((k, v) {
-      // Пропускаем Content-Type и Content-Length для form-data
+      // Skip Content-Type and Content-Length for form-data
       if (useFormData &&
           (k.toLowerCase() == 'content-type' ||
               k.toLowerCase() == 'content-length')) {
@@ -173,19 +173,19 @@ class CopyCurlButton extends StatelessWidget {
       buffer.write("$newline-H '$k: ${_escapeShellArg(v)}'");
     });
 
-    // Добавляем cookie
+    // Add cookie
     if ((cookieValue ?? '').isNotEmpty) {
       buffer.write("$newline--cookie '${_escapeShellArg(cookieValue!)}'");
     }
 
-    // Добавляем body или form data
+    // Add body or form data
     if (useFormData) {
       _appendFormData(buffer, newline, form);
     } else if (body.isNotEmpty) {
       buffer.write("$newline--data '${_escapeShellArg(body)}'");
     }
 
-    // Доп. опции для withOptions режима
+    // Additional options for withOptions mode
     if (mode == CurlExportMode.withOptions) {
       buffer.write("$newline--location");
       buffer.write("$newline--insecure");

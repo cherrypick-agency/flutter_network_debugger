@@ -24,7 +24,7 @@ class NotificationsService {
   }
 
   void errorFromResolved(ResolvedErrorMessage msg) {
-    // Подавляем шум "SocketException: Connection refused" (Flutter runtime)
+    // Suppress "SocketException: Connection refused" noise (Flutter runtime)
     if (_isConnectionRefused(msg)) return;
     final details = msg.details ?? const {};
     final title = '[${msg.code?.name.toUpperCase() ?? 'ERROR'}] ${msg.title}';
@@ -33,14 +33,13 @@ class NotificationsService {
         (details.isNotEmpty
             ? ' — ${details['method'] ?? ''} ${details['url'] ?? ''} ${details['statusCode'] ?? ''}'
             : '');
-    // Санитизация: если кто-то передал объект вместо строки
+    // Sanitization: if someone passed an object instead of a string
     if (desc.contains("Instance of 'ResolvedErrorMessage'")) {
-      desc =
-          (msg.raw?.toString().trim().isNotEmpty ?? false)
-              ? msg.raw!.toString()
-              : msg.description;
+      desc = (msg.raw?.toString().trim().isNotEmpty ?? false)
+          ? msg.raw!.toString()
+          : msg.description;
     }
-    // Если совсем нечего показать и код unknown — не шумим
+    // If there's nothing to show and code is unknown — don't spam
     if ((desc.trim().isEmpty || desc.trim() == 'Unexpected error occurred.') &&
         (msg.code == ServerErrorCode.unknown)) {
       return;
@@ -62,7 +61,7 @@ class NotificationsService {
   }
 
   void _emit(NotificationLevel level, String title, String description) {
-    // Глобальное подавление Connection refused вне зависимости от канала
+    // Global suppression of Connection refused regardless of channel
     if (_isConnRefusedStr(title) || _isConnRefusedStr(description)) return;
     final key = '${level.name}|$title|$description';
     final now = DateTime.now();
@@ -79,7 +78,7 @@ class NotificationsService {
   bool _isConnectionRefused(ResolvedErrorMessage msg) {
     final raw = (msg.raw ?? '').toLowerCase();
     final desc = (msg.description).toLowerCase();
-    // Признаки: SocketException + Connection refused (errno 61 и аналоги)
+    // Signs: SocketException + Connection refused (errno 61 and similar)
     if (raw.contains('socketexception') && raw.contains('connection refused'))
       return true;
     if (desc.contains('connection refused')) return true;

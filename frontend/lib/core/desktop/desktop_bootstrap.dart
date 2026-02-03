@@ -7,22 +7,22 @@ import '../../services/prefs.dart';
 import '../../features/startup/startup_dialog.dart';
 import '../go_server/go_server_manager.dart';
 
-/// Bootstrap service для desktop приложений
-/// Управляет запуском Go сервера и инициализацией приложения
+/// Bootstrap service for desktop applications
+/// Manages Go server startup and application initialization
 class DesktopBootstrap {
   static final GoServerManager _serverManager = GoServerManager();
 
-  /// Проверяет, является ли текущая платформа desktop
+  /// Checks if the current platform is desktop
   static bool isDesktop() {
     return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
   }
 
-  /// Загружает сохраненную конфигурацию портов из preferences
+  /// Loads saved port configuration from preferences
   static Future<StartupConfig> _loadSavedConfig() async {
     try {
       final prefs = await PrefsService().load();
-      // Пытаемся получить сохраненные порты из настроек
-      // Если нет - возвращаем defaults
+      // Try to get saved ports from settings
+      // If none - return defaults
       final apiPort = int.tryParse(prefs['apiPort'] ?? '') ?? 9092;
       final proxyPort = int.tryParse(prefs['proxyPort'] ?? '') ?? 9091;
 
@@ -32,7 +32,7 @@ class DesktopBootstrap {
     }
   }
 
-  /// Проверяет что сервер действительно работает
+  /// Verifies that the server is actually running
   static Future<bool> _verifyServerHealth(int apiPort) async {
     try {
       final client = HttpClient();
@@ -55,13 +55,13 @@ class DesktopBootstrap {
     }
   }
 
-  /// Сохраняет конфигурацию портов в preferences
+  /// Saves port configuration to preferences
   static Future<void> _saveConfig(StartupConfig config) async {
     try {
       final prefs = await PrefsService().load();
       prefs['apiPort'] = config.apiPort.toString();
       prefs['proxyPort'] = config.forwardProxyPort.toString();
-      // Сохраняем обратно
+      // Save back
       await PrefsService().save(
         baseUrl: 'http://localhost:${config.apiPort}',
         targetWs: prefs['targetWs'] ?? '',
@@ -85,37 +85,37 @@ class DesktopBootstrap {
     }
   }
 
-  /// Показывает startup dialog и запускает сервер
-  /// Возвращает порт API для использования в setupDI
+  /// Shows startup dialog and starts the server
+  /// Returns API port for use in setupDI
   static Future<int?> bootstrap(BuildContext context) async {
     if (!isDesktop()) {
-      // Для web возвращаем default port
+      // For web return default port
       return 9092;
     }
 
-    // Цикл для возможности повторной попытки
+    // Loop for retry capability
     // ignore: use_build_context_synchronously
     while (true) {
-      // Загружаем сохраненную конфигурацию
+      // Load saved configuration
       final savedConfig = await _loadSavedConfig();
 
-      // Показываем startup dialog
+      // Show startup dialog
       final config = await showStartupDialog(
         context,
         initialConfig: savedConfig,
       );
 
       if (config == null) {
-        // Пользователь отменил запуск
+        // User cancelled startup
         return null;
       }
 
-      // Сохраняем конфигурацию для следующего раза
+      // Save configuration for next time
       await _saveConfig(config);
 
-      // Если сервер уже запущен, проверяем что он действительно работает
+      // If server is already running, verify it's actually working
       if (config.serverAlreadyRunning) {
-        // Показываем индикатор проверки
+        // Show verification indicator
         if (context.mounted) {
           showDialog(
             context: context,
@@ -138,16 +138,16 @@ class DesktopBootstrap {
           );
         }
 
-        // Проверяем здоровье сервера
+        // Check server health
         final isHealthy = await _verifyServerHealth(config.apiPort);
 
-        // Закрываем индикатор
+        // Close indicator
         if (context.mounted) {
           Navigator.of(context, rootNavigator: true).pop();
         }
 
         if (!isHealthy) {
-          // Сервер не отвечает - показываем ошибку
+          // Server not responding - show error
           if (context.mounted) {
             final retry = await showDialog<bool>(
               context: context,
@@ -212,16 +212,16 @@ class DesktopBootstrap {
             if (retry != true) {
               return null;
             }
-            // Продолжаем цикл - покажем startup dialog снова
+            // Continue loop - show startup dialog again
             continue;
           }
         }
 
-        // Сервер работает - возвращаем порт
+        // Server is working - return port
         return config.apiPort;
       }
 
-      // Запускаем Go сервер и показываем отдельный диалог с логами старта
+      // Start Go server and show separate dialog with startup logs
       final serverConfig = GoServerConfig(
         apiPort: config.apiPort,
         forwardProxyPort: config.forwardProxyPort,
@@ -231,7 +231,7 @@ class DesktopBootstrap {
         return null;
       }
 
-      // Диалог старта сервера с живыми логами и явной кнопкой Continue
+      // Server startup dialog with live logs and explicit Continue button
       final startResult = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -241,38 +241,38 @@ class DesktopBootstrap {
         ),
       );
 
-      // null — пользователь отменил запуск полностью
+      // null — user cancelled startup completely
       if (startResult == null) {
         return null;
       }
 
-      // true — сервер запущен, продолжаем инициализацию
+      // true — server started, continue initialization
       if (startResult) {
         return config.apiPort;
       }
 
-      // false — пользователь нажал Back в диалоге логов,
-      // повторяем цикл и снова показываем диалог выбора портов
+      // false — user clicked Back in logs dialog,
+      // repeat loop and show port selection dialog again
     }
   }
 
-  /// Останавливает сервер при выходе из приложения
+  /// Stops server on application exit
   static Future<void> shutdown() async {
     await _serverManager.stop();
   }
 
-  /// Получить статус сервера
+  /// Get server status
   static ServerStatus get serverStatus => _serverManager.status;
 
-  /// Получить поток статуса сервера
+  /// Get server status stream
   static Stream<ServerStatus> get serverStatusStream =>
       _serverManager.statusStream;
 
-  /// Получить поток логов сервера
+  /// Get server log stream
   static Stream<String> get serverLogStream => _serverManager.logStream;
 }
 
-/// Виджет для отображения строки лога с подсветкой ключевых слов
+/// Widget for displaying log line with keyword highlighting
 class _LogLine extends StatelessWidget {
   final String line;
   final ColorScheme scheme;
@@ -293,13 +293,13 @@ class _LogLine extends StatelessWidget {
         lower.contains('ready') ||
         lower.contains('running') ||
         lower.contains('"addr"');
-    // Предупреждения - оранжевый
+    // Warnings - orange
     final isWarn =
         lower.contains('"level":"warn"') ||
         lower.contains('level=warn') ||
         lower.contains('warning');
 
-    // Базовый цвет строки
+    // Base line color
     Color lineColor;
     if (isStderr) {
       lineColor = scheme.outline;
@@ -311,7 +311,7 @@ class _LogLine extends StatelessWidget {
       lineColor = scheme.onSurface.withValues(alpha: 0.9);
     }
 
-    // Паттерны для подсветки жирным красным
+    // Patterns for bold red highlighting
     final errorPatterns = RegExp(
       r'\b(error|fail|failed|cannot|unable|panic|fatal)\b',
       caseSensitive: false,
@@ -321,7 +321,7 @@ class _LogLine extends StatelessWidget {
       return Text(line, style: baseStyle.copyWith(color: lineColor));
     }
 
-    // Разбиваем строку на части и подсвечиваем ключевые слова
+    // Split line into parts and highlight keywords
     final spans = <TextSpan>[];
     int lastEnd = 0;
 
@@ -359,9 +359,9 @@ class _LogLine extends StatelessWidget {
   }
 }
 
-/// Диалог, который показывает логи старта Go сервера и его текущий статус.
-/// Пользователь видит живой вывод stdout/stderr и вручную нажимает Continue,
-/// когда сервер успешно запустился.
+/// Dialog that shows Go server startup logs and current status.
+/// User sees live stdout/stderr output and manually clicks Continue
+/// when the server has successfully started.
 class ServerStartupDialog extends StatefulWidget {
   final GoServerConfig config;
   final GoServerManager serverManager;
@@ -625,7 +625,7 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
               ),
               child: NotificationListener<ScrollNotification>(
                 onNotification: (notification) {
-                  // Отключаем автоскролл если пользователь скроллит вверх
+                  // Disable autoscroll if user scrolls up
                   if (notification is ScrollUpdateNotification) {
                     final maxScroll =
                         _logsScrollController.position.maxScrollExtent;
@@ -670,7 +670,7 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
       actions: [
         TextButton(
           onPressed: () async {
-            // При отмене пробуем остановить сервер, если он успел стартовать
+            // On cancel, try to stop server if it managed to start
             if (_status == ServerStatus.starting ||
                 _status == ServerStatus.running) {
               await widget.serverManager.stop();
@@ -685,7 +685,7 @@ class _ServerStartupDialogState extends State<ServerStartupDialog> {
         if (hasError)
           ElevatedButton.icon(
             onPressed: () async {
-              // На Back тоже стараемся не оставлять висящий процесс
+              // On Back, also try not to leave hanging process
               if (_status == ServerStatus.starting ||
                   _status == ServerStatus.running) {
                 await widget.serverManager.stop();

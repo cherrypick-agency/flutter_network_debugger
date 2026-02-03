@@ -20,11 +20,11 @@ class ResolvedErrorMessage {
 }
 
 ResolvedErrorMessage resolveErrorMessage(Object e, [StackTrace? stackTrace]) {
-  // Уже резолвлено ранее — пробрасываем как есть
+  // Already resolved earlier — pass through as is
   if (e is ResolvedErrorMessage) {
     return e;
   }
-  // Простой текст
+  // Plain text
   if (e is String) {
     return ResolvedErrorMessage(
       title: 'Error',
@@ -65,7 +65,7 @@ ResolvedErrorMessage resolveErrorMessage(Object e, [StackTrace? stackTrace]) {
   if (e is AppHttpException) {
     final req = e.requestOptions;
     final resp = e.response;
-    // Сформируем более понятное краткое описание:
+    // Form a more understandable brief description:
     // "HTTP 404 POST /_api/v1/sessions/{id}/tags - Not Found"
     String makeDescription() {
       final method = req.method;

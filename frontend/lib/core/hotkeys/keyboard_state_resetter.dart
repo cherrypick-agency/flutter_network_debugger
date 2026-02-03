@@ -1,10 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// Следит за lifecycle и сбрасывает состояние клавиатуры при смене активности.
+/// Monitors lifecycle and resets keyboard state on activity change.
 ///
-/// На desktop иногда теряются KeyUp события при потере фокуса/сворачивании окна,
-/// из‑за чего следующий KeyDown может вызвать assert в `HardwareKeyboard`.
+/// On desktop, KeyUp events are sometimes lost when focus is lost/window is minimized,
+/// which can cause the next KeyDown to trigger an assert in `HardwareKeyboard`.
 class KeyboardStateResetter extends StatefulWidget {
   const KeyboardStateResetter({required this.child, super.key});
 
@@ -39,7 +39,7 @@ class _KeyboardStateResetterState extends State<KeyboardStateResetter>
   }
 
   void _clearKeyboardState() {
-    // HardwareKeyboard API отличается между версиями Flutter — вызываем мягко.
+    // HardwareKeyboard API differs between Flutter versions — call softly.
     try {
       final dynamic hw = HardwareKeyboard.instance;
       hw.clearState();

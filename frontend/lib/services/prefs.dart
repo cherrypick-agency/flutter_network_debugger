@@ -20,8 +20,7 @@ class PrefsService {
   static const _keyThemeMode = 'theme_mode';
   static const _keySinceTs = 'clear_since_ts';
   static const _keyRespDelayEnabled = 'resp_delay_enabled';
-  static const _keyRespDelayValue =
-      'resp_delay_value'; // "1500" или "1000-3000"
+  static const _keyRespDelayValue = 'resp_delay_value'; // "1500" or "1000-3000"
   static const _keyIsRecording = 'is_recording';
   static const _keyRecentWindowEnabled = 'recent_window_enabled';
   static const _keyRecentWindowMinutes = 'recent_window_minutes';
@@ -287,13 +286,13 @@ extension PrefsServiceAdmin on PrefsService {
 extension PrefsServiceVisualDensity on PrefsService {
   static const _keyVisualDensity = 'visual_density';
 
-  /// Сохраняет уровень компактности UI: 'standard', 'comfortable', 'compact'
+  /// Saves UI density level: 'standard', 'comfortable', 'compact'
   Future<void> saveVisualDensity(String density) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyVisualDensity, density);
   }
 
-  /// Загружает уровень компактности UI
+  /// Loads UI density level
   Future<String> loadVisualDensity() async {
     final p = await SharedPreferences.getInstance();
     return p.getString(_keyVisualDensity) ?? 'standard';

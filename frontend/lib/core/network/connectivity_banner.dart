@@ -75,7 +75,7 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
   void _setConnected(bool v) {
     if (_connected == v) {
       if (v) {
-        // при восстановлении связи снова разрешаем показывать баннер в будущем
+        // when connection is restored, allow showing banner again in the future
         if (_dismissed)
           setState(() {
             _dismissed = false;
@@ -88,7 +88,7 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
       if (v) _dismissed = false;
     });
     ConnectivityState.connected.value = v;
-    // overlay больше не используем — баннер рисуется в build и сдвигает контент
+    // overlay is no longer used — banner is drawn in build and shifts content
   }
 
   @override
@@ -97,9 +97,7 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
     final theme = Theme.of(context);
     final bg = theme.colorScheme.errorContainer;
     final on = theme.colorScheme.onErrorContainer;
-    final insets = MediaQuery.of(
-      context,
-    ).padding; // используем только top для статуса
+    final insets = MediaQuery.of(context).padding; // use only top for status
     return Container(
       width: double.infinity,
       color: bg,

@@ -177,7 +177,7 @@ class HotkeysService {
       final mods = <String>[];
       if (a.control) mods.add('Ctrl');
       if (a.alt) mods.add('Alt');
-      // CharacterActivator не имеет флага shift
+      // CharacterActivator doesn't have a shift flag
       if (a.meta) mods.add('Meta');
       mods.add(a.character);
       return mods.join('+');
