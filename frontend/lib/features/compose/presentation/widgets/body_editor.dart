@@ -40,7 +40,7 @@ class BodyEditor extends StatefulWidget {
 }
 
 class _BodyEditorState extends State<BodyEditor> {
-  String? _jsonError; // сообщение об ошибке json (если есть)
+  String? _jsonError; // json error message (if any)
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +138,7 @@ class _BodyEditorState extends State<BodyEditor> {
             );
           }
 
-          // Используем Flexible для динамической высоты по контенту
+          // Use Flexible for dynamic height based on content
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -157,7 +157,7 @@ class _BodyEditorState extends State<BodyEditor> {
         setState(() => _jsonError = null);
         return;
       }
-      // Если парсится — всё ок
+      // If it parses — all good
       jsonDecode(s);
       setState(() => _jsonError = null);
     } catch (e) {

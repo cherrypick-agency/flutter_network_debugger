@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:multi_editor_ui/multi_editor_ui.dart';
 import '../../infrastructure/editor_di.dart';
 
-/// Обёртка вокруг EditorScaffold из multi_file_code_editor
-/// Упрощённый виджет для интеграции с ScriptEditorDialog
+/// Wrapper around EditorScaffold from multi_file_code_editor
+/// Simplified widget for integration with ScriptEditorDialog
 class MultiFileEditorWidget extends StatelessWidget {
   final EditorDI editorDI;
 
@@ -28,7 +28,7 @@ class MultiFileEditorWidget extends StatelessWidget {
         autoSaveDelay: 2,
       ),
       onControllerReady: (controller) {
-        // Регистрируем Monaco controller в MultiEditorService для доступа плагинов
+        // Register Monaco controller in MultiEditorService for plugin access
         editorDI.multiEditorService.setController(controller);
       },
     );

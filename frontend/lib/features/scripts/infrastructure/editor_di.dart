@@ -17,8 +17,8 @@ import 'package:multi_editor_plugin_dart/multi_editor_plugin_dart.dart';
 import 'package:multi_editor_plugin_file_stats/multi_editor_plugin_file_stats.dart';
 import 'package:multi_editor_plugin_recent_files/multi_editor_plugin_recent_files.dart';
 
-/// Dependency Injection для multi_file_code_editor
-/// Адаптирует EditorScaffold для работы с ScriptEditorStore
+/// Dependency Injection for multi_file_code_editor
+/// Adapts EditorScaffold to work with ScriptEditorStore
 class EditorDI {
   // Core components
   late final FileRepository fileRepository;
@@ -42,17 +42,17 @@ class EditorDI {
   EditorDI({required ScriptEditorStore scriptStore})
     : _scriptStore = scriptStore;
 
-  /// Инициализация всех зависимостей
+  /// Initialize all dependencies
   Future<void> init() async {
-    // Создаём event bus
+    // Create event bus
     eventBus = MobxEventBus();
 
-    // Создаём адаптеры репозиториев, которые работают с ScriptEditorStore
+    // Create repository adapters that work with ScriptEditorStore
     final baseFileRepository = MobxFileRepository(
       scriptStore: _scriptStore,
       eventBus: eventBus,
     );
-    // Оборачиваем репозиторий, чтобы сохранять несохранённые изменения между переключениями
+    // Wrap repository to preserve unsaved changes between file switches
     _unsavedOverlay = UnsavedOverlayFileRepository(
       base: baseFileRepository,
       eventBus: eventBus,
@@ -60,7 +60,7 @@ class EditorDI {
     fileRepository = _unsavedOverlay!;
     folderRepository = MobxFolderRepository();
 
-    // Создаём контроллеры
+    // Create controllers
     fileTreeController = FileTreeController(
       folderRepository: folderRepository,
       fileRepository: fileRepository,
@@ -72,22 +72,22 @@ class EditorDI {
       eventBus: eventBus,
     );
 
-    // Инициализируем plugin system
+    // Initialize plugin system
     await _initializePluginSystem();
 
-    // Загружаем дерево файлов
+    // Load file tree
     await fileTreeController.load();
   }
 
-  /// Инициализация plugin system
+  /// Initialize plugin system
   Future<void> _initializePluginSystem() async {
-    // Создаём service implementations
+    // Create service implementations
     multiEditorService = MultiEditorService();
     fileNavigationService = EditorFileNavigationService(editorController);
     pluginUIRegistry = PluginUIRegistry();
     errorTracker = ErrorTracker(maxErrors: 100);
 
-    // Создаём plugin context
+    // Create plugin context
     pluginContext = AppPluginContext(
       eventBus: eventBus,
       fileRepository: fileRepository,
@@ -96,56 +96,56 @@ class EditorDI {
       languageDetector: LanguageDetectorImpl(),
     );
 
-    // Регистрируем services в context
+    // Register services in context
     pluginContext.registerService<EditorService>(multiEditorService);
     pluginContext.registerService<FileNavigationService>(fileNavigationService);
     pluginContext.registerService<PluginUIService>(pluginUIRegistry);
 
-    // Создаём plugin manager
+    // Create plugin manager
     pluginManager = PluginManager(pluginContext, errorTracker: errorTracker);
 
-    // Регистрируем и активируем plugins
+    // Register and activate plugins
     await _registerPlugins();
   }
 
-  /// Регистрация всех plugins
+  /// Register all plugins
   Future<void> _registerPlugins() async {
-    // Регистрируем FileIconsPlugin из package
+    // Register FileIconsPlugin from package
     await pluginManager.registerPlugin(FileIconsPlugin());
 
-    // Регистрируем локальные plugins
+    // Register local plugins
     await pluginManager.registerPlugin(DartLanguagePlugin());
     await pluginManager.registerPlugin(FileStatsPlugin());
     await pluginManager.registerPlugin(RecentFilesPlugin());
   }
 
-  /// Синхронизация файлов из ScriptEditorStore в FileTreeController
+  /// Synchronize files from ScriptEditorStore to FileTreeController
   Future<void> syncFilesFromStore() async {
-    // Перезагружаем дерево файлов при изменении sourceFiles
+    // Reload file tree when sourceFiles change
     await fileTreeController.load();
   }
 
-  /// Освобождение ресурсов
+  /// Release resources
   void dispose() {
-    // Освобождаем plugin system
+    // Release plugin system
     pluginManager.disposeAll();
     errorTracker.dispose();
     multiEditorService.dispose();
     pluginUIRegistry.dispose();
 
-    // Освобождаем контроллеры
+    // Release controllers
     fileTreeController.dispose();
     editorController.dispose();
     _unsavedOverlay?.dispose();
   }
 
-  /// Принудительно сохраняет буфер редактора в ScriptEditorStore.
-  /// Используем перед отправкой на сервер, чтобы не потерять последние правки.
+  /// Forcefully saves editor buffer to ScriptEditorStore.
+  /// Used before sending to server to not lose latest edits.
   Future<void> flushUnsavedChanges() async {
     await _unsavedOverlay?.flushAll();
   }
 
-  /// Перезагружает текущий выбранный файл в редакторе, чтобы сбросить dirty‑флаг.
+  /// Reloads currently selected file in editor to reset dirty flag.
   Future<void> reloadCurrentFileIfAny(String? selectedFile) async {
     if (selectedFile == null) return;
     await editorController.loadFile(selectedFile);

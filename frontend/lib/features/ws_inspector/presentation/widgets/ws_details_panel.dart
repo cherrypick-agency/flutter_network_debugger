@@ -115,12 +115,12 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   // void _onListScroll() {
   //   if (!_listCtrl.hasClients) return;
   //   final pos = _listCtrl.position;
-  //   // небольшой порог, чтобы не дёргать прокрутку при едва заметном «хвосте»
+  //   // small threshold to avoid jerking scroll with barely visible "tail"
   //   const threshold = 48.0;
   //   _stickToBottom = (pos.maxScrollExtent - pos.pixels) <= threshold;
   // }
 
-  // Уникальный ключ фрейма, чтобы не путать элементы с одинаковыми id в разных направлениях
+  // Unique frame key to avoid confusing elements with same id in different directions
   String _frameKeyOf(Map<String, dynamic> f) {
     final id = (f['id'] ?? '').toString();
     final dir = (f['direction'] ?? '').toString();
@@ -331,7 +331,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     );
   }
 
-  // (заголовок рендерим через _buildTitleRich)
+  // (header is rendered via _buildTitleRich)
 
   dynamic _decodeNestedJsonStrings(dynamic v) {
     if (v is Map) {
@@ -357,7 +357,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       if (s.isNotEmpty && (s.startsWith('{') || s.startsWith('['))) {
         try {
           final parsed = jsonDecode(s);
-          // Интересуют только объекты/массивы — примитивы как строки не трогаем
+          // Only interested in objects/arrays - don't touch string primitives
           if (parsed is Map || parsed is List) {
             return _decodeNestedJsonStrings(parsed);
           }
@@ -367,7 +367,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     return val;
   }
 
-  // Пытаемся получить нормализованный объект для заголовка (если preview — JSON)
+  // Try to get normalized object for header (if preview is JSON)
   dynamic _tryDecodeNormalizedForHeader(String preview) {
     final t = preview.trim();
     if (t.isEmpty) return null;
@@ -380,9 +380,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     }
   }
 
-  // Однострочный рендер JSON с подсветкой токенов для заголовка
+  // Single-line JSON render with token highlighting for header
   Widget _buildTitleRich(BuildContext context, String preview) {
-    // 1) Чистый JSON целиком
+    // 1) Pure JSON entirely
     final wholeObj = _tryDecodeNormalizedForHeader(preview);
     if (wholeObj != null) {
       final spans = _buildInlineJsonSpans(context, wholeObj);
@@ -393,7 +393,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         style: context.appText.body,
       );
     }
-    // 2) JSON как часть строки (например, socket.io '42/ns,[...]')
+    // 2) JSON as part of a string (e.g., socket.io '42/ns,[...]')
     final jsonPart = _extractJsonPayload(preview);
     if (jsonPart != null) {
       try {
@@ -420,10 +420,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
           style: context.appText.body,
         );
       } catch (_) {
-        // если вдруг не распарсили — упадём на дефолтный рендер
+        // if parsing fails - fall back to default render
       }
     }
-    // 3) Не JSON — просто текст
+    // 3) Not JSON - just text
     return Text(
       preview,
       maxLines: 1,
@@ -735,7 +735,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                     }
                     setState(() {});
                   },
-                  // hover: только подсветка на таймлайне, без скролла списка
+                  // hover: only highlight on timeline, no list scrolling
                 ),
                 const Align(
                   alignment: Alignment.centerLeft,
@@ -1044,11 +1044,11 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                 },
                               );
 
-                              // Ограничиваем высоту фрейма и скроллим только JSON,
-                              // панель с копированием/поиском висит поверх контента.
+                              // Limit frame height and scroll only JSON content,
+                              // copy/search panel floats above the content.
                               return ConstrainedBox(
                                 constraints: const BoxConstraints(
-                                  maxHeight: 400, // максимум, дальше скролл
+                                  maxHeight: 400, // maximum, then scroll
                                 ),
                                 child: Stack(
                                   children: [
@@ -1064,9 +1064,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                           if (_listCtrl.hasClients) {
                                             final parentPos =
                                                 _listCtrl.position;
-                                            // Доскроллили контент фрейма до низа
-                                            // и продолжаем скроллить вниз —
-                                            // переводим скролл в родительский список.
+                                            // Scrolled frame content to bottom
+                                            // and continuing to scroll down -
+                                            // transfer scroll to parent list.
                                             if (metrics.pixels >=
                                                     metrics.maxScrollExtent &&
                                                 delta > 0) {
@@ -1081,9 +1081,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                                 _listCtrl.jumpTo(target);
                                               }
                                             }
-                                            // Доскроллили контент фрейма до верха
-                                            // и продолжаем скроллить вверх —
-                                            // передаём скролл родителю.
+                                            // Scrolled frame content to top
+                                            // and continuing to scroll up -
+                                            // transfer scroll to parent.
                                             if (metrics.pixels <= 0 &&
                                                 delta < 0) {
                                               final target =
@@ -1104,7 +1104,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                       child: SingleChildScrollView(
                                         child: Container(
                                           alignment: Alignment.centerLeft,
-                                          // небольшой внутренний отступ, без лишнего пустого места сверху
+                                          // small internal padding, without extra empty space at top
                                           padding: const EdgeInsets.all(8),
                                           child: contentWidget,
                                         ),

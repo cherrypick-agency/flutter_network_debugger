@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 
-/// DataSource для работы с GitHub Releases API
+/// DataSource for working with GitHub Releases API
 class GitHubApiDataSource {
   final String githubOwner;
   final String githubRepo;
@@ -10,7 +10,7 @@ class GitHubApiDataSource {
 
   GitHubApiDataSource({required this.githubOwner, required this.githubRepo});
 
-  /// Получает последний релиз из GitHub
+  /// Gets latest release from GitHub
   Future<Map<String, dynamic>?> fetchLatestRelease() async {
     try {
       final url = Uri.parse(
@@ -40,7 +40,7 @@ class GitHubApiDataSource {
     }
   }
 
-  /// Получает список релизов с пагинацией
+  /// Gets list of releases with pagination
   Future<List<Map<String, dynamic>>> fetchAllReleases({
     int page = 1,
     int perPage = 10,
@@ -78,7 +78,7 @@ class GitHubApiDataSource {
     }
   }
 
-  /// Получает конкретный релиз по тегу
+  /// Gets specific release by tag
   Future<Map<String, dynamic>?> fetchReleaseByTag(String tag) async {
     try {
       _log.info('Fetching release by tag: $tag');
@@ -115,17 +115,17 @@ class GitHubApiDataSource {
     }
   }
 
-  /// Выбирает подходящий asset для текущей платформы
+  /// Selects appropriate asset for current platform
   Map<String, dynamic>? selectPlatformAsset(List assets) {
     if (assets.isEmpty) return null;
 
-    // Эта логика будет использоваться из repository impl
-    // Здесь только возвращаем первый asset для демонстрации
-    // В реальном коде нужно проверять Platform.isMacOS/Windows/Linux
-    return null; // Будет реализовано в repository
+    // This logic will be used from repository impl
+    // Here we only return first asset for demonstration
+    // In real code, Platform.isMacOS/Windows/Linux needs to be checked
+    return null; // Will be implemented in repository
   }
 
-  /// Проверяет rate limit и логирует предупреждение
+  /// Checks rate limit and logs warning
   void _checkRateLimit(http.Response response) {
     final remaining = response.headers['x-ratelimit-remaining'];
     if (remaining != null) {
@@ -136,7 +136,7 @@ class GitHubApiDataSource {
     }
   }
 
-  /// Логирует информацию о превышении rate limit
+  /// Logs rate limit exceeded information
   void _logRateLimitExceeded(http.Response response) {
     final resetTime = response.headers['x-ratelimit-reset'];
     if (resetTime != null) {

@@ -47,10 +47,10 @@ class _SettingsPageState extends State<SettingsPage> {
   // custom fonts
   late final FontProvider _fontProvider;
 
-  // компактность UI
+  // UI compactness
   String _visualDensity = 'standard';
 
-  // темы подсветки кода
+  // code highlight themes
   String? _highlightThemeLight;
   String? _highlightThemeDark;
 
@@ -207,7 +207,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
-    // Отменяем несохранённые изменения шрифтов
+    // Cancel unsaved font changes
     _fontProvider.cancelPendingChanges();
     _delayCtrl.dispose();
     _adminTokenCtrl.dispose();
@@ -287,7 +287,7 @@ class _SettingsPageState extends State<SettingsPage> {
         minutes: minutes.clamp(1, 1440),
       );
       await PrefsService().saveAdminToken(_adminTokenCtrl.text);
-      // сохранить и применить порты прокси
+      // save and apply proxy ports
       await SettingsService().saveProxyConfig(
         forwardEnabled: _fwdEnabled,
         forwardPort: _fwdPort,
@@ -297,7 +297,7 @@ class _SettingsPageState extends State<SettingsPage> {
         user: _socksUserCtrl.text.trim(),
         pass: _socksPassCtrl.text.trim(),
       );
-      // применить throttling настройки
+      // apply throttling settings
       await ThrottleService().apply(
         enabled: _thEnabled,
         downKbps: _thOffline ? 0 : _thDown,
@@ -305,22 +305,22 @@ class _SettingsPageState extends State<SettingsPage> {
         packetLossPct: _thOffline ? 0 : _thLoss,
         offline: _thOffline,
       );
-      // применить и сохранить font scale
+      // apply and save font scale
       FontScale.value.value = _fontScale;
       await SettingsService().saveFontScale(_fontScale);
-      // применить и сохранить visual density
+      // apply and save visual density
       VisualDensityNotifier.value.value = VisualDensityNotifier.fromString(
         _visualDensity,
       );
       await PrefsService().saveVisualDensity(_visualDensity);
-      // сохранить темы подсветки кода (если были изменены)
+      // save code highlight themes (if changed)
       if (_highlightThemeLight != null) {
         await SettingsService().saveHighlightThemeLight(_highlightThemeLight!);
       }
       if (_highlightThemeDark != null) {
         await SettingsService().saveHighlightThemeDark(_highlightThemeDark!);
       }
-      // сохранить изменения кастомных шрифтов
+      // save custom font changes
       if (_fontProvider.hasPendingChanges) {
         await _fontProvider.commitPendingChanges();
       }

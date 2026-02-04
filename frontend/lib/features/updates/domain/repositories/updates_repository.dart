@@ -3,23 +3,23 @@ import 'package:dio/dio.dart';
 import '../entities/update_info.dart';
 import '../../presentation/widgets/download_progress_dialog.dart';
 
-/// Repository интерфейс для работы с обновлениями
+/// Repository interface for working with updates
 abstract class UpdatesRepository {
-  /// Проверяет наличие обновлений через GitHub Releases API
+  /// Checks for updates via GitHub Releases API
   Future<UpdateInfo?> checkForUpdates({bool forceCheck = false});
 
-  /// Получает список всех релизов из GitHub с пагинацией
+  /// Gets list of all releases from GitHub with pagination
   Future<List<UpdateInfo>> getAllReleases({
     int page = 1,
     int perPage = 10,
     bool includePrerelease = true,
   });
 
-  /// Получает конкретный релиз по тегу (версии)
+  /// Gets specific release by tag (version)
   Future<UpdateInfo?> getReleaseByTag(String tag);
 
-  /// Загружает обновление с прогрессом
-  /// Возвращает путь к загруженному файлу или null при ошибке
+  /// Downloads update with progress
+  /// Returns path to downloaded file or null on error
   Future<String?> downloadUpdate(
     UpdateInfo updateInfo, {
     required StreamController<DownloadProgress> progressController,
@@ -27,18 +27,18 @@ abstract class UpdatesRepository {
     int maxRetries = 3,
   });
 
-  /// Отмечает версию как пропущенную
+  /// Marks version as skipped
   Future<void> skipVersion(String version);
 
-  /// Сбрасывает пропущенную версию
+  /// Clears skipped version
   Future<void> clearSkippedVersion();
 
-  /// Получает время последней проверки
+  /// Gets last check time
   Future<DateTime?> getLastCheckTime();
 
-  /// Очищает старые загруженные установщики
+  /// Cleans up old downloaded installers
   Future<void> cleanupOldDownloads({Duration maxAge = const Duration(days: 7)});
 
-  /// Освобождение ресурсов
+  /// Releases resources
   void dispose();
 }

@@ -118,7 +118,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     final collectionId = 'col-${DateTime.now().microsecondsSinceEpoch}';
     final rootFolderId = 'fld-${DateTime.now().microsecondsSinceEpoch}';
 
-    // Создаём коллекцию с корневой папкой
+    // Create collection with root folder
     await repo.upsertCollection({
       'id': collectionId,
       'name': name,
@@ -130,11 +130,11 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
       },
     });
 
-    // Перезагружаем библиотеку и перестраиваем дерево
+    // Reload library and rebuild tree
     await _store.loadLibrary();
     _rebuild();
 
-    // Автоматически выбираем созданную коллекцию
+    // Automatically select created collection
     setState(() {
       _selected = FolderSelection(
         collectionId: collectionId,

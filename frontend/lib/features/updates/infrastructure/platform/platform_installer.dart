@@ -7,7 +7,7 @@ import 'platform_installer_stub.dart'
 
 export '../../domain/entities/installer_result.dart';
 
-/// Открывает установщик на текущей платформе
+/// Opens installer on the current platform
 Future<InstallerResult> openInstaller(String filePath) async {
   return openInstallerImpl(filePath);
 }

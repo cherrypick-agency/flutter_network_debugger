@@ -34,7 +34,7 @@ class BreakpointsApi {
 
   Future<void> replaceRules(List<dynamic> rules) async {
     final hdrs = await _hdrs();
-    // Бэк ожидает массив правил, а не объект.
+    // Backend expects an array of rules, not an object.
     await _http.post<void>(
       path: '/_api/v1/intercept/rules',
       headers: hdrs,

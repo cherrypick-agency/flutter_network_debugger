@@ -1,13 +1,13 @@
 import 'package:multi_editor_core/multi_editor_core.dart';
 
-/// Реализация [ValidationService] для проверки имён/путей/контента
+/// Implementation of [ValidationService] for validating names/paths/content
 class ValidationServiceImpl implements ValidationService {
-  // Разрешённые паттерны для имён
+  // Allowed patterns for names
   static final RegExp _fileNameRegex = RegExp(r'^[a-zA-Z0-9_.-]+$');
   static final RegExp _folderNameRegex = RegExp(r'^[a-zA-Z0-9_.-]+$');
   static final RegExp _projectNameRegex = RegExp(r'^[a-zA-Z0-9_\\s-]+$');
 
-  // Список допустимых языков и расширений
+  // List of valid languages and extensions
   static const List<String> _validLanguages = [
     'dart',
     'javascript',
@@ -226,7 +226,7 @@ class ValidationServiceImpl implements ValidationService {
 
   @override
   Either<DomainFailure, void> validateFileContent(String content) {
-    // Простая защита от чрезмерного объёма
+    // Simple protection against excessive size
     if (content.length > 10 * 1024 * 1024) {
       return Left(
         DomainFailure.validationError(

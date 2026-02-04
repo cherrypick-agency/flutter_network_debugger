@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:multi_editor_core/multi_editor_core.dart';
 
-/// Простая реализация EventBus для Editor
-/// Использует StreamController для pub/sub паттерна
+/// Simple EventBus implementation for Editor
+/// Uses StreamController for pub/sub pattern
 class MobxEventBus implements EventBus {
   final StreamController<EditorEvent> _controller =
       StreamController<EditorEvent>.broadcast();

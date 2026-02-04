@@ -31,7 +31,7 @@ String detectArch() {
 
 String macArchLabel(String arch) => arch == 'arm64' ? 'Apple Silicon' : 'Intel';
 
-/// Биндинги для NavigatorUAData (User-Agent Client Hints API)
+/// Bindings for NavigatorUAData (User-Agent Client Hints API)
 @JS('navigator.userAgentData')
 external NavigatorUAData? get _userAgentData;
 
@@ -47,7 +47,7 @@ extension type UADataValues._(JSObject _) implements JSObject {
   external String? get platform;
 }
 
-/// Биндинги для WebGL debug extension
+/// Bindings for WebGL debug extension
 extension type WebGLDebugRendererInfo._(JSObject _) implements JSObject {
   @JS('UNMASKED_RENDERER_WEBGL')
   external int get unmaskedRendererWebGL;
@@ -70,10 +70,10 @@ Future<String?> detectArchPrecise() async {
 
     if (arch.contains('arm')) return 'arm64';
     if (bit == '32') return '386';
-    // Если userAgentData доступен и не ARM — считаем amd64
+    // If userAgentData is available and not ARM - assume amd64
     return 'amd64';
   } catch (_) {
-    // Падение/нет userAgentData — попробуем эвристику через WebGL на macOS
+    // Failure/no userAgentData - try heuristics via WebGL on macOS
     try {
       if (detectOS() != 'mac') return null;
 
@@ -90,11 +90,11 @@ Future<String?> detectArchPrecise() async {
         final extObj = ext as WebGLDebugRendererInfo;
         final renderer = glObj.getParameter(extObj.unmaskedRendererWebGL);
         final r = (renderer?.toString() ?? '').toLowerCase();
-        // Если в Chromium выдаёт конкретный Apple M*, это ARM
+        // If Chromium returns specific Apple M*, it's ARM
         if (r.contains('apple') && !r.contains('apple gpu')) return 'arm64';
       }
 
-      // В Safari рендерер маскируется как "Apple GPU" — используем отсутствующую S3TC_sRGB как слабый сигнал ARM
+      // In Safari renderer is masked as "Apple GPU" - use missing S3TC_sRGB as weak ARM signal
       final supported = glObj.getSupportedExtensions();
       if (supported != null) {
         final extensions = supported.toDart;

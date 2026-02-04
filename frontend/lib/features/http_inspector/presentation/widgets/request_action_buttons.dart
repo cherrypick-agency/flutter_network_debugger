@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../types/body_callbacks.dart';
 import '../../../../widgets/copy_curl_button.dart';
 
-// Re-export для обратной совместимости
+// Re-export for backwards compatibility
 export '../../../../widgets/copy_curl_button.dart' show CurlExportMode;
 
 /// Action buttons for HTTP request operations

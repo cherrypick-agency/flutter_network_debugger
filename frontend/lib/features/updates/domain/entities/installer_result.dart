@@ -1,8 +1,8 @@
-/// Результат открытия установщика
+/// Installer opening result
 class InstallerResult {
   final bool success;
   final String? errorMessage;
-  final String? instructions; // Для Linux может быть инструкция
+  final String? instructions; // May contain instructions for Linux
 
   const InstallerResult({
     required this.success,

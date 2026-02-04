@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/update_info.dart';
 
-/// Показывает диалог с информацией о доступном обновлении
+/// Shows a dialog with information about the available update
 Future<UpdateDialogResult?> showUpdateDialog(
   BuildContext context,
   UpdateInfo updateInfo,
@@ -173,7 +173,7 @@ class _UpdateDialog extends StatelessWidget {
   }
 }
 
-/// Открывает URL для скачивания обновления
+/// Opens URL to download the update
 Future<void> openUpdateDownloadUrl(String url) async {
   final uri = Uri.parse(url);
   if (await canLaunchUrl(uri)) {

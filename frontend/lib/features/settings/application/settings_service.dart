@@ -61,7 +61,7 @@ class SettingsService {
         },
       );
     } catch (_) {
-      // тихо игнорируем: баннер покажет проблемы соединения
+      // silently ignore: banner will show connection problems
     }
   }
 
@@ -118,7 +118,7 @@ class SettingsService {
     required bool enabled,
     required int minutes,
   }) async {
-    // Сохраняем и отдаём в сервис, чтобы он обновил since и дёрнул перезагрузку
+    // Save and pass to service so it updates since and triggers reload
     await PrefsService().saveRecentWindow(enabled: enabled, minutes: minutes);
     sl<RecentWindowService>().apply(enabled: enabled, minutes: minutes);
   }

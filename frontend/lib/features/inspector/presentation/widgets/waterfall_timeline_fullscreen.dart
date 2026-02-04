@@ -23,7 +23,7 @@ class _WaterfallTimelineFullscreenPageState
   @override
   void initState() {
     super.initState();
-    // Подтягиваем актуальные статусы завершения сессий, пока открыт фулскрин
+    // Pull up-to-date session completion statuses while fullscreen is open
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final store = context.read<SessionsStore>();
       store.load();
@@ -88,10 +88,9 @@ class _WaterfallTimelineFullscreenPageState
                         })
                         .toList(growable: false);
                   }
-                  final fixedWindow =
-                      ui.recentWindowEnabled.value
-                          ? Duration(minutes: ui.recentWindowMinutes.value)
-                          : null;
+                  final fixedWindow = ui.recentWindowEnabled.value
+                      ? Duration(minutes: ui.recentWindowMinutes.value)
+                      : null;
                   return WaterfallTimeline(
                     sessions: list,
                     autoCompressLanes: true,

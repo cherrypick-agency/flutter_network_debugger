@@ -67,7 +67,7 @@ class FontService {
       throw ArgumentError('Font family name cannot be empty');
     }
 
-    // Создаём entity для превью
+    // Create entity for preview
     final font = CustomFont(
       id: _uuid.v4(),
       name: fileName,
@@ -76,12 +76,12 @@ class FontService {
       sizeInBytes: fontData.length,
     );
 
-    // Регистрируем шрифт в Flutter (только в памяти)
+    // Register font in Flutter (memory only)
     final loader = FontLoader(familyName);
     loader.addFont(Future.value(ByteData.sublistView(fontData)));
     await loader.load();
 
-    // Сохраняем как pending
+    // Save as pending
     _pendingFont = font;
     _pendingFontData = fontData;
     _pendingRemove = false;
@@ -108,21 +108,21 @@ class FontService {
   /// Commit pending changes (save font or remove)
   Future<void> commitPendingChanges() async {
     if (_pendingRemove) {
-      // Удаляем текущий шрифт
+      // Remove current font
       await _removeUseCase.execute();
       currentFont.value = null;
       _pendingRemove = false;
     } else if (_pendingFont != null && _pendingFontData != null) {
-      // Удаляем старый шрифт если есть
+      // Remove old font if exists
       if (currentFont.value != null) {
         await _removeUseCase.execute();
       }
-      // Сохраняем новый шрифт
+      // Save new font
       await _repository.saveFontData(_pendingFont!.id, _pendingFontData!);
       await _repository.saveCustomFont(_pendingFont!);
       currentFont.value = _pendingFont;
     }
-    // Очищаем pending состояние
+    // Clear pending state
     _pendingFont = null;
     _pendingFontData = null;
   }

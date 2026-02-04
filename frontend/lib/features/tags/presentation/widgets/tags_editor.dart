@@ -37,7 +37,7 @@ class _TagsEditorState extends State<TagsEditor> {
 
     _controller.addListener(_onSearchChanged);
     _focusNode.addListener(() {
-      // Перерисуем подсказки при смене фокуса
+      // Redraw suggestions on focus change
       _onSearchChanged();
       if (mounted) setState(() {});
     });
@@ -56,8 +56,8 @@ class _TagsEditorState extends State<TagsEditor> {
 
     if (query.isEmpty) {
       setState(() {
-        // Если поле в фокусе — показываем весь список предустановленных тегов,
-        // иначе скрываем подсказки.
+        // If field is focused - show full list of predefined tags,
+        // otherwise hide suggestions.
         _filteredTags = _focusNode.hasFocus
             ? store.predefinedTags.toList()
             : [];
@@ -85,7 +85,7 @@ class _TagsEditorState extends State<TagsEditor> {
 
     final store = sl<TagsStore>();
     try {
-      // Если такого тега нет в базе предопределённых — добавим его для переиспользования
+      // If tag doesn't exist in predefined tags - add it for reuse
       final exists = store.predefinedTags.any(
         (t) => t.name.toLowerCase() == tagName.trim().toLowerCase(),
       );
@@ -204,7 +204,7 @@ class _TagsEditorState extends State<TagsEditor> {
               onSubmitted: _addTag,
             ),
 
-            // Autocomplete suggestions (только когда в фокусе)
+            // Autocomplete suggestions (only when focused)
             if (_focusNode.hasFocus && _filteredTags.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(

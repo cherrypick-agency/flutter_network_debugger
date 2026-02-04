@@ -54,7 +54,7 @@ class TagsApi {
         headers: await _hdrs(),
       );
     } on AppHttpServerException catch (e) {
-      // Fallback для окружений без session‑endpoint: используем bulk API
+      // Fallback for environments without session-endpoint: use bulk API
       if (e.code == ServerErrorCode.notFound) {
         await bulkTags({
           'operation': 'add',

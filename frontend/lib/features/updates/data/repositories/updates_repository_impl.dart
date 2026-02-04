@@ -12,24 +12,24 @@ import '../../presentation/widgets/download_progress_dialog.dart';
 import '../datasources/github_api_datasource.dart';
 import '../datasources/updates_local_datasource.dart';
 
-/// Реализация UpdatesRepository для работы с обновлениями
+/// UpdatesRepository implementation for working with updates
 class UpdatesRepositoryImpl implements UpdatesRepository {
   final GitHubApiDataSource _githubApi;
   final UpdatesLocalDataSource _localStorage;
   final String currentVersion;
   final _log = Logger('UpdatesRepositoryImpl');
 
-  // Кэш
+  // Cache
   UpdateInfo? _cachedUpdateInfo;
   DateTime? _lastCheckTime;
 
-  // Dio для загрузки обновлений с таймаутами
+  // Dio for downloading updates with timeouts
   final Dio _dio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(
         minutes: 30,
-      ), // Большие файлы могут качаться долго
+      ), // Large files may take a long time to download
       sendTimeout: const Duration(seconds: 30),
     ),
   );
@@ -40,7 +40,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
     required this.currentVersion,
   }) : _githubApi = githubApi,
        _localStorage = localStorage {
-    // Очищаем старые загруженные файлы при инициализации
+    // Clean up old downloaded files on initialization
     cleanupOldDownloads().catchError((e) {
       _log.warning('Failed to cleanup old downloads: $e');
     });
@@ -48,13 +48,13 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
 
   @override
   Future<UpdateInfo?> checkForUpdates({bool forceCheck = false}) async {
-    // Web не поддерживает автообновления
+    // Web doesn't support auto-updates
     if (kIsWeb) {
       _log.fine('Auto-updates not supported on web platform');
       return null;
     }
 
-    // Проверка не чаще раза в час (если не force)
+    // Check no more than once per hour (unless force)
     if (!forceCheck && _lastCheckTime != null && _cachedUpdateInfo != null) {
       final diff = DateTime.now().difference(_lastCheckTime!);
       if (diff.inHours < 1) {
@@ -68,7 +68,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
     try {
       _log.info('Checking for updates from GitHub Releases...');
 
-      // Получаем данные из GitHub API через datasource
+      // Get data from GitHub API via datasource
       final data = await _githubApi.fetchLatestRelease();
       if (data == null) {
         return null;
@@ -76,14 +76,14 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
 
       final latestVersion = data['tag_name'] as String? ?? '';
 
-      // Проверяем, пропустил ли пользователь эту версию
+      // Check if user skipped this version
       final skippedVersion = await _localStorage.getSkippedVersion();
       if (skippedVersion == latestVersion) {
         _log.info('User skipped version $latestVersion');
         return null;
       }
 
-      // Определяем asset для скачивания в зависимости от платформы
+      // Determine asset to download based on platform
       final asset = _getPlatformAsset(data['assets'] as List);
 
       if (asset == null) {
@@ -93,7 +93,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
 
       final updateInfo = UpdateInfo.fromGitHubRelease(data, asset);
 
-      // Проверяем, действительно ли это новая версия
+      // Check if this is actually a new version
       if (!updateInfo.isNewerThan(currentVersion)) {
         _log.info('Already on latest version: $currentVersion');
         _lastCheckTime = DateTime.now();
@@ -106,7 +106,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
       _lastCheckTime = DateTime.now();
       await _localStorage.setLastCheckTime(_lastCheckTime!);
 
-      // Кешируем релиз для будущего использования
+      // Cache release for future use
       await _localStorage.cacheRelease(latestVersion, data);
 
       return updateInfo;
@@ -128,7 +128,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
     }
 
     try {
-      // Получаем данные из GitHub API через datasource
+      // Get data from GitHub API via datasource
       final releasesJson = await _githubApi.fetchAllReleases(
         page: page,
         perPage: perPage,
@@ -137,17 +137,17 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
       final List<UpdateInfo> releases = [];
 
       for (final release in releasesJson) {
-        // Пропускаем pre-release если не нужны
+        // Skip pre-release if not needed
         if (!includePrerelease && (release['prerelease'] as bool? ?? false)) {
           continue;
         }
 
-        // Получаем asset для текущей платформы
+        // Get asset for current platform
         final assets = release['assets'] as List;
         final asset = _getPlatformAsset(assets);
 
         if (asset == null) {
-          // Нет asset для текущей платформы - пропускаем
+          // No asset for current platform - skip
           _log.fine('No asset for platform in release: ${release['tag_name']}');
           continue;
         }
@@ -155,7 +155,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         final updateInfo = UpdateInfo.fromGitHubRelease(release, asset);
         releases.add(updateInfo);
 
-        // Кешируем каждый релиз
+        // Cache each release
         final version = release['tag_name'] as String? ?? '';
         if (version.isNotEmpty) {
           await _localStorage.cacheRelease(version, release);
@@ -178,7 +178,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
     }
 
     try {
-      // Сначала проверяем кеш
+      // First check cache
       final cachedData = await _localStorage.getCachedRelease(tag);
       if (cachedData != null) {
         _log.fine('Using cached release data for: $tag');
@@ -190,7 +190,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         }
       }
 
-      // Если нет в кеше - запрашиваем из GitHub API
+      // If not in cache - fetch from GitHub API
       _log.info('Fetching release by tag: $tag');
       final releaseJson = await _githubApi.fetchReleaseByTag(tag);
 
@@ -198,7 +198,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return null;
       }
 
-      // Получаем asset для текущей платформы
+      // Get asset for current platform
       final assets = releaseJson['assets'] as List;
       final asset = _getPlatformAsset(assets);
 
@@ -207,7 +207,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return null;
       }
 
-      // Кешируем полученный релиз
+      // Cache received release
       await _localStorage.cacheRelease(tag, releaseJson);
 
       return UpdateInfo.fromGitHubRelease(releaseJson, asset);
@@ -229,7 +229,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
       return null;
     }
 
-    // Проверяем место на диске
+    // Check disk space
     if (updateInfo.sizeBytes > 0) {
       final hasSpace = await _checkDiskSpace(updateInfo.sizeBytes);
       if (!hasSpace) {
@@ -249,11 +249,11 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
       }
     }
 
-    // Retry logic с экспоненциальным backoff
+    // Retry logic with exponential backoff
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          final delay = Duration(seconds: (1 << attempt)); // 2, 4, 8 секунд
+          final delay = Duration(seconds: (1 << attempt)); // 2, 4, 8 seconds
           _log.info('Retry attempt $attempt after ${delay.inSeconds}s delay');
           await Future.delayed(delay);
         }
@@ -262,23 +262,23 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
           'Starting download: ${updateInfo.downloadUrl} (attempt ${attempt + 1}/$maxRetries)',
         );
 
-        // Получаем директорию для загрузки
+        // Get download directory
         final tempDir = await getTemporaryDirectory();
         final fileName = path.basename(Uri.parse(updateInfo.downloadUrl).path);
         final savePath = path.join(tempDir.path, fileName);
 
-        // Удаляем старый файл если существует
+        // Delete old file if exists
         final file = File(savePath);
         if (file.existsSync()) {
           await file.delete();
         }
 
-        // Переменные для отслеживания прогресса
+        // Variables for tracking progress
         int lastReceived = 0;
         DateTime lastUpdate = DateTime.now();
         double currentSpeed = 0.0;
 
-        // Загружаем файл
+        // Download file
         await _dio.download(
           updateInfo.downloadUrl,
           savePath,
@@ -287,15 +287,15 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
             final now = DateTime.now();
             final timeDiff = now.difference(lastUpdate).inMilliseconds;
 
-            // Обновляем прогресс каждые 100ms для плавности
+            // Update progress every 100ms for smoothness
             if (timeDiff >= 100) {
               final bytesDiff = received - lastReceived;
-              currentSpeed = (bytesDiff / timeDiff) * 1000; // байт/сек
+              currentSpeed = (bytesDiff / timeDiff) * 1000; // bytes/sec
 
               lastReceived = received;
               lastUpdate = now;
 
-              // Отправляем прогресс
+              // Send progress
               if (!progressController.isClosed) {
                 progressController.add(
                   DownloadProgress(
@@ -309,7 +309,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
           },
         );
 
-        // Финальный прогресс (100%)
+        // Final progress (100%)
         if (!progressController.isClosed) {
           try {
             final fileSize = file.lengthSync();
@@ -322,34 +322,34 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
             );
           } catch (e) {
             _log.warning('Failed to read final file size: $e');
-            // Не критично, просто не отправляем финальный прогресс
+            // Not critical, just don't send final progress
           }
         }
 
-        // Вычисляем SHA256 для проверки целостности
+        // Compute SHA256 for integrity check
         _log.info('Computing SHA256 checksum...');
         final computedSha256 = await _computeSha256(file);
         _log.info('File SHA256: $computedSha256');
 
-        // NOTE: GitHub Releases API не предоставляет checksums для assets.
-        // Checksum вычисляется для логирования и будущей проверки, когда/если
-        // GitHub добавит поддержку checksums в API response.
-        // Альтернатива: можно хранить checksums в release notes как workaround.
+        // NOTE: GitHub Releases API doesn't provide checksums for assets.
+        // Checksum is computed for logging and future verification when/if
+        // GitHub adds checksum support in API response.
+        // Alternative: checksums can be stored in release notes as a workaround.
 
         _log.info('Download completed successfully: $savePath');
         return savePath;
       } catch (e) {
-        // Ошибка при попытке загрузки
+        // Error during download attempt
         if (attempt == maxRetries - 1) {
-          // Последняя попытка не удалась
+          // Last attempt failed
           rethrow;
         }
         _log.warning('Download attempt ${attempt + 1} failed: $e');
-        // Продолжаем retry loop
+        // Continue retry loop
       }
     }
 
-    // Все retry исчерпаны - отправляем финальную ошибку
+    // All retries exhausted - send final error
     _log.warning('All download attempts failed');
     if (!progressController.isClosed) {
       progressController.add(
@@ -386,12 +386,12 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
     await _localStorage.cleanupOldDownloads(maxAge: maxAge);
   }
 
-  /// Определяет asset для скачивания в зависимости от платформы
+  /// Determines asset to download based on platform
   Map<String, dynamic>? _getPlatformAsset(List assets) {
     if (assets.isEmpty) return null;
 
     if (Platform.isMacOS) {
-      // Приоритет: .dmg > .tar.gz
+      // Priority: .dmg > .tar.gz
       final dmg = assets.firstWhere(
         (a) => (a['name'] as String).endsWith('.dmg'),
         orElse: () => null,
@@ -400,7 +400,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return dmg as Map<String, dynamic>;
       }
 
-      // Ищем tar.gz для macOS
+      // Look for tar.gz for macOS
       final tarGz = assets.firstWhere((a) {
         final name = (a['name'] as String).toLowerCase();
         return name.contains('darwin') && name.endsWith('.tar.gz');
@@ -409,7 +409,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return tarGz as Map<String, dynamic>;
       }
     } else if (Platform.isWindows) {
-      // Приоритет: .msi > .zip
+      // Priority: .msi > .zip
       final msi = assets.firstWhere(
         (a) => (a['name'] as String).endsWith('.msi'),
         orElse: () => null,
@@ -418,7 +418,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return msi as Map<String, dynamic>;
       }
 
-      // Ищем zip для Windows
+      // Look for zip for Windows
       final zip = assets.firstWhere((a) {
         final name = (a['name'] as String).toLowerCase();
         return name.contains('windows') && name.endsWith('.zip');
@@ -427,7 +427,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return zip as Map<String, dynamic>;
       }
     } else if (Platform.isLinux) {
-      // Приоритет: AppImage > deb > tar.gz
+      // Priority: AppImage > deb > tar.gz
       final appImage = assets.firstWhere(
         (a) => (a['name'] as String).endsWith('.AppImage'),
         orElse: () => null,
@@ -444,7 +444,7 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
         return deb as Map<String, dynamic>;
       }
 
-      // Ищем tar.gz для Linux
+      // Look for tar.gz for Linux
       final tarGz = assets.firstWhere((a) {
         final name = (a['name'] as String).toLowerCase();
         return name.contains('linux') && name.endsWith('.tar.gz');
@@ -458,19 +458,19 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
     return null;
   }
 
-  /// Вычисляет SHA256 хеш файла
+  /// Computes SHA256 hash of file
   Future<String> _computeSha256(File file) async {
     final bytes = await file.readAsBytes();
     final digest = sha256.convert(bytes);
     return digest.toString();
   }
 
-  /// Проверяет доступное место на диске
+  /// Checks available disk space
   Future<bool> _checkDiskSpace(int requiredBytes) async {
     try {
       final tempDir = await getTemporaryDirectory();
 
-      // Для Unix-like систем можем использовать df команду
+      // For Unix-like systems we can use df command
       if (Platform.isLinux || Platform.isMacOS) {
         final result = await Process.run('df', ['-k', tempDir.path]);
         if (result.exitCode == 0) {
@@ -480,19 +480,19 @@ class UpdatesRepositoryImpl implements UpdatesRepository {
             if (parts.length >= 4) {
               final availableKB = int.tryParse(parts[3]) ?? 0;
               final availableBytes = availableKB * 1024;
-              // Требуем 20% запас
+              // Require 20% margin
               return availableBytes >= (requiredBytes * 1.2);
             }
           }
         }
       }
 
-      // Для Windows или если df не сработал - делаем приблизительную проверку
-      // путем попытки создать test файл
-      return true; // Оптимистичный fallback
+      // For Windows or if df failed - do approximate check
+      // by attempting to create test file
+      return true; // Optimistic fallback
     } catch (e) {
       _log.warning('Failed to check disk space: $e');
-      return true; // Оптимистичный fallback при ошибке
+      return true; // Optimistic fallback on error
     }
   }
 

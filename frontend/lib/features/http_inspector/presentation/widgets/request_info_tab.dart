@@ -68,7 +68,7 @@ class RequestInfoTab extends StatelessWidget {
     ];
   }
 
-  /// Копирует все хедеры в буфер обмена
+  /// Copies all headers to clipboard
   void _copyAllHeaders() {
     final raw = headersRaw ?? headers;
     final text = raw.entries.map((e) => '${e.key}: ${e.value}').join('\n');
@@ -107,7 +107,7 @@ class RequestInfoTab extends StatelessWidget {
   }
 }
 
-/// Компактная кнопка копирования для заголовков секций
+/// Compact copy button for section headers
 class _CopyAllButton extends StatefulWidget {
   const _CopyAllButton({required this.onTap});
 

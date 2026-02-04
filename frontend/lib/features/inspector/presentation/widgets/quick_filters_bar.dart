@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../../../filters/application/stores/sessions_filters_store.dart';
 import '../../application/stores/sessions_store.dart';
 
-// Компактная панель быстрых фильтров под таймлайном
+// Compact quick filters panel below the timeline
 class QuickFiltersBar extends StatelessWidget {
   const QuickFiltersBar({super.key});
 
@@ -17,9 +17,9 @@ class QuickFiltersBar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final textStyle = Theme.of(context).textTheme.labelSmall;
 
-    // Чуть заметная подложка, как у контролов таймлайна справа
+    // Subtle background similar to timeline controls on the right
     final bg = cs.surface.withValues(alpha: 0.45);
-    // Рамку убираем — оставляем только мягкую подложку
+    // Remove border — keep only soft background
 
     return Container(
       width: double.infinity,
@@ -75,7 +75,7 @@ class QuickFiltersBar extends StatelessWidget {
           };
           final statusList = <String>['1xx', '2xx', '3xx', '4xx', '5xx'];
 
-          // Горизонтальный скролл, одна строка
+          // Horizontal scroll, single row
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -92,7 +92,7 @@ class QuickFiltersBar extends StatelessWidget {
                 const SizedBox(width: 6),
                 const _DividerDot(),
                 const SizedBox(width: 6),
-                // Типы
+                // Types
                 ...[
                   for (final e in typeMap.entries) ...[
                     chip(
@@ -108,7 +108,7 @@ class QuickFiltersBar extends StatelessWidget {
                 ],
                 const _DividerDot(),
                 const SizedBox(width: 6),
-                // Статусы
+                // Statuses
                 ...[
                   for (final g in statusList) ...[
                     chip(

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-/// Простой превьювер HTML через WebView
-/// Поддерживает загрузку HTML-строки с опциональным baseUrl для относительных ссылок
+/// Simple HTML previewer via WebView
+/// Supports loading HTML string with optional baseUrl for relative links
 class HtmlPreview extends StatefulWidget {
   const HtmlPreview({super.key, required this.html, this.baseUrl});
 

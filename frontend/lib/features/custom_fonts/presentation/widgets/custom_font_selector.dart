@@ -97,7 +97,7 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
         familyName = fileName.replaceAll(RegExp(r'\.(ttf|otf)$'), '');
       }
 
-      // Загружаем для превью (не сохраняем)
+      // Load for preview (don't save)
       await provider.loadFontForPreview(
         fontData: fontData,
         fileName: fileName,
@@ -118,7 +118,7 @@ class _CustomFontSelectorState extends State<CustomFontSelector> {
   }
 
   void _removeFont() {
-    // Помечаем шрифт для удаления (удалится при Save)
+    // Mark font for removal (will be removed on Save)
     provider.markFontForRemoval();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

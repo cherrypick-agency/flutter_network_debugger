@@ -1,4 +1,4 @@
-/// Информация о доступном обновлении
+/// Information about available update
 class UpdateInfo {
   final String version;
   final String downloadUrl;
@@ -24,7 +24,7 @@ class UpdateInfo {
     Map<String, dynamic> json,
     Map<String, dynamic> asset,
   ) {
-    // Парсим дату публикации
+    // Parse publication date
     DateTime publishedAt;
     try {
       publishedAt = DateTime.parse(json['published_at'] as String);
@@ -85,12 +85,12 @@ class UpdateInfo {
   }
 
   bool isNewerThan(String currentVersion) {
-    // Убираем 'v' префикс если есть
+    // Remove 'v' prefix if present
     final current = currentVersion.replaceFirst('v', '');
     final latest = version.replaceFirst('v', '');
 
     try {
-      // Убираем build number (+4) если есть, оставляем только версию
+      // Remove build number (+4) if present, keep only version
       final currentVersionOnly = current.split('+').first;
       final latestVersionOnly = latest.split('+').first;
 
@@ -100,7 +100,7 @@ class UpdateInfo {
           .toList();
       final latestParts = latestVersionOnly.split('.').map(int.parse).toList();
 
-      // Сравниваем major.minor.patch
+      // Compare major.minor.patch
       for (int i = 0; i < 3; i++) {
         final currentPart = i < currentParts.length ? currentParts[i] : 0;
         final latestPart = i < latestParts.length ? latestParts[i] : 0;
@@ -109,9 +109,9 @@ class UpdateInfo {
         if (latestPart < currentPart) return false;
       }
 
-      return false; // Версии равны
+      return false; // Versions are equal
     } catch (e) {
-      // Если не удалось распарсить версии, считаем что обновление доступно
+      // If version parsing failed, assume update is available
       return version != currentVersion;
     }
   }

@@ -29,7 +29,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
         scope = ui.captureScope.value;
         includePaused = ui.includePaused.value;
       } catch (_) {}
-      // Собираем быстрые фильтры напрямую из UI-стора, чтобы не плодить параметры
+      // Collect quick filters directly from UI store to avoid proliferating parameters
       Set<String> uiTypes = const {};
       Set<String> uiStatusGroups = const {};
       try {
@@ -54,7 +54,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
           if ((statusGroups != null && statusGroups.isNotEmpty) ||
               uiStatusGroups.isNotEmpty)
             'status': (statusGroups ?? uiStatusGroups).join(','),
-          // Включаем глубокую проверку GraphQL только при явном выборе
+          // Enable deep GraphQL scan only when explicitly selected
           if (((types ?? uiTypes).contains('graphql'))) 'scan': 'graphql',
         },
       );
@@ -94,7 +94,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
           )
           .toList(growable: false);
     } catch (e) {
-      // Пробрасываем только сообщение; UI решит, как показывать
+      // Pass only the message; UI will decide how to display
       throw resolveErrorMessage(e);
     }
   }

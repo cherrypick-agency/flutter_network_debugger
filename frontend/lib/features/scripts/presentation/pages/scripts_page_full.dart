@@ -83,7 +83,7 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
       ),
       body: Column(
         children: [
-          // Предупреждение: раздел ещё не завершён, экраны демонстрационные
+          // Warning: section is not yet complete, screens are for demonstration
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Card(

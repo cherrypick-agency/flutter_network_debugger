@@ -70,7 +70,7 @@ class FramesTimelinePainter extends CustomPainter {
       String s => int.tryParse(s) ?? 0,
       _ => 0,
     };
-    // Чем больше размер, тем крупнее точка, но теперь всё вдвое меньше
+    // The larger the size, the bigger the dot, but now everything is half the size
     final base = 1.5 + (intSize <= 0 ? 0.0 : math.sqrt(intSize.toDouble()) / 6);
     final scaled = base * 0.5; // x0.5
     final double r = scaled.clamp(0.75, 3.0);
@@ -79,24 +79,23 @@ class FramesTimelinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final axisPaint =
-        Paint()
-          ..color = style.axisColor
-          ..strokeWidth = 1;
+    final axisPaint = Paint()
+      ..color = style.axisColor
+      ..strokeWidth = 1;
 
     final centerY = size.height / 2;
     final laneOffset = math.min(12.0, (size.height - padding.vertical) / 4);
     final topLaneY = centerY - laneOffset;
     final bottomLaneY = centerY + laneOffset;
 
-    // Ось времени
+    // Time axis
     canvas.drawLine(
       Offset(padding.left, centerY),
       Offset(size.width - padding.right, centerY),
       axisPaint,
     );
 
-    // Точки
+    // Points
     final pointPaint = Paint();
     for (final f in frames) {
       final tsStr = (f['ts'] ?? '').toString();
@@ -118,7 +117,7 @@ class FramesTimelinePainter extends CustomPainter {
       canvas.drawCircle(Offset(x, y), r, pointPaint);
     }
 
-    // Спарклайны на той же оси: msgs/s (синяя) и bytes/s (зелёная)
+    // Sparklines on the same axis: msgs/s (blue) and bytes/s (green)
     if (frames.isNotEmpty) {
       final innerW = size.width - padding.horizontal;
       if (innerW > 4) {
@@ -140,10 +139,9 @@ class FramesTimelinePainter extends CustomPainter {
           if (idx < 0 || idx >= binsCount) continue;
           msgs[idx] += 1;
           final szRaw = f['size'];
-          final sz =
-              szRaw is int
-                  ? (szRaw.toDouble())
-                  : (double.tryParse(szRaw?.toString() ?? '0') ?? 0.0);
+          final sz = szRaw is int
+              ? (szRaw.toDouble())
+              : (double.tryParse(szRaw?.toString() ?? '0') ?? 0.0);
           bytes[idx] += sz;
         }
         final maxMsgs = msgs.fold<double>(0, (p, n) => n > p ? n : p);
@@ -160,11 +158,10 @@ class FramesTimelinePainter extends CustomPainter {
             else
               path.lineTo(x, y);
           }
-          final p =
-              Paint()
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 1.2
-                ..color = style.msgsColor;
+          final p = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = style.msgsColor;
           canvas.drawPath(path, p);
         }
         if (maxBytes > 0) {
@@ -175,17 +172,16 @@ class FramesTimelinePainter extends CustomPainter {
             final y =
                 centerY -
                 (bytes[i] / maxBytes) * amp -
-                3; // немного сместим для различимости
+                3; // slight offset for visibility
             if (i == 0)
               path.moveTo(x, y);
             else
               path.lineTo(x, y);
           }
-          final p =
-              Paint()
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 1.2
-                ..color = style.bytesColor;
+          final p = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = style.bytesColor;
           canvas.drawPath(path, p);
         }
       }

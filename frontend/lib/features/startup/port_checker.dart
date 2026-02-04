@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 
-/// Статус проверки портов
+/// Port check status
 class PortStatus {
   final bool apiRunning;
   final bool proxyRunning;
@@ -20,7 +20,7 @@ class PortStatus {
   bool get partialRunning => !bothRunning && !bothStopped;
 }
 
-/// Проверяет доступность API порта через health endpoint
+/// Checks API port availability via health endpoint
 Future<bool> checkApiPort(int port) async {
   try {
     final client = HttpClient();
@@ -41,7 +41,7 @@ Future<bool> checkApiPort(int port) async {
   }
 }
 
-/// Проверяет доступность Proxy порта через TCP подключение
+/// Checks Proxy port availability via TCP connection
 Future<bool> checkProxyPort(int port) async {
   try {
     final socket = await Socket.connect(
@@ -56,12 +56,12 @@ Future<bool> checkProxyPort(int port) async {
   }
 }
 
-/// Проверяет статус обоих портов
+/// Checks status of both ports
 Future<PortStatus> checkPorts({
   required int apiPort,
   required int proxyPort,
 }) async {
-  // Проверяем оба порта параллельно для скорости
+  // Check both ports in parallel for speed
   final results = await Future.wait([
     checkApiPort(apiPort),
     checkProxyPort(proxyPort),

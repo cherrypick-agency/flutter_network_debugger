@@ -193,7 +193,7 @@ class BreakpointsRepositoryImpl implements BreakpointsRepository {
             final name = _r(_mapOrNull(x['name']));
             final value = _r(_mapOrNull(x['value']));
             if (name == null) return null;
-            // Если name пустой (или невалидный) — не создаём фантомный header match.
+            // If name is empty (or invalid) - don't create phantom header match.
             return RuleHeaderMatch(name: name, value: value);
           }();
     RuleStatusMatch? _s(Map<String, dynamic>? x) => x == null

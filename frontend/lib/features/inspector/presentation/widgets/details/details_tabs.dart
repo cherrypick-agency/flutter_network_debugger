@@ -5,8 +5,8 @@ import '../../../../http_inspector/presentation/widgets/http_details_panel.dart'
 import '../../../application/stores/home_ui_store.dart';
 import '../../../../../core/di/di.dart';
 
-// Компонент-обёртка над табами деталей сессии.
-// Делает логику выбора вкладок компактной и не тянет state в родителя.
+// Wrapper component for session details tabs.
+// Makes tab selection logic compact and avoids pulling state into parent.
 class DetailsTabs extends StatelessWidget {
   const DetailsTabs({
     super.key,
@@ -27,17 +27,17 @@ class DetailsTabs extends StatelessWidget {
     required this.wsClosedAt,
   });
 
-  // Какие вкладки показывать
+  // Which tabs to show
   final bool showWs;
   final bool showHttp;
 
-  // Данные
+  // Data
   final List<Map<String, dynamic>> frames;
   final List<Map<String, dynamic>> events;
   final String? selectedSessionId;
   final Map<String, dynamic>? httpMeta;
 
-  // Фильтры WS
+  // WS filters
   final String opcodeFilter;
   final String directionFilter;
   final TextEditingController namespaceCtrl;
@@ -51,9 +51,9 @@ class DetailsTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = sl<HomeUiStore>();
-    // Если выбрана HTTP‑сессия — показываем сразу HTTP без вкладок.
-    // Если выбрана WS‑сессия — показываем WS без вкладок.
-    // Хранение выбранной вкладки оставляем ради совместимости истории.
+    // If HTTP session selected — show HTTP directly without tabs.
+    // If WS session selected — show WS directly without tabs.
+    // Tab selection storage is kept for history compatibility.
     if (showHttp && !showWs) {
       final sid = selectedSessionId;
       if (sid != null) {
@@ -68,12 +68,12 @@ class DetailsTabs extends StatelessWidget {
       }
       return _buildWs();
     }
-    // Фолбэк на случай неконсистентного состояния.
+    // Fallback in case of inconsistent state.
     return const SizedBox.shrink();
   }
 
   Widget _buildWs() {
-    // Сохраняем выбранную вкладку как 'ws'
+    // Save selected tab as 'ws'
     final sid = selectedSessionId;
     if (sid != null) {
       sl<HomeUiStore>().setSessionTab(sid, 'ws');

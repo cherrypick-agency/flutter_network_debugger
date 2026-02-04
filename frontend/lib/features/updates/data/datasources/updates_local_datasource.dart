@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-/// DataSource для работы с локальным хранилищем (SharedPreferences + файлы)
+/// DataSource for working with local storage (SharedPreferences + files)
 class UpdatesLocalDataSource {
   static const String _skipVersionKey = 'skip_update_version';
   static const String _lastCheckKey = 'last_update_check';
@@ -14,26 +14,26 @@ class UpdatesLocalDataSource {
 
   final _log = Logger('UpdatesLocalDataSource');
 
-  /// Получает пропущенную версию
+  /// Gets skipped version
   Future<String?> getSkippedVersion() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_skipVersionKey);
   }
 
-  /// Сохраняет пропущенную версию
+  /// Saves skipped version
   Future<void> setSkippedVersion(String version) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_skipVersionKey, version);
     _log.info('Skipped version: $version');
   }
 
-  /// Удаляет пропущенную версию
+  /// Removes skipped version
   Future<void> clearSkippedVersion() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_skipVersionKey);
   }
 
-  /// Получает время последней проверки
+  /// Gets last check time
   Future<DateTime?> getLastCheckTime() async {
     final prefs = await SharedPreferences.getInstance();
     final timeStr = prefs.getString(_lastCheckKey);
@@ -46,13 +46,13 @@ class UpdatesLocalDataSource {
     }
   }
 
-  /// Сохраняет время последней проверки
+  /// Saves last check time
   Future<void> setLastCheckTime(DateTime time) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastCheckKey, time.toIso8601String());
   }
 
-  /// Кеширует релиз в SharedPreferences
+  /// Caches release in SharedPreferences
   Future<void> cacheRelease(
     String version,
     Map<String, dynamic> releaseData,
@@ -70,7 +70,7 @@ class UpdatesLocalDataSource {
     }
   }
 
-  /// Получает закешированный релиз
+  /// Gets cached release
   Future<Map<String, dynamic>?> getCachedRelease(
     String version, {
     Duration maxAge = const Duration(days: 1),
@@ -83,7 +83,7 @@ class UpdatesLocalDataSource {
       final cacheData = jsonDecode(cachedStr) as Map<String, dynamic>;
       final cachedAt = DateTime.parse(cacheData['cached_at'] as String);
 
-      // Проверяем не устарел ли кеш
+      // Check if cache is expired
       if (DateTime.now().difference(cachedAt) > maxAge) {
         _log.fine('Cache expired for version: $version');
         return null;
@@ -97,7 +97,7 @@ class UpdatesLocalDataSource {
     }
   }
 
-  /// Очищает устаревший кеш релизов
+  /// Clears expired release cache
   Future<void> clearExpiredCache({
     Duration maxAge = const Duration(days: 7),
   }) async {
@@ -118,7 +118,7 @@ class UpdatesLocalDataSource {
             _log.fine('Removed expired cache: $key');
           }
         } catch (e) {
-          // Неверный формат - удаляем
+          // Invalid format - remove
           await prefs.remove(key);
         }
       }
@@ -127,12 +127,12 @@ class UpdatesLocalDataSource {
     }
   }
 
-  /// Очищает старые загруженные установщики из temp директории
+  /// Cleans up old downloaded installers from temp directory
   Future<void> cleanupOldDownloads({
     Duration maxAge = const Duration(days: 7),
   }) async {
     if (kIsWeb) {
-      return; // Web не имеет файловой системы
+      return; // Web doesn't have file system
     }
 
     try {
@@ -147,7 +147,7 @@ class UpdatesLocalDataSource {
       int deletedCount = 0;
       int totalSize = 0;
 
-      // Список расширений установщиков для очистки
+      // List of installer extensions to clean up
       const installerExtensions = [
         '.dmg',
         '.msi',
@@ -157,13 +157,13 @@ class UpdatesLocalDataSource {
         '.zip',
       ];
 
-      // Сканируем все файлы в temp директории
+      // Scan all files in temp directory
       await for (final entity in dir.list()) {
         if (entity is File) {
           try {
             final fileName = path.basename(entity.path).toLowerCase();
 
-            // Проверяем, является ли файл установщиком
+            // Check if file is an installer
             final isInstaller = installerExtensions.any(
               (ext) => fileName.endsWith(ext),
             );
@@ -172,7 +172,7 @@ class UpdatesLocalDataSource {
               continue;
             }
 
-            // Проверяем возраст файла
+            // Check file age
             final stat = await entity.stat();
             final age = now.difference(stat.modified);
 

@@ -11,7 +11,7 @@ class FramesTimelineLegend extends StatelessWidget {
     final baseSize = (t.body.fontSize ?? 12);
     final legendTextStyle = t.body.copyWith(
       fontSize: baseSize * 0.5,
-    ); // в 2 раза меньше
+    ); // 2 times smaller
     Widget dot(Color color) => Container(
       width: 5,
       height: 5,

@@ -25,7 +25,7 @@ class MultipartEditor extends StatefulWidget {
 }
 
 class _MultipartEditorState extends State<MultipartEditor> {
-  bool _hovering = false; // подсветка дропа
+  bool _hovering = false; // drop highlight
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +36,7 @@ class _MultipartEditorState extends State<MultipartEditor> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Глобальная зона для массового дропа файлов — добавляет новые части
+            // Global drop zone for bulk file drop — adds new parts
             SizedBox(
               height: 56,
               child: Stack(
@@ -326,7 +326,7 @@ class _MultipartEditorState extends State<MultipartEditor> {
                                   widget.onChanged?.call(widget.items);
                                 },
                                 onDropMany: (files) {
-                                  // заменим текущий и добавим остальные
+                                  // replace current and add the rest
                                   if (files.isEmpty) return;
                                   final first = files.first;
                                   final b64 = base64Encode(first.bytes);
@@ -398,7 +398,7 @@ class _MultipartEditorState extends State<MultipartEditor> {
   int _calcMB(String? base64Str) {
     try {
       if (base64Str == null || base64Str.isEmpty) return 0;
-      // на глаз: base64 ~ +33% к оригиналу, но нам хватает грубой оценки по длине
+      // rough estimate: base64 ~ +33% of original, but rough length estimate is enough
       final bytes = base64.decode(base64Str);
       return (bytes.length / (1024 * 1024)).ceil();
     } catch (_) {

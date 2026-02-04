@@ -54,7 +54,7 @@ class MappingStore extends ChangeNotifier {
   Future<void> reorder(List<String> ids) async {
     _lastError = null;
     await _repo.reorder(ids);
-    // После reorder приоритеты на бэке меняются. Проще и надёжнее перечитать.
+    // After reorder, priorities change on the backend. It's simpler and more reliable to reload.
     await load();
   }
 }

@@ -285,7 +285,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // Sessions scroll: if user is at the bottom — stick to bottom when new items arrive
   final ScrollController _sessionsCtrl = ScrollController();
   Timer? _pollTimer;
-  // removed: _detailsRefreshDebounce (SSE обновляет детали)
+  // removed: _detailsRefreshDebounce (SSE updates details)
   // Background polling of sessions list as backup update channel
 
   final FocusNode _searchFocus = FocusNode();
@@ -487,7 +487,7 @@ class _MyHomePageState extends State<MyHomePage> {
     monitor.connect();
   }
 
-  // removed: _scheduleSessionsReload (REST поллинг заменён на сокеты)
+  // removed: _scheduleSessionsReload (REST polling replaced with sockets)
 
   Future<void> _clearAllSessions() async {
     final ok = await showDialog<bool>(
@@ -562,7 +562,7 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       await context.read<AggregateStore>().load(groupBy: 'domain');
     } catch (_) {}
-    // realtime заново подтянет состояние
+    // realtime will pull state again
     await _loadSessions();
   }
 
@@ -658,7 +658,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _pollTimer?.cancel();
   }
 
-  // removed: _tickRefresh (SSE обновляет детали)
+  // removed: _tickRefresh (SSE updates details)
 
   void _onSessionsScroll() {
     if (!_sessionsCtrl.hasClients) return;
@@ -1219,7 +1219,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  // removed: _suckMetaFromSessions (meta приходит сразу в init/upsert)
+  // removed: _suckMetaFromSessions (meta arrives immediately in init/upsert)
 }
 
 class _SessionPlaceholder extends StatelessWidget {

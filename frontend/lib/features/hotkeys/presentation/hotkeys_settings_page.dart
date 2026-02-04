@@ -62,7 +62,7 @@ class _HotkeysSettingsPageState extends State<HotkeysSettingsPage> {
       final mods = <String>[];
       if (a.control) mods.add('Ctrl');
       if (a.alt) mods.add('Alt');
-      // CharacterActivator не имеет флага shift
+      // CharacterActivator doesn't have shift flag
       if (a.meta) mods.add('Meta');
       mods.add(a.character.toUpperCase());
       return mods.join(' + ');
@@ -73,10 +73,9 @@ class _HotkeysSettingsPageState extends State<HotkeysSettingsPage> {
       if (a.alt) mods.add('Alt');
       if (a.shift) mods.add('Shift');
       if (a.meta) mods.add('Meta');
-      final name =
-          a.trigger.keyLabel.isNotEmpty
-              ? a.trigger.keyLabel.toUpperCase()
-              : (a.trigger.debugName ?? a.trigger.keyId.toString());
+      final name = a.trigger.keyLabel.isNotEmpty
+          ? a.trigger.keyLabel.toUpperCase()
+          : (a.trigger.debugName ?? a.trigger.keyId.toString());
       mods.add(name);
       return mods.join(' + ');
     }

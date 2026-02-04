@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Универсальный SearchBar с навигацией и переключателями
+// Universal SearchBar with navigation and toggles
 class CommonSearchBar extends StatelessWidget {
   const CommonSearchBar({
     super.key,
@@ -80,7 +80,7 @@ class CommonSearchBar extends StatelessWidget {
             color: surface.withValues(alpha: 0.75),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              // Сужаемся по доступной ширине родителя, но не шире 480
+              // Shrink to available parent width, but no wider than 480
               constraints: const BoxConstraints(maxWidth: 480),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

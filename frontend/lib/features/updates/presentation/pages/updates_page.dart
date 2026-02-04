@@ -56,7 +56,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
       appBar: AppBar(title: const Text('Updates'), centerTitle: false),
       body: Column(
         children: [
-          // Header section с текущей версией и кнопкой проверки обновлений
+          // Header section with current version and check for updates button
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -70,7 +70,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Текущая версия
+                // Current version
                 Row(
                   children: [
                     Icon(
@@ -96,7 +96,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Кнопка проверки обновлений
+                // Check for updates button
                 Observer(
                   builder: (_) => ElevatedButton.icon(
                     onPressed: _store.isCheckingForUpdates
@@ -136,7 +136,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
                   ),
                 ),
 
-                // Показ доступного обновления
+                // Display available update
                 Observer(
                   builder: (_) {
                     if (_store.availableUpdate == null) {
@@ -178,7 +178,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
             ),
           ),
 
-          // Фильтры релизов
+          // Release filters
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Row(
@@ -219,16 +219,16 @@ class _UpdatesPageState extends State<UpdatesPage> {
             ),
           ),
 
-          // Список релизов
+          // Releases list
           Expanded(
             child: Observer(
               builder: (_) {
-                // Состояние загрузки (первая загрузка)
+                // Loading state (initial load)
                 if (_store.isLoading && _store.releases.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                // Ошибка
+                // Error
                 if (_store.errorMessage != null && _store.releases.isEmpty) {
                   return Center(
                     child: Padding(
@@ -259,7 +259,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
                   );
                 }
 
-                // Пустой список
+                // Empty list
                 if (_store.filteredReleases.isEmpty) {
                   return Center(
                     child: Padding(
@@ -283,7 +283,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
                   );
                 }
 
-                // Список релизов
+                // Releases list
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
@@ -293,7 +293,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
                       _store.filteredReleases.length +
                       (_store.hasMoreReleases ? 1 : 0),
                   itemBuilder: (context, index) {
-                    // Кнопка Load More
+                    // Load More button
                     if (index == _store.filteredReleases.length) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -358,14 +358,14 @@ class _ReleaseCardState extends State<_ReleaseCard> {
     try {
       final updatesService = getIt<UpdatesService>();
 
-      // Запускаем загрузку в фоне
+      // Start download in background
       final downloadFuture = updatesService.downloadUpdate(
         release,
         progressController: progressController,
         cancelToken: cancelToken,
       );
 
-      // Показываем диалог прогресса
+      // Show progress dialog
       // ignore: use_build_context_synchronously
       final downloadDialogFuture = showDownloadProgressDialog(
         context,
@@ -373,16 +373,16 @@ class _ReleaseCardState extends State<_ReleaseCard> {
         onCancel: () => cancelToken.cancel(),
       );
 
-      // Ждем оба future
+      // Wait for both futures
       final results = await Future.wait([downloadFuture, downloadDialogFuture]);
       final filePath = results[0] as String?;
       final dialogResult = results[1] as DownloadDialogResult;
 
       if (!mounted) return;
 
-      // Обрабатываем результат
+      // Handle result
       if (dialogResult == DownloadDialogResult.cancelled) {
-        return; // Пользователь отменил
+        return; // User cancelled
       }
 
       if (dialogResult == DownloadDialogResult.error || filePath == null) {
@@ -396,7 +396,7 @@ class _ReleaseCardState extends State<_ReleaseCard> {
         return;
       }
 
-      // Успешная загрузка - открываем установщик
+      // Download successful - open installer
       // ignore: use_build_context_synchronously
       _openInstaller(context, filePath);
     } catch (e) {
@@ -405,7 +405,7 @@ class _ReleaseCardState extends State<_ReleaseCard> {
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     } finally {
-      // ВАЖНО: Закрываем stream в finally блоке для предотвращения memory leak
+      // IMPORTANT: Close stream in finally block to prevent memory leak
       await progressController.close();
     }
   }
@@ -418,7 +418,7 @@ class _ReleaseCardState extends State<_ReleaseCard> {
       if (!mounted) return;
 
       if (result.success) {
-        // Показываем инструкции если есть
+        // Show instructions if available
         if (result.instructions != null) {
           // ignore: use_build_context_synchronously
           await showDialog(
@@ -450,7 +450,7 @@ class _ReleaseCardState extends State<_ReleaseCard> {
           );
         }
       } else {
-        // Ошибка открытия установщика
+        // Error opening installer
         // ignore: use_build_context_synchronously
         await showDialog(
           context: context,
@@ -501,10 +501,10 @@ class _ReleaseCardState extends State<_ReleaseCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Версия и метаданные
+                  // Version and metadata
                   Row(
                     children: [
-                      // Версия
+                      // Version
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -590,7 +590,7 @@ class _ReleaseCardState extends State<_ReleaseCard> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Дата и размер
+                  // Date and size
                   Row(
                     children: [
                       Icon(

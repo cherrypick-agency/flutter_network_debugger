@@ -29,7 +29,7 @@ class InterceptQueueStore extends ChangeNotifier {
 
   Future<void> init() async {
     await refresh();
-    // если уже подписаны — повторно не подписываемся
+    // if already subscribed, do not subscribe again
     if (_listener != null) {
       return;
     }
@@ -74,7 +74,7 @@ class InterceptQueueStore extends ChangeNotifier {
       if (stamp != _refreshStamp) return;
       _lastError = e.toString();
       _loading = false;
-      // На ошибке оставляем старый список/выбор — так UX стабильнее при сетевых глюках.
+      // On error, keep the old list/selection - this makes UX more stable during network glitches.
       notifyListeners();
       _scheduleRetry();
       return;
@@ -83,8 +83,8 @@ class InterceptQueueStore extends ChangeNotifier {
 
     _items = nextItems;
 
-    // Обновляем выбранный элемент из списка pending (getItem здесь не нужен —
-    // listPending уже отдаёт полный снапшот).
+    // Update the selected item from the pending list (getItem is not needed here -
+    // listPending already returns the full snapshot).
     if (_selected != null) {
       final selectedId = _selected!.id;
       final match = _items.where((e) => e.id == selectedId);
@@ -102,7 +102,8 @@ class InterceptQueueStore extends ChangeNotifier {
   }
 
   void _scheduleRetry() {
-    if (_listener == null) return; // если диалог уже закрыли — не ретраим
+    if (_listener == null)
+      return; // if the dialog is already closed, don't retry
     _retryTimer?.cancel();
     final attempt = _retryAttempt.clamp(0, 6);
     final delayMs = (500 * (1 << attempt)).clamp(500, 10000);
@@ -120,8 +121,8 @@ class InterceptQueueStore extends ChangeNotifier {
         return;
       }
     }
-    // Если элемента уже нет в списке (например, пришло обновление очереди),
-    // просто оставляем текущее значение.
+    // If the item is no longer in the list (e.g., queue update arrived),
+    // just keep the current value.
     notifyListeners();
   }
 

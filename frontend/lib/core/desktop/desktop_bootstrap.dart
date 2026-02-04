@@ -284,9 +284,9 @@ class _LogLine extends StatelessWidget {
     const baseStyle = TextStyle(fontFamily: 'monospace', fontSize: 12);
     final lower = line.toLowerCase();
 
-    // [stderr] - серый
+    // [stderr] - gray
     final isStderr = lower.contains('[stderr]');
-    // Успешные сообщения - синий
+    // Success messages - blue
     final isSuccess =
         lower.contains('started') ||
         lower.contains('listening') ||

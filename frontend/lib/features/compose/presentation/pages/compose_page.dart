@@ -25,7 +25,7 @@ import 'dart:convert';
 class ComposePage extends StatefulWidget {
   const ComposePage({super.key, this.initialTemplate});
 
-  /// Начальный шаблон для редактирования (например, из Inspector)
+  /// Initial template for editing (e.g., from Inspector)
   final ComposeTemplateDTO? initialTemplate;
 
   @override
@@ -81,16 +81,16 @@ class _ComposePageState extends State<ComposePage> {
     super.initState();
     _loadComposeConfig();
 
-    // Если передан начальный шаблон - применяем его, иначе загружаем черновик
+    // If initial template is passed - apply it, otherwise load draft
     if (widget.initialTemplate != null) {
       _applyTemplate(widget.initialTemplate!);
-      _dirty = true; // новый запрос, пока не сохранён
-      _currentTplId = null; // сбрасываем id, это новый запрос
+      _dirty = true; // new request, not yet saved
+      _currentTplId = null; // reset id, this is a new request
     } else {
       _loadDraftIfAny();
     }
 
-    // загрузим библиотеку один раз при входе
+    // load library once on entry
     // ignore: discarded_futures
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // ignore: discarded_futures
@@ -109,7 +109,7 @@ class _ComposePageState extends State<ComposePage> {
   void _scheduleAutosave() {
     if (!_dirty) return;
     _autosave.run(() {
-      // локальный черновик
+      // local draft
       // ignore: discarded_futures
       _saveDraft();
     });
@@ -306,7 +306,7 @@ class _ComposePageState extends State<ComposePage> {
         _maxUploadMB = (cfg['maxUploadMB'] as num?)?.toInt() ?? 10;
       });
     } catch (_) {
-      // оставим дефолт
+      // keep default
       setState(() {
         _maxUploadMB = 10;
       });
@@ -768,8 +768,8 @@ class _ComposePageState extends State<ComposePage> {
                                       Navigator.of(context).pop();
                                     },
                                   );
-                                  // Используем ConstrainedBox для динамической высоты
-                                  // с максимумом 600px
+                                  // Use ConstrainedBox for dynamic height
+                                  // with maximum 600px
                                   return ConstrainedBox(
                                     constraints: const BoxConstraints(
                                       maxHeight: 600,
@@ -958,14 +958,14 @@ class _ComposePageState extends State<ComposePage> {
     try {
       if (!mounted) return;
 
-      // 1) Выбор папки и имени запроса (диалог поддерживает создание коллекций)
+      // 1) Select folder and request name (dialog supports creating collections)
       final pick = await showDialog<FolderSelection>(
         context: context,
         builder: (_) => FolderPickerDialog(initialRequestName: _currentTplName),
       );
       if (pick == null) return;
 
-      // 2) Сохраняем шаблон с введённым именем (если задано)
+      // 2) Save template with entered name (if provided)
       if ((pick.requestName ?? '').trim().isNotEmpty) {
         _currentTplName = pick.requestName!.trim();
       }
@@ -975,7 +975,7 @@ class _ComposePageState extends State<ComposePage> {
         throw Exception('Failed to save the template');
       }
 
-      // 3) Перемещаем в выбранную папку
+      // 3) Move to selected folder
       await sl<ComposeRepository>().moveRequest(
         id: _currentTplId!,
         collectionId: pick.collectionId,
@@ -1062,7 +1062,7 @@ class _ComposePageState extends State<ComposePage> {
     setState(() {
       _applyTemplate(tpl);
     });
-    // после применения — предложить восстановить черновик для этого шаблона
+    // after applying — offer to restore draft for this template
     await _loadDraftForTpl(tpl.id);
   }
 

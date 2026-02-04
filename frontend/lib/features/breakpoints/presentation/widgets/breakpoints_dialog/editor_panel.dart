@@ -157,7 +157,7 @@ class _EditorPanelState extends State<EditorPanel> {
       _lastItemId = it.id;
       _lastItemRef = it;
     } else if (canAutoSyncFromItem && !identical(it, _lastItemRef)) {
-      // Item может обновиться (например, server refresh) без смены id.
+      // Item may be updated (e.g., server refresh) without changing id.
       _populateFromItem(it);
       _lastItemRef = it;
     }
@@ -271,7 +271,7 @@ class _EditorPanelState extends State<EditorPanel> {
         await ed.continueRequest(
           method: _methodDirty ? (method.isEmpty ? null : method) : null,
           url: _urlDirty ? (url.isEmpty ? null : url) : null,
-          // Пустая map означает "очистить заголовки", null означает "не менять".
+          // Empty map means "clear headers", null means "do not change".
           headers: hdrs,
           bodyBase64: bodyB64,
         );
@@ -289,7 +289,7 @@ class _EditorPanelState extends State<EditorPanel> {
         }
         await ed.continueResponse(
           status: status,
-          // Пустая map означает "очистить заголовки", null означает "не менять".
+          // Empty map means "clear headers", null means "do not change".
           headers: hdrs,
           bodyBase64: bodyB64,
         );
@@ -382,8 +382,8 @@ class _EditorPanelState extends State<EditorPanel> {
     try {
       if (b64 == null || b64.isEmpty) return '';
       final bytes = base64Decode(b64);
-      // В snapshot от бэка уже лежит декодированное тело (decodeForIntercept),
-      // повторная декомпрессия по Content-Encoding здесь ломает данные.
+      // The snapshot from the backend already contains the decoded body (decodeForIntercept),
+      // re-decompressing by Content-Encoding here corrupts the data.
       return utf8.decode(bytes);
     } catch (_) {
       return null;

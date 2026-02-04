@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Получить цвет фона для HTTP метода
+/// Get background color for HTTP method
 Color getHttpMethodBgColor(BuildContext context, String method) {
   final m = method.toUpperCase();
   final cs = Theme.of(context).colorScheme;
@@ -11,7 +11,7 @@ Color getHttpMethodBgColor(BuildContext context, String method) {
   return cs.surfaceContainerHighest;
 }
 
-/// Получить цвет текста для HTTP метода
+/// Get text color for HTTP method
 Color getHttpMethodFgColor(BuildContext context, String method) {
   final m = method.toUpperCase();
   final cs = Theme.of(context).colorScheme;
@@ -22,7 +22,7 @@ Color getHttpMethodFgColor(BuildContext context, String method) {
   return cs.onSurfaceVariant;
 }
 
-/// Виджет для отображения HTTP метода с цветовой подсветкой
+/// Widget for displaying HTTP method with color highlighting
 class HttpMethodChip extends StatelessWidget {
   final String method;
   final TextStyle? style;

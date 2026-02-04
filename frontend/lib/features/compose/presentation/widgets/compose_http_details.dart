@@ -16,8 +16,7 @@ class ComposeHttpDetails extends StatefulWidget {
   });
 
   final Map<String, dynamic>? data;
-  final ComposeTemplateDTO?
-  template; // не используется после переключения на frames API
+  final ComposeTemplateDTO? template; // not used after switching to frames API
   final void Function(String sessionId)? onOpenSession;
 
   @override
@@ -54,7 +53,7 @@ class _ComposeHttpDetailsState extends State<ComposeHttpDetails> {
     });
     try {
       if (sid == null || sid.isEmpty) {
-        // Ошибка транспорта: просто покажем сообщение через httpMeta
+        // Transport error: just show message via httpMeta
         if (isError) {
           _httpMeta = {
             'method': widget.template?.method ?? '',
@@ -73,7 +72,7 @@ class _ComposeHttpDetailsState extends State<ComposeHttpDetails> {
           .whereType<Map>()
           .map((e) => e.cast<String, dynamic>())
           .toList(growable: false);
-      // Минимальная httpMeta: метод из http_request, статус из http_response
+      // Minimal httpMeta: method from http_request, status from http_response
       String method = '';
       for (final m in items) {
         final p = m['preview']?.toString() ?? '';
@@ -119,16 +118,13 @@ class _ComposeHttpDetailsState extends State<ComposeHttpDetails> {
           ),
         const Divider(height: 1),
         Expanded(
-          child:
-              _loading
-                  ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                  : HttpDetailsPanel(
-                    sessionId: sessionId,
-                    frames: _frames,
-                    httpMeta: _httpMeta,
-                  ),
+          child: _loading
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : HttpDetailsPanel(
+                  sessionId: sessionId,
+                  frames: _frames,
+                  httpMeta: _httpMeta,
+                ),
         ),
       ],
     );

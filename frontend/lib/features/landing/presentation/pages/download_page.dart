@@ -44,7 +44,7 @@ class DownloadPage extends StatelessWidget {
         child: ListView(
           children: [
             card('Recommended build', [
-              // Для Safari на macOS точную архитектуру получаем асинхронно
+              // For Safari on macOS we get precise architecture asynchronously
               FutureBuilder<String?>(
                 future: osd.detectArchPrecise(),
                 builder: (context, snap) {

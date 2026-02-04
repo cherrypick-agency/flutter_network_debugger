@@ -2,21 +2,21 @@ import 'dart:async';
 import 'package:multi_editor_core/multi_editor_core.dart';
 import '../../application/stores/script_editor_store.dart';
 
-/// Адаптер FileRepository для работы с ScriptEditorStore
-/// Преобразует ObservableMap String->String в FileDocument entities
+/// FileRepository adapter for working with ScriptEditorStore
+/// Converts ObservableMap String->String to FileDocument entities
 class MobxFileRepository implements FileRepository {
   final ScriptEditorStore scriptStore;
   final EventBus eventBus;
 
-  // Контроллеры для watch streams
+  // Controllers for watch streams
   final Map<String, StreamController<Either<DomainFailure, FileDocument>>>
   _watchControllers = {};
 
-  // Mapping между sanitized ID и оригинальным filename
+  // Mapping between sanitized ID and original filename
   final Map<String, String> _idToFilename = {};
 
-  // Хранилище folderId для каждого файла (по sanitized id)
-  // По умолчанию все файлы считаются в 'root'
+  // Storage for folderId for each file (by sanitized id)
+  // By default all files are considered in 'root'
   final Map<String, String> _fileIdToFolderId = {};
 
   MobxFileRepository({required this.scriptStore, required this.eventBus});
@@ -47,20 +47,20 @@ class MobxFileRepository implements FileRepository {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      // Определяем язык по расширению файла, если не указан
+      // Detect language from file extension if not specified
       final detectedLanguage = language ?? _detectLanguageFromFileName(name);
 
-      // Добавляем файл в store
+      // Add file to store
       scriptStore.addSourceFile(name, initialContent ?? '');
 
-      // Регистрируем mapping между ID и filename
+      // Register mapping between ID and filename
       _registerIdMapping(name);
-      // Сохраняем привязку к папке
+      // Save folder binding
       _fileIdToFolderId[_sanitizeId(name)] = folderId;
 
-      // Создаём FileDocument entity
+      // Create FileDocument entity
       final file = FileDocument(
-        id: _sanitizeId(name), // используем sanitized имя файла как ID
+        id: _sanitizeId(name), // use sanitized filename as ID
         name: name,
         content: initialContent ?? '',
         language: detectedLanguage,
@@ -81,24 +81,22 @@ class MobxFileRepository implements FileRepository {
   @override
   Future<Either<DomainFailure, FileDocument>> load(String id) async {
     try {
-      // Получаем оригинальное имя файла из sanitized ID
+      // Get original filename from sanitized ID
       String? filename = _getFilename(id);
 
-      // Если mapping не найден, пробуем альтернативные стратегии
+      // If mapping not found, try alternative strategies
       if (filename == null) {
-        // Стратегия 1: Попробовать использовать id как есть (может быть уже original filename)
+        // Strategy 1: Try using id as is (may already be original filename)
         if (scriptStore.sourceFiles.containsKey(id)) {
           filename = id;
-          _registerIdMapping(id); // Регистрируем для будущего использования
+          _registerIdMapping(id); // Register for future use
         }
-        // Стратегия 2: Попробовать reverse sanitize (main_rs → main.rs)
+        // Strategy 2: Try reverse sanitize (main_rs -> main.rs)
         else {
           final unsanitized = id.replaceAll('_', '.');
           if (scriptStore.sourceFiles.containsKey(unsanitized)) {
             filename = unsanitized;
-            _registerIdMapping(
-              unsanitized,
-            ); // Регистрируем для будущего использования
+            _registerIdMapping(unsanitized); // Register for future use
           } else {
             return Left(
               DomainFailure.notFound(
@@ -112,7 +110,7 @@ class MobxFileRepository implements FileRepository {
         }
       }
 
-      // Ищем файл в sourceFiles по имени файла
+      // Find file in sourceFiles by filename
       if (!scriptStore.sourceFiles.containsKey(filename)) {
         return Left(
           DomainFailure.notFound(
@@ -145,14 +143,14 @@ class MobxFileRepository implements FileRepository {
   @override
   Future<Either<DomainFailure, void>> save(FileDocument file) async {
     try {
-      // Получаем оригинальное имя файла из sanitized ID
+      // Get original filename from sanitized ID
       String? filename = _getFilename(file.id);
-      // Фоллбэк: некоторые плагины/редактор могут отдавать id как оригинальное имя файла
-      // В этом случае примем id за имя файла напрямую.
+      // Fallback: some plugins/editor may return id as original filename
+      // In this case accept id as filename directly.
       filename ??= scriptStore.sourceFiles.containsKey(file.id)
           ? file.id
           : null;
-      // Ещё один фоллбэк: reverse sanitize (main_rs -> main.rs)
+      // Another fallback: reverse sanitize (main_rs -> main.rs)
       filename ??= () {
         final unsanitized = file.id.replaceAll('_', '.');
         return scriptStore.sourceFiles.containsKey(unsanitized)
@@ -169,11 +167,11 @@ class MobxFileRepository implements FileRepository {
         );
       }
 
-      // Проверяем что файл существует
+      // Check that file exists
       final loadResult = await load(file.id);
 
       return loadResult.fold((failure) => Left(failure), (existingFile) {
-        // Обновляем содержимое файла используя оригинальное имя
+        // Update file content using original name
         scriptStore.updateSourceFile(filename!, file.content);
         return const Right(null);
       });
@@ -185,7 +183,7 @@ class MobxFileRepository implements FileRepository {
   @override
   Future<Either<DomainFailure, void>> delete(String id) async {
     try {
-      // Получаем оригинальное имя файла
+      // Get original filename
       final filename = _getFilename(id);
       if (filename == null) {
         return Left(
@@ -198,7 +196,7 @@ class MobxFileRepository implements FileRepository {
       }
 
       scriptStore.removeSourceFile(filename);
-      _idToFilename.remove(id); // Удаляем mapping
+      _idToFilename.remove(id); // Remove mapping
       return const Right(null);
     } catch (e) {
       return Left(
@@ -213,7 +211,7 @@ class MobxFileRepository implements FileRepository {
     required String newName,
   }) async {
     try {
-      // Получаем старое имя файла
+      // Get old filename
       final oldFilename = _getFilename(fileId);
       if (oldFilename == null) {
         return Left(
@@ -238,18 +236,18 @@ class MobxFileRepository implements FileRepository {
       final content = scriptStore.sourceFiles[oldFilename]!;
       final currentFolderId = _fileIdToFolderId[fileId] ?? 'root';
 
-      // Удаляем старый файл и mapping
+      // Remove old file and mapping
       scriptStore.removeSourceFile(oldFilename);
       _idToFilename.remove(fileId);
       _fileIdToFolderId.remove(fileId);
 
-      // Создаём новый файл с новым именем
+      // Create new file with new name
       scriptStore.addSourceFile(newName, content);
       _registerIdMapping(newName);
 
       final language = _detectLanguageFromFileName(newName);
       final newId = _sanitizeId(newName);
-      // Переносим привязку к папке на новый id
+      // Transfer folder binding to new id
       _fileIdToFolderId[newId] = currentFolderId;
 
       final file = FileDocument(
@@ -275,7 +273,7 @@ class MobxFileRepository implements FileRepository {
     required String fileId,
     required String targetFolderId,
   }) async {
-    // Обновляем привязку файла к папке и возвращаем обновлённый документ
+    // Update file folder binding and return updated document
     _fileIdToFolderId[fileId] = targetFolderId;
     return load(fileId);
   }
@@ -286,7 +284,7 @@ class MobxFileRepository implements FileRepository {
     String? newName,
   }) async {
     try {
-      // Получаем оригинальное имя файла
+      // Get original filename
       final filename = _getFilename(fileId);
       if (filename == null) {
         return Left(
@@ -318,7 +316,7 @@ class MobxFileRepository implements FileRepository {
         name: name,
         initialContent: content,
       );
-      // Подстрахуемся, что маппинг выставлен корректно
+      // Ensure mapping is set correctly
       _fileIdToFolderId[newId] = folderId;
       return created;
     } catch (e) {
@@ -346,7 +344,7 @@ class MobxFileRepository implements FileRepository {
         final filename = entry.key;
         final lang = _detectLanguageFromFileName(filename);
 
-        // Регистрируем mapping если его еще нет
+        // Register mapping if not exists yet
         _registerIdMapping(filename);
 
         final id = _sanitizeId(filename);
@@ -363,7 +361,7 @@ class MobxFileRepository implements FileRepository {
         );
       }).toList();
 
-      // Фильтруем по query если указан
+      // Filter by query if specified
       var result = files;
 
       if (query != null && query.isNotEmpty) {
@@ -374,12 +372,12 @@ class MobxFileRepository implements FileRepository {
             .toList();
       }
 
-      // Фильтруем по языку если указан
+      // Filter by language if specified
       if (language != null && language.isNotEmpty) {
         result = result.where((file) => file.language == language).toList();
       }
 
-      // Фильтруем по папке если указана
+      // Filter by folder if specified
       if (folderId != null) {
         result = result.where((file) => file.folderId == folderId).toList();
       }
@@ -394,17 +392,17 @@ class MobxFileRepository implements FileRepository {
 
   @override
   Stream<Either<DomainFailure, FileDocument>> watch(String id) {
-    // Создаём stream controller если его ещё нет
+    // Create stream controller if not exists yet
     if (!_watchControllers.containsKey(id)) {
       _watchControllers[id] =
           StreamController<Either<DomainFailure, FileDocument>>.broadcast();
     }
 
-    // Возвращаем stream
+    // Return stream
     return _watchControllers[id]!.stream;
   }
 
-  /// Определяет язык программирования по расширению файла
+  /// Detects programming language from file extension
   String _detectLanguageFromFileName(String fileName) {
     final extension = fileName.split('.').last.toLowerCase();
 
@@ -447,14 +445,14 @@ class MobxFileRepository implements FileRepository {
     }
   }
 
-  /// Уведомляет watchers об изменении файла
+  /// Notifies watchers about file change
   void notifyFileChanged(String fileId, FileDocument file) {
     if (_watchControllers.containsKey(fileId)) {
       _watchControllers[fileId]!.add(Right(file));
     }
   }
 
-  /// Освобождает ресурсы
+  /// Releases resources
   void dispose() {
     for (final controller in _watchControllers.values) {
       controller.close();

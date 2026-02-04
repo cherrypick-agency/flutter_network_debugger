@@ -95,7 +95,7 @@ class _BodyFullScreenDialogState extends State<BodyFullScreenDialog> {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // FilterChips (режимы Pretty/Tree/Raw/etc)
+            // FilterChips (modes: Pretty/Tree/Raw/etc)
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Wrap(
@@ -126,12 +126,12 @@ class _BodyFullScreenDialogState extends State<BodyFullScreenDialog> {
                 ],
               ),
             ),
-            // Stack с контентом и фиксированными кнопками поверх
+            // Stack with content and fixed buttons on top
             Expanded(
               child: Stack(
                 children: [
-                  // Контент с увеличенным левым отступом
-                  // Hex mode не использует ScrollView, так как HexViewer имеет свой скроллинг
+                  // Content with increased left padding
+                  // Hex mode doesn't use ScrollView since HexViewer has its own scrolling
                   if (_viewController.current != BodyViewMode.hex)
                     SingleChildScrollView(
                       padding: const EdgeInsets.only(
@@ -152,7 +152,7 @@ class _BodyFullScreenDialogState extends State<BodyFullScreenDialog> {
                       ),
                       child: _renderBodyContent(),
                     ),
-                  // Фиксированные кнопки поиска/копирования (только для JSON)
+                  // Fixed search/copy buttons (JSON only)
                   if (_isJsonMode())
                     Positioned(
                       top: 8,

@@ -140,8 +140,8 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
   }
 
   String? _re2Warning(String raw) {
-    // Бэкенд — Go/RE2. Эти конструкции там не поддерживаются.
-    // Мы не пытаемся полноценно валидировать RE2, а даём быстрые подсказки.
+    // Backend uses Go/RE2. These constructs are not supported there.
+    // We don't try to fully validate RE2, just provide quick hints.
     final s = raw;
     if (s.contains('(?<=')) return 'RE2 does not support lookbehind (?<=...)';
     if (s.contains('(?<!')) return 'RE2 does not support lookbehind (?<!...)';

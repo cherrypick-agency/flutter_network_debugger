@@ -250,7 +250,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     );
   }
 
-  /// Копирует сводку запроса и ответа для AI
+  /// Copies request and response summary for AI
   void _copyForAi(BuildContext context, Map<String, dynamic> req) {
     final resp = _findByType(widget.frames, 'http_response');
     final method = (req['method'] ?? 'GET').toString();
@@ -279,7 +279,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
     ).showSnackBar(const SnackBar(content: Text('Copied for AI')));
   }
 
-  /// Открывает Compose с данными текущего запроса для редактирования
+  /// Opens Compose with current request data for editing
   void _openComposeWithRequest(Map<String, dynamic> req) {
     final headersRaw =
         (req['headersRaw'] as Map?)?.map(
@@ -1074,7 +1074,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
       headers,
     );
     final errMessage = widget.httpMeta?['errorMessage']?.toString();
-    // Автоподтяжка полного тела, если по заголовку это JSON, но превью не парсится
+    // Auto-fetch full body if header indicates JSON but preview doesn't parse
     if (_bodyOverride == null &&
         isJsonCt &&
         body.isNotEmpty &&
@@ -1343,7 +1343,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
   }
 
   String _rebuildUrlWithQuery(Uri uri, Map<String, List<String>> qp) {
-    // Собираем URL из базовой части + нормализованный query
+    // Build URL from base part + normalized query
     final base = uri.replace(query: null, queryParameters: null);
     if (qp.isEmpty) return base.toString();
     final parts = <String>[];
@@ -1401,7 +1401,7 @@ class _HttpDetailsPanelState extends State<HttpDetailsPanel>
         _bodyOverride = data;
       });
     } catch (_) {
-      // тихо игнорируем
+      // silently ignore
     } finally {
       if (mounted) {
         setState(() {

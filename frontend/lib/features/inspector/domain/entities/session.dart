@@ -61,9 +61,9 @@ class Session extends Equatable {
   final String? kind; // ws | http
   final Map<String, dynamic>? httpMeta; // server-provided
   final Map<String, dynamic>? sizes;
-  // Признак, что в сессии присутствуют Socket.IO события (по данным бэка)
+  // Flag indicating that session contains Socket.IO events (from backend data)
   final bool isSocketIo;
-  // Информация о процессе, который создал эту сессию
+  // Information about the process that created this session
   final ProcessInfo? processInfo;
 
   @override

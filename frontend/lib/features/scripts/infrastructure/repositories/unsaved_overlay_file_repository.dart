@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:multi_editor_core/multi_editor_core.dart';
 
-/// Репозиторий-обёртка, который хранит несохранённые изменения в памяти
-/// и подмешивает их при загрузке файла. Это позволяет переключаться между
-/// файлами без потери набранного контента до явного сохранения.
+/// Wrapper repository that stores unsaved changes in memory
+/// and mixes them in when loading a file. This allows switching between
+/// files without losing typed content before explicit save.
 class UnsavedOverlayFileRepository implements FileRepository {
   final FileRepository _base;
   final EventBus _eventBus;
@@ -18,11 +18,11 @@ class UnsavedOverlayFileRepository implements FileRepository {
     required EventBus eventBus,
   }) : _base = base,
        _eventBus = eventBus {
-    // Кешируем несохранённый контент по событиям редактора
+    // Cache unsaved content from editor events
     _subContentChanged = _eventBus.on<FileContentChanged>().listen((e) {
       _unsavedByFileId[e.fileId] = e.content;
     });
-    // Чистим кеш после успешного сохранения или удаления
+    // Clear cache after successful save or delete
     _subFileSaved = _eventBus.on<FileSaved>().listen((e) {
       _unsavedByFileId.remove(e.file.id);
     });
@@ -37,10 +37,10 @@ class UnsavedOverlayFileRepository implements FileRepository {
     _subFileDeleted?.cancel();
   }
 
-  /// Принудительно сохраняет все несохранённые изменения в базовый репозиторий.
-  /// Нужен для случаев, когда пользователь жмёт Cmd+S раньше, чем сработает авто‑сейв.
+  /// Forcefully saves all unsaved changes to base repository.
+  /// Needed for cases when user presses Cmd+S before auto-save triggers.
   Future<void> flushAll() async {
-    // Делаем копию ключей, т.к. коллекция будет изменяться по мере сохранения
+    // Make a copy of keys since collection will change during save
     final pending = List<String>.from(_unsavedByFileId.keys);
     for (final fileId in pending) {
       final loaded = await load(fileId);
@@ -73,7 +73,7 @@ class UnsavedOverlayFileRepository implements FileRepository {
     return res.fold((l) => Left(l), (file) {
       final cached = _unsavedByFileId[id];
       if (cached != null) {
-        // Возвращаем файл с несохранённым контентом
+        // Return file with unsaved content
         return Right(file.updateContent(cached));
       }
       return Right(file);

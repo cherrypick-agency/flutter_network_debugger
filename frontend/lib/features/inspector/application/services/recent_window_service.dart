@@ -22,7 +22,7 @@ class RecentWindowService {
     ui.setRecentWindowEnabled(enabled);
     ui.setRecentWindowMinutes(minutes);
     _apply(enabled: enabled, minutes: minutes);
-    // Подтянем список сессий под новое окно
+    // Pull sessions list for the new window
     try {
       sl<SessionsStore>().load();
     } catch (_) {}
@@ -35,7 +35,7 @@ class RecentWindowService {
       ui.setSince(null);
       return;
     }
-    // первое применение сразу
+    // first application immediately
     ui.setSince(DateTime.now().subtract(Duration(minutes: minutes)));
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       ui.setSince(DateTime.now().subtract(Duration(minutes: minutes)));

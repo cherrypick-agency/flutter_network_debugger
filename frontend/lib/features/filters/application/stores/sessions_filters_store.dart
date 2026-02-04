@@ -2,7 +2,7 @@ import 'package:mobx/mobx.dart';
 
 part 'sessions_filters_store.g.dart';
 
-// Храним значения фильтров сессий в одном Store, чтобы легко шарить через Provider
+// Store session filter values in one Store to easily share via Provider
 class SessionsFiltersStore = _SessionsFiltersStore with _$SessionsFiltersStore;
 
 abstract class _SessionsFiltersStore with Store {
@@ -33,7 +33,7 @@ abstract class _SessionsFiltersStore with Store {
   @observable
   ObservableList<String> selectedTags = ObservableList<String>();
 
-  // Простой индикатор активности фильтров именно этой фичи (без доменов/диапазонов)
+  // Simple indicator of active filters for this feature (without domains/ranges)
   @computed
   bool get hasActive =>
       target.trim().isNotEmpty ||

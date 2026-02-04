@@ -352,7 +352,7 @@ class SessionsFilters extends StatelessWidget {
             */
             // Tags filter section
             _TagsFilterSection(onApply: onApply),
-            // Кнопка сброса появляется только когда есть отклонения от дефолтов
+            // Reset button appears only when there are deviations from defaults
             if (store.hasActive)
               IntrinsicWidth(
                 child: TextButton.icon(
@@ -364,7 +364,7 @@ class SessionsFilters extends StatelessWidget {
                     textStyle: const TextStyle(fontSize: 12),
                   ),
                   onPressed: () {
-                    // Вернём все значения к дефолтным и применим
+                    // Reset all values to defaults and apply
                     store
                       ..setTarget('')
                       ..setHttpMethod('any')

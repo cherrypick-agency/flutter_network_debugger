@@ -1,7 +1,7 @@
 import '../../application/stores/sessions_store.dart';
 import '../../../filters/application/stores/sessions_filters_store.dart';
 
-// Чистая фильтрация списка сессий под UI-колонку.
+// Pure session list filtering for UI column.
 List<dynamic> filterVisibleSessions({
   required SessionsStore store,
   required SessionsFiltersStore filters,
@@ -10,7 +10,7 @@ List<dynamic> filterVisibleSessions({
   required Map<String, Map<String, dynamic>> httpMeta,
   required DateTime? since,
   required Set<String> ignoredIds,
-  // Быстрые фильтры: наборы тегов
+  // Quick filters: tag sets
   Set<String> quickTypes = const <String>{},
   Set<String> quickStatusGroups = const <String>{},
 }) {
@@ -20,7 +20,7 @@ List<dynamic> filterVisibleSessions({
         if (ignoredIds.contains(s.id)) return false;
         if (since != null) {
           final end = s.closedAt ?? DateTime.now();
-          // Показываем только сессии, у которых конец \(закрытие или now\) >= since
+          // Show only sessions where end (close time or now) >= since
           if (end.isBefore(since)) return false;
         }
         if (selectedRange != null) {
@@ -74,7 +74,7 @@ List<dynamic> filterVisibleSessions({
           }
           if (filters.headerVal.isEmpty && hv.isEmpty) return false;
         }
-        // Быстрые группы статусов: если заданы — оставляем только попадающие в любую выбранную группу
+        // Quick status groups: if set — keep only those matching any selected group
         if (quickStatusGroups.isNotEmpty) {
           final st = int.tryParse((m['status'] ?? '0').toString()) ?? 0;
           bool statusOk = false;
@@ -85,11 +85,11 @@ List<dynamic> filterVisibleSessions({
             if (g == '4xx' && st >= 400 && st <= 499) statusOk = true;
             if (g == '5xx' && st >= 500 && st <= 599) statusOk = true;
           }
-          // Для WebSocket у статуса может не быть — в этом случае не проходим статусный фильтр
+          // For WebSocket there may be no status — in this case status filter is not passed
           if (!statusOk) return false;
         }
 
-        // Быстрые типы контента/протокола: если заданы — совпадение по любому тегу
+        // Quick content/protocol types: if set — match any tag
         if (quickTypes.isNotEmpty) {
           final tags = _tagsForSession(s, m);
           if (!quickTypes.any(tags.contains)) return false;
@@ -116,7 +116,7 @@ List<dynamic> filterVisibleSessions({
   return filtered;
 }
 
-// Набор коротких тегов по сессии: протоколы (http, https, ws) и типы контента
+// Set of short tags for session: protocols (http, https, ws) and content types
 Set<String> _tagsForSession(dynamic s, Map<String, dynamic> meta) {
   final tags = <String>{};
   try {
@@ -125,7 +125,7 @@ Set<String> _tagsForSession(dynamic s, Map<String, dynamic> meta) {
     if (scheme == 'https') tags.add('https');
     if (scheme == 'http') tags.add('http');
     if (scheme == 'ws' || scheme == 'wss') tags.add('ws');
-    // Явная метка kind для надёжности
+    // Explicit kind label for reliability
     final kind = (s.kind as String?);
     if (kind == 'ws') tags.add('ws');
   } catch (_) {}
@@ -151,22 +151,22 @@ Set<String> _tagsForSession(dynamic s, Map<String, dynamic> meta) {
     }
   }
 
-  // Грубая эвристика для GraphQL по пути
+  // Rough heuristic for GraphQL by path
   try {
     final uri = Uri.parse((s.target as String));
     final path = uri.path.toLowerCase();
     if (path.contains('graphql')) tags.add('graphql');
   } catch (_) {}
 
-  // Если ничего не распознали и это не websocket — считаем "other"
+  // If nothing recognized and not websocket — consider "other"
   if (tags.isEmpty || (tags.length == 1 && tags.contains('http'))) {
-    // http без mime тоже можно считать other, но оставим общий флаг
+    // http without mime can also be considered other, but we keep the common flag
     tags.add('other');
   }
   return tags;
 }
 
-// Обёртка над DateTimeRange, чтобы не тянуть material в util (оставляем совместимость типов)
+// Wrapper over DateTimeRange to avoid pulling material into util (keeping type compatibility)
 class DateTimeRangeWrapper {
   DateTimeRangeWrapper({required this.start, required this.end});
   final DateTime start;

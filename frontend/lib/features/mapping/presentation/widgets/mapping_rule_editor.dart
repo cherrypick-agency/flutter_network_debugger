@@ -294,8 +294,8 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
       setState(() {
         final blob = (m['blobPath'] ?? '').toString();
         _blobPath = blob.isEmpty ? null : blob;
-        // На бэке запрещено одновременно filePath и blobPath.
-        // Если загрузили blob — очищаем filePath, чтобы правило точно прошло валидацию.
+        // Backend does not allow both filePath and blobPath at the same time.
+        // If a blob was uploaded, clear filePath so the rule passes validation.
         if (_filePath.text.trim().isNotEmpty) {
           _filePath.text = '';
         }

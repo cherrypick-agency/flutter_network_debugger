@@ -1,7 +1,7 @@
 import 'package:mobx/mobx.dart' as mobx;
 import 'package:flutter/material.dart';
 
-// UI-стор для главной страницы инспектора
+// UI store for the inspector main page
 class HomeUiStore {
   HomeUiStore() {
     selectedSessionId = mobx.Observable<String?>(null);
@@ -24,7 +24,7 @@ class HomeUiStore {
     includePaused = mobx.Observable<bool>(true);
     recentWindowEnabled = mobx.Observable<bool>(false);
     recentWindowMinutes = mobx.Observable<int>(5);
-    // Быстрые фильтры под таймлайном
+    // Quick filters below the timeline
     quickTypes = mobx.ObservableSet.of(<String>{});
     quickStatusGroups = mobx.ObservableSet.of(<String>{});
   }
@@ -49,10 +49,10 @@ class HomeUiStore {
   late final mobx.Observable<bool> includePaused;
   late final mobx.Observable<bool> recentWindowEnabled;
   late final mobx.Observable<int> recentWindowMinutes;
-  // метка времени, когда поставили на паузу (чтобы отсекать новые сессии)
+  // timestamp when recording was paused (to filter out new sessions)
   late final mobx.Observable<DateTime?> pausedSince =
       mobx.Observable<DateTime?>(null);
-  // Быстрые фильтры: типы контента/протокола и группы статусов
+  // Quick filters: content/protocol types and status groups
   late final mobx.ObservableSet<String>
   quickTypes; // http, https, ws, json, form, ...
   late final mobx.ObservableSet<String> quickStatusGroups; // 1xx..5xx
@@ -109,7 +109,7 @@ class HomeUiStore {
   void setRecentWindowMinutes(int v) =>
       mobx.runInAction(() => recentWindowMinutes.value = v);
 
-  // Быстрые фильтры
+  // Quick filters
   void toggleQuickType(String key) => mobx.runInAction(() {
     if (quickTypes.contains(key)) {
       quickTypes.remove(key);

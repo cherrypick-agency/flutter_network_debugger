@@ -12,7 +12,7 @@ class FormDataView extends StatelessWidget {
     required this.rawBody,
   });
 
-  // form – структура, которую отдаёт бэкенд в превью (см. buildHTTPRequestPreview)
+  // form - structure returned by backend in preview (see buildHTTPRequestPreview)
   final Map<String, dynamic>? form;
   final String? contentType;
   final String? rawBody;
@@ -29,7 +29,7 @@ class FormDataView extends StatelessWidget {
 
   Map<String, dynamic>? _fallbackFromUrlEncoded(String? body) {
     if (body == null || body.isEmpty || !_isUrlEncodedCt) return null;
-    // Разбираем как query-строку, поддержим повторяющиеся ключи
+    // Parse as query string, support repeating keys
     try {
       final map = Uri(query: body).queryParametersAll;
       if (map.isEmpty) return null;
@@ -48,7 +48,7 @@ class FormDataView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effective = form ?? _fallbackFromUrlEncoded(rawBody);
-    // Показываем только если реально есть что показать и это форма
+    // Show only if there's actually something to display and it's a form
     if (effective == null) return const SizedBox.shrink();
     final type = (effective['type'] ?? '').toString();
     if (!_isUrlEncodedCt && !_isMultipartCt && type.isEmpty) {

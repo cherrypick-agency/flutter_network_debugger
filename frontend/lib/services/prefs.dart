@@ -125,7 +125,7 @@ extension PrefsServiceMonitor on PrefsService {
     await p.setString(
       PrefsService._keyMonitorLog,
       trimmed.join('\n'),
-    ); // компактно
+    ); // compact
   }
 
   Future<List<String>> loadMonitorLog() async {

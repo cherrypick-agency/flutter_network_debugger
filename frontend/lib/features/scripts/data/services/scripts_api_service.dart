@@ -89,8 +89,8 @@ class ScriptsApiService {
   }
 
   /// GET /_api/v1/scripts/compilers
-  /// Доступность компиляторов (из системы или кэша) для разблокировки компиляции
-  /// Возвращает карту language -> canCompile
+  /// Compiler availability (from system or cache) for unlocking compilation
+  /// Returns map language -> canCompile
   Future<Map<String, bool>> getCompilersAvailability() async {
     final response = await _httpClient.get(path: '$_basePath/compilers');
     final data = response.data;

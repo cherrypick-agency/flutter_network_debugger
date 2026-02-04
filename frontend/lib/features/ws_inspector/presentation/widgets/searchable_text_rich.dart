@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../widgets/json_viewer.dart';
 
-/// Текстовый виджет с подсветкой совпадений и якорями для навигации
+/// Text widget with match highlighting and anchors for navigation
 class SearchableTextRich extends StatelessWidget {
   const SearchableTextRich({
     super.key,
@@ -91,13 +91,13 @@ class SearchableTextRich extends StatelessWidget {
         if (s > last) {
           out.add(TextSpan(text: srcText.substring(last, s), style: baseStyle));
         }
-        // Стабильные ключи для якорей при наличии anchorScope
+        // Stable keys for anchors when anchorScope is present
         final anchorIndex = matchCounter();
         final k = search.anchorScope == null
             ? GlobalKey()
             : GlobalObjectKey('${search.anchorScope}:$anchorIndex');
         keys.add(k);
-        // Якорь должен иметь ненулевую высоту и базовую линию, чтобы ensureVisible корректно работал
+        // Anchor must have non-zero height and baseline for ensureVisible to work correctly
         out.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
@@ -176,7 +176,7 @@ class SearchableTextRich extends StatelessWidget {
           ? GlobalKey()
           : GlobalObjectKey('${search.anchorScope}:$anchorIndex');
       keys.add(k);
-      // Якорь должен иметь ненулевую высоту и базовую линию, чтобы ensureVisible корректно работал
+      // Anchor must have non-zero height and baseline for ensureVisible to work correctly
       out.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,

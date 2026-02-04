@@ -128,8 +128,8 @@ class _SessionsColumnState extends State<SessionsColumn> {
         // Domains inline (up to 3 rows), then scroll — only from filtered sessions
         Builder(
           builder: (_) {
-            // Источник доменных счётчиков: сначала realtime aggregate от сервера,
-            // при его отсутствии — локальный подсчёт на основе видимого списка
+            // Domain counters source: first try realtime aggregate from server,
+            // if unavailable — fall back to local count based on visible list
             final agg = context.watch<AggregateStore>().groups.toList();
             final Map<String, int> counts = <String, int>{};
             if (agg.isNotEmpty) {
@@ -263,23 +263,23 @@ class _SessionsColumnState extends State<SessionsColumn> {
         ),
       );
     }
-    // Определяем общий домен среди текущих видимых сессий.
-    // Если у всех сессий один и тот же host — в списке ниже домен скрываем,
-    // чтобы строка была короче и читалась проще.
+    // Determine the common domain among current visible sessions.
+    // If all sessions share the same host — hide the domain in the list below
+    // to make the row shorter and easier to read.
     final String? commonHost = (() {
       String? host;
       for (final s in widget.sessions) {
         try {
           final h = Uri.parse((s.target as String)).host;
           if (h.isEmpty)
-            return null; // встретилась пустая/битая ссылка — не скрываем
+            return null; // empty/broken URL encountered — don't hide
           host ??= h;
-          if (host != h) return null; // разные домены — показываем как есть
+          if (host != h) return null; // different domains — show as is
         } catch (_) {
           return null;
         }
       }
-      return host; // одинаковый host у всех элементов
+      return host; // same host for all items
     })();
 
     return ListView.builder(
@@ -425,7 +425,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
-                                  // Имя процесса
+                                  // Process name
                                   if (_shouldShowProcessName(
                                     s.processInfo?.name,
                                   ))
@@ -668,7 +668,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
   bool _shouldShowProcessName(String? name) {
     final n = (name ?? '').trim().toLowerCase();
     if (n.isEmpty) return false;
-    // Скрываем технические имена процессов UI/прокси
+    // Hide technical UI/proxy process names
     if (n == 'reverse proxy' || n == 'runner') return false;
     return true;
   }
@@ -687,10 +687,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
   String _formatTimeHMSSafe(DateTime? dt) {
     if (dt == null) return '';
 
-    // Конвертируем UTC в локальное время
+    // Convert UTC to local time
     final localDt = dt.toLocal();
 
-    // Проверяем, сегодняшняя ли дата (по локальному времени)
+    // Check if the date is today (by local time)
     final now = DateTime.now();
     final isToday =
         localDt.year == now.year &&
@@ -703,9 +703,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
     final time = '$h:$m:$s';
 
     if (isToday) {
-      return time; // Только время
+      return time; // Time only
     } else {
-      // Дата + время (без года)
+      // Date + time (without year)
       const months = [
         'Jan',
         'Feb',

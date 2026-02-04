@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:multi_editor_core/multi_editor_core.dart';
 
-/// Простой адаптер FolderRepository
-/// У нас только одна root папка, так как все файлы хранятся плоским списком
+/// Simple FolderRepository adapter
+/// We only have one root folder since all files are stored as a flat list
 class MobxFolderRepository implements FolderRepository {
-  // Хранилище папок (только root)
+  // Folder storage (only root)
   final Map<String, Folder> _folders = {
     'root': Folder(
       id: 'root',
@@ -167,12 +167,12 @@ class MobxFolderRepository implements FolderRepository {
     String? parentId,
   ) async {
     try {
-      // Фильтруем папки по parentId
+      // Filter folders by parentId
       final allFolders = _folders.values.toList();
       final filtered = <Folder>[];
 
       for (final folder in allFolders) {
-        // folder.parentId может быть null, сравниваем правильно
+        // folder.parentId can be null, compare correctly
         final folderParentId = folder.parentId;
         if ((parentId == null && folderParentId == null) ||
             (parentId != null && folderParentId == parentId)) {
@@ -206,7 +206,7 @@ class MobxFolderRepository implements FolderRepository {
 
   @override
   Stream<Either<DomainFailure, Folder>> watch(String id) {
-    // Простая реализация без реального watching
+    // Simple implementation without actual watching
     return Stream.empty();
   }
 }

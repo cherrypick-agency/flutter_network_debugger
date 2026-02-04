@@ -7,7 +7,7 @@ import '../core/di/di.dart';
 import '../theme/context_ext.dart';
 import 'json_search_controller.dart';
 
-/// Универсальный JSON-виджет поверх json_tree_viewer
+/// Universal JSON widget on top of json_tree_viewer
 class JsonViewer extends StatefulWidget {
   const JsonViewer({
     super.key,
@@ -127,14 +127,14 @@ class _JsonViewerState extends State<JsonViewer> {
       try {
         final renderObject = ctx.findRenderObject();
         if (renderObject != null && _innerScrollCtrl.hasClients) {
-          // Скроллим ТОЛЬКО внутренний скролл JSON
+          // Scroll ONLY internal JSON scroll
           _innerScrollCtrl.position.ensureVisible(
             renderObject,
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             alignment: 0.1,
           );
-          // Дополнительная коррекция после итоговой компоновки
+          // Additional correction after final layout
           WidgetsBinding.instance.addPostFrameCallback((_) {
             try {
               _innerScrollCtrl.position.ensureVisible(
@@ -147,7 +147,7 @@ class _JsonViewerState extends State<JsonViewer> {
           });
         }
       } catch (_) {
-        // игнорируем — лучше не трогать родителя
+        // ignore — better not to touch parent
       }
     }
   }
@@ -277,7 +277,7 @@ class _JsonViewerState extends State<JsonViewer> {
 
         // Constrained height with internal scroll
         if (!constraints.hasBoundedHeight) {
-          // Внутренний скролл и закрепленная сверху панель поиска, контейнер сжимается до контента
+          // Internal scroll and pinned search panel at top, container shrinks to content
           return ConstrainedBox(
             constraints: BoxConstraints(maxHeight: widget.treeHeight),
             child: Stack(
@@ -306,7 +306,7 @@ class _JsonViewerState extends State<JsonViewer> {
           );
         }
 
-        // Bounded height with internal scroll (обычный режим)
+        // Bounded height with internal scroll (normal mode)
         return SingleChildScrollView(
           controller: _innerScrollCtrl,
           child: SizedBox(
@@ -403,7 +403,7 @@ class _JsonViewerState extends State<JsonViewer> {
   }
 }
 
-/// Расширенный tree-view с подсветкой и автоматическим раскрытием совпадений
+/// Extended tree-view with highlighting and automatic expansion of matches
 class JsonTreeRich extends StatefulWidget {
   const JsonTreeRich({required this.data, required this.search});
   final dynamic data;
@@ -924,7 +924,7 @@ class _JsonTreeRichState extends State<JsonTreeRich> {
             ? GlobalKey()
             : GlobalObjectKey('${widget.search.anchorScope}:$anchorIndex');
         keys.add(k);
-        // Небольшой якорь по базовой линии — помогает ensureVisible прокрутить точно к совпадению
+        // Small baseline anchor — helps ensureVisible scroll exactly to match
         out.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
@@ -1052,7 +1052,7 @@ class JsonPrettyRich extends StatelessWidget {
 
     if (search?.onRebuilt != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Передаем наверх количество совпадений и якоря после завершения build
+        // Pass up match count and anchors after build completes
         search!.onRebuilt!(matchCounter, keys);
       });
     }
@@ -1341,7 +1341,7 @@ class JsonSearchConfig {
   final bool useRegex;
   final int focusedIndex;
   final void Function(int count, List<GlobalKey> keys)? onRebuilt;
-  // Используется для стабильных ключей якорей в пределах конкретного контейнера
-  // чтобы избежать конфликтов GlobalKey при быстрых перестроениях/навигации.
+  // Used for stable anchor keys within specific container
+  // to avoid GlobalKey conflicts during fast rebuilds/navigation.
   final String? anchorScope;
 }

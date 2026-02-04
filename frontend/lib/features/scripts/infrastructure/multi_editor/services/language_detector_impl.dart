@@ -1,8 +1,8 @@
 import 'package:multi_editor_core/multi_editor_core.dart';
 
-/// Реализация [LanguageDetector] с маппингом расширений на языки Monaco
+/// Implementation of [LanguageDetector] with extension to Monaco language mapping
 class LanguageDetectorImpl implements LanguageDetector {
-  /// Карта расширений (без точки) -> язык Monaco
+  /// Map of extensions (without dot) -> Monaco language
   static const Map<String, String> _extensionMap = {
     // dart
     'dart': 'dart',
@@ -72,7 +72,7 @@ class LanguageDetectorImpl implements LanguageDetector {
     'makefile': 'makefile',
   };
 
-  /// Обратный маппинг язык -> расширение (с точкой)
+  /// Reverse mapping language -> extension (with dot)
   static const Map<String, String> _languageToExtension = {
     'dart': '.dart',
     'javascript': '.js',
@@ -113,7 +113,7 @@ class LanguageDetectorImpl implements LanguageDetector {
     return _extensionMap[ext] ?? 'plaintext';
   }
 
-  /// Обработка файлов без расширения и распространённых имён
+  /// Handle files without extension and common names
   String _detectSpecialNames(String fileName) {
     final lowerName = fileName.toLowerCase();
 
@@ -136,7 +136,7 @@ class LanguageDetectorImpl implements LanguageDetector {
   String detectFromContent(String content) {
     if (content.isEmpty) return 'plaintext';
 
-    // shebang
+    // Shebang
     if (content.startsWith('#!')) {
       final firstLine = content.split('\n').first.toLowerCase();
       if (firstLine.contains('python')) return 'python';
@@ -147,7 +147,7 @@ class LanguageDetectorImpl implements LanguageDetector {
       }
     }
 
-    // простые эвристики
+    // Simple heuristics
     if (content.contains('import \'package:') ||
         content.contains('import "package:')) {
       return 'dart';

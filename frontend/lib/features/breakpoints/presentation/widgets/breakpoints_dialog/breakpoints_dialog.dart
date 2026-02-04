@@ -28,7 +28,7 @@ class _BreakpointsDialogState extends State<BreakpointsDialog>
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
 
-    // Загружаем конфиг/правила и поднимаем подписку на события очереди.
+    // Load config/rules and subscribe to queue events.
     Future.microtask(() async {
       try {
         await sl<BreakpointsStore>().load();
@@ -46,7 +46,7 @@ class _BreakpointsDialogState extends State<BreakpointsDialog>
 
   @override
   void dispose() {
-    // Очередь живёт как singleton в DI, поэтому отписываемся вручную при закрытии.
+    // The queue lives as a singleton in DI, so we unsubscribe manually when closing.
     try {
       sl<InterceptQueueStore>().detach();
     } catch (_) {}

@@ -24,9 +24,9 @@ class SocketIoService {
         // path - full HTTP path to Socket.IO endpoint (/_api/v1/monitor/io/socket.io/)
         final cfg = SocketIoDebugger.attach(
           enabled: false,
-          baseUrl: base, // Только хост
+          baseUrl: base, // Host only
           path:
-              '/_api/v1/monitor/io/socket.io/', // Полный HTTP путь к Socket.IO endpoint
+              '/_api/v1/monitor/io/socket.io/', // Full HTTP path to Socket.IO endpoint
           proxyBaseUrl: 'http://localhost:9091',
         );
         print(

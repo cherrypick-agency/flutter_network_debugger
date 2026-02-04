@@ -26,8 +26,8 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
   Future<Script> create(Script script) async {
     final json = script.toJson();
     final responseJson = await _apiService.create(json);
-    // Бэкенд в режиме source/dependencies может вернуть только { "id": "..." }.
-    // В таком случае дотягиваем полноценный объект отдельным запросом.
+    // Backend in source/dependencies mode may return only { "id": "..." }.
+    // In that case fetch full object with a separate request.
     final maybeName = responseJson['name'];
     final maybeRuntime = responseJson['runtime'];
     final maybeLanguage = responseJson['language'];
@@ -48,7 +48,7 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
       return Script.fromJson(fetched);
     }
 
-    // В крайнем случае пробуем распарсить как есть (даст понятную ошибку, если формат неожиданный)
+    // As a last resort try to parse as is (will give clear error if format is unexpected)
     return Script.fromJson(responseJson);
   }
 
@@ -82,9 +82,9 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
 
   @override
   Future<Script> compile(String id, {bool optimize = true}) async {
-    // 1) Запускаем компиляцию (API возвращает статус/логи)
+    // 1) Start compilation (API returns status/logs)
     await _apiService.compile(id, optimize: optimize);
-    // 2) Дотягиваем актуальный объект скрипта после компиляции
+    // 2) Fetch updated script object after compilation
     final json = await _apiService.getById(id);
     return Script.fromJson(json);
   }

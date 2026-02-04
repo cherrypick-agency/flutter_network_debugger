@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-/// Результат диалога загрузки
+/// Download dialog result
 enum DownloadDialogResult { completed, cancelled, error }
 
-/// Состояние загрузки
+/// Download state
 class DownloadProgress {
-  final int downloaded; // байты
-  final int total; // байты
-  final double speed; // байт/сек
+  final int downloaded; // bytes
+  final int total; // bytes
+  final double speed; // bytes/sec
   final String? error;
 
   DownloadProgress({
@@ -35,7 +35,7 @@ class DownloadProgress {
   String get progressPercent => '${(progress * 100).toStringAsFixed(0)}%';
 }
 
-/// Показывает диалог прогресса загрузки обновления
+/// Shows update download progress dialog
 Future<DownloadDialogResult> showDownloadProgressDialog(
   BuildContext context, {
   required Stream<DownloadProgress> progressStream,
@@ -71,7 +71,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
   DownloadProgress? _currentProgress;
   StreamSubscription<DownloadProgress>? _subscription;
   bool _cancelled = false;
-  bool _dialogClosed = false; // Флаг для предотвращения множественных pop()
+  bool _dialogClosed = false; // Flag to prevent multiple pop() calls
 
   @override
   void initState() {
@@ -84,7 +84,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
           _currentProgress = progress;
         });
 
-        // Автоматически закрываем диалог при завершении
+        // Automatically close dialog on completion
         if (progress.downloaded >= progress.total && progress.total > 0) {
           Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted && !_cancelled && !_dialogClosed) {
@@ -93,7 +93,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
           });
         }
 
-        // Показываем ошибку
+        // Show error
         if (progress.error != null && mounted && !_dialogClosed) {
           Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted && !_dialogClosed) {
@@ -117,7 +117,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
     );
   }
 
-  /// Безопасное закрытие диалога (только один раз)
+  /// Safe dialog close (only once)
   void _closeDialog(DownloadDialogResult result) {
     if (_dialogClosed) return;
     _dialogClosed = true;

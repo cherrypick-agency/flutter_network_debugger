@@ -21,8 +21,9 @@ class FramesTimelineSparkline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bins = _buildBins();
-    final maxVal =
-        bins.isEmpty ? 0.0 : bins.map((e) => e.value).reduce(math.max);
+    final maxVal = bins.isEmpty
+        ? 0.0
+        : bins.map((e) => e.value).reduce(math.max);
     final color = switch (metric) {
       SparkMetric.messagesPerSecond => context.appColors.primary,
       SparkMetric.bytesPerSecond => context.appColors.success,
@@ -38,7 +39,7 @@ class FramesTimelineSparkline extends StatelessWidget {
 
   List<_Bin> _buildBins() {
     final totalMs = maxTs.difference(minTs).inMilliseconds;
-    final bucketMs = math.max(1000, (totalMs / 50).round()); // ~50 точек
+    final bucketMs = math.max(1000, (totalMs / 50).round()); // ~50 points
     final bins = <int, double>{};
     for (final f in frames) {
       DateTime? ts;
@@ -57,10 +58,9 @@ class FramesTimelineSparkline extends StatelessWidget {
           break;
         case SparkMetric.bytesPerSecond:
           final szRaw = f['size'];
-          final sz =
-              szRaw is int
-                  ? szRaw.toDouble()
-                  : double.tryParse(szRaw?.toString() ?? '0') ?? 0.0;
+          final sz = szRaw is int
+              ? szRaw.toDouble()
+              : double.tryParse(szRaw?.toString() ?? '0') ?? 0.0;
           bins[idx] = (bins[idx] ?? 0) + sz;
           break;
       }
@@ -91,11 +91,10 @@ class _SparklinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (bins.isEmpty || maxVal <= 0) return;
-    final paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = color;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = color;
     final path = Path();
     final dx = size.width / math.max(1, bins.length - 1);
     for (var i = 0; i < bins.length; i++) {

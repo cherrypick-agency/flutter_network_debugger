@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../theme/context_ext.dart';
 
-/// Переиспользуемый виджет для отображения URL с цветовой подсветкой частей
-/// и опциональной подсветкой поиска
+/// Reusable widget for displaying URL with color highlighting of parts
+/// and optional search highlighting
 class HighlightedUrlWidget extends StatelessWidget {
   final String url;
   final String? searchQuery;
@@ -34,10 +34,10 @@ class HighlightedUrlWidget extends StatelessWidget {
         ).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace') ??
         const TextStyle(fontFamily: 'monospace');
 
-    // 1. Форматируем URL с учетом suppressHost
+    // 1. Format URL with suppressHost consideration
     final formattedUrl = _formatDisplayUrl(url, suppressHost: suppressHost);
 
-    // 2. Парсим URL и создаем цветные spans
+    // 2. Parse URL and create colored spans
     final spans = _parseUrlWithSearch(
       formattedUrl,
       colors,
@@ -45,7 +45,7 @@ class HighlightedUrlWidget extends StatelessWidget {
       searchQuery?.trim(),
     );
 
-    // 3. Возвращаем виджет
+    // 3. Return widget
     if (selectable) {
       return SelectableText.rich(
         TextSpan(children: spans),
@@ -61,11 +61,11 @@ class HighlightedUrlWidget extends StatelessWidget {
     }
   }
 
-  /// Форматирует URL для отображения с учетом suppressHost
+  /// Formats URL for display with suppressHost consideration
   String _formatDisplayUrl(String raw, {String? suppressHost}) {
     try {
       final u = Uri.parse(raw);
-      // Если у всех элементов один и тот же домен — скрываем схему/домен/порт
+      // If all elements have the same domain — hide scheme/domain/port
       if (suppressHost != null &&
           suppressHost.isNotEmpty &&
           u.host == suppressHost) {
@@ -76,7 +76,7 @@ class HighlightedUrlWidget extends StatelessWidget {
         final String frag = u.fragment.isNotEmpty ? '#${u.fragment}' : '';
         return '/$path$q$frag';
       }
-      // Иначе — оставляем как есть, но нормализуем двойное кодирование
+      // Otherwise — keep as is, but normalize double encoding
       final String auth = u.hasAuthority
           ? '${u.host}${u.hasPort ? ':${u.port}' : ''}'
           : '';
@@ -89,7 +89,7 @@ class HighlightedUrlWidget extends StatelessWidget {
     }
   }
 
-  /// Парсит URL, применяет цветовое раскрашивание и подсветку поиска
+  /// Parses URL, applies color highlighting and search highlighting
   List<InlineSpan> _parseUrlWithSearch(
     String url,
     AppColors colors,
@@ -101,7 +101,7 @@ class HighlightedUrlWidget extends StatelessWidget {
     try {
       final uri = Uri.parse(url);
 
-      // 1. Протокол (если есть) - базовый цвет
+      // 1. Protocol (if present) - base color
       if (uri.scheme.isNotEmpty) {
         _addSpansWithHighlight(
           spans,
@@ -112,7 +112,7 @@ class HighlightedUrlWidget extends StatelessWidget {
         );
       }
 
-      // 2. Домен (host + port) - голубой
+      // 2. Domain (host + port) - blue
       if (uri.host.isNotEmpty) {
         final hostPart = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
         _addSpansWithHighlight(
@@ -124,7 +124,7 @@ class HighlightedUrlWidget extends StatelessWidget {
         );
       }
 
-      // 3. Путь - зелёный
+      // 3. Path - green
       if (uri.path.isNotEmpty) {
         _addSpansWithHighlight(
           spans,
@@ -135,7 +135,7 @@ class HighlightedUrlWidget extends StatelessWidget {
         );
       }
 
-      // 4. Query параметры - жёлтый
+      // 4. Query parameters - yellow
       if (uri.query.isNotEmpty) {
         _addSpansWithHighlight(
           spans,
@@ -146,7 +146,7 @@ class HighlightedUrlWidget extends StatelessWidget {
         );
       }
 
-      // 5. Fragment (если есть) - базовый цвет
+      // 5. Fragment (if present) - base color
       if (uri.fragment.isNotEmpty) {
         _addSpansWithHighlight(
           spans,
@@ -157,14 +157,14 @@ class HighlightedUrlWidget extends StatelessWidget {
         );
       }
     } catch (e) {
-      // Если URL не удалось распарсить, показываем как есть
+      // If URL parsing failed, show as is
       _addSpansWithHighlight(spans, url, baseStyle, query, colors);
     }
 
     return spans;
   }
 
-  /// Добавляет spans для текста с подсветкой поиска
+  /// Adds spans for text with search highlighting
   void _addSpansWithHighlight(
     List<InlineSpan> spans,
     String text,
@@ -172,13 +172,13 @@ class HighlightedUrlWidget extends StatelessWidget {
     String? query,
     AppColors colors,
   ) {
-    // Если нет поискового запроса, просто добавляем текст с цветом
+    // If no search query, just add text with color
     if (query == null || query.isEmpty) {
       spans.add(TextSpan(text: text, style: style));
       return;
     }
 
-    // Иначе ищем совпадения и подсвечиваем их желтым фоном
+    // Otherwise search for matches and highlight them with yellow background
     final String src = text;
     final String srcLower = src.toLowerCase();
     final String qLower = query.toLowerCase();

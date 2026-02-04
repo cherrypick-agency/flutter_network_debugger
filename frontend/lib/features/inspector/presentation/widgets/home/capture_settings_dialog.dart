@@ -183,7 +183,7 @@ class _CaptureSettingsDialogState extends State<CaptureSettingsDialog> {
       ui.setIsRecording(_recording);
     }
     ui.setCaptureScope(_scope);
-    // Если запись выключена — по умолчанию не показываем «в паузе»
+    // If recording is off — by default don't show "paused" sessions
     if (ui.isRecording.value) {
       ui.setIncludePaused(_includePaused);
     } else {

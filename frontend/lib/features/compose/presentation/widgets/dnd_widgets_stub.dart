@@ -13,7 +13,7 @@ class DndDropArea extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    // Пустышка: ничего не делает
+    // Stub: does nothing
     return const SizedBox.shrink();
   }
 }

@@ -47,8 +47,8 @@ class MappingRule {
     'patternType': patternType,
     'filePath': filePath,
     'blobPath': blobPath,
-    // Бэк сейчас не принимает null для этих полей, поэтому отправляем безопасные
-    // значения по умолчанию.
+    // Backend currently does not accept null for these fields, so we send safe
+    // default values.
     'statusOverride': statusOverride ?? 200,
     'contentTypeOverride': contentTypeOverride ?? '',
     'targetURLTemplate': targetURLTemplate ?? '',

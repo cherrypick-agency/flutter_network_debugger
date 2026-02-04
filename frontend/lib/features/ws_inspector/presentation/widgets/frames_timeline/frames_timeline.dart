@@ -15,7 +15,7 @@ class FramesTimeline extends StatelessWidget {
     this.onFrameHover,
   });
 
-  // Ожидается список Map: { id, ts(ISO), direction('client->upstream'|'upstream->client'), opcode, size }
+  // Expected list of Map: { id, ts(ISO), direction('client->upstream'|'upstream->client'), opcode, size }
   final List<Map<String, dynamic>> frames;
   final double height;
   final EdgeInsets padding;
@@ -25,7 +25,7 @@ class FramesTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Находим диапазон времени
+    // Find time range
     final tsList = <DateTime>[];
     for (final f in frames) {
       final tsStr = (f['ts'] ?? '').toString();
@@ -49,7 +49,7 @@ class FramesTimeline extends StatelessWidget {
       textColor: colors.primary,
       binaryColor: colors.warning,
       pingColor: colors.warning,
-      pongColor: colors.textSecondary, // Pong серым
+      pongColor: colors.textSecondary, // Pong in gray
       closeColor: colors.danger,
       msgsColor: colors.primary,
       bytesColor: colors.success,

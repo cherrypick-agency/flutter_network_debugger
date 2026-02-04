@@ -39,15 +39,15 @@ class RealtimeInspectorService {
         'tags': filters.selectedTags.toList(),
     };
     print('[RealtimeInspector] Payload prepared: $payload');
-    // Если запись выключена и «в паузе не показывать», то отбрасываем все
-    // сессии без captureId на клиенте (доп. защита на случай гонок/дефолтов сервера)
+    // If recording is off and "don't show paused", discard all sessions
+    // without captureId on client (extra protection against races/server defaults)
     final bool dropUnassignedWhilePaused =
         !ui.isRecording.value && !ui.includePaused.value;
     final DateTime? pausedSince = ui.pausedSince.value;
     final bool dropStartedAfterPaused =
         pausedSince != null && !ui.includePaused.value;
 
-    // ВАЖНО: Сначала создаем socket (если еще нет), ПОТОМ регистрируем handlers
+    // IMPORTANT: First create socket (if not yet), THEN register handlers
     print('[RealtimeInspector] Calling init() to ensure socket exists...');
     await init();
     print('[RealtimeInspector] Socket exists, now registering handlers...');
@@ -113,7 +113,7 @@ class RealtimeInspectorService {
           if (dropUnassignedWhilePaused) {
             final cap = data['captureId'];
             if (cap == null) {
-              // пропускаем «непривязанные» во время паузы
+              // skip "unassigned" during pause
               return;
             }
           }
@@ -162,7 +162,7 @@ class RealtimeInspectorService {
       }
     });
 
-    // Простой фолбэк: если сокет недоступен — разово подхватим REST
+    // Simple fallback: if socket is unavailable — fetch via REST once
     _sio.on('connect_error', (_) {
       print('[RealtimeInspector] 📥 connect_error handler CALLED');
       _restFallbackOnce();
@@ -172,12 +172,12 @@ class RealtimeInspectorService {
       _restFallbackOnce();
     });
 
-    // Обеспечим подписку при переподключении
+    // Ensure subscription on reconnection
     _sio.on('connect', (_) {
       print(
         '[RealtimeInspector] 📥 connect handler CALLED, emitting sessions:subscribe',
       );
-      _fallbackUsed = false; // сбросим флаг после успешного переподключения
+      _fallbackUsed = false; // reset flag after successful reconnection
       _sio.emit('sessions:subscribe', payload);
     });
 

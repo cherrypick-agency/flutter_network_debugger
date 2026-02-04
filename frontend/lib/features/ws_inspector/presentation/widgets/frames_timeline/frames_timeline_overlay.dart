@@ -8,9 +8,9 @@ class FramesTimelineOverlay extends StatelessWidget {
     required this.frame,
   });
 
-  // Позиция курсора/тапа в локальных координатах таймлайна
+  // Cursor/tap position in timeline local coordinates
   final Offset position;
-  // Данные фрейма (минимум: id, ts, direction, opcode, size, preview?)
+  // Frame data (minimum: id, ts, direction, opcode, size, preview?)
   final Map<String, dynamic> frame;
 
   @override

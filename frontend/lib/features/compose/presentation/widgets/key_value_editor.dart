@@ -19,7 +19,7 @@ class KeyValueEditor extends StatefulWidget {
 }
 
 class _KeyValueEditorState extends State<KeyValueEditor> {
-  // Простой показ ошибок: пустые ключи и дубликаты
+  // Simple error display: empty keys and duplicates
   Set<String> _dupKeys = <String>{};
 
   @override
@@ -29,8 +29,8 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          // Список делаем shrinkWrap, чтобы блок растягивался по содержимому,
-          // а прокрутка была общей у страницы, а не локальной у списка
+          // Make list shrinkWrap so block expands to content,
+          // and scroll is shared with page, not local to list
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),

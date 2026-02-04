@@ -5,11 +5,11 @@ import '../../domain/entities/update_info.dart';
 
 part 'updates_store.g.dart';
 
-/// Тип фильтра релизов
+/// Release filter type
 enum ReleaseFilter {
-  all, // Все релизы
-  stable, // Только stable (не pre-release)
-  prerelease, // Только pre-release
+  all, // All releases
+  stable, // Only stable (not pre-release)
+  prerelease, // Only pre-release
 }
 
 class UpdatesStore = _UpdatesStore with _$UpdatesStore;
@@ -20,39 +20,39 @@ abstract class _UpdatesStore with Store {
 
   _UpdatesStore(this._updatesService);
 
-  /// Список загруженных релизов
+  /// List of loaded releases
   @observable
   ObservableList<UpdateInfo> releases = ObservableList();
 
-  /// Состояние загрузки
+  /// Loading state
   @observable
   bool isLoading = false;
 
-  /// Сообщение об ошибке
+  /// Error message
   @observable
   String? errorMessage;
 
-  /// Текущая страница пагинации
+  /// Current pagination page
   @observable
   int currentPage = 1;
 
-  /// Есть ли еще релизы для загрузки
+  /// Whether there are more releases to load
   @observable
   bool hasMoreReleases = true;
 
-  /// Текущий фильтр
+  /// Current filter
   @observable
   ReleaseFilter filter = ReleaseFilter.all;
 
-  /// Информация о доступном обновлении (если есть)
+  /// Information about available update (if any)
   @observable
   UpdateInfo? availableUpdate;
 
-  /// Проверка обновления в процессе
+  /// Update check in progress
   @observable
   bool isCheckingForUpdates = false;
 
-  /// Отфильтрованный список релизов на основе выбранного фильтра
+  /// Filtered list of releases based on selected filter
   @computed
   List<UpdateInfo> get filteredReleases {
     switch (filter) {
@@ -65,10 +65,10 @@ abstract class _UpdatesStore with Store {
     }
   }
 
-  /// Количество релизов на странице
+  /// Number of releases per page
   static const int _perPage = 15;
 
-  /// Загружает релизы (первая страница или Load More)
+  /// Loads releases (first page or Load More)
   @action
   Future<void> loadReleases({bool loadMore = false}) async {
     if (isLoading) return;
@@ -83,21 +83,21 @@ abstract class _UpdatesStore with Store {
       final newReleases = await _updatesService.getAllReleases(
         page: page,
         perPage: _perPage,
-        includePrerelease: true, // Всегда загружаем все, фильтруем локально
+        includePrerelease: true, // Always load all, filter locally
       );
 
       if (loadMore) {
-        // Добавляем к существующим
+        // Add to existing
         releases.addAll(newReleases);
         currentPage = page;
       } else {
-        // Заменяем список (первая загрузка или обновление)
+        // Replace list (initial load or refresh)
         releases.clear();
         releases.addAll(newReleases);
         currentPage = 1;
       }
 
-      // Если получили меньше чем perPage, значит больше нет релизов
+      // If received fewer than perPage, no more releases available
       hasMoreReleases = newReleases.length >= _perPage;
 
       _log.info(
@@ -119,7 +119,7 @@ abstract class _UpdatesStore with Store {
     }
   }
 
-  /// Проверяет наличие доступных обновлений
+  /// Checks for available updates
   @action
   Future<void> checkForUpdates() async {
     if (isCheckingForUpdates) return;
@@ -143,14 +143,14 @@ abstract class _UpdatesStore with Store {
     }
   }
 
-  /// Устанавливает фильтр релизов
+  /// Sets release filter
   @action
   void setFilter(ReleaseFilter newFilter) {
     _log.info('Setting filter: $newFilter');
     filter = newFilter;
   }
 
-  /// Сброс состояния (для повторной загрузки)
+  /// Reset state (for reload)
   @action
   void reset() {
     releases.clear();

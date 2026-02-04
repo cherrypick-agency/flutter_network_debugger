@@ -36,8 +36,8 @@ abstract class _SessionDetailsStore with Store {
 
   @action
   Future<void> open(String id) async {
-    // Перед открытием новой сессии аккуратно отписываемся от старой,
-    // чтобы не накапливать обработчики socket.io
+    // Before opening a new session, carefully unsubscribe from the old one
+    // to avoid accumulating socket.io handlers
     _unsubscribeFromSession();
 
     sessionId = id;
@@ -61,8 +61,8 @@ abstract class _SessionDetailsStore with Store {
     try {
       final from = frames.isNotEmpty ? frames.last.id : null;
       final res = await _listFrames(sessionId!, from: from, limit: 100);
-      // На всякий случай фильтруем дубликаты по id,
-      // если бэкенд вернёт пересекающиеся страницы
+      // Just in case, filter duplicates by id
+      // if backend returns overlapping pages
       final existingIds = frames.map((f) => f.id).toSet();
       final unique = res.where((f) => !existingIds.contains(f.id));
       frames.addAll(unique);
@@ -96,27 +96,27 @@ abstract class _SessionDetailsStore with Store {
   void _subscribeToSession() {
     if (sessionId == null) return;
 
-    // Получаем синглтон Socket.IO сервиса
+    // Get Socket.IO service singleton
     _socketIo = sl<SocketIoService>();
 
-    // Подписываемся на события
+    // Subscribe to events
     _socketIo?.on('session:frames', _handleFrames);
     _socketIo?.on('session:events', _handleEvents);
     _socketIo?.on('session:http', _handleHttp);
 
-    // Отправляем подписку на сервер
+    // Send subscription to server
     _socketIo?.emit('session:subscribe', {'sessionId': sessionId});
   }
 
   void _unsubscribeFromSession() {
     if (sessionId == null || _socketIo == null) return;
 
-    // Отписываемся от событий
+    // Unsubscribe from events
     _socketIo?.off('session:frames', _handleFrames);
     _socketIo?.off('session:events', _handleEvents);
     _socketIo?.off('session:http', _handleHttp);
 
-    // Отправляем отписку на сервер
+    // Send unsubscription to server
     _socketIo?.emit('session:unsubscribe', {'sessionId': sessionId});
     _socketIo = null;
   }
@@ -130,7 +130,7 @@ abstract class _SessionDetailsStore with Store {
         if (id.isEmpty) {
           continue;
         }
-        // Защита от дубликатов: один и тот же frame по id добавляем только один раз
+        // Duplicate protection: add the same frame by id only once
         final alreadyExists = frames.any((existing) => existing.id == id);
         if (alreadyExists) {
           continue;
@@ -179,7 +179,7 @@ abstract class _SessionDetailsStore with Store {
   }
 
   void _handleHttp(dynamic data) {
-    // HTTP транзакции можно добавить позже если нужно
-    // Пока оставляем заглушку
+    // HTTP transactions can be added later if needed
+    // For now leaving a stub
   }
 }

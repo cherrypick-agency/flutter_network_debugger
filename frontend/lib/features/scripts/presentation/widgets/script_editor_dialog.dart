@@ -69,10 +69,11 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   late final ScriptEditorStore _editorStore;
   late final CompilerListStore _compilerStore;
   EditorDI? _editorDI; // Multi-file editor DI (lazy init)
-  Future<void>? _initEditorFuture; // фикс дергания FutureBuilder
+  Future<void>? _initEditorFuture; // fix FutureBuilder jitter
   bool _isSaving = false;
   bool _loadingCompilers = true;
-  Map<String, bool>? _canCompileByLanguage; // доступность компиляции по языкам
+  Map<String, bool>?
+  _canCompileByLanguage; // compilation availability by language
   final FocusNode _hotkeysFocus = FocusNode(
     debugLabel: 'script_editor_hotkeys',
   );
@@ -93,7 +94,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     } else {
       _editorStore.initForNewScript();
     }
-    // Запускаем ленивую инициализацию редактора один раз
+    // Start lazy editor initialization once
     _initEditorFuture = _initEditorDI();
   }
 
@@ -106,9 +107,9 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
 
   /// Load compilers list from backend
   Future<void> _loadCompilersAsync() async {
-    // Загружаем два источника:
-    // 1) статусы кэша (страница менеджера) через CompilerListStore
-    // 2) доступность компиляции (из системы или кэша) через /_api/v1/scripts/compilers
+    // Load from two sources:
+    // 1) cache statuses (manager page) via CompilerListStore
+    // 2) compilation availability (from system or cache) via /_api/v1/scripts/compilers
     final futures = <Future<void>>[];
     if (_compilerStore.compilers.isEmpty) {
       futures.add(_compilerStore.loadCompilers());
@@ -124,10 +125,10 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     try {
       final api = sl<ScriptsApiService>();
       final map = await api.getCompilersAvailability();
-      // нормализуем ключи в нижний регистр для удобства
+      // normalize keys to lowercase for convenience
       _canCompileByLanguage = map.map((k, v) => MapEntry(k.toLowerCase(), v));
     } catch (_) {
-      // молча игнорируем — не блокируем UI, просто останемся без подсказки
+      // silently ignore — don't block UI, just remain without hint
       _canCompileByLanguage = null;
     }
   }
@@ -152,10 +153,10 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   bool _isCompilerInstalled(String language) {
     if (_loadingCompilers) return true; // Optimistic check while loading
     final lang = language.toLowerCase();
-    // Если бэкенд говорит, что компиляция доступна (система или кэш) — ок.
+    // If backend says compilation is available (system or cache) — ok.
     final canCompile = _canCompileByLanguage?[lang];
     if (canCompile == true) return true;
-    // Иначе — fallback к кэшу (как раньше).
+    // Otherwise — fallback to cache (as before).
     return _compilerStore.installedCompilers.any(
       (c) => c.language.toLowerCase() == lang,
     );
@@ -260,23 +261,23 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
           focusNode: _hotkeysFocus,
           autofocus: true,
           onKey: (event) {
-            // Fallback для macOS: перехватываем ⌘S и ⌘⇧C на уровне платформы,
-            // если они не дошли до Shortcuts из‑за platform view редактора.
+            // Fallback for macOS: intercept ⌘S and ⌘⇧C at platform level,
+            // if they didn't reach Shortcuts due to editor platform view.
             if (event is RawKeyDownEvent) {
               final isMeta = event.isMetaPressed;
               final isCtrl = event.isControlPressed;
               final key = event.logicalKey;
-              // Save: Cmd+S или Ctrl+S
+              // Save: Cmd+S or Ctrl+S
               if ((isMeta || isCtrl) && key == LogicalKeyboardKey.keyS) {
                 if (_shouldProceedSave() &&
                     !_isSaving &&
                     _editorStore.isValid) {
                   _save();
                 }
-                // предотвращаем повторную обработку
+                // prevent duplicate processing
                 return;
               }
-              // Compile: Cmd+Shift+C или Ctrl+Shift+C
+              // Compile: Cmd+Shift+C or Ctrl+Shift+C
               if ((isMeta || isCtrl) &&
                   event.isShiftPressed &&
                   key == LogicalKeyboardKey.keyC) {
@@ -525,10 +526,10 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
 
   Widget _buildMultiFileEditor() {
     return FutureBuilder<void>(
-      // важен стабильный future, чтобы не мигал спиннер на каждом rebuild
+      // stable future is important to prevent spinner flicker on each rebuild
       future: _initEditorFuture,
       builder: (context, snapshot) {
-        // Если редактор ещё не создан — показываем лоадер
+        // If editor is not created yet — show loader
         if (_editorDI == null) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -859,7 +860,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
       return;
     }
 
-    // Перед сохранением принудительно сбрасываем несохранённые изменения редактора
+    // Before saving, forcefully flush unsaved editor changes
     await _editorDI?.flushUnsavedChanges();
 
     setState(() => _isSaving = true);
@@ -874,7 +875,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
         );
       } else {
         final createdScript = await widget.scriptsStore.createScript(script);
-        // Остаёмся в редакторе и переключаемся в режим редактирования нового скрипта
+        // Stay in editor and switch to edit mode for the new script
         _editorStore.initForEdit(createdScript);
       }
 
@@ -889,7 +890,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
             backgroundColor: Colors.green,
           ),
         );
-        // Сбрасываем индикатор несохранённых изменений, перезагрузив активный файл
+        // Reset unsaved changes indicator by reloading active file
         await _editorDI?.reloadCurrentFileIfAny(_editorStore.selectedFile);
       }
     } catch (e) {
@@ -1120,7 +1121,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     // Save the script first (create new or update existing)
     setState(() => _isSaving = true);
     try {
-      // Перед сохранением принудительно сбрасываем несохранённые изменения редактора
+      // Before saving, forcefully flush unsaved editor changes
       await _editorDI?.flushUnsavedChanges();
 
       final script = _editorStore.buildScript();

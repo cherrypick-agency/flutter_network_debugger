@@ -75,10 +75,9 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
   try {
     final api = sl<http_client.AppHttpClient>();
     final resp = await api.get(path: '/_api/v1/mitm/ca');
-    final pem =
-        (resp.data is String)
-            ? resp.data as String
-            : utf8.decode((resp.data as List).cast<int>());
+    final pem = (resp.data is String)
+        ? resp.data as String
+        : utf8.decode((resp.data as List).cast<int>());
     final f = File(tmpPath);
     await f.writeAsString(pem);
   } catch (_) {}
@@ -96,7 +95,7 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
   ]);
 
   // 4) Enable HTTP/HTTPS proxy for every service (call networksetup per service)
-  // Берём порт форвард‑прокси с бэка; фоллбек — 9091
+  // Get forward-proxy port from backend; fallback to 9091
   int port = 9091;
   try {
     final api = sl<http_client.AppHttpClient>();
@@ -114,19 +113,18 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
       }
     }
   } catch (_) {
-    // ignore — остаёмся на 9091
+    // ignore - stay on 9091
   }
   final servicesRes = await Process.run('bash', [
     '-lc',
     'networksetup -listallnetworkservices | tail -n +2 | sed "s/^\\* \\?//"',
   ]);
-  final services =
-      (servicesRes.stdout ?? '')
-          .toString()
-          .split('\n')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+  final services = (servicesRes.stdout ?? '')
+      .toString()
+      .split('\n')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
   for (final svc in services) {
     final qSvc = svc.replaceAll('"', '\\"');
     final cmds = [
@@ -148,7 +146,7 @@ Future<void> autoIntegrateMacOS(String baseUrl) async {
     }
   }
 
-  // 5) Fallback: напрямую проставим флаги в динамическом сторе через scutil
+  // 5) Fallback: directly set flags in dynamic store via scutil
   try {
     final sc =
         "printf 'open\\nget State:/Network/Global/Proxies\\n'"

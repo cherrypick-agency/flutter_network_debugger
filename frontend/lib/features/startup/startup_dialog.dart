@@ -21,7 +21,7 @@ class StartupConfig {
   }
 }
 
-/// Показывает диалог настройки/проверки портов при старте приложения
+/// Shows port configuration/check dialog at application startup
 Future<StartupConfig?> showStartupDialog(
   BuildContext context, {
   StartupConfig? initialConfig,
@@ -113,7 +113,7 @@ class _StartupDialogState extends State<_StartupDialog> {
     final status = await checkPorts(apiPort: apiPort, proxyPort: proxyPort);
 
     if (mounted) {
-      // Показать снэкбар при изменении статуса (только для silent режима)
+      // Show snackbar on status change (only for silent mode)
       if (silent && _portStatus != null) {
         _showStatusChangeSnackbar(_portStatus!, status);
       }
@@ -123,7 +123,7 @@ class _StartupDialogState extends State<_StartupDialog> {
         _checking = false;
       });
 
-      // Автоматически закрываем диалог если оба сервера уже запущены
+      // Automatically close dialog if both servers are already running
       if (status.bothRunning) {
         _onNext();
       }
@@ -136,27 +136,27 @@ class _StartupDialogState extends State<_StartupDialog> {
     String? message;
     Color? backgroundColor;
 
-    // Оба запустились
+    // Both started
     if (!oldStatus.bothRunning && newStatus.bothRunning) {
       message = 'All servers are ready!';
       backgroundColor = Colors.green;
     }
-    // API сервер запустился
+    // API server started
     else if (!oldStatus.apiRunning && newStatus.apiRunning) {
       message = 'API server is now running';
       backgroundColor = Colors.green;
     }
-    // Proxy сервер запустился
+    // Proxy server started
     else if (!oldStatus.proxyRunning && newStatus.proxyRunning) {
       message = 'Proxy server is now running';
       backgroundColor = Colors.green;
     }
-    // API сервер упал
+    // API server stopped
     else if (oldStatus.apiRunning && !newStatus.apiRunning) {
       message = 'API server stopped';
       backgroundColor = Colors.orange;
     }
-    // Proxy сервер упал
+    // Proxy server stopped
     else if (oldStatus.proxyRunning && !newStatus.proxyRunning) {
       message = 'Proxy server stopped';
       backgroundColor = Colors.orange;
@@ -177,7 +177,7 @@ class _StartupDialogState extends State<_StartupDialog> {
     final apiPort = int.tryParse(_apiPortCtrl.text) ?? 9092;
     final proxyPort = int.tryParse(_proxyPortCtrl.text) ?? 9091;
 
-    // Валидация портов
+    // Port validation
     if (apiPort < 1024 || apiPort > 65535) {
       _showError('API port must be between 1024 and 65535');
       return;
@@ -463,7 +463,7 @@ class _StartupDialogState extends State<_StartupDialog> {
     }
 
     if (_portStatus!.bothStopped) {
-      // Состояние 1: Оба не запущены - показываем Refresh + Start Server
+      // State 1: Both not running - show Refresh + Start Server
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
@@ -481,7 +481,7 @@ class _StartupDialogState extends State<_StartupDialog> {
         ),
       ];
     } else if (_portStatus!.bothRunning) {
-      // Состояние 3: Оба запущены - показываем Refresh + Next
+      // State 3: Both running - show Refresh + Next
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
@@ -499,7 +499,7 @@ class _StartupDialogState extends State<_StartupDialog> {
         ),
       ];
     } else {
-      // Состояние 2: Частично запущены - показываем Refresh
+      // State 2: Partially running - show Refresh
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),

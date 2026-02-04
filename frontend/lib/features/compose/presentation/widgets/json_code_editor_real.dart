@@ -47,7 +47,7 @@ class _JsonCodeEditorState extends State<JsonCodeEditor> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_onExternalChanged);
       widget.controller.addListener(_onExternalChanged);
-      // синхронизируем текущее значение
+      // sync current value
       _updatingFromExternal = true;
       _codeController.text = widget.controller.text;
       _updatingFromExternal = false;
@@ -90,8 +90,9 @@ class _JsonCodeEditorState extends State<JsonCodeEditor> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final def = isDark ? 'a11y-dark' : 'a11y-light';
-    final key =
-        isDark ? (_themeDark ?? _themeLight) : (_themeLight ?? _themeDark);
+    final key = isDark
+        ? (_themeDark ?? _themeLight)
+        : (_themeLight ?? _themeDark);
     final styles = themeMap[key ?? def] ?? themeMap[def]!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,13 +139,15 @@ class _JsonCodeEditorState extends State<JsonCodeEditor> {
       final dark = (data['highlightThemeDark'] ?? '').toString();
       final legacy = (data['highlightTheme'] ?? '').toString();
       setState(() {
-        _themeLight =
-            light.isNotEmpty ? light : (legacy.isNotEmpty ? legacy : null);
-        _themeDark =
-            dark.isNotEmpty ? dark : (legacy.isNotEmpty ? legacy : null);
+        _themeLight = light.isNotEmpty
+            ? light
+            : (legacy.isNotEmpty ? legacy : null);
+        _themeDark = dark.isNotEmpty
+            ? dark
+            : (legacy.isNotEmpty ? legacy : null);
       });
     } catch (_) {
-      // игнорируем, используем дефолтные темы
+      // ignore, use default themes
     }
   }
 }

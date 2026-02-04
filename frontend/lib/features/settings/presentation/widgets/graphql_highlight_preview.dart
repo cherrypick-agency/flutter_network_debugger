@@ -5,7 +5,7 @@ import 'package:highlight_selectable/theme_map.dart';
 import '../../application/settings_service.dart';
 
 class GraphqlHighlightPreview extends StatefulWidget {
-  /// Callback при изменении тем (для отложенного сохранения)
+  /// Callback when themes change (for deferred saving)
   final void Function(String lightTheme, String darkTheme)? onThemesChanged;
 
   const GraphqlHighlightPreview({super.key, this.onThemesChanged});
@@ -16,7 +16,7 @@ class GraphqlHighlightPreview extends StatefulWidget {
 }
 
 class _GraphqlHighlightPreviewState extends State<GraphqlHighlightPreview> {
-  // Тестовый GraphQL-запрос
+  // Sample GraphQL query
   static const String _sample = '''query GetUser(\$id: ID!) {
   user(id: \$id) {
     id
@@ -90,7 +90,7 @@ console.log(u);''';
     super.initState();
     _lightTheme = 'a11y-light';
     _darkTheme = 'a11y-dark';
-    // загрузим сохранённые темы с бэкенда, если есть
+    // load saved themes from backend if available
     SettingsService().fetchRuntime().then((data) {
       if (!mounted) return;
       final savedLight = (data['highlightThemeLight'] ?? '').toString();
@@ -215,7 +215,7 @@ console.log(u);''';
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Theme.of(context).dividerColor),
-            color: bgColor, // фон совпадает с темой подсветки
+            color: bgColor, // background matches the highlight theme
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(

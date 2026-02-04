@@ -49,7 +49,7 @@ class MappingApi {
   }
 
   Future<void> reorder(List<String> ids) async {
-    // Эндпоинт ждёт JSON-массив. AppHttpClient спокойно умеет отправлять List.
+    // Endpoint expects a JSON array. AppHttpClient can send a List just fine.
     await _http.post<void>(
       path: '/_api/v1/mapping/rules/reorder',
       body: ids,

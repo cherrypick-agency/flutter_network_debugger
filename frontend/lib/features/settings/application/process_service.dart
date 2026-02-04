@@ -5,30 +5,30 @@ class ProcessService {
 
   ProcessService(this._api);
 
-  /// Получить текущую конфигурацию детекции процессов
+  /// Get current process detection configuration
   Future<ProcessConfig> fetchConfig() async {
     final res = await _api.get(path: '/_api/v1/process/config');
     return ProcessConfig.fromJson(res.data as Map<String, dynamic>);
   }
 
-  /// Сохранить конфигурацию детекции процессов
+  /// Save process detection configuration
   Future<void> saveConfig(ProcessConfig config) async {
     await _api.post(path: '/_api/v1/process/config', body: config.toJson());
   }
 
-  /// Проверить статус helper tool
+  /// Check helper tool status
   Future<HelperStatus> checkHelperStatus() async {
     final res = await _api.get(path: '/_api/v1/process/helper/status');
     return HelperStatus.fromJson(res.data as Map<String, dynamic>);
   }
 
-  /// Установить helper tool (требует admin пароль)
+  /// Install helper tool (requires admin password)
   Future<void> installHelper() async {
     await _api.post(path: '/_api/v1/process/helper/install');
   }
 }
 
-/// Конфигурация детекции процессов
+/// Process detection configuration
 class ProcessConfig {
   final bool enabled;
   final bool useHelperTool;
@@ -85,7 +85,7 @@ class ProcessConfig {
   }
 }
 
-/// Статус helper tool
+/// Helper tool status
 class HelperStatus {
   final bool running;
   final bool installed;
