@@ -40,12 +40,12 @@ func TestGormScriptRepository_SaveAndGet(t *testing.T) {
 		Enabled:     true,
 	}
 
-	// Сохраняем
+	// Save
 	if err := repo.Save(ctx, script); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Получаем
+	// Get
 	loaded, err := repo.Get(ctx, script.ID)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -70,7 +70,7 @@ func TestGormScriptRepository_List(t *testing.T) {
 	repo := NewGormScriptRepository(db)
 	ctx := context.Background()
 
-	// Создаем несколько скриптов
+	// Create several scripts
 	scripts := []*domain.Script{
 		{
 			ID:          "script-1",
@@ -98,7 +98,7 @@ func TestGormScriptRepository_List(t *testing.T) {
 		}
 	}
 
-	// Список всех скриптов
+	// List all scripts
 	all, err := repo.List(ctx, domain.ScriptFilter{})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
@@ -108,29 +108,29 @@ func TestGormScriptRepository_List(t *testing.T) {
 		t.Errorf("List() length = %d, want 2", len(all))
 	}
 
-	// Фильтр по enabled
+	// Filter by enabled
 	enabled := true
 	enabledList, err := repo.List(ctx, domain.ScriptFilter{Enabled: &enabled})
 	if err != nil {
 		t.Fatalf("List with filter failed: %v", err)
 	}
 
-	// Проверяем что фильтр работает (может быть 1 или 2 в зависимости от дефолтов GORM)
+	// Check that filter works (may be 1 or 2 depending on GORM defaults)
 	if len(enabledList) < 1 {
 		t.Errorf("List(Enabled=true) length = %d, want at least 1", len(enabledList))
 	}
 
-	// Фильтр по disabled
+	// Filter by disabled
 	disabled := false
 	disabledList, err := repo.List(ctx, domain.ScriptFilter{Enabled: &disabled})
 	if err != nil {
 		t.Fatalf("List with disabled filter failed: %v", err)
 	}
 
-	// Проверяем что фильтр работает
+	// Check that filter works
 	_ = disabledList
 
-	// Фильтр по runtime
+	// Filter by runtime
 	runtimeList, err := repo.List(ctx, domain.ScriptFilter{Runtime: domain.RuntimeExtism})
 	if err != nil {
 		t.Fatalf("List with runtime filter failed: %v", err)
@@ -157,17 +157,17 @@ func TestGormScriptRepository_Delete(t *testing.T) {
 		Enabled:     true,
 	}
 
-	// Сохраняем
+	// Save
 	if err := repo.Save(ctx, script); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Удаляем
+	// Delete
 	if err := repo.Delete(ctx, script.ID); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
-	// Проверяем что скрипт удален
+	// Check that script was deleted
 	_, err := repo.Get(ctx, script.ID)
 	if err == nil {
 		t.Error("Get() should fail for deleted script")
@@ -194,7 +194,7 @@ func TestGormScriptRepository_UpdateEnabled(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Отключаем
+	// Disable
 	if err := repo.UpdateEnabled(ctx, script.ID, false); err != nil {
 		t.Fatalf("UpdateEnabled(false) failed: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestGormScriptRepository_UpdateEnabled(t *testing.T) {
 		t.Error("Script should be disabled")
 	}
 
-	// Включаем обратно
+	// Enable back
 	if err := repo.UpdateEnabled(ctx, script.ID, true); err != nil {
 		t.Fatalf("UpdateEnabled(true) failed: %v", err)
 	}

@@ -106,7 +106,7 @@ func TestBulkTagOperation(t *testing.T) {
 		t.Errorf("Expected 2 TagNames, got %d", len(op.TagNames))
 	}
 
-	// Тест операции remove
+	// Test the remove operation
 	opRemove := BulkTagOperation{
 		Operation:  "remove",
 		SessionIDs: []string{"session-3"},

@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// PatternType описывает способ сопоставления путей/хостов
+// PatternType describes how paths/hosts are matched
 type PatternType string
 
 const (
@@ -10,7 +10,7 @@ const (
 	PatternRegex PatternType = "regex"
 )
 
-// Kind определяет тип правила
+// Kind defines the rule type
 type Kind string
 
 const (
@@ -18,7 +18,7 @@ const (
 	KindRemote Kind = "remote"
 )
 
-// MapRule — доменная сущность правила маппинга
+// MapRule — domain entity for mapping rule
 type MapRule struct {
 	ID             string
 	Enabled        bool
@@ -26,19 +26,19 @@ type MapRule struct {
 	Kind           Kind
 	StopProcessing bool
 
-	// Условия
+	// Conditions
 	Methods     []string
 	HostPattern string
 	PathPattern string
 	PatternType PatternType
 
-	// Local‑опции
+	// Local options
 	FilePath            *string
 	BlobPath            *string
 	StatusOverride      int
 	ContentTypeOverride string
 
-	// Remote‑опции
+	// Remote options
 	TargetURLTemplate string
 	PreserveHost      bool
 

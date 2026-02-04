@@ -79,24 +79,24 @@ void main() {
   });
 
   group('Time Range Management', () {
-    test('начальный диапазон времени - последний час', () {
+    test('initial time range is last hour', () {
       final now = DateTime.now();
       final hourAgo = now.subtract(const Duration(hours: 1));
 
-      // Проверяем что from и to корректно установлены
+      // Check that from and to are set correctly
       expect(
         store.from.difference(hourAgo).abs().inMinutes < 1,
         true,
-        reason: 'from должен быть примерно час назад',
+        reason: 'from should be approximately an hour ago',
       );
       expect(
         store.to.difference(now).abs().inMinutes < 1,
         true,
-        reason: 'to должен быть примерно сейчас',
+        reason: 'to should be approximately now',
       );
     });
 
-    test('setTimeRange обновляет from и to и загружает метрики', () async {
+    test('setTimeRange updates from and to and loads metrics', () async {
       final newFrom = DateTime.now().subtract(const Duration(hours: 24));
       final newTo = DateTime.now();
 
@@ -110,7 +110,7 @@ void main() {
       expect(store.loading, false);
     });
 
-    test('setLastHour устанавливает диапазон на последний час', () async {
+    test('setLastHour sets range to last hour', () async {
       store.setLastHour();
       await Future.delayed(const Duration(milliseconds: 50));
 
@@ -121,7 +121,7 @@ void main() {
       expect(store.to.difference(now).abs().inMinutes < 1, true);
     });
 
-    test('setLastDay устанавливает диапазон на последний день', () async {
+    test('setLastDay sets range to last day', () async {
       store.setLastDay();
       await Future.delayed(const Duration(milliseconds: 50));
 
@@ -132,7 +132,7 @@ void main() {
       expect(store.to.difference(now).abs().inMinutes < 1, true);
     });
 
-    test('setLastWeek устанавливает диапазон на последнюю неделю', () async {
+    test('setLastWeek sets range to last week', () async {
       store.setLastWeek();
       await Future.delayed(const Duration(milliseconds: 50));
 
@@ -145,16 +145,16 @@ void main() {
   });
 
   group('Load Metrics', () {
-    test('loadMetrics успешно загружает данные о производительности', () async {
-      // Действие
+    test('loadMetrics successfully loads performance data', () async {
+      // Action
       await store.loadMetrics();
 
-      // Проверка
+      // Verification
       expect(store.loading, false);
       expect(store.error, null);
       expect(store.overview, isNotNull);
 
-      // Проверяем что данные загружены корректно
+      // Check that data is loaded correctly
       final overview = store.overview!;
       expect(overview.responseTimeStats.count, 150);
       expect(overview.responseTimeStats.p50, 120.5);
@@ -162,59 +162,53 @@ void main() {
       expect(overview.topSlowEndpoints.length, 2);
     });
 
-    test(
-      'loadMetrics устанавливает loading в true во время загрузки',
-      () async {
-        // Создаем медленный mock для проверки состояния loading
-        mockRepo = MockPerformanceRepository();
-        store = PerformanceStore(mockRepo);
+    test('loadMetrics sets loading to true during loading', () async {
+      // Create slow mock to check loading state
+      mockRepo = MockPerformanceRepository();
+      store = PerformanceStore(mockRepo);
 
-        // Начинаем загрузку но не ждем завершения
-        final future = store.loadMetrics();
+      // Start loading but don't wait for completion
+      final future = store.loadMetrics();
 
-        // В начале loading должен быть true
-        // (может быть уже false если загрузка очень быстрая)
-        await future;
+      // Initially loading should be true
+      // (may already be false if loading is very fast)
+      await future;
 
-        // После завершения loading должен быть false
-        expect(store.loading, false);
-      },
-    );
+      // After completion loading should be false
+      expect(store.loading, false);
+    });
 
-    test('loadMetrics обрабатывает ошибки', () async {
-      // Подготовка
+    test('loadMetrics handles errors', () async {
+      // Setup
       mockRepo.shouldThrowError = true;
 
-      // Действие
+      // Action
       await store.loadMetrics();
 
-      // Проверка
+      // Verification
       expect(store.loading, false);
       expect(store.error, isNotNull);
       expect(store.error, contains('Failed to fetch'));
     });
 
-    test(
-      'loadMetrics очищает предыдущую ошибку при успешной загрузке',
-      () async {
-        // Подготовка - первая загрузка с ошибкой
-        mockRepo.shouldThrowError = true;
-        await store.loadMetrics();
-        expect(store.error, isNotNull);
+    test('loadMetrics clears previous error on successful load', () async {
+      // Setup - first load with error
+      mockRepo.shouldThrowError = true;
+      await store.loadMetrics();
+      expect(store.error, isNotNull);
 
-        // Действие - вторая загрузка успешная
-        mockRepo.shouldThrowError = false;
-        await store.loadMetrics();
+      // Action - second load is successful
+      mockRepo.shouldThrowError = false;
+      await store.loadMetrics();
 
-        // Проверка
-        expect(store.error, null);
-        expect(store.overview, isNotNull);
-      },
-    );
+      // Verification
+      expect(store.error, null);
+      expect(store.overview, isNotNull);
+    });
   });
 
   group('Response Time Stats', () {
-    test('загруженные responseTimeStats содержат корректные данные', () async {
+    test('loaded responseTimeStats contains correct data', () async {
       await store.loadMetrics();
 
       final stats = store.overview!.responseTimeStats;
@@ -229,7 +223,7 @@ void main() {
   });
 
   group('Throughput Stats', () {
-    test('загруженные throughputStats содержат корректные данные', () async {
+    test('loaded throughputStats contains correct data', () async {
       await store.loadMetrics();
 
       final stats = store.overview!.throughputStats;
@@ -242,7 +236,7 @@ void main() {
       expect(stats.status5xx, 38);
     });
 
-    test('successRate + errorRate должны быть примерно равны 1.0', () async {
+    test('successRate + errorRate should approximately equal 1.0', () async {
       await store.loadMetrics();
 
       final stats = store.overview!.throughputStats;
@@ -253,7 +247,7 @@ void main() {
   });
 
   group('Bandwidth Stats', () {
-    test('загруженные bandwidthStats содержат корректные данные', () async {
+    test('loaded bandwidthStats contains correct data', () async {
       await store.loadMetrics();
 
       final stats = store.overview!.bandwidthStats;
@@ -265,27 +259,24 @@ void main() {
   });
 
   group('Top Slow Endpoints', () {
-    test('загружается список медленных endpoints', () async {
+    test('loads list of slow endpoints', () async {
       await store.loadMetrics();
 
       final endpoints = store.overview!.topSlowEndpoints;
       expect(endpoints.length, 2);
     });
 
-    test(
-      'endpoints отсортированы по скорости (самые медленные первыми)',
-      () async {
-        await store.loadMetrics();
+    test('endpoints are sorted by speed (slowest first)', () async {
+      await store.loadMetrics();
 
-        final endpoints = store.overview!.topSlowEndpoints;
+      final endpoints = store.overview!.topSlowEndpoints;
 
-        // Первый endpoint должен быть медленнее второго
-        expect(endpoints[0].avgDuration > endpoints[1].avgDuration, true);
-        expect(endpoints[0].p95Duration > endpoints[1].p95Duration, true);
-      },
-    );
+      // First endpoint should be slower than second
+      expect(endpoints[0].avgDuration > endpoints[1].avgDuration, true);
+      expect(endpoints[0].p95Duration > endpoints[1].p95Duration, true);
+    });
 
-    test('endpoint содержит полную информацию', () async {
+    test('endpoint contains complete information', () async {
       await store.loadMetrics();
 
       final endpoint = store.overview!.topSlowEndpoints[0];
@@ -299,7 +290,7 @@ void main() {
       expect(endpoint.errorRate, lessThanOrEqualTo(1));
     });
 
-    test('errorRate вычисляется правильно', () async {
+    test('errorRate is calculated correctly', () async {
       await store.loadMetrics();
 
       final endpoint = store.overview!.topSlowEndpoints[0];
@@ -310,8 +301,8 @@ void main() {
   });
 
   group('Custom Mock Data', () {
-    test('можно задать кастомные данные через mockOverview', () async {
-      // Подготовка
+    test('can set custom data via mockOverview', () async {
+      // Setup
       final customFrom = DateTime.now().subtract(const Duration(hours: 2));
       final customTo = DateTime.now();
 
@@ -344,10 +335,10 @@ void main() {
         timeRange: TimeRange(from: customFrom, to: customTo),
       );
 
-      // Действие
+      // Action
       await store.loadMetrics();
 
-      // Проверка
+      // Verification
       expect(store.overview!.responseTimeStats.p50, 999.0);
       expect(store.overview!.responseTimeStats.count, 500);
       expect(store.overview!.throughputStats.totalRequests, 3000);
@@ -355,30 +346,30 @@ void main() {
   });
 
   group('Edge Cases', () {
-    test('overview остается null до первой загрузки', () {
+    test('overview remains null until first load', () {
       expect(store.overview, null);
     });
 
-    test('loading false по умолчанию', () {
+    test('loading is false by default', () {
       expect(store.loading, false);
     });
 
-    test('error null по умолчанию', () {
+    test('error is null by default', () {
       expect(store.error, null);
     });
 
-    test('можно загрузить метрики несколько раз подряд', () async {
+    test('can load metrics multiple times in a row', () async {
       await store.loadMetrics();
       final firstOverview = store.overview;
 
       await store.loadMetrics();
       final secondOverview = store.overview;
 
-      // Оба overview должны быть ненулевыми
+      // Both overviews should be non-null
       expect(firstOverview, isNotNull);
       expect(secondOverview, isNotNull);
 
-      // Данные должны быть одинаковыми (т.к. mock возвращает одно и то же)
+      // Data should be the same (since mock returns the same thing)
       expect(
         firstOverview!.responseTimeStats.count,
         secondOverview!.responseTimeStats.count,

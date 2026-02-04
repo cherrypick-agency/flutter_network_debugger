@@ -79,7 +79,7 @@ func startHTTPApp(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: config.Config{CORSAllowOrigin: "*"}, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
-	// Инициализируем SQLite для включения ProxySvc/ProxyRt
+	// Initialize SQLite to enable ProxySvc/ProxyRt
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "test.db")
 	if gdb, err := dbpkg.NewSQLite(dbPath); err == nil {
@@ -97,17 +97,17 @@ func startHTTPApp(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	return srv, deps
 }
 
-// ensureForwardProxyAddr включает forward‑proxy на динамическом порту и возвращает host:port
+// ensureForwardProxyAddr enables forward-proxy on dynamic port and returns host:port
 func ensureForwardProxyAddr(t *testing.T, app *httptest.Server, deps *httpapi.Deps) string {
 	t.Helper()
-	// Включаем forward proxy на 127.0.0.1:0 через API
+	// Enable forward proxy on 127.0.0.1:0 via API
 	body := []byte(`{"forward":{"enabled":true,"addr":"127.0.0.1:0"}}`)
 	resp, err := app.Client().Post(app.URL+"/_api/v1/proxy/config", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("enable forward proxy: %v", err)
 	}
 	_ = resp.Body.Close()
-	// Подождём применения и получим фактический адрес из рантайма
+	// Wait for application and get actual address from runtime
 	time.Sleep(50 * time.Millisecond)
 	addr := deps.ProxyRt.ForwardAddr()
 	if addr == "" {
@@ -195,12 +195,12 @@ func TestForwardProxy_HTTP_AbsoluteURI(t *testing.T) {
 	defer upstream.Close()
 	app, deps := startHTTPApp(t)
 	defer app.Close()
-	// Включаем forward‑proxy и берём фактический адрес
+	// Enable forward-proxy and get actual address
 	hostPort := ensureForwardProxyAddr(t, app, deps)
 
 	// manual request with absolute-URI to proxy
 	req, _ := http.NewRequest(http.MethodGet, upstreamURL+"/get?q=1", nil)
-	// override URL/Host if понадобится (для полноты форм)
+	// override URL/Host if needed (for completeness)
 	req.URL = &url.URL{Scheme: "http", Host: hostPort, Path: "/"}
 	req.Host = hostPort
 	// Raw absolute-URI in RequestURI — httptest.Client doesn't expose directly. Use net.Dial and write raw HTTP.
@@ -886,7 +886,7 @@ func TestHTTPReverseProxy_StealthHeaders_OnOff(t *testing.T) {
 	defer rOff.Body.Close()
 	var gotOff map[string]string
 	_ = json.NewDecoder(rOff.Body).Decode(&gotOff)
-	if gotOff["xfp"] == "" || gotOff["via"] == "" { // Via и X-Forwarded-Proto должны быть выставлены
+	if gotOff["xfp"] == "" || gotOff["via"] == "" { // Via and X-Forwarded-Proto should be set
 		t.Fatalf("stealth off should set Via and X-Forwarded-Proto: %+v", gotOff)
 	}
 }
@@ -923,7 +923,7 @@ func TestHTTPReverseProxy_Cookies_AutoMode_NoIsolation(t *testing.T) {
 	_, _ = client.Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvA.URL) + "&_cookie_mode=auto")
 	_, _ = client.Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvB.URL) + "&_cookie_mode=auto")
 
-	// request to A should carry both sidA and sidB since auto не изолирует имена
+	// request to A should carry both sidA and sidB since auto doesn't isolate names
 	rA, err := client.Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(srvA.URL) + "&_cookie_mode=auto")
 	if err != nil {
 		t.Fatalf("auto A: %v", err)
@@ -976,7 +976,7 @@ func TestHTTPReverseProxy_Cookies_ModeOff_PassThrough(t *testing.T) {
 	app, _ := startHTTPApp(t)
 	defer app.Close()
 
-	// cookie_mode=off — прокси не должен переписывать Set-Cookie
+	// cookie_mode=off - proxy should not rewrite Set-Cookie
 	resp, err := app.Client().Get(app.URL + "/httpproxy/cookie?_target=" + url.QueryEscape(upstream.URL) + "&_cookie_mode=off")
 	if err != nil {
 		t.Fatalf("request: %v", err)

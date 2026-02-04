@@ -1,17 +1,17 @@
 package helper
 
-// Installer - интерфейс для установки/удаления helper tool
+// Installer - interface for installing/uninstalling helper tool
 type Installer interface {
-	// IsInstalled - проверить установлен ли helper
+	// IsInstalled - check if helper is installed
 	IsInstalled() bool
 
-	// Install - установить helper tool
-	// Может потребовать пароль администратора
+	// Install - install helper tool
+	// May require administrator password
 	Install(helperBinaryPath string) error
 
-	// Uninstall - удалить helper tool
+	// Uninstall - uninstall helper tool
 	Uninstall() error
 
-	// GetVersion - получить версию установленного helper
+	// GetVersion - get installed helper version
 	GetVersion() string
 }

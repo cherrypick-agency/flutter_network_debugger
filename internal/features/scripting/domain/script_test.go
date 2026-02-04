@@ -132,7 +132,7 @@ func TestScript_Validate_SetsDefaults(t *testing.T) {
 		t.Fatalf("Validate failed: %v", err)
 	}
 
-	// Проверяем что дефолты установлены
+	// Check that defaults are set
 	if script.Config.TimeoutMs != 5000 {
 		t.Errorf("Expected default TimeoutMs 5000, got %d", script.Config.TimeoutMs)
 	}
@@ -165,7 +165,7 @@ func TestScript_Validate_PreservesExistingValues(t *testing.T) {
 		t.Fatalf("Validate failed: %v", err)
 	}
 
-	// Проверяем что существующие значения не перезаписаны
+	// Check that existing values are not overwritten
 	if script.Config.TimeoutMs != 10000 {
 		t.Errorf("Expected TimeoutMs 10000, got %d", script.Config.TimeoutMs)
 	}

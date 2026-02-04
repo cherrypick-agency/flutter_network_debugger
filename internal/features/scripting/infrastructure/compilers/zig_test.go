@@ -302,7 +302,7 @@ func TestZigCompiler_IsAvailable_SystemFallback(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewZigCompiler(cache)
 
-	// IsAvailable может вернуть true если zig есть в системе
+	// IsAvailable may return true if zig is available in the system
 	_ = compiler.IsAvailable()
 }
 

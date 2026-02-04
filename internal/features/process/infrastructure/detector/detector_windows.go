@@ -16,15 +16,15 @@ import (
 
 type windowsDetector struct{}
 
-// DetectByPort - найти процесс по локальному порту используя gopsutil
+// DetectByPort - find process by local port using gopsutil
 func (w *windowsDetector) DetectByPort(ctx context.Context, port uint32) (*domain.ProcessInfo, error) {
-	// gopsutil работает хорошо на Windows без admin
+	// gopsutil works well on Windows without admin
 	conns, err := net.ConnectionsWithContext(ctx, "tcp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connections: %w", err)
 	}
 
-	// Найти соединение по порту
+	// Find connection by port
 	for _, conn := range conns {
 		if conn.Laddr.Port == port {
 			return w.DetectByPID(ctx, conn.Pid)
@@ -34,7 +34,7 @@ func (w *windowsDetector) DetectByPort(ctx context.Context, port uint32) (*domai
 	return nil, fmt.Errorf("no process found for port %d", port)
 }
 
-// DetectByPID - получить информацию о процессе по PID используя gopsutil
+// DetectByPID - get process information by PID using gopsutil
 func (w *windowsDetector) DetectByPID(ctx context.Context, pid int32) (*domain.ProcessInfo, error) {
 	proc, err := process.NewProcessWithContext(ctx, pid)
 	if err != nil {
@@ -52,7 +52,7 @@ func (w *windowsDetector) DetectByPID(ctx context.Context, pid int32) (*domain.P
 	}, nil
 }
 
-// RequiresPrivileges - Windows более permissive, не требует admin для базовой информации
+// RequiresPrivileges - Windows is more permissive, doesn't require admin for basic information
 func (w *windowsDetector) RequiresPrivileges() bool {
 	return false
 }

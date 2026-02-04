@@ -22,7 +22,7 @@ import (
 	"network-debugger/internal/features/scripting/usecase"
 )
 
-// DTOs для一致ного JSON на фронте (camelCase)
+// DTOs for consistent JSON on frontend (camelCase)
 type scriptConfigDTO struct {
 	TimeoutMs     int      `json:"timeoutMs"`
 	MemoryLimitMB int      `json:"memoryLimitMB"`
@@ -66,7 +66,7 @@ func toScriptDTO(s *domain.Script) scriptDTO {
 	} else {
 		codeStr = ""
 	}
-	// Гарантируем корректные значения по умолчанию
+	// Ensure correct default values
 	pt := string(s.MatchRules.PatternType)
 	if pt == "" {
 		pt = "wildcard"
@@ -315,7 +315,7 @@ func (h *ScriptHandlers) ListScripts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	// Гарантируем camelCase и code как string
+	// Ensure camelCase and code as string
 	out := make([]scriptDTO, len(scripts))
 	for i := range scripts {
 		out[i] = toScriptDTO(scripts[i])
@@ -393,7 +393,7 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		script.Description = *req.Description
 	}
 	if req.Code != nil {
-		// Принимаем base64, но на всякий случай поддержим и «как есть»
+		// Accept base64, but just in case also support "as is"
 		if decoded, err := base64.StdEncoding.DecodeString(*req.Code); err == nil {
 			script.Code = decoded
 		} else {
@@ -418,7 +418,7 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		script.Config.AllowedHosts = req.Config.AllowedHosts
 	}
 	if req.Dependencies != nil {
-		// Полностью заменяем набор файлов проекта
+		// Completely replace the project files set
 		script.Dependencies = *req.Dependencies
 	}
 	if req.MatchRules != nil {
@@ -426,7 +426,7 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		if pt == "" {
 			pt = "wildcard"
 		}
-		// Простая валидация regexp как при создании
+		// Simple regexp validation like during creation
 		if domain.PatternType(pt) == domain.PatternRegex {
 			if req.MatchRules.HostPattern != "" {
 				if _, err := regexp.Compile(req.MatchRules.HostPattern); err != nil {

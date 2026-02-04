@@ -32,7 +32,7 @@ void main() {
       await proxy?.stop();
     });
 
-    test('echo through /wsproxy записывает ws-сессию в Go', () async {
+    test('echo through /wsproxy records ws-session in Go', () async {
       final upstreamWs = 'ws://127.0.0.1:${upstream!.port}/echo';
       final proxyUrl = Uri.parse('${proxy!.proxyHttpBase}')
           .replace(scheme: 'ws', path: '/wsproxy', queryParameters: {
@@ -58,7 +58,8 @@ void main() {
               target.contains('/echo');
         }),
         isTrue,
-        reason: 'не нашли ws-сессию, связанную с подключением через /wsproxy',
+        reason:
+            'did not find ws-session associated with connection through /wsproxy',
       );
     }, timeout: const Timeout(Duration(seconds: 90)));
   }, skip: GoNetworkDebuggerProcess.hasGo() ? false : 'go not found');

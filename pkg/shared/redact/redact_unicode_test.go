@@ -8,7 +8,7 @@ import (
 func TestRedactJSON_UnicodeAndLongStrings(t *testing.T) {
 	t.Parallel()
 
-	// Юникод: эмодзи, диакритика, RTL
+	// Unicode: emojis, diacritics, RTL
 	in := map[string]any{
 		"authorization": "Bearer 🔑секрет",
 		"note":          "café naïve — مرحبا",
@@ -20,7 +20,7 @@ func TestRedactJSON_UnicodeAndLongStrings(t *testing.T) {
 	mustContain(t, out, `"authorization":"Bearer 🔑секрет"`)
 	mustContain(t, out, `"note":"café naïve — مرحبا"`)
 
-	// Длинная строка
+	// Long string
 	long := make([]rune, 10000)
 	for i := range long {
 		long[i] = 'あ'
@@ -39,8 +39,8 @@ func FuzzRedactJSON_NoPanicAndUTF8(f *testing.F) {
 	f.Add("[1,2,3]")
 	f.Fuzz(func(t *testing.T, s string) {
 		_ = RedactJSON(s)
-		// инварианты: отсутствие паник и валидный UTF-8 по определению строки Go
-		// Дополнительно можно проверить, что результат не пустеет без причины,
-		// но оставим минимальным для скорости.
+		// invariants: no panics and valid UTF-8 by Go string definition
+		// Additionally can check that result doesn't become empty without reason,
+		// but keeping it minimal for speed.
 	})
 }

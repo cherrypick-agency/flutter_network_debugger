@@ -10,19 +10,19 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// Service - сервис детекции процессов и управления конфигурацией
+// Service - service for process detection and configuration management
 type Service struct {
 	config           domain.IConfigRepository
 	iconCache        domain.IIconCacheRepository
-	localDetector    domain.IProcessDetector // без привилегий
-	helperClient     domain.IHelperClient    // с привилегиями
+	localDetector    domain.IProcessDetector // without privileges
+	helperClient     domain.IHelperClient    // with privileges
 	iconExtractor    domain.IIconExtractor
-	helperInstaller  HelperInstaller // installer для helper tool
-	helperBinaryPath string          // путь к helper binary
+	helperInstaller  HelperInstaller // installer for helper tool
+	helperBinaryPath string          // path to helper binary
 	logger           *zerolog.Logger
 }
 
-// HelperInstaller - интерфейс для установки/удаления helper tool
+// HelperInstaller - interface for installing/uninstalling helper tool
 type HelperInstaller interface {
 	IsInstalled() bool
 	Install(helperBinaryPath string) error
@@ -30,7 +30,7 @@ type HelperInstaller interface {
 	GetVersion() string
 }
 
-// NewService - создать новый сервис детекции процессов
+// NewService - create new process detection service
 func NewService(
 	config domain.IConfigRepository,
 	iconCache domain.IIconCacheRepository,
@@ -53,8 +53,8 @@ func NewService(
 	}
 }
 
-// DetectForConnection - главный метод детекции процесса для сетевого соединения
-// Стратегия: пробуем helper → fallback на local → fallback на "Unknown"
+// DetectForConnection - main method for detecting process for network connection
+// Strategy: try helper -> fallback to local -> fallback to "Unknown"
 func (s *Service) DetectForConnection(ctx context.Context, localPort uint32) (*domain.ProcessInfo, error) {
 	cfg, err := s.config.Load(ctx)
 	if err != nil {
@@ -62,12 +62,12 @@ func (s *Service) DetectForConnection(ctx context.Context, localPort uint32) (*d
 	}
 
 	if !cfg.Enabled {
-		return nil, nil // детекция отключена
+		return nil, nil // detection disabled
 	}
 
 	var info *domain.ProcessInfo
 
-	// 1. Попытка через helper (если включен и доступен)
+	// 1. Try via helper (if enabled and available)
 	if cfg.UseHelperTool && s.helperClient != nil && s.helperClient.IsRunning() {
 		info, err = s.helperClient.DetectProcess(localPort)
 		if err != nil {
@@ -77,12 +77,12 @@ func (s *Service) DetectForConnection(ctx context.Context, localPort uint32) (*d
 		}
 	}
 
-	// 2. Fallback на локальную детекцию
+	// 2. Fallback to local detection
 	if info == nil {
 		info, err = s.localDetector.DetectByPort(ctx, localPort)
 		if err != nil {
 			if cfg.FallbackEnabled {
-				// Вернуть "Unknown Process"
+				// Return "Unknown Process"
 				s.logger.Debug().Err(err).Uint32("port", localPort).Msg("Local detection failed, using fallback")
 				return &domain.ProcessInfo{
 					Name:       "Unknown Process",
@@ -94,7 +94,7 @@ func (s *Service) DetectForConnection(ctx context.Context, localPort uint32) (*d
 		s.logger.Debug().Uint32("port", localPort).Int32("pid", info.PID).Msg("Process detected locally")
 	}
 
-	// 3. Получить иконку
+	// 3. Get icon
 	if info != nil && info.PID > 0 {
 		icon, err := s.getIcon(ctx, info.PID, info.ExecutablePath)
 		if err != nil {
@@ -107,7 +107,7 @@ func (s *Service) DetectForConnection(ctx context.Context, localPort uint32) (*d
 	return info, nil
 }
 
-// getIcon - получение иконки с кешированием
+// getIcon - get icon with caching
 func (s *Service) getIcon(ctx context.Context, pid int32, path string) (*domain.AppIcon, error) {
 	cfg, _ := s.config.Load(ctx)
 
@@ -115,20 +115,20 @@ func (s *Service) getIcon(ctx context.Context, pid int32, path string) (*domain.
 		return s.extractIcon(ctx, pid, path)
 	}
 
-	// Проверить кеш
+	// Check cache
 	key := fmt.Sprintf("icon:%d:%s", pid, path)
 	if cached, err := s.iconCache.Get(key); err == nil {
 		s.logger.Debug().Str("key", key).Msg("Icon found in cache")
 		return cached, nil
 	}
 
-	// Извлечь иконку
+	// Extract icon
 	icon, err := s.extractIcon(ctx, pid, path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Сохранить в кеш
+	// Save to cache
 	ttl := time.Duration(cfg.CacheTTLSeconds) * time.Second
 	if err := s.iconCache.Set(key, icon, ttl); err != nil {
 		s.logger.Warn().Err(err).Msg("Failed to cache icon")
@@ -139,11 +139,11 @@ func (s *Service) getIcon(ctx context.Context, pid int32, path string) (*domain.
 	return icon, nil
 }
 
-// extractIcon - извлечение иконки (helper или local)
+// extractIcon - extract icon (helper or local)
 func (s *Service) extractIcon(ctx context.Context, pid int32, path string) (*domain.AppIcon, error) {
 	cfg, _ := s.config.Load(ctx)
 
-	// Попытка через helper
+	// Try via helper
 	if cfg.UseHelperTool && s.helperClient != nil && s.helperClient.IsRunning() {
 		icon, err := s.helperClient.ExtractIcon(pid)
 		if err == nil {
@@ -153,16 +153,16 @@ func (s *Service) extractIcon(ctx context.Context, pid int32, path string) (*dom
 		s.logger.Debug().Err(err).Msg("Helper icon extraction failed, trying local")
 	}
 
-	// Fallback на локальное извлечение
+	// Fallback to local extraction
 	return s.iconExtractor.ExtractByPID(ctx, pid)
 }
 
-// GetConfig - получить текущую конфигурацию детекции
+// GetConfig - get current detection configuration
 func (s *Service) GetConfig(ctx context.Context) (*domain.DetectionConfig, error) {
 	return s.config.Load(ctx)
 }
 
-// SaveConfig - сохранить конфигурацию детекции
+// SaveConfig - save detection configuration
 func (s *Service) SaveConfig(ctx context.Context, cfg *domain.DetectionConfig) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -176,7 +176,7 @@ func (s *Service) SaveConfig(ctx context.Context, cfg *domain.DetectionConfig) e
 	return s.config.Save(ctx, cfg)
 }
 
-// CheckHelperStatus - проверить статус helper tool
+// CheckHelperStatus - check helper tool status
 func (s *Service) CheckHelperStatus() HelperStatus {
 	if s.helperClient == nil {
 		return HelperStatus{
@@ -204,7 +204,7 @@ func (s *Service) CheckHelperStatus() HelperStatus {
 	}
 }
 
-// InstallHelper - установить helper tool
+// InstallHelper - install helper tool
 func (s *Service) InstallHelper(ctx context.Context) error {
 	if s.helperInstaller == nil {
 		return fmt.Errorf("helper installer not available")
@@ -225,7 +225,7 @@ func (s *Service) InstallHelper(ctx context.Context) error {
 	return nil
 }
 
-// HelperStatus - статус helper tool
+// HelperStatus - helper tool status
 type HelperStatus struct {
 	Installed bool
 	Running   bool

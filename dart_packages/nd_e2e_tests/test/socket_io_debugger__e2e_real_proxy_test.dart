@@ -11,7 +11,7 @@ void main() {
     GoSocketIoUpstreamProcess? upstream;
 
     setUp(() async {
-      // Тут лог нужен для диагностики: хотим видеть, что wsproxy реально подключился к upstream.
+      // Logging is needed here for diagnostics: we want to see that wsproxy actually connected to upstream.
       proxy = await GoNetworkDebuggerProcess.start(logLevel: 'info');
       upstream =
           await GoSocketIoUpstreamProcess.start(port: await pickFreePort());
@@ -25,8 +25,8 @@ void main() {
 
     test('connects to Go Socket.IO server through /wsproxy and _target',
         () async {
-      // Поднимаем отдельный upstream (mini engine.io/socket.io), чтобы Go его мониторил
-      // и записывал ws-сессию.
+      // We spin up a separate upstream (mini engine.io/socket.io) so that Go monitors it
+      // and records the ws-session.
       final cfg = SocketIoDebugger.attach(
         baseUrl: upstream!.httpBase.toString(),
         path: '/socket.io/',
@@ -101,14 +101,14 @@ void main() {
       }
       socket.dispose();
 
-      // Минимальная проверка, что wsproxy реально делал диал к апстриму.
+      // Minimal check that wsproxy actually dialed the upstream.
       expect(
         proxy!.stdoutLines.any((l) => l.contains('connected to upstream')),
         isTrue,
-        reason: 'не увидели в логах факт подключения wsproxy к upstream',
+        reason: 'did not see wsproxy connection to upstream in logs',
       );
 
-      // Главное: Go реально записал ws-сессию.
+      // Main point: Go actually recorded the ws-session.
       final sessions = await listSessions(proxy!.apiBase, types: 'ws');
       expect(
         sessions.any((s) {
@@ -119,7 +119,8 @@ void main() {
               target.contains('/socket.io/');
         }),
         isTrue,
-        reason: 'не нашли ws-сессию, связанную с подключением через /wsproxy',
+        reason:
+            'did not find ws-session associated with connection through /wsproxy',
       );
     }, timeout: const Timeout(Duration(seconds: 60)));
   }, skip: GoNetworkDebuggerProcess.hasGo() ? false : 'go not found');

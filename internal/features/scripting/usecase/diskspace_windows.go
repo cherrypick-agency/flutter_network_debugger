@@ -7,8 +7,8 @@ import (
 	"unsafe"
 )
 
-// getAvailableDiskSpace возвращает доступное дисковое пространство (байт) для указанного пути.
-// На Windows использует GetDiskFreeSpaceExW.
+// getAvailableDiskSpace returns available disk space (bytes) for the specified path.
+// On Windows uses GetDiskFreeSpaceExW.
 func getAvailableDiskSpace(path string) (int64, error) {
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	proc := kernel32.NewProc("GetDiskFreeSpaceExW")
@@ -29,7 +29,7 @@ func getAvailableDiskSpace(path string) (int64, error) {
 		uintptr(unsafe.Pointer(&totalFreeBytes)),
 	)
 	if ret == 0 {
-		// Возвращаем ошибку, чтобы вызывающий мог обработать best-effort сценарий
+		// Return error so caller can handle best-effort scenario
 		if callErr != nil {
 			return 0, callErr
 		}

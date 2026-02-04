@@ -15,20 +15,20 @@ const (
 	SocketPath = "/var/run/network-debugger-helper.sock"
 )
 
-// CreateListener - создать Unix socket listener
-// Socket будет создан с правами 0600 (только owner может читать/писать)
+// CreateListener - create Unix socket listener
+// Socket will be created with 0600 permissions (only owner can read/write)
 func CreateListener() (net.Listener, error) {
-	// Удалить существующий socket если есть
+	// Remove existing socket if present
 	if err := os.Remove(SocketPath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to remove existing socket: %w", err)
 	}
 
-	// Сохранить текущий umask и установить 0177 для создания socket с 0600
-	// Это атомарно устанавливает permissions без security window
+	// Save current umask and set 0177 to create socket with 0600
+	// This atomically sets permissions without security window
 	oldMask := syscall.Umask(0177) // 0777 - 0177 = 0600
 	defer syscall.Umask(oldMask)
 
-	// Создать Unix socket listener (будет создан с permissions 0600)
+	// Create Unix socket listener (will be created with permissions 0600)
 	listener, err := net.Listen("unix", SocketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create socket listener: %w", err)
@@ -37,7 +37,7 @@ func CreateListener() (net.Listener, error) {
 	return listener, nil
 }
 
-// CleanupSocket - удалить socket файл
+// CleanupSocket - remove socket file
 func CleanupSocket() {
 	_ = os.Remove(SocketPath)
 }

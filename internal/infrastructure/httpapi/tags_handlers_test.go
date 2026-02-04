@@ -16,7 +16,7 @@ import (
 )
 
 // Composer 1.
-// Mock tags repository для тестирования handlers
+// Mock tags repository for testing handlers
 type mockTagsRepo struct {
 	listPredefinedTagsFunc      func(ctx context.Context) ([]tagsdomain.PredefinedTag, error)
 	createPredefinedTagFunc     func(ctx context.Context, tag tagsdomain.PredefinedTag) error
@@ -127,7 +127,7 @@ func setupTagsDeps(repo *mockTagsRepo) *Deps {
 }
 
 // Composer 1.
-// Тесты для handlePredefinedTags
+// Tests for handlePredefinedTags
 
 func TestHandlePredefinedTags_GET_Success(t *testing.T) {
 	repo := &mockTagsRepo{
@@ -318,7 +318,7 @@ func TestHandlePredefinedTags_InvalidMethod(t *testing.T) {
 }
 
 // Composer 1.
-// Тесты для handlePredefinedTagByID
+// Tests for handlePredefinedTagByID
 
 func TestHandlePredefinedTagByID_DELETE_Success(t *testing.T) {
 	deletedID := ""
@@ -389,7 +389,7 @@ func TestHandlePredefinedTagByID_InvalidMethod(t *testing.T) {
 }
 
 // Composer 1.
-// Тесты для handleSessionTags
+// Tests for handleSessionTags
 
 func TestHandleSessionTags_GET_Success(t *testing.T) {
 	repo := &mockTagsRepo{
@@ -538,7 +538,7 @@ func TestHandleSessionTags_InvalidPath(t *testing.T) {
 }
 
 // Composer 1.
-// Тесты для handleBulkTags
+// Tests for handleBulkTags
 
 func TestHandleBulkTags_POST_Add_Success(t *testing.T) {
 	var receivedSessionIDs, receivedTagNames []string
@@ -710,7 +710,7 @@ func TestHandleBulkTags_InvalidMethod(t *testing.T) {
 }
 
 // Composer 1.
-// Тесты для handleSessionAnnotations
+// Tests for handleSessionAnnotations
 
 func TestHandleSessionAnnotations_GET_Success(t *testing.T) {
 	repo := &mockTagsRepo{

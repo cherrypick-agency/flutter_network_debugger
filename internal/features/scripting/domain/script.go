@@ -7,12 +7,12 @@ import (
 )
 
 const (
-	// maxScriptTimeoutMs - верхняя граница, чтобы скрипты не могли "повесить" запрос/процесс.
-	// Если нужно больше — лучше делать это осознанно через отдельную настройку на уровне сервиса.
+	// maxScriptTimeoutMs - upper limit so scripts can't "hang" a request/process.
+	// If more is needed — it's better to do this consciously via a separate service-level setting.
 	maxScriptTimeoutMs = 60_000 // 60s
 
-	// maxWASMMemoryLimitMB - ограничение памяти для WASM (Extism/Wazero), чтобы не словить OOM.
-	// 1024MB = 1GB; выше почти всегда ошибка конфигурации или DoS-вектор.
+	// maxWASMMemoryLimitMB - memory limit for WASM (Extism/Wazero) to avoid OOM.
+	// 1024MB = 1GB; anything higher is almost always a configuration error or DoS vector.
 	maxWASMMemoryLimitMB = 1024
 )
 
@@ -105,8 +105,8 @@ func (s *Script) Validate() error {
 		return fmt.Errorf("script timeout is too large: %dms (max %dms)", s.Config.TimeoutMs, maxScriptTimeoutMs)
 	}
 
-	// Ограничение по памяти актуально только для WASM-runtime'ов, но держим в домене,
-	// чтобы не разъезжались ожидания между слоями.
+	// Memory limit is relevant only for WASM runtimes, but we keep it in the domain
+	// to maintain consistent expectations across layers.
 	if s.Runtime == RuntimeExtism && s.Config.MemoryLimitMB > maxWASMMemoryLimitMB {
 		return fmt.Errorf("script memory limit is too large: %dMB (max %dMB)", s.Config.MemoryLimitMB, maxWASMMemoryLimitMB)
 	}

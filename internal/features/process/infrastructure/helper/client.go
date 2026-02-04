@@ -15,7 +15,7 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// Client - IPC client для общения с helper daemon
+// Client - IPC client for communicating with helper daemon
 type Client struct {
 	socketPath string
 	timeout    time.Duration
@@ -23,21 +23,21 @@ type Client struct {
 	mu         sync.Mutex
 }
 
-// NewClient - создать новый IPC client
+// NewClient - create new IPC client
 func NewClient(socketPath string) *Client {
 	return &Client{
 		socketPath: socketPath,
-		timeout:    10 * time.Second, // 10 секунд timeout на request
+		timeout:    10 * time.Second, // 10 seconds timeout per request
 	}
 }
 
-// IsRunning - проверить доступен ли helper daemon
+// IsRunning - check if helper daemon is available
 func (c *Client) IsRunning() bool {
 	err := c.Ping()
 	return err == nil
 }
 
-// DetectProcess - детектировать процесс по порту через helper
+// DetectProcess - detect process by port via helper
 func (c *Client) DetectProcess(port uint32) (*domain.ProcessInfo, error) {
 	req := &ipc.Request{
 		ID:     generateID(),
@@ -63,7 +63,7 @@ func (c *Client) DetectProcess(port uint32) (*domain.ProcessInfo, error) {
 	return resp.Result.ProcessInfo, nil
 }
 
-// ExtractIcon - извлечь иконку через helper
+// ExtractIcon - extract icon via helper
 func (c *Client) ExtractIcon(pid int32) (*domain.AppIcon, error) {
 	req := &ipc.Request{
 		ID:     generateID(),
@@ -108,7 +108,7 @@ func (c *Client) Ping() error {
 	return nil
 }
 
-// Close - закрыть соединение
+// Close - close connection
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -122,12 +122,12 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// sendRequest - отправить request и получить response
+// sendRequest - send request and receive response
 func (c *Client) sendRequest(req *ipc.Request) (*ipc.Response, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Подключиться если еще не подключены
+	// Connect if not yet connected
 	if c.conn == nil {
 		if err := c.connect(); err != nil {
 			return nil, fmt.Errorf("failed to connect to helper: %w", err)
@@ -141,7 +141,7 @@ func (c *Client) sendRequest(req *ipc.Request) (*ipc.Response, error) {
 		return nil, fmt.Errorf("failed to set deadline: %w", err)
 	}
 
-	// Отправить request
+	// Send request
 	reqData, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -161,7 +161,7 @@ func (c *Client) sendRequest(req *ipc.Request) (*ipc.Response, error) {
 		return nil, fmt.Errorf("failed to flush: %w", err)
 	}
 
-	// Получить response
+	// Receive response
 	reader := bufio.NewReader(c.conn)
 	line, err := reader.ReadBytes('\n')
 	if err != nil {
@@ -177,7 +177,7 @@ func (c *Client) sendRequest(req *ipc.Request) (*ipc.Response, error) {
 	return &resp, nil
 }
 
-// connect - подключиться к Unix socket
+// connect - connect to Unix socket
 func (c *Client) connect() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -192,8 +192,8 @@ func (c *Client) connect() error {
 	return nil
 }
 
-// reconnect - переподключиться (после ошибки)
-// ВАЖНО: должен вызываться только когда c.mu заблокирован
+// reconnect - reconnect (after error)
+// IMPORTANT: must only be called when c.mu is locked
 func (c *Client) reconnect() {
 	if c.conn != nil {
 		_ = c.conn.Close()
@@ -201,7 +201,7 @@ func (c *Client) reconnect() {
 	}
 }
 
-// generateID - сгенерировать уникальный ID для request (thread-safe)
+// generateID - generate unique ID for request (thread-safe)
 func generateID() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {

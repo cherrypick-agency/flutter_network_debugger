@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Минимальная проверка SOCKS5: рукопожатие + CONNECT к локальному HTTP и чтение ответа
+// Minimal SOCKS5 test: handshake + CONNECT to local HTTP and read response
 func TestSocks5_HandshakeAndConnect(t *testing.T) {
 	// Upstream server
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "pong") }))
@@ -18,7 +18,7 @@ func TestSocks5_HandshakeAndConnect(t *testing.T) {
 	_, upPortStr, _ := net.SplitHostPort(upstream.Listener.Addr().String())
 
 	m := New(nil)
-	// динамический порт на loopback
+	// dynamic port on loopback
 	if err := m.StartSocks("127.0.0.1:0", "none", "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}

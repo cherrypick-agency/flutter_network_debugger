@@ -18,7 +18,7 @@ func TestNewExtractor(t *testing.T) {
 		t.Fatal("NewExtractor() returned nil")
 	}
 
-	// Проверяем что это реализует интерфейс
+	// Check that it implements the interface
 	_, ok := extractor.(domain.IIconExtractor)
 	if !ok {
 		t.Error("Extractor does not implement IIconExtractor interface")

@@ -63,8 +63,8 @@ func (h *MonitorHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 func (h *MonitorHub) Broadcast(ev domain.MonitorEvent) {
 	data, _ := json.Marshal(ev)
-	// Отправляем под RLock, чтобы не пересечься с close(ch) при удалении клиента.
-	// Отправка неблокирующая, поэтому держать RLock безопасно и коротко.
+	// Send under RLock to avoid racing with close(ch) when removing client.
+	// Send is non-blocking, so holding RLock is safe and brief.
 	h.mu.RLock()
 	for _, ch := range h.clients {
 		select {
@@ -74,7 +74,7 @@ func (h *MonitorHub) Broadcast(ev domain.MonitorEvent) {
 	}
 	h.mu.RUnlock()
 
-	// Аналогично для in-process listeners
+	// Similarly for in-process listeners
 	h.lmu.RLock()
 	for ch := range h.listeners {
 		select {

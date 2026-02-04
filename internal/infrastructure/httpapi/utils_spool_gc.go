@@ -81,10 +81,10 @@ func keepSpoolPaths(d *Deps, spoolDir string) map[string]struct{} {
 			abs, _ := filepath.Abs(*r.BlobPath)
 			out[abs] = struct{}{}
 		}
-		// На всякий случай: если кто-то использует filePath внутри spool dir.
+		// Just in case: if someone uses filePath inside spool dir.
 		if r.FilePath != nil && strings.TrimSpace(*r.FilePath) != "" {
 			abs, _ := filepath.Abs(*r.FilePath)
-			// держим только если это реально наш spool файл
+			// keep only if this is really our spool file
 			if strings.HasPrefix(filepath.Base(abs), "gpx-map-") && isWithinDir(spoolAbs, abs) {
 				out[abs] = struct{}{}
 			}

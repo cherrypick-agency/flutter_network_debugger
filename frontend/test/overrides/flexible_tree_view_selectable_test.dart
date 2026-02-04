@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('FlexibleTreeView оборачивает дерево в SelectionArea', (
-    tester,
-  ) async {
+  testWidgets('FlexibleTreeView wraps tree in SelectionArea', (tester) async {
     final nodes = [
       TreeNode<String>(
         data: 'root',

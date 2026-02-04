@@ -189,7 +189,7 @@ func FromEnv() Config {
 	if os.Getenv("STEALTH_HEADERS") == "0" || os.Getenv("STEALTH_HEADERS") == "false" {
 		cfg.StealthHeaders = false
 	} else {
-		// по умолчанию скрываем прокси-заголовки в /httpproxy
+		// by default hide proxy headers in /httpproxy
 		cfg.StealthHeaders = true
 	}
 

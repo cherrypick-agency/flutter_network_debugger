@@ -6,11 +6,11 @@ package helper
 import "network-debugger/internal/features/process/domain"
 
 const (
-	// HelperSocketPath - путь к Unix socket helper daemon на macOS
+	// HelperSocketPath - path to Unix socket of helper daemon on macOS
 	HelperSocketPath = "/var/run/network-debugger-helper.sock"
 )
 
-// NewHelperClient - создать IPC client для macOS
+// NewHelperClient - create IPC client for macOS
 func NewHelperClient() domain.IHelperClient {
 	return NewClient(HelperSocketPath)
 }

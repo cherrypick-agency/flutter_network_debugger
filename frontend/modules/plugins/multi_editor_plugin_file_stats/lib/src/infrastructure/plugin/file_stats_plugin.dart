@@ -60,7 +60,7 @@ class FileStatsPlugin extends BaseEditorPlugin with StatefulPlugin {
   @override
   void onFileOpen(FileDocument file) {
     safeExecute('Calculate file statistics', () {
-      // Сбрасываем текущий файл; статистика обновится при первом изменении контента
+      // Reset current file; statistics will update on first content change
       _currentFileId = null;
     });
   }

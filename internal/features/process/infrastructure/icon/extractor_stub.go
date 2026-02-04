@@ -7,15 +7,15 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// stubExtractor - fallback extractor для платформ где нет реализации
+// stubExtractor - fallback extractor for platforms without implementation
 type stubExtractor struct{}
 
-// ExtractByPID - заглушка
+// ExtractByPID - stub
 func (e *stubExtractor) ExtractByPID(ctx context.Context, pid int32) (*domain.AppIcon, error) {
 	return nil, fmt.Errorf("icon extraction not supported on this platform")
 }
 
-// ExtractByPath - заглушка
+// ExtractByPath - stub
 func (e *stubExtractor) ExtractByPath(ctx context.Context, path string) (*domain.AppIcon, error) {
 	return nil, fmt.Errorf("icon extraction not supported on this platform")
 }

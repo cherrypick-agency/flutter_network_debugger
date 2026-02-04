@@ -37,11 +37,11 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_TARGET", "invalid target", map[string]any{"target": tgt})
 		return
 	}
-	// Авто-нормализация схемы: если клиент прислал http(s) — переводим в ws(s).
-	// Это удобно для Socket.IO ссылок вида https://host/socket.io?EIO=4&transport=websocket
+	// Auto-normalize scheme: if client sent http(s) — convert to ws(s).
+	// This is convenient for Socket.IO links like https://host/socket.io?EIO=4&transport=websocket
 	switch u.Scheme {
 	case "ws", "wss":
-		// уже корректная схема
+		// already correct scheme
 	case "http":
 		u.Scheme = "ws"
 	case "https":
@@ -51,14 +51,14 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Объединяем query из таргета и входящего запроса (кроме служебных параметров `_target`, `_resetCapture`)
-	// Параметры из входящего запроса имеют приоритет поверх параметров таргета
+	// Merge query from target and incoming request (except service parameters `_target`, `_resetCapture`)
+	// Parameters from incoming request have priority over target parameters
 	targetQ := u.Query()
 	incomingQ := r.URL.Query()
 	incomingQ.Del("_target")
 	incomingQ.Del("_resetCapture")
 
-	// Объединяем: входящие query перезаписывают query из таргета
+	// Merge: incoming query overwrites query from target
 	for k, vv := range incomingQ {
 		targetQ.Del(k)
 		for _, v := range vv {
@@ -120,7 +120,7 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Logger.Info().Str("session", sessionID).Msg("network-debugger: client upgraded to WebSocket")
 
-	// Ограничиваем время рукопожатия/диала к апстриму, чтобы не вешать клиента при недоступном апстриме
+	// Limit handshake/dial time to upstream, so we don't hang the client when upstream is unavailable
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 		NetDialContext:   (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
@@ -230,7 +230,7 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 	defer func() {
 		_ = src.Close()
 		_ = dst.Close()
-		// Закрываем сессию один раз, не затирая потенциальную ошибку (only if monitoring)
+		// Close session once, without overwriting potential error (only if monitoring)
 		if shouldMonitor {
 			ctx := contextWithNoCancel()
 			sess, ok, _ := d.Svc.Get(ctx, sessionID)
@@ -256,12 +256,12 @@ func (d *Deps) pipe(sessionID string, src, dst *websocket.Conn, direction domain
 			lastErr = err
 			return
 		}
-		// Троттлинг WS на уровне сообщений
+		// WS throttling at message level
 		d.throttleSleepWS(direction, len(data))
-		// Симуляция потерь: по вероятности пропускаем запись
+		// Loss simulation: probabilistically skip write
 		if d.Cfg.ThrottleEnabled && d.Cfg.ThrottlePacketLoss > 0 {
-			if randInt := time.Now().UnixNano() % 100; int(randInt) < d.Cfg.ThrottlePacketLoss { // лёгкий детерминизм без глобального rand
-				// пропустим запись — как будто кадр потерян
+			if randInt := time.Now().UnixNano() % 100; int(randInt) < d.Cfg.ThrottlePacketLoss { // lightweight determinism without global rand
+				// skip write — as if frame was lost
 				continue
 			}
 		}

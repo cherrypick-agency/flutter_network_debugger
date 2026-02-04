@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// ComposeLibraryModel — хранит снимок библиотеки в JSON (одна строка с id=1).
+// ComposeLibraryModel — stores a library snapshot in JSON (single row with id=1).
 type ComposeLibraryModel struct {
 	ID        int64  `gorm:"primaryKey"`
 	JSON      string `gorm:"type:text"`
@@ -13,7 +13,7 @@ type ComposeLibraryModel struct {
 
 func (ComposeLibraryModel) TableName() string { return "compose_library" }
 
-// ComposeHistoryEntryModel — одна запись истории отправок.
+// ComposeHistoryEntryModel — single entry of submission history.
 type ComposeHistoryEntryModel struct {
 	ID       string `gorm:"type:text;primaryKey"`
 	Template string `gorm:"type:text"`

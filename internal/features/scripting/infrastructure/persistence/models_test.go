@@ -53,7 +53,7 @@ func TestStringArray_Value(t *testing.T) {
 			}
 
 			if !tt.wantNil {
-				// Проверяем что это валидный JSON
+				// Check that it's valid JSON
 				bytes, ok := value.([]byte)
 				if !ok {
 					t.Fatalf("Value() = %T, want []byte", value)

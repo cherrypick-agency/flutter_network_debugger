@@ -23,15 +23,15 @@ func (r *Repo) Load(ctx context.Context) (pdomain.ProxyConfig, error) {
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
 			now := time.Now().UTC()
-			// По умолчанию оставляем forward‑proxy на 9091, UI живёт на отдельном порту (Addr).
-			// Можно переопределить через env variable FORWARD_PROXY_DEFAULT_PORT
+			// By default forward-proxy is on 9091, UI lives on separate port (Addr).
+			// Can be overridden via env variable FORWARD_PROXY_DEFAULT_PORT
 			forwardAddr := ":9091"
 			if port := os.Getenv("FORWARD_PROXY_DEFAULT_PORT"); port != "" {
-				// Валидация порта
+				// Port validation
 				if p, err := strconv.Atoi(port); err == nil && p > 0 && p <= 65535 {
 					forwardAddr = fmt.Sprintf(":%d", p)
 				}
-				// Если порт невалидный, используем дефолтный 9091
+				// If port is invalid, use default 9091
 			}
 			def := ProxyConfigModel{ID: 1, ForwardEnabled: true, ForwardAddr: forwardAddr, SocksEnabled: false, SocksAddr: ":8889", SocksAuthMode: "none", UpdatedAt: now}
 			if err := r.db.WithContext(ctx).Create(&def).Error; err != nil {

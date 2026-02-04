@@ -188,12 +188,12 @@ n127.0.0.1:8081`
 		t.Fatal("Expected non-nil ProcessInfo")
 	}
 
-	// Функция перезаписывает pid при каждом найденном 'p', поэтому возвращается последний
+	// The function overwrites pid on each found 'p', so it returns the last one
 	if info.PID != 67890 {
 		t.Errorf("Expected PID 67890 (last PID found), got %d", info.PID)
 	}
 
-	// Проверяем что команда и имя тоже соответствуют последней записи
+	// Check that command and name also correspond to the last entry
 	if info.Name != "anotherapp" {
 		t.Errorf("Expected name 'anotherapp', got '%s'", info.Name)
 	}

@@ -4,15 +4,15 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// NewDetector - создать детектор процессов для текущей платформы
+// NewDetector - create process detector for the current platform
 func NewDetector(privileged bool) (domain.IProcessDetector, error) {
-	// Пока privileged и unprivileged детекторы идентичны
-	// В будущем privileged будет использовать helper tool
+	// For now privileged and unprivileged detectors are identical
+	// In the future privileged will use helper tool
 	return newDetectorForPlatform()
 }
 
 func newDetectorForPlatform() (domain.IProcessDetector, error) {
-	// Используем gopsutil adapter как универсальное решение для всех платформ
-	// Platform-specific детекторы (darwin/windows/linux) доступны но не используются пока
+	// Using gopsutil adapter as universal solution for all platforms
+	// Platform-specific detectors (darwin/windows/linux) are available but not used for now
 	return &gopsutilAdapter{}, nil
 }

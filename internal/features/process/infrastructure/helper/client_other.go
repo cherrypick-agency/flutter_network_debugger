@@ -9,7 +9,7 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// stubHelperClient - заглушка для не-macOS платформ
+// stubHelperClient - stub for non-macOS platforms
 type stubHelperClient struct{}
 
 func (s *stubHelperClient) IsRunning() bool {
@@ -32,7 +32,7 @@ func (s *stubHelperClient) Close() error {
 	return nil
 }
 
-// NewHelperClient - создать stub client для не-macOS
+// NewHelperClient - create stub client for non-macOS
 func NewHelperClient() domain.IHelperClient {
 	return &stubHelperClient{}
 }

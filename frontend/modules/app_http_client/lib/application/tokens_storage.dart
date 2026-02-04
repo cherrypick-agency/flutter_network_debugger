@@ -1,7 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 
-/// Ключи, которые приходят с бэкенда в ответах.
+/// Keys that come from the backend in responses.
 abstract class TokensStorageKeys {
   static const String token = 'token';
   static const String refreshToken = 'refresh_token';
@@ -19,7 +19,7 @@ abstract class TokensStorage {
   Future<void> clear();
 }
 
-/// Реализация, использующая защищённое хранилище KeyChain/KeyStore.
+/// Implementation using secure storage KeyChain/KeyStore.
 @LazySingleton(as: TokensStorage)
 class TokensStorageImpl implements TokensStorage {
   late final FlutterSecureStorage _storage;
@@ -72,7 +72,7 @@ class TokensStorageImpl implements TokensStorage {
   }
 }
 
-/// Тестовая реализация для unit-тестов.
+/// Test implementation for unit tests.
 class TokensTestStorage implements TokensStorage {
   @override
   String? token;

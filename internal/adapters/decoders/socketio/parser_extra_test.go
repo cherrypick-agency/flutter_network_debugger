@@ -9,19 +9,19 @@ import (
 func TestParseEvent_Ack43Variants(t *testing.T) {
 	t.Parallel()
 
-	// Вариант с запятой перед ack id
+	// Variant with comma before ack id
 	nsp, ev, args, ok := ParseEvent("43,5[1,2]")
 	if !ok || nsp != "" || ev != "ack" || args == "" {
 		t.Fatalf("unexpected: ok=%v nsp=%q ev=%q args=%q", ok, nsp, ev, args)
 	}
 
-	// Вариант с namespace и ack id
+	// Variant with namespace and ack id
 	nsp, ev, args, ok = ParseEvent("43/chat,7[\"ok\"]")
 	if !ok || nsp != "/chat" || ev != "ack" || args == "" {
 		t.Fatalf("unexpected: ok=%v nsp=%q ev=%q args=%q", ok, nsp, ev, args)
 	}
 
-	// Некорректный: отсутствует args массив
+	// Invalid: args array is missing
 	if _, _, _, ok := ParseEvent("43/chat,5"); ok {
 		t.Fatalf("should be invalid without args array")
 	}
@@ -49,7 +49,7 @@ func TestParseEvent_Binary46_Ack(t *testing.T) {
 func TestParseEvent_Binary_InvalidAttachments(t *testing.T) {
 	t.Parallel()
 
-	// Нет цифр перед '-'
+	// No digits before '-'
 	if _, _, _, ok := ParseEvent("45-/[\"x\"]"); ok {
 		t.Fatalf("should be invalid without attachment digits")
 	}

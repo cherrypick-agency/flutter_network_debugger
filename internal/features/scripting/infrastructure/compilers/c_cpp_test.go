@@ -281,7 +281,7 @@ func TestCCPPCompiler_Compile_WithSysroot(t *testing.T) {
 	}
 
 	_, err := compiler.Compile(ctx, req)
-	// Может вернуть ошибку если clang недоступен или не может скомпилировать
+	// May return error if clang is unavailable or cannot compile
 	_ = err
 }
 
@@ -290,7 +290,7 @@ func TestCCPPCompiler_IsAvailable_SystemFallback(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewCCPPCompiler(cache)
 
-	// IsAvailable может вернуть true если clang есть в системе
+	// IsAvailable may return true if clang is in the system
 	_ = compiler.IsAvailable()
 }
 
@@ -299,7 +299,7 @@ func TestCCPPCompiler_IsAvailable_WithPrintTargets(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewCCPPCompiler(cache)
 
-	// IsAvailable проверяет --print-targets для поддержки wasm32
+	// IsAvailable checks --print-targets for wasm32 support
 	_ = compiler.IsAvailable()
 }
 
@@ -387,7 +387,7 @@ func TestCCPPCompiler_ValidateSyntax_WithSysroot(t *testing.T) {
 	}
 
 	err := compiler.ValidateSyntax(ctx, req)
-	// Может вернуть ошибку если clang недоступен
+	// May return error if clang is unavailable
 	_ = err
 }
 
@@ -396,7 +396,7 @@ func TestCCPPCompiler_IsAvailable_WithVersionedClang(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewCCPPCompiler(cache)
 
-	// IsAvailable проверяет разные версии clang (clang-18, clang-17)
+	// IsAvailable checks different clang versions (clang-18, clang-17)
 	_ = compiler.IsAvailable()
 }
 
@@ -405,6 +405,6 @@ func TestCCPPCompiler_IsAvailable_WithWasiSDKPath(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewCCPPCompiler(cache)
 
-	// IsAvailable проверяет /opt/wasi-sdk/bin/clang
+	// IsAvailable checks /opt/wasi-sdk/bin/clang
 	_ = compiler.IsAvailable()
 }

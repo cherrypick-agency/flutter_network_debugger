@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// InterceptDirection описывает направление перехвата
+// InterceptDirection describes interception direction
 type InterceptDirection string
 
 const (
@@ -16,7 +16,7 @@ const (
 	DirResponse InterceptDirection = "response"
 )
 
-// RuleStringMatch — простая модель сопоставления строковых полей
+// RuleStringMatch — simple string field matching model
 type RuleStringMatch struct {
 	Equals   string   `json:"equals,omitempty"`
 	Prefix   string   `json:"prefix,omitempty"`
@@ -26,13 +26,13 @@ type RuleStringMatch struct {
 	Regex    string   `json:"regex,omitempty"`
 }
 
-// RuleHeaderMatch — сопоставление заголовков
+// RuleHeaderMatch — header matching
 type RuleHeaderMatch struct {
 	Name  RuleStringMatch `json:"name"`
 	Value RuleStringMatch `json:"value,omitempty"`
 }
 
-// RuleStatusMatch — диапазоны статусов (для ответа)
+// RuleStatusMatch — status ranges (for response)
 type RuleStatusMatch struct {
 	Equals []int `json:"equals,omitempty"`
 	From   int   `json:"from,omitempty"`
@@ -41,7 +41,7 @@ type RuleStatusMatch struct {
 	Is5xx  bool  `json:"is5xx,omitempty"`
 }
 
-// InterceptRule — правило перехвата (MVP)
+// InterceptRule — interception rule (MVP)
 type InterceptRule struct {
 	ID             string        `json:"id"`
 	Enabled        bool          `json:"enabled"`
@@ -52,7 +52,7 @@ type InterceptRule struct {
 	When           InterceptWhen `json:"when"`
 }
 
-// InterceptWhen — условия (все AND в MVP)
+// InterceptWhen — conditions (all AND in MVP)
 type InterceptWhen struct {
 	Method       []string         `json:"method,omitempty"`
 	Scheme       []string         `json:"scheme,omitempty"`
@@ -65,7 +65,7 @@ type InterceptWhen struct {
 	BodyContains string           `json:"bodyContains,omitempty"`
 }
 
-// InterceptItemState — состояние элемента перехвата
+// InterceptItemState — interception item state
 type InterceptItemState string
 
 const (
@@ -75,7 +75,7 @@ const (
 	StateTimedOut InterceptItemState = "TIMED_OUT"
 )
 
-// InterceptItem — единица ожидания решения пользователя
+// InterceptItem — unit awaiting user decision
 type InterceptItem struct {
 	ID        string             `json:"id"`
 	CreatedAt time.Time          `json:"createdAt"`
@@ -84,14 +84,14 @@ type InterceptItem struct {
 	SessionID string             `json:"sessionId"`
 	RuleID    string             `json:"ruleId,omitempty"`
 
-	// Снимки
+	// Snapshots
 	Req *HTTPRequestSnapshot  `json:"req,omitempty"`
 	Res *HTTPResponseSnapshot `json:"res,omitempty"`
 
 	State InterceptItemState `json:"state"`
 }
 
-// HTTPRequestSnapshot — часть, которую можно показать/редактировать
+// HTTPRequestSnapshot — part that can be shown/edited
 type HTTPRequestSnapshot struct {
 	Method        string      `json:"method"`
 	URL           string      `json:"url"`
@@ -101,7 +101,7 @@ type HTTPRequestSnapshot struct {
 	ContentType   string      `json:"contentType,omitempty"`
 }
 
-// HTTPResponseSnapshot — аналогично для ответа
+// HTTPResponseSnapshot — similarly for response
 type HTTPResponseSnapshot struct {
 	Status        int         `json:"status"`
 	Headers       http.Header `json:"headers"`
@@ -110,7 +110,7 @@ type HTTPResponseSnapshot struct {
 	ContentType   string      `json:"contentType,omitempty"`
 }
 
-// Решения пользователя
+// User decisions
 type HTTPRequestDecision struct {
 	Action  string      `json:"action"` // continue|drop
 	Method  string      `json:"method,omitempty"`
@@ -215,7 +215,7 @@ func (s *RuleStatusMatch) matches(code int) bool {
 	return len(s.Equals) == 0 && !s.Is4xx && !s.Is5xx && s.From == 0 && s.To == 0
 }
 
-// requestMatch проверяет условие для запроса
+// requestMatch checks condition for request
 func (w *InterceptWhen) requestMatch(r *http.Request, bodyPreview string) bool {
 	if w == nil {
 		return true
@@ -291,7 +291,7 @@ func (w *InterceptWhen) requestMatch(r *http.Request, bodyPreview string) bool {
 	return true
 }
 
-// responseMatch проверяет условие для ответа
+// responseMatch checks condition for response
 func (w *InterceptWhen) responseMatch(resp *http.Response, bodyPreview string) bool {
 	if w == nil {
 		return true
@@ -314,7 +314,7 @@ func (w *InterceptWhen) responseMatch(resp *http.Response, bodyPreview string) b
 	return true
 }
 
-// urlString безопасно возвращает строку URL для снапшота
+// urlString safely returns URL string for snapshot
 func urlString(u *url.URL) string {
 	if u == nil {
 		return ""

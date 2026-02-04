@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Service инкапсулирует бизнес‑операции над правилами маппинга
+// Service encapsulates business operations on mapping rules
 type Service struct {
 	repo mdomain.MapRulesRepository
 }
@@ -18,7 +18,7 @@ func (s *Service) List(ctx context.Context) ([]mdomain.MapRule, error) {
 }
 
 func (s *Service) Upsert(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error) {
-	// нормализация дат
+	// date normalization
 	now := time.Now().UTC()
 	if r.CreatedAt.IsZero() {
 		r.CreatedAt = now
@@ -31,7 +31,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-// Reorder пересчитывает приоритеты согласно переданному порядку идентификаторов
+// Reorder recalculates priorities according to the given order of identifiers
 func (s *Service) Reorder(ctx context.Context, ids []string) error {
 	return s.repo.Reorder(ctx, ids)
 }

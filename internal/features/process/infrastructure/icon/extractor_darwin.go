@@ -16,9 +16,9 @@ import (
 
 type darwinExtractor struct{}
 
-// ExtractByPID - извлечь иконку по PID процесса
+// ExtractByPID - extract icon by process PID
 func (e *darwinExtractor) ExtractByPID(ctx context.Context, pid int32) (*domain.AppIcon, error) {
-	// Получить путь к приложению по PID
+	// Get path to application by PID
 	cmd := exec.CommandContext(ctx, "ps", "-p", fmt.Sprint(pid), "-o", "comm=")
 	output, err := cmd.Output()
 	if err != nil {
@@ -29,15 +29,15 @@ func (e *darwinExtractor) ExtractByPID(ctx context.Context, pid int32) (*domain.
 	return e.ExtractByPath(ctx, path)
 }
 
-// ExtractByPath - извлечь иконку по пути к приложению
+// ExtractByPath - extract icon by path to application
 func (e *darwinExtractor) ExtractByPath(ctx context.Context, path string) (*domain.AppIcon, error) {
-	// 1. Найти .app bundle
+	// 1. Find .app bundle
 	appPath := findAppBundle(path)
 	if appPath == "" {
 		return nil, fmt.Errorf("not an application bundle: %s", path)
 	}
 
-	// 2. Создать временную директорию
+	// 2. Create temporary directory
 	tmpDir, err := os.MkdirTemp("", "icons")
 	if err != nil {
 		return nil, err
@@ -47,20 +47,20 @@ func (e *darwinExtractor) ExtractByPath(ctx context.Context, path string) (*doma
 	icnsPath := filepath.Join(tmpDir, "icon.icns")
 	pngPath := filepath.Join(tmpDir, "icon.png")
 
-	// 3. Извлечь .icns с помощью fileicon (если установлен)
+	// 3. Extract .icns using fileicon (if installed)
 	cmd := exec.CommandContext(ctx, "fileicon", "get", appPath, "--output", icnsPath)
 	if err := cmd.Run(); err != nil {
-		// Fallback: попробовать найти Info.plist и иконку напрямую
+		// Fallback: try to find Info.plist and icon directly
 		return e.extractFromInfoPlist(appPath)
 	}
 
-	// 4. Конвертировать в PNG с помощью sips (встроенная утилита macOS)
+	// 4. Convert to PNG using sips (built-in macOS utility)
 	cmd = exec.CommandContext(ctx, "sips", "-s", "format", "png", icnsPath, "--out", pngPath)
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("sips conversion failed: %w", err)
 	}
 
-	// 5. Прочитать PNG
+	// 5. Read PNG
 	data, err := os.ReadFile(pngPath)
 	if err != nil {
 		return nil, err
@@ -72,9 +72,9 @@ func (e *darwinExtractor) ExtractByPath(ctx context.Context, path string) (*doma
 	}, nil
 }
 
-// findAppBundle - найти .app bundle в пути
+// findAppBundle - find .app bundle in path
 func findAppBundle(path string) string {
-	// Ищем .app в пути, идя вверх по директориям
+	// Look for .app in path, going up the directories
 	current := path
 	for {
 		if strings.HasSuffix(current, ".app") {
@@ -90,12 +90,12 @@ func findAppBundle(path string) string {
 	return ""
 }
 
-// extractFromInfoPlist - fallback: извлечь иконку напрямую из Info.plist
+// extractFromInfoPlist - fallback: extract icon directly from Info.plist
 func (e *darwinExtractor) extractFromInfoPlist(appPath string) (*domain.AppIcon, error) {
-	// Путь к Resources
+	// Path to Resources
 	resourcesPath := filepath.Join(appPath, "Contents", "Resources")
 
-	// Попробовать найти .icns файлы
+	// Try to find .icns files
 	entries, err := os.ReadDir(resourcesPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Resources: %w", err)
@@ -105,7 +105,7 @@ func (e *darwinExtractor) extractFromInfoPlist(appPath string) (*domain.AppIcon,
 		if strings.HasSuffix(entry.Name(), ".icns") {
 			icnsPath := filepath.Join(resourcesPath, entry.Name())
 
-			// Конвертировать в PNG через sips
+			// Convert to PNG via sips
 			tmpDir, _ := os.MkdirTemp("", "icons")
 			defer os.RemoveAll(tmpDir)
 
@@ -115,7 +115,7 @@ func (e *darwinExtractor) extractFromInfoPlist(appPath string) (*domain.AppIcon,
 				continue
 			}
 
-			// Прочитать PNG
+			// Read PNG
 			data, err := os.ReadFile(pngPath)
 			if err != nil {
 				continue

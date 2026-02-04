@@ -110,8 +110,8 @@ Future<String> executeScript(String code, String input) async {
     // Run the script as a subprocess
     child = await Process.start('dart', [scriptFile.path]);
 
-    // Важно: всегда читаем stderr, иначе процесс может зависнуть, когда буфер забьётся.
-    // Храним только последние N строк для диагностики.
+    // Important: always read stderr, otherwise the process may hang when the buffer fills up.
+    // Store only the last N lines for diagnostics.
     child.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
       (line) {
         stderrLines.add(line);
@@ -173,7 +173,7 @@ Future<String> executeScript(String code, String input) async {
   } finally {
     if (child != null && !childExited) {
       try {
-        // Если скрипт завис/не ответил — обязательно прибиваем процесс, иначе будут "зомби" и утечки ресурсов.
+        // If the script hung/didn't respond — must kill the process, otherwise there will be "zombie" processes and resource leaks.
         child.kill();
         await child.exitCode.timeout(const Duration(seconds: 1));
       } catch (_) {}

@@ -2,7 +2,7 @@ package domain
 
 import "context"
 
-// MapRulesRepository — порт репозитория правил
+// MapRulesRepository — repository port for rules
 type MapRulesRepository interface {
 	List(ctx context.Context) ([]MapRule, error)
 	Upsert(ctx context.Context, r MapRule) (MapRule, error)

@@ -42,7 +42,7 @@ func (r *Repo) Upsert(ctx context.Context, d mdomain.MapRule) (mdomain.MapRule, 
 		m.UpdatedAt = time.Now().UTC()
 	}
 
-	// Важно: created_at нельзя перетирать при апдейтах (иначе любая правка "пересоздаёт" запись).
+	// Important: created_at must not be overwritten on updates (otherwise any edit "recreates" the record).
 	onConflict := clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
@@ -67,7 +67,7 @@ func (r *Repo) Upsert(ctx context.Context, d mdomain.MapRule) (mdomain.MapRule, 
 	if err := r.db.WithContext(ctx).Clauses(onConflict).Create(m).Error; err != nil {
 		return mdomain.MapRule{}, err
 	}
-	// перечитаем
+	// re-read
 	var saved MapRuleModel
 	if err := r.db.WithContext(ctx).First(&saved, "id = ?", m.ID).Error; err != nil {
 		return mdomain.MapRule{}, err
@@ -83,7 +83,7 @@ func (r *Repo) Reorder(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	// проставим приоритеты с 1..N в переданном порядке
+	// set priorities 1..N in the given order
 	now := time.Now().UTC()
 	tx := r.db.WithContext(ctx).Begin()
 	if tx.Error != nil {

@@ -9,9 +9,9 @@ import (
 )
 
 func (d *Deps) interceptAuthOK(r *http.Request) bool {
-	// Если AdminToken пуст и сервер слушает loopback — разрешаем
+	// If AdminToken is empty and server listens on loopback — allow
 	if d.Cfg.AdminToken == "" {
-		// best-effort: доверяем локальной разработке
+		// best-effort: trust local development
 		return isLoopback(r.RemoteAddr)
 	}
 	tok := r.Header.Get("X-Admin-Token")

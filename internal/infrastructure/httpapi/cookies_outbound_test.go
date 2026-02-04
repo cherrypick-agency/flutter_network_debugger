@@ -14,14 +14,14 @@ func TestRewriteOutboundCookieHeaderForUpstream_ModeAuto_NoChange(t *testing.T) 
 
 	vals := h.Values("Cookie")
 	if len(vals) != 2 {
-		t.Fatalf("для Mode!=isolate Cookie не должен меняться, получили: %v", vals)
+		t.Fatalf("for Mode!=isolate Cookie should not change, got: %v", vals)
 	}
 }
 
 func TestRewriteOutboundCookieHeaderForUpstream_Isolate_FilterAndUnprefix(t *testing.T) {
 	t.Parallel()
 	h := newHeaderFake()
-	// несколько заголовков, часть пар битые
+	// multiple headers, some pairs are malformed
 	h.Add("Cookie", "gpx_ns__a=1; x; c=3")
 	h.Add("Cookie", "gpx_ns__b=2; bad; d")
 
@@ -29,25 +29,25 @@ func TestRewriteOutboundCookieHeaderForUpstream_Isolate_FilterAndUnprefix(t *tes
 
 	vals := h.Values("Cookie")
 	if len(vals) == 0 {
-		t.Fatalf("должен остаться один Cookie после склейки")
+		t.Fatalf("should have one Cookie left after merging")
 	}
 
 	out := vals[0]
-	// должны остаться только пары из текущего namespace без префикса
+	// only pairs from current namespace without prefix should remain
 	if out != "a=1; b=2" {
-		t.Fatalf("ожидались только a=1; b=2, получили: %q", out)
+		t.Fatalf("expected only a=1; b=2, got: %q", out)
 	}
 }
 
 func TestRewriteOutboundCookieHeaderForUpstream_Isolate_EmptyAfterFilter(t *testing.T) {
 	t.Parallel()
 	h := newHeaderFake()
-	h.Add("Cookie", "c=3") // нет namespace
+	h.Add("Cookie", "c=3") // no namespace
 
 	rewriteOutboundCookieHeaderForUpstream(h, CookieRewriteOptions{Mode: CookieModeIsolate, Namespace: "ns"})
 
 	vals := h.Values("Cookie")
 	if len(vals) != 0 {
-		t.Fatalf("если после фильтра пусто — Cookie не должен быть установлен: %v", vals)
+		t.Fatalf("if empty after filtering — Cookie should not be set: %v", vals)
 	}
 }

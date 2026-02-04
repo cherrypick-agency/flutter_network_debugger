@@ -10,7 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Тестирует forward‑proxy для ws:// (без TLS): Upgrade 101 и обмен сообщениями
+// Tests forward-proxy for ws:// (without TLS): Upgrade 101 and message exchange
 func TestForwardProxy_WSPlain(t *testing.T) {
 	t.Parallel()
 
@@ -23,10 +23,10 @@ func TestForwardProxy_WSPlain(t *testing.T) {
 	defer appSrv.Close()
 	_ = deps
 
-	// Dial через HTTP forward‑proxy
+	// Dial via HTTP forward-proxy
 	proxyHost := ensureForwardProxyAddr(t, appSrv, deps)
 	proxyURL := &url.URL{Scheme: "http", Host: proxyHost}
-	// gorilla/websocket Dialer.Proxy поддерживает http‑прокси
+	// gorilla/websocket Dialer.Proxy supports http-proxy
 	d := *websocket.DefaultDialer
 	d.Proxy = http.ProxyURL(proxyURL)
 
@@ -49,7 +49,7 @@ func TestForwardProxy_WSPlain(t *testing.T) {
 	_ = c.Close()
 }
 
-// Большие фреймы и backpressure через forward‑proxy
+// Large frames and backpressure via forward-proxy
 func TestForwardProxy_WSLargeAndBackpressure(t *testing.T) {
 	t.Parallel()
 	echoSrv, echoWS := startEchoWSServer(t)
@@ -68,18 +68,18 @@ func TestForwardProxy_WSLargeAndBackpressure(t *testing.T) {
 		t.Fatalf("dial: %v", err)
 	}
 
-	// большой текст ~128KB
+	// large text ~128KB
 	bigText := bytes.Repeat([]byte("A"), 128*1024)
 	if err := c.WriteMessage(websocket.TextMessage, bigText); err != nil {
 		t.Fatalf("write big text: %v", err)
 	}
-	// большой бинарный ~150KB
+	// large binary ~150KB
 	bigBin := bytes.Repeat([]byte{0xEE}, 150*1024)
 	if err := c.WriteMessage(websocket.BinaryMessage, bigBin); err != nil {
 		t.Fatalf("write big bin: %v", err)
 	}
 
-	// backpressure: серия коротких сообщений
+	// backpressure: series of short messages
 	for i := 0; i < 30; i++ {
 		if err := c.WriteMessage(websocket.TextMessage, []byte("s")); err != nil {
 			t.Fatalf("write small %d: %v", i, err)
@@ -87,7 +87,7 @@ func TestForwardProxy_WSLargeAndBackpressure(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// читаем хотя бы несколько эхо‑ответов, чтобы убедиться, что соединение живое
+	// read at least several echo responses to ensure connection is alive
 	reads := 0
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && reads < 3 {
@@ -102,7 +102,7 @@ func TestForwardProxy_WSLargeAndBackpressure(t *testing.T) {
 	_ = c.Close()
 }
 
-// Ping/Pong и корректное закрытие соединения
+// Ping/Pong and proper connection close
 func TestForwardProxy_WSPingPongAndClose(t *testing.T) {
 	t.Parallel()
 	echoSrv, echoWS := startEchoWSServer(t)
@@ -116,16 +116,16 @@ func TestForwardProxy_WSPingPongAndClose(t *testing.T) {
 	d := *websocket.DefaultDialer
 	d.Proxy = http.ProxyURL(proxyURL)
 
-	// используем "rich" режим, чтобы сервер периодически отправлял ping
+	// use "rich" mode so server periodically sends ping
 	c, _, err := d.Dial(echoWS+"?server=rich", nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	// клиентский ping
+	// client ping
 	if err := c.WriteControl(websocket.PingMessage, []byte("cli"), time.Now().Add(500*time.Millisecond)); err != nil {
 		t.Fatalf("client ping: %v", err)
 	}
-	// небольшая пауза, затем корректное закрытие
+	// short pause, then proper close
 	time.Sleep(200 * time.Millisecond)
 	_ = c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bye"), time.Now().Add(1*time.Second))
 	_ = c.Close()

@@ -7,9 +7,9 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// newPlatformExtractor - создать extractor для macOS
+// newPlatformExtractor - create extractor for macOS
 func newPlatformExtractor() (domain.IIconExtractor, error) {
-	// Используем darwinExtractor с fallback на Info.plist
-	// Работает даже без fileicon утилиты
+	// Using darwinExtractor with fallback to Info.plist
+	// Works even without fileicon utility
 	return &darwinExtractor{}, nil
 }

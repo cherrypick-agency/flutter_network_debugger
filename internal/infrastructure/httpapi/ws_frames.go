@@ -16,14 +16,14 @@ import (
 	"network-debugger/pkg/shared/id"
 )
 
-// pipeWSRaw читает по одному WebSocket кадру из src и переправляет его в dst,
-// формируя превью для первых previewMaxBytes байт полезной нагрузки.
-// Минимальная поддержка RFC6455: не разбираем фрагментацию/расширения.
+// pipeWSRaw reads one WebSocket frame at a time from src and forwards it to dst,
+// building preview for the first previewMaxBytes bytes of payload.
+// Minimal RFC6455 support: we don't parse fragmentation/extensions.
 func (d *Deps) pipeWSRaw(sessionID string, src net.Conn, dst net.Conn, direction domain.Direction) {
 	defer func() {
 		_ = src.Close()
 		_ = dst.Close()
-		// Завершение сессии, если другая сторона уже не закрыла
+		// End session if the other side hasn't already closed it
 		ctx := contextWithNoCancel()
 		if sess, ok, _ := d.Svc.Get(ctx, sessionID); !ok || sess.ClosedAt == nil {
 			_ = d.Svc.SetClosed(ctx, sessionID, time.Now().UTC(), nil)
@@ -41,7 +41,7 @@ func (d *Deps) pipeWSRaw(sessionID string, src net.Conn, dst net.Conn, direction
 			}
 			return
 		}
-		// Логируем кадр
+		// Log frame
 		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: direction, Opcode: op, Size: size, Preview: preview}
 		_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
 		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
@@ -49,9 +49,9 @@ func (d *Deps) pipeWSRaw(sessionID string, src net.Conn, dst net.Conn, direction
 	}
 }
 
-// pipeWSMessages собирает WS-сообщения из последовательности кадров (учитывая continuation/FIN),
-// пишет исходные кадры в dst и логирует превью на уровне сообщения. Поддерживает best-effort
-// распаковку permessage-deflate для превью, если включено в конфиге.
+// pipeWSMessages assembles WS messages from frame sequences (considering continuation/FIN),
+// writes original frames to dst and logs preview at message level. Supports best-effort
+// permessage-deflate decompression for preview if enabled in config.
 func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, direction domain.Direction, shouldMonitor bool) {
 	defer func() {
 		_ = src.Close()
@@ -67,7 +67,7 @@ func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, dire
 	}()
 
 	br := bufio.NewReader(src)
-	// Оборачиваем writer, чтобы равномерно замедлять запись
+	// Wrap writer to evenly slow down writes
 	pacedDst := &wsPacedWriter{d: d, w: dst, dir: direction}
 	for {
 		opMain, msgSize, preview, rawText, bodyFile, err := d.forwardOneWSMessage(br, pacedDst)
@@ -86,7 +86,7 @@ func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, dire
 			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(direction), string(opMain)).Inc()
 
-			// SIO parse for text messages (forward mode) — единый путь
+			// SIO parse for text messages (forward mode) — single path
 			if opMain == domain.OpcodeText {
 				if len(rawText) > 0 {
 					_ = d.recordSIOIfAny(sessionID, rawText, fr.ID)
@@ -98,10 +98,10 @@ func (d *Deps) pipeWSMessages(sessionID string, src net.Conn, dst net.Conn, dire
 	}
 }
 
-// forwardOneWSFrame читает один WS‑кадр из r и пишет его как есть в w, возвращая
-// (opcode, payloadSize, preview). Поддерживает MASK и расширенные длины.
+// forwardOneWSFrame reads one WS frame from r and writes it as-is to w, returning
+// (opcode, payloadSize, preview). Supports MASK and extended lengths.
 func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, int, string, error) {
-	// Заголовок (минимум 2 байта)
+	// Header (minimum 2 bytes)
 	b0, err := r.ReadByte()
 	if err != nil {
 		return domain.OpcodeBinary, 0, "", err
@@ -110,11 +110,11 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 	if err != nil {
 		return domain.OpcodeBinary, 0, "", err
 	}
-	// Опкод
+	// Opcode
 	opCode := b0 & 0x0F
 	op := opcodeFromWS(opCode)
 
-	// MASK и длина
+	// MASK and length
 	mask := (b1 & 0x80) != 0
 	plen7 := int(b1 & 0x7F)
 	payloadLen := 0
@@ -129,7 +129,7 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 		if _, err := io.ReadFull(r, extLen[:]); err != nil {
 			return op, 0, "", err
 		}
-		// Ограничим до int (практически всегда укладывается)
+		// Limit to int (practically always fits)
 		ln := binary.BigEndian.Uint64(extLen[:])
 		if ln > 1<<31-1 {
 			ln = 1<<31 - 1
@@ -139,7 +139,7 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 		payloadLen = plen7
 	}
 
-	// Пишем заголовок в dst
+	// Write header to dst
 	if _, err := w.Write([]byte{b0, b1}); err != nil {
 		return op, 0, "", err
 	}
@@ -153,7 +153,7 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 		}
 	}
 
-	// Masking key (если есть)
+	// Masking key (if present)
 	var maskKey [4]byte
 	if mask {
 		if _, err := io.ReadFull(r, maskKey[:]); err != nil {
@@ -164,8 +164,8 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 		}
 	}
 
-	// Копируем payload чанками; формируем превью по первым previewMaxBytes
-	// Для превью размаскируем если нужно
+	// Copy payload in chunks; build preview from first previewMaxBytes
+	// Unmask for preview if needed
 	previewMax := d.Cfg.PreviewMaxBytes
 	if previewMax <= 0 {
 		previewMax = 4096
@@ -183,12 +183,12 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 		if err != nil {
 			return op, 0, "", err
 		}
-		// Пишем как есть в dst
+		// Write as-is to dst
 		if _, err := w.Write(buf[:n]); err != nil {
 			return op, 0, "", err
 		}
-		// Формируем превью
-		// Маскирование применяется только к клиентским кадрам, но мы смотрим на бит MASK
+		// Build preview
+		// Masking applies only to client frames, but we check the MASK bit
 		take := n
 		if len(previewBuf) < previewMax {
 			need := previewMax - len(previewBuf)
@@ -197,7 +197,7 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 			}
 			chunk := buf[:take]
 			if mask {
-				// демаскируем копию
+				// unmask copy
 				tmp := make([]byte, take)
 				for i := 0; i < take; i++ {
 					tmp[i] = chunk[i] ^ maskKey[(offset+i)&3]
@@ -211,7 +211,7 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 		offset += n
 	}
 
-	// Сборка превью
+	// Build preview
 	var preview string
 	if op == domain.OpcodeText {
 		preview = string(previewBuf)
@@ -225,13 +225,13 @@ func (d *Deps) forwardOneWSFrame(r *bufio.Reader, w io.Writer) (domain.Opcode, i
 	return op, payloadLen, preview, nil
 }
 
-// forwardOneWSMessage читает один логический WS-месседж (Text/Binary/Control),
-// потоково пробрасывая кадры в dst. Возвращает opcode сообщения, полный размер payload
-// и превью (для text — строка, для binary — hex), а также "rawText" — исходный текст
-// для дальнейшего парсинга SIO (может быть усечён). Для control кадров возврат аналогичен кадру.
+// forwardOneWSMessage reads one logical WS message (Text/Binary/Control),
+// streaming frames to dst. Returns message opcode, total payload size
+// and preview (for text — string, for binary — hex), as well as "rawText" — original text
+// for further SIO parsing (may be truncated). For control frames return is similar to frame.
 func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode, int, string, string, string, error) {
-	// Читаем первый кадр сообщения
-	// Скопируем первый байт для проверки FIN/RSV1/opcode
+	// Read first message frame
+	// Copy first byte to check FIN/RSV1/opcode
 	b0, err := r.ReadByte()
 	if err != nil {
 		return domain.OpcodeBinary, 0, "", "", "", err
@@ -268,7 +268,7 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 		payloadLen = plen7
 	}
 
-	// Пишем заголовок первого кадра
+	// Write first frame header
 	if _, err := w.Write([]byte{b0, b1}); err != nil {
 		return opMain, 0, "", "", "", err
 	}
@@ -298,10 +298,10 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 			wsPreviewMax = 4096
 		}
 	}
-	// Собираем сообщение: для превью держим отдельный буфер (демаскированный),
-	// а для permessage-deflate — сберём сжатые байты (первые WS_BODY_MAX_BYTES)
+	// Assemble message: for preview keep separate buffer (unmasked),
+	// and for permessage-deflate — collect compressed bytes (first WS_BODY_MAX_BYTES)
 	previewBuf := make([]byte, 0, min(wsPreviewMax, payloadLen))
-	// подготовим фаловую шпулю для полного дампа, если включено
+	// prepare file spool for full dump if enabled
 	var spool *os.File
 	var spoolPath string
 	var spoolRemain int64
@@ -318,7 +318,7 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 	if rsv1 && d.Cfg.WSDeflatePreview {
 		capBytes := d.Cfg.WSBodyMaxBytes
 		if capBytes <= 0 {
-			capBytes = 1 << 20 // 1MB по умолчанию
+			capBytes = 1 << 20 // 1MB by default
 		}
 		if payloadLen < capBytes {
 			capBytes = payloadLen
@@ -326,7 +326,7 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 		compressedBuf = make([]byte, 0, capBytes)
 	}
 
-	// helper для приёма тела кадра
+	// helper for receiving frame body
 	readPayload := func(rem int, applyMask bool, key [4]byte, offsetBase int) (int, error) {
 		buf := make([]byte, 32*1024)
 		off := offsetBase
@@ -339,11 +339,11 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 			if err != nil {
 				return off, err
 			}
-			// forward оригинальные байты
+			// forward original bytes
 			if _, err := w.Write(buf[:n]); err != nil {
 				return off, err
 			}
-			// превью
+			// preview
 			if len(previewBuf) < wsPreviewMax {
 				take := n
 				need := wsPreviewMax - len(previewBuf)
@@ -370,14 +370,14 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 					compressedBuf = append(compressedBuf, buf[:take]...)
 				}
 			}
-			// дамп в файл (демаскированный payload на уровне сообщения)
+			// dump to file (unmasked payload at message level)
 			if spool != nil && spoolRemain > 0 {
 				toWrite := n
 				if int64(toWrite) > spoolRemain {
 					toWrite = int(spoolRemain)
 				}
 				if toWrite > 0 {
-					// для маски — демаскируем копию
+					// for mask — unmask copy
 					if mask {
 						tmp := make([]byte, toWrite)
 						for i := 0; i < toWrite; i++ {
@@ -396,14 +396,14 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 		return off, nil
 	}
 
-	// читаем payload первого кадра
+	// read first frame payload
 	off, err := readPayload(payloadLen, mask, maskKey, 0)
 	if err != nil {
 		return opMain, 0, "", "", "", err
 	}
 	totalSize := payloadLen
 
-	// Если это control‑кадр или fin=true — сообщение закончено
+	// If this is control frame or fin=true — message is complete
 	if fin || opCode == 0x8 || opCode == 0x9 || opCode == 0xA {
 		preview, raw := d.buildWSPreview(opMain, rsv1, previewBuf, compressedBuf)
 		if spool != nil {
@@ -412,9 +412,9 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 		return opMain, totalSize, preview, raw, spoolPath, nil
 	}
 
-	// Иначе — собираем continuation кадры
+	// Otherwise — collect continuation frames
 	for {
-		// следующий заголовок
+		// next header
 		b0c, err := r.ReadByte()
 		if err != nil {
 			return opMain, totalSize, "", "", "", err
@@ -424,8 +424,8 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 			return opMain, totalSize, "", "", "", err
 		}
 		fin = (b0c & 0x80) != 0
-		// permessage-deflate: RSV1 ставится только в первом кадре сообщения
-		// опкод должен быть 0x0 (continuation)
+		// permessage-deflate: RSV1 is set only in first message frame
+		// opcode should be 0x0 (continuation)
 		plen7 = int(b1c & 0x7F)
 		mask = (b1c & 0x80) != 0
 		payloadLen = 0
@@ -484,15 +484,15 @@ func (d *Deps) forwardOneWSMessage(r *bufio.Reader, w io.Writer) (domain.Opcode,
 }
 
 func (d *Deps) buildWSPreview(op domain.Opcode, rsv1 bool, previewBuf []byte, compressedBuf []byte) (string, string) {
-	// Если текст и есть сжатая копия — попробуем распаковать для превью/сырого текста
+	// If text and compressed copy exists — try to decompress for preview/raw text
 	if op == domain.OpcodeText && rsv1 && d.Cfg.WSDeflatePreview && len(compressedBuf) > 0 {
-		// permessage-deflate требует добавления zlib tail 0x00 0x00 0xFF 0xFF
+		// permessage-deflate requires adding zlib tail 0x00 0x00 0xFF 0xFF
 		data := append([]byte(nil), compressedBuf...)
 		data = append(data, 0x00, 0x00, 0xFF, 0xFF)
 		zr := flate.NewReader(bytes.NewReader(data))
 		if zr != nil {
 			defer zr.Close()
-			// ограничим чтение
+			// limit reading
 			lim := d.Cfg.WSPreviewMaxBytes
 			if lim <= 0 {
 				lim = d.Cfg.PreviewMaxBytes
@@ -515,11 +515,11 @@ func (d *Deps) buildWSPreview(op domain.Opcode, rsv1 bool, previewBuf []byte, co
 					break
 				}
 			}
-			// Возвращаем превью/сырой как строку
+			// Return preview/raw as string
 			return string(out), string(out)
 		}
 	}
-	// Без распаковки
+	// Without decompression
 	if op == domain.OpcodeText {
 		s := string(previewBuf)
 		return s, s
@@ -527,7 +527,7 @@ func (d *Deps) buildWSPreview(op domain.Opcode, rsv1 bool, previewBuf []byte, co
 	return hexPreview(previewBuf), ""
 }
 
-// openWSFile создаёт временный файл в BodySpoolDir и возвращает файл и абсолютный путь
+// openWSFile creates temporary file in BodySpoolDir and returns file and absolute path
 func (d *Deps) openWSFile() (*os.File, string) {
 	dir := d.Cfg.BodySpoolDir
 	if dir == "" {
@@ -563,7 +563,7 @@ func hexPreview(b []byte) string {
 	if len(b) == 0 {
 		return ""
 	}
-	// Ограничим до 256 байт как в wsproxy
+	// Limit to 256 bytes as in wsproxy
 	if len(b) > 256 {
 		b = b[:256]
 	}
@@ -579,8 +579,8 @@ func min(a, b int) int {
 	return b
 }
 
-// wsPacedWriter добавляет задержку записи пропорционально размеру, чтобы симулировать
-// ограничение пропускной способности для WS при ручной прокачке кадров.
+// wsPacedWriter adds write delay proportionally to size to simulate
+// bandwidth limiting for WS during manual frame pumping.
 type wsPacedWriter struct {
 	d   *Deps
 	w   io.Writer
@@ -588,7 +588,7 @@ type wsPacedWriter struct {
 }
 
 func (p *wsPacedWriter) Write(b []byte) (int, error) {
-	// Пауза до записи, чтобы не перегонять лишнего за тик
+	// Pause before write to avoid pushing too much per tick
 	if p != nil && p.d != nil && p.d.Cfg.ThrottleEnabled {
 		p.d.throttleSleepWS(p.dir, len(b))
 	}

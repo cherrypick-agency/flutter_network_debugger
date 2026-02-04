@@ -137,7 +137,7 @@ var (
 	effectiveCleanupInterval        = clampDuration(CleanupInterval, 10*time.Second, 30*time.Minute)
 )
 
-// init validates configuration constants at startup (без паники: используем безопасные значения)
+// init validates configuration constants at startup (no panic: using safe values)
 func init() {
 	if effectiveMaxConcurrentPerScript != MaxConcurrentPerScript ||
 		effectiveInstanceTTL != InstanceTTL ||
@@ -296,7 +296,7 @@ func (p *PluginPool) Acquire(ctx context.Context) (*pooledPlugin, error) {
 
 		plugin, createErr := p.createFunc(ctx, p.script)
 		if createErr != nil {
-			// Учитываем ошибку создания в circuit breaker, иначе можно бесконечно жечь CPU на компиляции.
+			// Count creation error in circuit breaker, otherwise we can burn CPU indefinitely on compilation.
 			total := p.totalCount.Add(1)
 			errors := p.errorCount.Add(1)
 			p.lastErrorTime.Store(time.Now())

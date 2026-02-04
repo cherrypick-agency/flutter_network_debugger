@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// HTTPView — представление одной HTTP‑транзакции для печати.
+// HTTPView — representation of a single HTTP transaction for printing.
 type HTTPView struct {
 	SessionID string
 	StartedAt time.Time
@@ -13,5 +13,5 @@ type HTTPView struct {
 	Status    int
 	ReqSize   int
 	RespSize  int
-	TotalMs   int64 // общая длительность
+	TotalMs   int64 // total duration
 }

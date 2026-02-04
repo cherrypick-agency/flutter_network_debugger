@@ -251,7 +251,7 @@ func TestAssemblyScriptCompiler_ValidateSyntax(t *testing.T) {
 	}
 
 	err := compiler.ValidateSyntax(ctx, req)
-	// ValidateSyntax вызывает Compile, который вернет ошибку если компилятор недоступен
+	// ValidateSyntax calls Compile, which will return error if compiler is not available
 	if err == nil {
 		t.Error("ValidateSyntax() should return error when compiler not available")
 	}
@@ -331,7 +331,7 @@ func TestAssemblyScriptCompiler_IsAvailable_SystemFallback(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewAssemblyScriptCompiler(cache)
 
-	// IsAvailable может вернуть true если asc и npm есть в системе
+	// IsAvailable may return true if asc and npm are in the system
 	_ = compiler.IsAvailable()
 }
 
@@ -385,7 +385,7 @@ func TestAssemblyScriptCompiler_IsAvailable_SystemAscNotFound(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewAssemblyScriptCompiler(cache)
 
-	// IsAvailable может вернуть false если asc не найден в системе
+	// IsAvailable may return false if asc is not found in the system
 	_ = compiler.IsAvailable()
 }
 
@@ -394,7 +394,7 @@ func TestAssemblyScriptCompiler_IsAvailable_SystemNpmNotFound(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewAssemblyScriptCompiler(cache)
 
-	// IsAvailable может вернуть false если npm не найден в системе
+	// IsAvailable may return false if npm is not found in the system
 	_ = compiler.IsAvailable()
 }
 

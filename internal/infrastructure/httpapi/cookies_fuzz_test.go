@@ -19,7 +19,7 @@ func FuzzParseSetCookie(f *testing.F) {
 		if !ok {
 			return
 		}
-		// проверяем, что build не паникует и результат снова парсится без паник
+		// verify that build doesn't panic and the result parses again without panics
 		out := buildSetCookieLine(p)
 		if out == "" {
 			return

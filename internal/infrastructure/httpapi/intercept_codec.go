@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// decodeForIntercept пытается декомпрессировать тело для превью/редактирования
-// поддерживаем gzip/deflate. Возвращает декодированные байты (или исходные, если декодирование не удалось).
+// decodeForIntercept tries to decompress body for preview/editing
+// supports gzip/deflate. Returns decoded bytes (or original if decoding failed).
 func decodeForIntercept(body []byte, contentEncoding string, limit int) ([]byte, bool) {
 	enc := strings.ToLower(strings.TrimSpace(contentEncoding))
 	if limit <= 0 {
@@ -45,7 +45,7 @@ func decodeForIntercept(body []byte, contentEncoding string, limit int) ([]byte,
 	}
 }
 
-// encodeForIntercept перекодирует тело обратно в исходный Content-Encoding.
+// encodeForIntercept re-encodes body back to original Content-Encoding.
 func encodeForIntercept(body []byte, contentEncoding string) ([]byte, bool) {
 	enc := strings.ToLower(strings.TrimSpace(contentEncoding))
 	switch enc {

@@ -68,7 +68,7 @@ func TestMITM_ShouldIntercept(t *testing.T) {
 }
 
 func TestPEMEncodeCert_WritesPEM(t *testing.T) {
-	// возьмём валидный DER из сгенерированного dev CA
+	// take valid DER from generated dev CA
 	certPEM, _, err := GenerateDevCA("dev", 1)
 	if err != nil {
 		t.Skip("skip crypto: ", err)

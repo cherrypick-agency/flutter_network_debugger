@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-// Избавляемся от зависимости archive: используем встроенные утилиты ОС
+// Avoiding archive dependency: using built-in OS utilities
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
@@ -59,7 +59,7 @@ Future<String> ensureBinary({
     final dir = Directory(localDir.trim());
     final fromBin = File(p.join(dir.path, binName));
     if (await fromBin.exists()) {
-      // копируем в cacheSub
+      // copy to cacheSub
       await cacheSub.create(recursive: true);
       final dest = File(execPath);
       await fromBin.copy(dest.path);
@@ -91,14 +91,14 @@ Future<String> ensureBinary({
       ? _buildFromBase(baseUrl, pkgFile)
       : _buildDownloadUrl(repo, pkgFile);
   final tmp = File(p.join(cacheSub.path, pkgFile));
-  stdout.writeln('[network-debugger] Загружаем $url');
+  stdout.writeln('[network-debugger] Downloading $url');
   if (url.startsWith('file://')) {
     final path = url.substring('file://'.length);
     await File(path).copy(tmp.path);
   } else {
     await _downloadToFile(url, tmp);
   }
-  stdout.writeln('[network-debugger] Распаковываем...');
+  stdout.writeln('[network-debugger] Extracting...');
   await _extract(tmp, cacheSub, ext);
   try {
     await tmp.delete();
@@ -115,14 +115,14 @@ Future<String> ensureBinary({
 }
 
 String _archiveFileName(String tag, PlatformSpec p, String ext) {
-  // Имя файла соответствует артефактам из frontend/lib/features/landing/presentation/pages/download_page.dart
+  // Filename matches artifacts from frontend/lib/features/landing/presentation/pages/download_page.dart
   // network-debugger-web_<os>_<arch>.(zip|tar.gz)
   final osPart = p.os; // windows | darwin | linux
   return 'network-debugger-web_${osPart}_${p.arch}.$ext';
 }
 
 String _buildDownloadUrl(String repo, String filename) {
-  // По умолчанию используем GitHub Pages из /cmd/network-debugger-web/_web/assets/downloads/
+  // By default use GitHub Pages from /cmd/network-debugger-web/_web/assets/downloads/
   final base = Platform.environment['NETWORK_DEBUGGER_DOWNLOAD_BASE'] ??
       'https://belief.github.io/network-debugger/assets/downloads';
   return '$base/$filename';
@@ -138,7 +138,7 @@ String _buildFromBase(String base, String filename) {
 }
 
 Future<String> _fetchLatestTag(String repo) async {
-  // Пытаемся сначала через GitHub API, затем fallback на 'latest'
+  // Try GitHub API first, then fallback to 'latest'
   try {
     final uri = Uri.parse('https://api.github.com/repos/$repo/releases/latest');
     final resp = await http.get(
@@ -171,7 +171,7 @@ Future<void> _downloadToFile(String url, File dest) async {
 Future<void> _extract(File archiveFile, Directory targetDir, String ext) async {
   if (ext == 'zip') {
     if (Platform.isWindows) {
-      // PowerShell Expand-Archive доступен из коробки
+      // PowerShell Expand-Archive is available out of the box
       final r = await Process.run('powershell', [
         '-NoProfile',
         '-Command',
@@ -182,7 +182,7 @@ Future<void> _extract(File archiveFile, Directory targetDir, String ext) async {
       }
       return;
     }
-    // unix: используем unzip, если доступен
+    // unix: use unzip if available
     final r = await Process.run('unzip', [
       '-o',
       archiveFile.path,
@@ -194,7 +194,7 @@ Future<void> _extract(File archiveFile, Directory targetDir, String ext) async {
     }
     return;
   }
-  // tar.gz — используем системный tar
+  // tar.gz - use system tar
   final r = await Process.run('tar', [
     '-xzf',
     archiveFile.path,

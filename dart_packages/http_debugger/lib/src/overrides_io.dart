@@ -112,10 +112,10 @@ class HttpDebugger {
       );
     }
 
-    // reverse (по умолчанию)
+    // reverse (default)
     final upstream = upstreamBaseUrl?.trim() ?? '';
     if (upstream.isEmpty) {
-      // безопасный фоллбек в forward с дефолтным proxy
+      // safe fallback to forward with default proxy
       final hostPort = _normalizeProxyHostPort(proxy);
       return enableForwardProxy(
         HttpDebuggerConfig(
@@ -142,7 +142,7 @@ class HttpDebugger {
     );
   }
 
-  /// Выполнить [action] в зоне с включённым прокси. Удобно для изолированного запуска.
+  /// Execute [action] in a zone with proxy enabled. Convenient for isolated execution.
   static T runZonedWithForwardProxy<T>(
     HttpDebuggerConfig config,
     T Function() action,
@@ -157,7 +157,7 @@ class HttpDebugger {
     );
   }
 
-  /// Выполнить [action] в зоне с включённым reverse‑proxy.
+  /// Execute [action] in a zone with reverse-proxy enabled.
   static T runZonedWithReverseProxy<T>(
     HttpReverseProxyConfig config,
     T Function() action,
@@ -177,19 +177,19 @@ class HttpDebugger {
           allowHosts: config.allowHosts,
           allowMethods: config.allowMethods,
           context: context,
-          // Важно: внутренний клиент создаём через super.createHttpClient,
-          // иначе получаем бесконечную рекурсию из-за HttpOverrides.runZoned.
+          // Important: create the inner client via super.createHttpClient,
+          // otherwise we get infinite recursion due to HttpOverrides.runZoned.
           innerClient: _RawHttpOverrides().createRawHttpClient(context),
         );
       },
     );
   }
 
-  /// Автовыбор режима из ENV/--dart-define.
+  /// Auto-select mode from ENV/--dart-define.
   ///
-  /// HTTP_PROXY_MODE|PROXY_MODE = reverse|forward|none (по умолчанию reverse)
-  /// DIO_DEBUGGER_ENABLED|HTTP_PROXY_ENABLED — вкл/выкл (по умолчанию true)
-  /// Для reverse необходимы UPSTREAM_BASE_URL|API_HOST и PROXY_BASE_URL|HTTP_PROXY.
+  /// HTTP_PROXY_MODE|PROXY_MODE = reverse|forward|none (default reverse)
+  /// DIO_DEBUGGER_ENABLED|HTTP_PROXY_ENABLED - enable/disable (default true)
+  /// For reverse mode, UPSTREAM_BASE_URL|API_HOST and PROXY_BASE_URL|HTTP_PROXY are required.
   static void enableAuto() {
     final enabled = _computeEnabledFromEnv();
     if (!enabled) return;
@@ -267,7 +267,7 @@ class HttpDebugger {
   }
 
   static void _configureClient(HttpClient client, HttpDebuggerConfig config) {
-    // Проксируем всё, кроме bypass‑хостов.
+    // Proxy everything except bypass hosts.
     client.findProxy = (Uri uri) {
       final host = uri.host;
       for (final pattern in config.bypassHosts) {
@@ -318,23 +318,22 @@ class _ReverseProxyOverrides extends HttpOverrides {
       allowHosts: _config.allowHosts,
       allowMethods: _config.allowMethods,
       context: context,
-      // Важно: внутренний HttpClient должен создаваться БЕЗ текущих overrides,
-      // иначе получаем бесконечную рекурсию (stack overflow).
+      // Important: the inner HttpClient must be created WITHOUT current overrides,
+      // otherwise we get infinite recursion (stack overflow).
       innerClient: super.createHttpClient(context),
     );
   }
 }
 
-/// Техническая обёртка, чтобы из обычной функции можно было безопасно вызвать
-/// `super.createHttpClient()` (это создаёт "сырой" HttpClient без применения
-/// текущих overrides).
+/// Technical wrapper to safely call `super.createHttpClient()` from a regular function
+/// (this creates a "raw" HttpClient without applying current overrides).
 class _RawHttpOverrides extends HttpOverrides {
   HttpClient createRawHttpClient(SecurityContext? context) {
     return super.createHttpClient(context);
   }
 }
 
-// Вспомогательная логика для ENV/defines — держим приватно здесь.
+// Helper logic for ENV/defines - kept private here.
 String? _readEnvVar(String name) {
   try {
     return Platform.environment[name];

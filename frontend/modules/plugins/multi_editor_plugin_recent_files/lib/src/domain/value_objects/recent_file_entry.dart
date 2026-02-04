@@ -36,7 +36,7 @@ sealed class RecentFileEntry with _$RecentFileEntry {
 
   Duration timeSince(DateTime now) => now.difference(lastOpened);
 
-  /// Format relative time in Russian (e.g., "10 секунд назад", "3 минуты назад")
+  /// Format relative time in Russian (e.g., "10 seconds ago", "3 minutes ago")
   String get formattedTime {
     final duration = timeSince(DateTime.now());
 

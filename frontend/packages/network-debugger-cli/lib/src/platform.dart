@@ -9,7 +9,7 @@ class PlatformSpec {
 PlatformSpec detectPlatform() {
   final os = Platform.operatingSystem; // linux, macos, windows
   String arch = _detectArchBasic();
-  // Unix: попытка уточнить через uname -m
+  // Unix: try to determine via uname -m
   if (!Platform.isWindows) {
     try {
       final res = Process.runSync('uname', ['-m']);
@@ -37,7 +37,7 @@ PlatformSpec detectPlatform() {
 }
 
 String _detectArchBasic() {
-  // Windows: учитываем WOW64
+  // Windows: account for WOW64
   if (Platform.isWindows) {
     final a1 =
         (Platform.environment['PROCESSOR_ARCHITECTURE'] ?? '').toLowerCase();
@@ -59,14 +59,14 @@ String _detectArchBasic() {
 }
 
 int sizeOfPointer() {
-  // Быстрая эвристика: на Dart VM 64-bit обычно intPtrSize == 8
-  // Platform.version включает архитектуру, но ненадёжно. Это простой fallback.
+  // Quick heuristic: on Dart VM 64-bit usually intPtrSize == 8
+  // Platform.version includes architecture but unreliable. This is a simple fallback.
   return (PidCurrent.is64BitProcess ? 8 : 4);
 }
 
 class PidCurrent {
   static bool get is64BitProcess {
-    // На Dart нет прямого API, используем эвристику по адресному пространству.
+    // No direct API in Dart, using heuristic based on address space.
     try {
       return Platform.version.contains('x64') ||
           Platform.version.contains('arm64');
@@ -77,7 +77,7 @@ class PidCurrent {
 }
 
 String archiveExtensionFor(PlatformSpec p) {
-  // На Windows — zip, на unix — tar.gz
+  // On Windows - zip, on Unix - tar.gz
   return p.os == 'windows' ? 'zip' : 'tar.gz';
 }
 

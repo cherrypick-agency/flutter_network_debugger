@@ -44,7 +44,7 @@ func TestNewService(t *testing.T) {
 		t.Error("Icon cache repository not set correctly")
 	}
 
-	// Проверяем что localDetector установлен (не можем сравнить напрямую из-за интерфейса)
+	// Check that localDetector is set (can't compare directly due to interface)
 	if service.localDetector == nil {
 		t.Error("Local detector not set")
 	}
@@ -53,7 +53,7 @@ func TestNewService(t *testing.T) {
 		t.Error("Helper client not set correctly")
 	}
 
-	// Проверяем что iconExtractor установлен (не можем сравнить напрямую из-за интерфейса)
+	// Check that iconExtractor is set (can't compare directly due to interface)
 	if service.iconExtractor == nil {
 		t.Error("Icon extractor not set")
 	}
@@ -343,7 +343,7 @@ func TestService_DetectForConnection_Disabled(t *testing.T) {
 	helperInstaller := &mockHelperInstaller{}
 	logger := zerolog.Nop()
 
-	// Мокаем конфиг с отключенной детекцией
+	// Mock config with detection disabled
 	config.loadFunc = func(ctx context.Context) (*domain.DetectionConfig, error) {
 		return &domain.DetectionConfig{
 			Enabled: false,
@@ -408,7 +408,7 @@ func TestService_DetectForConnection_WithHelper(t *testing.T) {
 		t.Errorf("DetectForConnection() error = %v, want nil", err)
 	}
 
-	// Может быть nil если helper не вернул результат
+	// May be nil if helper didn't return a result
 	_ = info
 }
 

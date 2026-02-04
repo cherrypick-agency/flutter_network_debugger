@@ -4,12 +4,12 @@ import 'package:frontend/widgets/json_viewer.dart';
 import 'package:frontend/theme/app_theme.dart';
 
 void main() {
-  Widget _wrap(Widget child) =>
-      MaterialApp(theme: buildLightTheme(), home: Scaffold(body: child));
+  Widget _wrap(Widget child) => MaterialApp(
+    theme: buildLightTheme(),
+    home: Scaffold(body: child),
+  );
 
-  testWidgets('JsonViewer: невалидный JSON — показывает сырой текст', (
-    tester,
-  ) async {
+  testWidgets('JsonViewer: invalid JSON - shows raw text', (tester) async {
     // Arrange
     const raw = 'not json';
 
@@ -20,9 +20,7 @@ void main() {
     expect(find.text(raw), findsOneWidget);
   });
 
-  testWidgets('JsonPrettyRich: считает и подсвечивает совпадения', (
-    tester,
-  ) async {
+  testWidgets('JsonPrettyRich: counts and highlights matches', (tester) async {
     // Arrange
     int count = -1;
     final cfg = JsonSearchConfig(
@@ -39,11 +37,11 @@ void main() {
     await tester.pumpWidget(_wrap(JsonPrettyRich(data: data, search: cfg)));
     await tester.pump();
 
-    // Assert: "id" в ключе и два раза в значении "idid" => 3
+    // Assert: "id" in key and twice in value "idid" => 3
     expect(count, 3);
   });
 
-  testWidgets('JsonViewer: валидный JSON рендерит prettified содержимое', (
+  testWidgets('JsonViewer: valid JSON renders prettified content', (
     tester,
   ) async {
     // Arrange
@@ -52,7 +50,7 @@ void main() {
     // Act
     await tester.pumpWidget(_wrap(const JsonViewer(jsonString: src)));
 
-    // Assert: ожидаем увидеть ключ
+    // Assert: expect to see the key
     expect(find.textContaining('"id"'), findsWidgets);
   });
 }

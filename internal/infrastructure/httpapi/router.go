@@ -89,14 +89,14 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		sr := settingsp.NewSettingsRepo(d.DB)
 		pr := settingsp.NewThrottleProfilesRepo(d.DB)
 		d.Settings = settingsuc.NewService(sr, pr)
-		// Применим сохранённые настройки поверх env-конфига
+		// Apply saved settings on top of env-config
 		if cur, err := d.Settings.Load(contextWithNoCancel()); err == nil {
 			settingsuc.ApplyOverlay(&d.Cfg, cur)
 		}
 	}
 
 	if d.Compose == nil {
-		// Только GORM-репозитории для Compose
+		// Only GORM repositories for Compose
 		libRepo := composep.NewLibraryRepo(d.DB)
 		histRepo := composep.NewHistoryRepo(d.DB)
 		clientFactory := func() *http.Client { return &http.Client{Transport: newTransport(d.Cfg), Timeout: 30 * time.Second} }
@@ -104,38 +104,38 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		d.Compose.SetMaxUploadMB(d.Cfg.ComposeMaxUploadMB)
 	}
 
-	// Инициализация ProxySvc/ProxyRt
+	// Initialize ProxySvc/ProxyRt
 	if d.DB != nil && d.ProxySvc == nil {
 		repo := proxyp.NewRepo(d.DB)
 		d.ProxySvc = proxyuc.NewService(repo)
 	}
-	// Инициализация Mapping сервиса
+	// Initialize Mapping service
 	if d.DB != nil && d.Mapping == nil {
 		mrepo := mappingp.NewRepo(d.DB)
 		d.Mapping = mappinguc.NewService(mrepo)
 	}
-	// Инициализация Tags сервиса
+	// Initialize Tags service
 	if d.DB != nil && d.TagsSvc == nil {
 		tagsRepo := tagsp.NewRepo(d.DB)
 		d.TagsSvc = tagsuc.NewService(tagsRepo)
 	}
-	// Инициализация Performance сервиса
+	// Initialize Performance service
 	if d.Svc != nil && d.PerformanceSvc == nil {
 		d.PerformanceSvc = performanceuc.NewService(d.Svc)
 	}
-	// Инициализация Process Detection сервиса
+	// Initialize Process Detection service
 	if d.DB != nil && d.ProcessSvc == nil {
 		processConfigRepo := processp.NewConfigRepo(d.DB)
 		iconCacheRepo := processp.NewIconCacheRepo(d.DB)
 		localDetector, _ := processdetector.NewDetector(false)
 		iconExtractor, _ := processicon.NewExtractor()
 
-		// Helper client и installer
+		// Helper client and installer
 		helperClient := processhelper.NewHelperClient()
 		helperInstaller := processhelper.NewInstaller()
 
-		// Путь к helper binary - используем абсолютный путь
-		// Попробуем найти binary относительно executable или в стандартных местах
+		// Path to helper binary - use absolute path
+		// Try to find binary relative to executable or in standard locations
 		helperBinaryPath := findHelperBinary(d.Logger)
 
 		d.ProcessSvc = processuc.NewService(
@@ -149,7 +149,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 			d.Logger,
 		)
 	}
-	// Связать ProcessSvc с SessionService для автоматической детекции
+	// Link ProcessSvc with SessionService for automatic detection
 	if d.ProcessSvc != nil && d.Svc != nil {
 		d.Svc.SetProcessService(d.ProcessSvc)
 	}
@@ -169,7 +169,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		})
 	}
 	if d.ProxyRt == nil {
-		// создадим рантайм-менеджер
+		// create runtime manager
 		var zl *zerolog.Logger = d.Logger
 		if zl == nil {
 			l := obs.NewLogger("info")
@@ -177,15 +177,15 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 		}
 		d.ProxyRt = pruntime.New(zl)
 	}
-	// Применим конфигурацию портов/режимов
+	// Apply ports/modes configuration
 	if d.ProxySvc != nil && d.ProxyRt != nil {
 		if pc, err := d.ProxySvc.Load(contextWithNoCancel()); err == nil {
-			// На порту прокси нужно уметь и forward, и reverse (/httpproxy) для SDK‑пакетов.
+			// On the proxy port we need both forward and reverse (/httpproxy) for SDK packages.
 			forwardHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Простой health-check именно на порту прокси (9091 по умолчанию),
-				// чтобы можно было быстро проверить что accept loop живой.
-				// Важно: не перехватываем proxy-style запросы (absolute-URI или CONNECT),
-				// иначе мы сломаем нормальное проксирование апстрима на /healthz.
+				// Simple health-check on the proxy port (9091 by default),
+				// so you can quickly verify that accept loop is alive.
+				// Important: don't intercept proxy-style requests (absolute-URI or CONNECT),
+				// otherwise we'll break normal proxying of upstream to /healthz.
 				isProxyStyle := r.Method == http.MethodConnect ||
 					isAbsoluteURL(r.RequestURI) ||
 					(r.URL != nil && r.URL.Scheme != "" && r.URL.Host != "")
@@ -220,7 +220,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 				if err != nil {
 					d.Logger.Error().Err(err).Msg("failed to apply proxy runtime config")
 				}
-				// Логируем фактическое состояние рантайма, а не "желаемое".
+				// Log actual runtime state, not the "desired" one.
 				d.Logger.Info().
 					Str("forward_addr_cfg", pc.ForwardAddr).
 					Bool("forward_enabled_cfg", pc.ForwardEnabled).
@@ -230,7 +230,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 					Str("socks_addr_runtime", d.ProxyRt.SocksAddr()).
 					Msg("proxy runtime state")
 			}
-			// Не пишем "endpoints enabled" если рантайм не поднял forward‑листенер.
+			// Don't write "endpoints enabled" if runtime didn't start forward listener.
 			if d.Logger != nil && d.ProxyRt.ForwardAddr() != "" {
 				d.Logger.Info().Str("addr", d.ProxyRt.ForwardAddr()).Msg("reverse proxy endpoints enabled (/httpproxy,/wsproxy)")
 			}
@@ -239,7 +239,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 	mux := buildBaseMux(d)
 	// Start background GC for spool files (best-effort)
 	go startSpoolGC(d)
-	// В этой сборке не перехватываем forward‑proxy на порту UI — он работает на отдельном листенере через ProxyRt.
+	// In this build we don't intercept forward-proxy on UI port — it works on a separate listener via ProxyRt.
 	return withCORS(d.Cfg, mux)
 }
 
@@ -254,11 +254,11 @@ func NewRouterWithoutForwardProxy(d *Deps) http.Handler {
 func buildBaseMux(d *Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	// Главная страница: этот бинарь — backend/API, и часто его запускают отдельно от web UI.
-	// Раньше `/` отвечал 404, но при авто-открытии браузера это выглядело как “сломалось”.
+	// Main page: this binary is backend/API, and often it's run separately from web UI.
+	// Previously `/` returned 404, but when auto-opening browser it looked like "broken".
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Не перехватываем неизвестные подпути: пусть остальные хендлеры и 404 работают как обычно.
-		// (ServeMux выберет более специфичный handler по префиксу.)
+		// Don't intercept unknown subpaths: let other handlers and 404 work as usual.
+		// (ServeMux will choose a more specific handler by prefix.)
 		if r.URL.Path != "/" {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
 			return
@@ -281,10 +281,10 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 <body>
   <h2>network-debugger backend is running</h2>
   <div class="box">
-    <p>Это API/прокси backend. Если ты ожидаешь Web UI — его обычно запускает отдельный фронтенд/бинарь.</p>
-    <p><b>Проверка здоровья:</b> <a href="/healthz"><code>/healthz</code></a></p>
-    <p><b>Версия API:</b> <a href="/_api/v1/version"><code>/_api/v1/version</code></a></p>
-    <p><b>Важно:</b> чтобы не открывать браузер автоматически, запускай с <code>NO_BROWSER=1</code> или флагом <code>-cli</code>.</p>
+    <p>This is an API/proxy backend. If you expect Web UI — it's usually launched by a separate frontend/binary.</p>
+    <p><b>Health check:</b> <a href="/healthz"><code>/healthz</code></a></p>
+    <p><b>API version:</b> <a href="/_api/v1/version"><code>/_api/v1/version</code></a></p>
+    <p><b>Important:</b> to prevent auto-opening browser, run with <code>NO_BROWSER=1</code> or flag <code>-cli</code>.</p>
   </div>
 </body>
 </html>`))
@@ -415,9 +415,9 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	// Runtime settings (response delay, etc.)
 	mux.HandleFunc("/_api/v1/settings", d.handleV1Settings)
 	mux.HandleFunc("/_api/v1/monitor/ws", d.Monitor.HandleWS)
-	// Socket.IO endpoint для push‑обновлений (sessions/aggregate)
-	// StripPrefix убирает /_api/v1/monitor/io перед передачей в Socket.IO
-	// Клиент подключается: /_api/v1/monitor/io/socket.io/ (path="/socket.io/")
+	// Socket.IO endpoint for push-updates (sessions/aggregate)
+	// StripPrefix removes /_api/v1/monitor/io before passing to Socket.IO
+	// Client connects: /_api/v1/monitor/io/socket.io/ (path="/socket.io/")
 	mux.Handle("/_api/v1/monitor/io/", http.StripPrefix("/_api/v1/monitor/io", NewSocketIOServer(d)))
 	mux.HandleFunc("/_api/v1/httpproxy", d.handleHTTPProxy)
 	mux.HandleFunc("/_api/v1/httpproxy/", d.handleHTTPProxy)
@@ -565,27 +565,27 @@ func withCORS(cfg config.Config, h http.Handler) http.Handler {
 	})
 }
 
-// findHelperBinary - найти helper binary используя абсолютные пути
+// findHelperBinary - find helper binary using absolute paths
 func findHelperBinary(logger *zerolog.Logger) string {
-	// Попробовать найти в стандартных местах
+	// Try to find in standard locations
 	candidates := []string{}
 
-	// 1. Получить путь к текущему executable
+	// 1. Get path to current executable
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
-		// Helper должен быть в той же директории что и main binary
+		// Helper should be in the same directory as main binary
 		candidates = append(candidates, filepath.Join(exeDir, "process-helper"))
-		// Или в ../bin относительно executable
+		// Or in ../bin relative to executable
 		candidates = append(candidates, filepath.Join(exeDir, "..", "bin", "process-helper"))
 	}
 
-	// 2. Относительно текущей рабочей директории (но как абсолютный путь)
+	// 2. Relative to current working directory (but as absolute path)
 	if wd, err := os.Getwd(); err == nil {
 		candidates = append(candidates, filepath.Join(wd, "bin", "process-helper"))
 		candidates = append(candidates, filepath.Join(wd, "..", "bin", "process-helper"))
 	}
 
-	// 3. Проверить каждый candidate
+	// 3. Check each candidate
 	for _, path := range candidates {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
@@ -599,7 +599,7 @@ func findHelperBinary(logger *zerolog.Logger) string {
 		}
 	}
 
-	// Fallback - вернуть первый candidate как есть (установщик может скопировать binary позже)
+	// Fallback - return first candidate as is (installer may copy binary later)
 	if len(candidates) > 0 {
 		absPath, _ := filepath.Abs(candidates[0])
 		if logger != nil {

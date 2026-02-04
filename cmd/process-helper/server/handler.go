@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	// RequestTimeout - максимальное время обработки одного запроса
+	// RequestTimeout - maximum time to process a single request
 	RequestTimeout = 30 * time.Second
 )
 
-// Handler - обработчик IPC requests
+// Handler - IPC request handler
 type Handler struct {
 	detector  domain.IProcessDetector
 	extractor domain.IIconExtractor
 	logger    zerolog.Logger
 }
 
-// NewHandler - создать новый handler
+// NewHandler - create new handler
 func NewHandler(detector domain.IProcessDetector, extractor domain.IIconExtractor, logger zerolog.Logger) *Handler {
 	return &Handler{
 		detector:  detector,
@@ -32,7 +32,7 @@ func NewHandler(detector domain.IProcessDetector, extractor domain.IIconExtracto
 	}
 }
 
-// Handle - обработать request и вернуть response
+// Handle - process request and return response
 func (h *Handler) Handle(req *ipc.Request) *ipc.Response {
 	switch req.Method {
 	case "detect":
@@ -52,7 +52,7 @@ func (h *Handler) Handle(req *ipc.Request) *ipc.Response {
 	}
 }
 
-// handleDetect - детектировать процесс по порту
+// handleDetect - detect process by port
 func (h *Handler) handleDetect(req *ipc.Request) *ipc.Response {
 	port := req.Params.Port
 	if port == 0 {
@@ -67,7 +67,7 @@ func (h *Handler) handleDetect(req *ipc.Request) *ipc.Response {
 
 	h.logger.Debug().Uint32("port", port).Msg("Detecting process")
 
-	// Создать context с timeout
+	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel()
 
@@ -97,7 +97,7 @@ func (h *Handler) handleDetect(req *ipc.Request) *ipc.Response {
 	}
 }
 
-// handleIcon - извлечь иконку процесса
+// handleIcon - extract process icon
 func (h *Handler) handleIcon(req *ipc.Request) *ipc.Response {
 	pid := req.Params.PID
 	path := req.Params.Path
@@ -114,7 +114,7 @@ func (h *Handler) handleIcon(req *ipc.Request) *ipc.Response {
 
 	h.logger.Debug().Int32("pid", pid).Str("path", path).Msg("Extracting icon")
 
-	// Создать context с timeout
+	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel()
 

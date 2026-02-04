@@ -290,7 +290,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "SESSIONS_CLEAR_FAILED", err.Error(), nil)
 			return
 		}
-		// Закрываем активные WS-сессии и уведомляем фронты, чтобы не прилетали новые события в старые сессии
+		// Close active WS sessions and notify frontends so new events don't arrive in old sessions
 		if d.Live != nil {
 			d.Live.CloseAll()
 		}
@@ -325,7 +325,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// включение глубокой проверки GraphQL по телу только если явно запрошено
+	// enable deep GraphQL body check only if explicitly requested
 	rawScan := r.URL.Query().Get("scan")
 	scan := splitCSV(rawScan)
 	scanGraphQL := false
@@ -365,7 +365,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "SESSIONS_LIST_FAILED", err.Error(), nil)
 		return
 	}
-	// Enrich with httpMeta/sizes best-effort и применяем быстрые фильтры
+	// Enrich with httpMeta/sizes best-effort and apply quick filters
 	views := make([]sessionV1, 0, len(items))
 	for _, s := range items {
 		view := sessionV1{Session: s}
@@ -376,10 +376,10 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 		if sz != nil {
 			view.Sizes = sz
 		}
-		// Быстрые фильтры по типам (с опциональным deep-scan для GraphQL)
+		// Quick filters by types (with optional deep-scan for GraphQL)
 		if len(types) > 0 {
 			tags := getBaseTags(view)
-			// Если запрошен graphql, но его нет в базовых тегах — по запросу клиента делаем глубокую проверку по телу
+			// If graphql is requested but not in base tags — at client's request do deep body check
 			needsGraphQL := false
 			for _, t := range types {
 				if t == "graphql" {
@@ -398,7 +398,7 @@ func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		}
-		// Быстрые фильтры по статусным группам
+		// Quick filters by status groups
 		if len(statusGroups) > 0 {
 			if !matchesAnyStatusGroup(statusGroups, view.HttpMeta) {
 				continue
@@ -537,7 +537,7 @@ func hasAnyTag(want []string, tags map[string]struct{}) bool {
 }
 
 // tagsForSession builds a compact set of tags based on scheme/kind and mime
-// --- base tags cache (без глубокого анализа тела)
+// --- base tags cache (without deep body analysis)
 var baseTagsCache sync.Map // map[string]baseTagsEntry
 
 type baseTagsEntry struct {
@@ -579,7 +579,7 @@ func computeBaseTags(v sessionV1) map[string]struct{} {
 		case "ws", "wss":
 			tags["ws"] = struct{}{}
 		}
-		// эвристика GraphQL по URL-пути
+		// GraphQL heuristic by URL path
 		p := strings.ToLower(u.Path)
 		if strings.Contains(p, "graphql") {
 			tags["graphql"] = struct{}{}
@@ -673,7 +673,7 @@ func (*urlParser) parse(raw string) (*urlURL, error) {
 
 type urlURL url.URL
 
-// --- GraphQL deep detection cache (привязка к числу кадров)
+// --- GraphQL deep detection cache (bound to frame count)
 var gqlBodyCache sync.Map // map[string]gqlBodyEntry
 
 type gqlBodyEntry struct {
@@ -1134,7 +1134,7 @@ func computeCORSMeta(method string, req, resp map[string]string, isPreflight boo
 	return &corsMetaV1{Ok: ok, Reason: reason, AllowedOrigin: allowOrigin, AllowedMethods: allowMethods, AllowedHeaders: allowHeaders, Vary: vary}
 }
 
-// Грубая классификация сетевых ошибок для UI
+// Rough classification of network errors for UI
 func classifyNetError(msg string) string {
 	m := strings.ToLower(msg)
 	switch {
@@ -1217,8 +1217,8 @@ func containsFoldSlice(arr []string, val string) bool {
 	return false
 }
 
-// computeQuickHTTPMetaFromFrames — быстрый best-effort: вытащим method/status/mime из превью кадров,
-// чтобы фронт видел базовую мету до записи транзакции.
+// computeQuickHTTPMetaFromFrames — quick best-effort: extract method/status/mime from frame previews,
+// so frontend sees base meta before transaction is recorded.
 func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID string) *httpMetaV1 {
 	frames, _, _ := d.Svc.ListFrames(ctx, sessionID, "", 1000)
 	if len(frames) == 0 {
@@ -1228,7 +1228,7 @@ func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID str
 	var status int
 	var mime string
 	var reqTs, respTs time.Time
-	// от конца к началу ищем http_response со статусом и типом
+	// from end to beginning search for http_response with status and type
 	for i := len(frames) - 1; i >= 0; i-- {
 		var m map[string]any
 		if err := json.Unmarshal([]byte(frames[i].Preview), &m); err != nil {
@@ -1247,7 +1247,7 @@ func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID str
 			break
 		}
 	}
-	// вперёд ищем первый http_request с методом
+	// forward search for first http_request with method
 	for i := 0; i < len(frames); i++ {
 		var m map[string]any
 		if err := json.Unmarshal([]byte(frames[i].Preview), &m); err != nil {
@@ -1264,7 +1264,7 @@ func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID str
 	if method == "" && status == 0 && mime == "" {
 		return nil
 	}
-	// Вычисляем длительность из timestamps фреймов
+	// Calculate duration from frame timestamps
 	var durationMs int64
 	if !reqTs.IsZero() && !respTs.IsZero() {
 		dur := respTs.Sub(reqTs)
@@ -1272,7 +1272,7 @@ func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID str
 		if durationMs < 0 {
 			durationMs = 0
 		}
-		// Если длительность > 0 но < 1ms, округляем до 1ms (как в durationMs функции)
+		// If duration > 0 but < 1ms, round to 1ms (like in durationMs function)
 		if durationMs == 0 && dur > 0 {
 			durationMs = 1
 		}
@@ -1281,7 +1281,7 @@ func (d *Deps) computeQuickHTTPMetaFromFrames(ctx context.Context, sessionID str
 	return out
 }
 
-// headerGetCaseInsensitive возвращает значение заголовка независимо от регистра ключа.
+// headerGetCaseInsensitive returns header value regardless of key case.
 func headerGetCaseInsensitive(h map[string]any, lowerName string) (string, bool) {
 	for k, v := range h {
 		if strings.EqualFold(k, lowerName) {
@@ -1301,7 +1301,7 @@ func headerGetCaseInsensitive(h map[string]any, lowerName string) (string, bool)
 			}
 		}
 	}
-	// быстрые варианты в случае точного совпадения ключа
+	// fast variants for exact key match
 	if v, ok := h["content-type"]; ok {
 		if s, ok2 := v.(string); ok2 {
 			return s, true
@@ -1315,13 +1315,13 @@ func headerGetCaseInsensitive(h map[string]any, lowerName string) (string, bool)
 	return "", false
 }
 
-// enrichWithHTTPMeta — общая логика enrichment для DRY (используется в REST API и WebSocket).
-// Пытается получить httpMeta из HTTPTransaction, если не удалось — fallback на извлечение из frames.
+// enrichWithHTTPMeta — common enrichment logic for DRY (used in REST API and WebSocket).
+// Tries to get httpMeta from HTTPTransaction, if failed — fallback to extracting from frames.
 func (d *Deps) enrichWithHTTPMeta(ctx context.Context, sess domain.Session) (*httpMetaV1, *sizeInfoV1) {
-	// 1. Попытка получить из HTTPTransaction
+	// 1. Try to get from HTTPTransaction
 	meta, sz := d.computeHTTPMeta(ctx, sess.ID)
 
-	// 2. Если не получилось и есть ошибка — вернуть error meta
+	// 2. If failed and there's an error — return error meta
 	if meta == nil && sess.Error != nil {
 		code := classifyNetError(*sess.Error)
 		meta = &httpMetaV1{
@@ -1337,7 +1337,7 @@ func (d *Deps) enrichWithHTTPMeta(ctx context.Context, sess domain.Session) (*ht
 		return meta, sz
 	}
 
-	// 3. Если не получилось и нет ошибки — fallback на извлечение из frames
+	// 3. If failed and no error — fallback to extracting from frames
 	if meta == nil {
 		meta = d.computeQuickHTTPMetaFromFrames(ctx, sess.ID)
 	}

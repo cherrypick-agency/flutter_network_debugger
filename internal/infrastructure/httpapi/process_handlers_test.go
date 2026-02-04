@@ -16,7 +16,7 @@ import (
 )
 
 // Composer 1.
-// Mock dependencies для тестирования process handlers
+// Mock dependencies for testing process handlers
 type mockConfigRepoForProcess struct {
 	loadFunc func(ctx context.Context) (*processdomain.DetectionConfig, error)
 	saveFunc func(ctx context.Context, cfg *processdomain.DetectionConfig) error
@@ -171,7 +171,7 @@ func setupProcessDeps(configRepo *mockConfigRepoForProcess, installer *mockHelpe
 }
 
 // Composer 1.
-// Тесты для handleV1ProcessConfig
+// Tests for handleV1ProcessConfig
 
 func TestHandleV1ProcessConfig_GET_Success(t *testing.T) {
 	expectedConfig := &processdomain.DetectionConfig{
@@ -344,7 +344,7 @@ func TestHandleV1ProcessConfig_InvalidMethod(t *testing.T) {
 }
 
 // Composer 1.
-// Тесты для handleV1ProcessHelperStatus
+// Tests for handleV1ProcessHelperStatus
 
 func TestHandleV1ProcessHelperStatus_GET_Success(t *testing.T) {
 	installer := &mockHelperInstallerForProcess{
@@ -415,7 +415,7 @@ func TestHandleV1ProcessHelperStatus_InvalidMethod(t *testing.T) {
 }
 
 // Composer 1.
-// Тесты для handleV1ProcessHelperInstall
+// Tests for handleV1ProcessHelperInstall
 
 func TestHandleV1ProcessHelperInstall_POST_Success(t *testing.T) {
 	installCalled := false

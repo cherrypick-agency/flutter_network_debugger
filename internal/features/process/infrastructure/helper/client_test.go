@@ -12,7 +12,7 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// mockServer - эмуляция helper daemon для тестов
+// mockServer - mock helper daemon for tests
 type mockServer struct {
 	conn      net.Conn
 	requests  chan *ipc.Request

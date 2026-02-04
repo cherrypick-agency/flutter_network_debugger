@@ -50,8 +50,8 @@ func sanitizeCompilerKey(language string) (string, error) {
 		return "", fmt.Errorf("invalid compiler key: empty")
 	}
 
-	// Нам нужен ровно один сегмент директории внутри cacheDir.
-	// Запрещаем любые разделители и volume-часть.
+	// We need exactly one directory segment inside cacheDir.
+	// Disallow any separators and volume part.
 	if strings.ContainsAny(key, `/\:`) {
 		return "", fmt.Errorf("invalid compiler key: %q", language)
 	}

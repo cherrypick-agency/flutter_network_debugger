@@ -2,19 +2,19 @@ package domain
 
 import "time"
 
-// ProxyConfig — рантайм‑настройки портов/режимов прокси (singleton с ID=1).
+// ProxyConfig - runtime settings for proxy ports/modes (singleton with ID=1).
 type ProxyConfig struct {
 	ID int64
 
-	// HTTP forward‑proxy на отдельном порту
+	// HTTP forward-proxy on separate port
 	ForwardEnabled bool
 	ForwardAddr    string
 
-	// SOCKS5 сервер
+	// SOCKS5 server
 	SocksEnabled bool
 	SocksAddr    string
 
-	// Аутентификация SOCKS5 (MVP): none | userpass
+	// SOCKS5 authentication (MVP): none | userpass
 	SocksAuthMode string
 	SocksUser     string
 	SocksPass     string

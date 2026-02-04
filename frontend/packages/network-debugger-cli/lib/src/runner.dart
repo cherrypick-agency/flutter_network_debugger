@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 Future<int> runBinary({required String execPath}) async {
-  // Запускаем в обычном режиме, чтобы сигналы корректно доходили
+  // Run in normal mode so signals are properly forwarded
   final proc = await Process.start(
     execPath,
     const <String>[],

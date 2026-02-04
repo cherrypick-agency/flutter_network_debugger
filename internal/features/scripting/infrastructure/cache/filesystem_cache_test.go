@@ -23,7 +23,7 @@ func TestNewFileSystemCache(t *testing.T) {
 		t.Errorf("Expected baseDir %q, got %q", tmpDir, cache.baseDir)
 	}
 
-	// Проверяем что директория создана
+	// Check that directory was created
 	cacheDir := cache.GetCacheDir()
 	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
 		t.Fatalf("Cache directory was not created: %s", cacheDir)
@@ -41,7 +41,7 @@ func TestNewFileSystemCache_EmptyDir(t *testing.T) {
 		t.Fatal("baseDir should be set to default location")
 	}
 
-	// Проверяем что используется домашняя директория
+	// Check that home directory is used
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("Failed to get home directory: %v", err)
@@ -80,13 +80,13 @@ func TestFileSystemCache_GetCompilerPath(t *testing.T) {
 	language := "rust"
 	compilerPath := filepath.Join(cache.GetCacheDir(), language)
 
-	// Создаем директорию компилятора
+	// Create compiler directory
 	err = os.MkdirAll(compilerPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create compiler directory: %v", err)
 	}
 
-	// Получаем путь
+	// Get path
 	path, err := cache.GetCompilerPath(language)
 	if err != nil {
 		t.Fatalf("GetCompilerPath failed: %v", err)
@@ -159,7 +159,7 @@ func TestFileSystemCache_GetCompilerPath_NotDirectory(t *testing.T) {
 	language := "rust"
 	compilerPath := filepath.Join(cache.GetCacheDir(), language)
 
-	// Создаем файл вместо директории
+	// Create file instead of directory
 	err = os.WriteFile(compilerPath, []byte("not a directory"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
@@ -198,19 +198,19 @@ func TestFileSystemCache_Clear(t *testing.T) {
 	language := "rust"
 	compilerPath := filepath.Join(cache.GetCacheDir(), language)
 
-	// Создаем директорию компилятора
+	// Create compiler directory
 	err = os.MkdirAll(compilerPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create compiler directory: %v", err)
 	}
 
-	// Очищаем
+	// Clear
 	err = cache.Clear(language)
 	if err != nil {
 		t.Fatalf("Clear failed: %v", err)
 	}
 
-	// Проверяем что директория удалена
+	// Check that directory was removed
 	if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
 		t.Fatal("Compiler directory was not removed")
 	}
@@ -224,7 +224,7 @@ func TestFileSystemCache_Clear_NotExists(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Очистка несуществующего компилятора не должна падать
+	// Clearing nonexistent compiler should not panic
 	err = cache.Clear("nonexistent")
 	if err != nil {
 		t.Fatalf("Clear should not fail for nonexistent compiler: %v", err)
@@ -239,7 +239,7 @@ func TestFileSystemCache_ClearAll(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Создаем несколько компиляторов
+	// Create several compilers
 	languages := []string{"rust", "go", "zig"}
 	for _, lang := range languages {
 		compilerPath := filepath.Join(cache.GetCacheDir(), lang)
@@ -249,13 +249,13 @@ func TestFileSystemCache_ClearAll(t *testing.T) {
 		}
 	}
 
-	// Очищаем все
+	// Clear all
 	err = cache.ClearAll()
 	if err != nil {
 		t.Fatalf("ClearAll failed: %v", err)
 	}
 
-	// Проверяем что все директории удалены
+	// Check that all directories were removed
 	for _, lang := range languages {
 		compilerPath := filepath.Join(cache.GetCacheDir(), lang)
 		if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
@@ -272,7 +272,7 @@ func TestFileSystemCache_ClearAll_Empty(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Очистка пустого кеша не должна падать
+	// Clearing empty cache should not panic
 	err = cache.ClearAll()
 	if err != nil {
 		t.Fatalf("ClearAll should not fail for empty cache: %v", err)
@@ -287,7 +287,7 @@ func TestFileSystemCache_GetCacheSize(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Пустой кеш должен иметь размер 0
+	// Empty cache should have size 0
 	size, err := cache.GetCacheSize()
 	if err != nil {
 		t.Fatalf("GetCacheSize failed: %v", err)
@@ -297,14 +297,14 @@ func TestFileSystemCache_GetCacheSize(t *testing.T) {
 		t.Errorf("Expected cache size 0, got %d", size)
 	}
 
-	// Создаем файл в кеше
+	// Create file in cache
 	testFile := filepath.Join(cache.GetCacheDir(), "test.txt")
 	err = os.WriteFile(testFile, []byte("test content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	// Проверяем размер
+	// Check size
 	size, err = cache.GetCacheSize()
 	if err != nil {
 		t.Fatalf("GetCacheSize failed: %v", err)
@@ -326,7 +326,7 @@ func TestFileSystemCache_GetCompilerSize(t *testing.T) {
 	language := "rust"
 	compilerPath := filepath.Join(cache.GetCacheDir(), language)
 
-	// Несуществующий компилятор должен иметь размер 0
+	// Nonexistent compiler should have size 0
 	size, err := cache.GetCompilerSize(language)
 	if err != nil {
 		t.Fatalf("GetCompilerSize failed: %v", err)
@@ -336,7 +336,7 @@ func TestFileSystemCache_GetCompilerSize(t *testing.T) {
 		t.Errorf("Expected compiler size 0, got %d", size)
 	}
 
-	// Создаем директорию компилятора с файлом
+	// Create compiler directory with file
 	err = os.MkdirAll(compilerPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create compiler directory: %v", err)
@@ -348,7 +348,7 @@ func TestFileSystemCache_GetCompilerSize(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	// Проверяем размер
+	// Check size
 	size, err = cache.GetCompilerSize(language)
 	if err != nil {
 		t.Fatalf("GetCompilerSize failed: %v", err)
@@ -369,19 +369,19 @@ func TestFileSystemCache_IsCompilerCached(t *testing.T) {
 
 	language := "rust"
 
-	// Компилятор не в кеше
+	// Compiler not in cache
 	if cache.IsCompilerCached(language) {
 		t.Error("IsCompilerCached should return false for uncached compiler")
 	}
 
-	// Создаем директорию компилятора
+	// Create compiler directory
 	compilerPath := filepath.Join(cache.GetCacheDir(), language)
 	err = os.MkdirAll(compilerPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create compiler directory: %v", err)
 	}
 
-	// Компилятор в кеше
+	// Compiler in cache
 	if !cache.IsCompilerCached(language) {
 		t.Error("IsCompilerCached should return true for cached compiler")
 	}
@@ -409,7 +409,7 @@ func TestFileSystemCache_GetCompilerBinaryPath(t *testing.T) {
 			setup: func(path string) error {
 				return os.MkdirAll(path, 0755)
 			},
-			wantErr: true, // binary не существует
+			wantErr: true, // binary doesn't exist
 		},
 		{
 			name:     "kotlin compiler",
@@ -419,7 +419,7 @@ func TestFileSystemCache_GetCompilerBinaryPath(t *testing.T) {
 				binaryPath := filepath.Join(path, "bin", "kotlinc")
 				return os.MkdirAll(filepath.Dir(binaryPath), 0755)
 			},
-			wantErr: true, // binary не существует
+			wantErr: true, // binary doesn't exist
 		},
 		{
 			name:     "unsupported language",
@@ -453,7 +453,7 @@ func TestFileSystemCache_ClearAll_WithFiles(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Создаем компиляторы с файлами
+	// Create compilers with files
 	languages := []string{"rust", "go"}
 	for _, lang := range languages {
 		compilerPath := filepath.Join(cache.GetCacheDir(), lang)
@@ -462,7 +462,7 @@ func TestFileSystemCache_ClearAll_WithFiles(t *testing.T) {
 			t.Fatalf("Failed to create compiler directory: %v", err)
 		}
 
-		// Создаем файл внутри
+		// Create file inside
 		testFile := filepath.Join(compilerPath, "test.txt")
 		err = os.WriteFile(testFile, []byte("test"), 0644)
 		if err != nil {
@@ -470,13 +470,13 @@ func TestFileSystemCache_ClearAll_WithFiles(t *testing.T) {
 		}
 	}
 
-	// Очищаем все
+	// Clear all
 	err = cache.ClearAll()
 	if err != nil {
 		t.Fatalf("ClearAll failed: %v", err)
 	}
 
-	// Проверяем что все удалено
+	// Check that everything was removed
 	for _, lang := range languages {
 		compilerPath := filepath.Join(cache.GetCacheDir(), lang)
 		if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
@@ -492,14 +492,14 @@ func TestFileSystemCache_GetCacheSize_WithNestedFiles(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Создаем компилятор с вложенными файлами
+	// Create compiler with nested files
 	compilerPath := filepath.Join(cache.GetCacheDir(), "rust")
 	err = os.MkdirAll(compilerPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create compiler directory: %v", err)
 	}
 
-	// Создаем файлы на разных уровнях
+	// Create files at different levels
 	files := []string{
 		filepath.Join(compilerPath, "binary"),
 		filepath.Join(compilerPath, "subdir", "file.txt"),
@@ -540,7 +540,7 @@ func TestFileSystemCache_GetCompilerSize_WithNestedFiles(t *testing.T) {
 		t.Fatalf("Failed to create compiler directory: %v", err)
 	}
 
-	// Создаем файлы на разных уровнях
+	// Create files at different levels
 	files := []string{
 		filepath.Join(compilerPath, "binary"),
 		filepath.Join(compilerPath, "subdir", "file.txt"),
@@ -574,7 +574,7 @@ func TestFileSystemCache_GetCompilerPath_StatError(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Создаем файл вместо директории
+	// Create file instead of directory
 	compilerPath := filepath.Join(cache.GetCacheDir(), "rust")
 	err = os.WriteFile(compilerPath, []byte("not a dir"), 0644)
 	if err != nil {
@@ -594,20 +594,20 @@ func TestFileSystemCache_Clear_FileInsteadOfDir(t *testing.T) {
 		t.Fatalf("NewFileSystemCache failed: %v", err)
 	}
 
-	// Создаем файл вместо директории
+	// Create file instead of directory
 	compilerPath := filepath.Join(cache.GetCacheDir(), "rust")
 	err = os.WriteFile(compilerPath, []byte("not a dir"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
 	}
 
-	// Clear должен удалить файл через RemoveAll
+	// Clear should remove file via RemoveAll
 	err = cache.Clear("rust")
 	if err != nil {
 		t.Fatalf("Clear should succeed even for file: %v", err)
 	}
 
-	// Проверяем что файл удален
+	// Check that file was removed
 	if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
 		t.Fatal("File should be removed by Clear")
 	}
@@ -623,33 +623,33 @@ func TestFileSystemCache_ClearAll_WithNonDirectoryEntries(t *testing.T) {
 
 	cacheDir := cache.GetCacheDir()
 
-	// Создаем директорию и файл
+	// Create directory and file
 	compilerDir := filepath.Join(cacheDir, "rust")
 	err = os.MkdirAll(compilerDir, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create compiler directory: %v", err)
 	}
 
-	// Создаем файл в корне кеша (не директорию)
+	// Create file in cache root (not directory)
 	filePath := filepath.Join(cacheDir, "somefile.txt")
 	err = os.WriteFile(filePath, []byte("test"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
 	}
 
-	// ClearAll должен удалить только директории
+	// ClearAll should remove only directories
 	err = cache.ClearAll()
 	if err != nil {
 		t.Fatalf("ClearAll failed: %v", err)
 	}
 
-	// Директория должна быть удалена
+	// Directory should be removed
 	if _, err := os.Stat(compilerDir); !os.IsNotExist(err) {
 		t.Error("Compiler directory should be removed")
 	}
 
-	// Файл может остаться или быть удален в зависимости от реализации
-	// Проверяем что директории удалены
+	// File may remain or be removed depending on implementation
+	// Check that directories are removed
 }
 
 // TestFileSystemCache_ClearAll_WithPartialErrors tests ClearAll with partial errors
@@ -662,7 +662,7 @@ func TestFileSystemCache_ClearAll_WithPartialErrors(t *testing.T) {
 
 	cacheDir := cache.GetCacheDir()
 
-	// Создаем несколько компиляторов
+	// Create several compilers
 	languages := []string{"rust", "go", "zig"}
 	for _, lang := range languages {
 		compilerPath := filepath.Join(cacheDir, lang)
@@ -672,13 +672,13 @@ func TestFileSystemCache_ClearAll_WithPartialErrors(t *testing.T) {
 		}
 	}
 
-	// ClearAll должен удалить все директории
+	// ClearAll should remove all directories
 	err = cache.ClearAll()
 	if err != nil {
 		t.Fatalf("ClearAll failed: %v", err)
 	}
 
-	// Проверяем что все директории удалены
+	// Check that all directories were removed
 	for _, lang := range languages {
 		compilerPath := filepath.Join(cacheDir, lang)
 		if _, err := os.Stat(compilerPath); !os.IsNotExist(err) {
@@ -715,7 +715,7 @@ func TestFileSystemCache_GetCacheSize_WithMultipleCompilers(t *testing.T) {
 
 	cacheDir := cache.GetCacheDir()
 
-	// Создаем несколько компиляторов с файлами разного размера
+	// Create several compilers with files of different sizes
 	languages := []string{"rust", "go", "zig"}
 	for i, lang := range languages {
 		compilerPath := filepath.Join(cacheDir, lang)
@@ -724,7 +724,7 @@ func TestFileSystemCache_GetCacheSize_WithMultipleCompilers(t *testing.T) {
 			t.Fatalf("Failed to create compiler directory: %v", err)
 		}
 
-		// Создаем файл разного размера для каждого компилятора
+		// Create file of different size for each compiler
 		testFile := filepath.Join(compilerPath, "binary")
 		fileSize := (i + 1) * 1000
 		data := make([]byte, fileSize)
@@ -755,7 +755,7 @@ func TestFileSystemCache_GetCacheSize_AfterClearAll(t *testing.T) {
 
 	cacheDir := cache.GetCacheDir()
 
-	// Создаем компилятор с файлом
+	// Create compiler with file
 	compilerPath := filepath.Join(cacheDir, "rust")
 	err = os.MkdirAll(compilerPath, 0755)
 	if err != nil {
@@ -768,7 +768,7 @@ func TestFileSystemCache_GetCacheSize_AfterClearAll(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	// Проверяем размер до очистки
+	// Check size before clearing
 	sizeBefore, err := cache.GetCacheSize()
 	if err != nil {
 		t.Fatalf("GetCacheSize failed: %v", err)
@@ -778,13 +778,13 @@ func TestFileSystemCache_GetCacheSize_AfterClearAll(t *testing.T) {
 		t.Error("Expected cache size > 0 before ClearAll")
 	}
 
-	// Очищаем кеш
+	// Clear cache
 	err = cache.ClearAll()
 	if err != nil {
 		t.Fatalf("ClearAll failed: %v", err)
 	}
 
-	// Проверяем размер после очистки
+	// Check size after clearing
 	sizeAfter, err := cache.GetCacheSize()
 	if err != nil {
 		t.Fatalf("GetCacheSize failed: %v", err)

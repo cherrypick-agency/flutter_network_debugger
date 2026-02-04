@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// RuntimeSettings — единичная запись с активными настройками рантайма.
+// RuntimeSettings — single record with active runtime settings.
 type RuntimeSettings struct {
 	ID int64
 
@@ -29,7 +29,7 @@ type RuntimeSettings struct {
 	UpdatedAt time.Time
 }
 
-// ThrottleProfile — пользовательский пресет скорости/надёжности.
+// ThrottleProfile — user preset for speed/reliability.
 type ThrottleProfile struct {
 	ID            string
 	Name          string

@@ -11,7 +11,7 @@ import (
 
 // Composer 1.
 func TestNewDetector(t *testing.T) {
-	// Тест без привилегий
+	// Test without privileges
 	detector, err := NewDetector(false)
 	if err != nil {
 		t.Fatalf("NewDetector(false) error = %v", err)
@@ -21,13 +21,13 @@ func TestNewDetector(t *testing.T) {
 		t.Fatal("NewDetector(false) returned nil")
 	}
 
-	// Проверяем что это реализует интерфейс
+	// Check that it implements the interface
 	_, ok := detector.(domain.IProcessDetector)
 	if !ok {
 		t.Error("Detector does not implement IProcessDetector interface")
 	}
 
-	// Тест с привилегиями
+	// Test with privileges
 	detector2, err := NewDetector(true)
 	if err != nil {
 		t.Fatalf("NewDetector(true) error = %v", err)
@@ -49,7 +49,7 @@ func TestNewDetectorForPlatform(t *testing.T) {
 		t.Fatal("newDetectorForPlatform() returned nil")
 	}
 
-	// Проверяем что возвращается gopsutilAdapter
+	// Check that gopsutilAdapter is returned
 	_, ok := detector.(*gopsutilAdapter)
 	if !ok {
 		t.Error("newDetectorForPlatform() did not return gopsutilAdapter")

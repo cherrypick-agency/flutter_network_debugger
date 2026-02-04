@@ -107,7 +107,7 @@ func ValidateWASMWithLanguage(ctx context.Context, wasmBytes []byte, language st
 	if _, ok := err.(*MissingProcessFunctionError); ok {
 		return NewWASMValidationError(language, err)
 	}
-	// Также полезно для "неправильной сигнатуры" — ошибка похожа на missing export по UX.
+	// Also useful for "invalid signature" — the error is similar to missing export in terms of UX.
 	if strings.Contains(err.Error(), "invalid process signature") {
 		return NewWASMValidationError(language, err)
 	}

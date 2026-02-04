@@ -39,7 +39,7 @@ class DioRefreshTokenInterceptor extends QueuedInterceptor {
         }
 
         if (e is AppHttp401Exception) {
-          // Пробрасываем AppHttp401Exception дальше для глобальной обработки
+          // Pass AppHttp401Exception further for global handling
           return handler.reject(DioException(
             requestOptions: err.requestOptions,
             error: e,
@@ -58,7 +58,7 @@ class DioRefreshTokenInterceptor extends QueuedInterceptor {
         return handler.resolve(await _retry(err.requestOptions));
       } catch (e) {
         if (e is DioException) {
-          // Если будет плохая связь, то следующий интерцептор обработает для ретрая
+          // If there's poor connectivity, the next interceptor will handle retry
           return handler.next(err);
         }
 

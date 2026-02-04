@@ -27,7 +27,7 @@ class AppHttpClientTokenRefresherImpl implements AppHttpClientTokenRefresher {
             '🔄 Refresh URL: ${httpClient.defaultHost}${httpClient.refreshPath}');
       }
 
-      // Запрос на обновление токена
+      // Token refresh request
       final response = await dioForInternalRequests.post(
         '${httpClient.defaultHost}${httpClient.refreshPath}',
         data: {
@@ -66,8 +66,8 @@ class AppHttpClientTokenRefresherImpl implements AppHttpClientTokenRefresher {
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
 
-        // НЕ разлогиниваем на 404 (эндпоинт может отсутствовать в окружении)
-        // Разлогиниваем только на 401/403      TODO  || statusCode == 404)?
+        // DO NOT log out on 404 (endpoint may not exist in the environment)
+        // Log out only on 401/403      TODO  || statusCode == 404)?
         if (statusCode == 401 || statusCode == 403) {
           if (kDebugMode) {
             print(
@@ -86,7 +86,7 @@ class AppHttpClientTokenRefresherImpl implements AppHttpClientTokenRefresher {
         }
       }
 
-      // Пробрасываем дальше для обработки на уровне запроса/UX
+      // Rethrow for handling at the request/UX level
       rethrow;
     }
   }

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Colorizer решает, печатать ли ANSI и подбирает цвета для элементов.
+// Colorizer decides whether to print ANSI and selects colors for elements.
 type Colorizer struct {
 	mode domain.ColorMode
 	use  bool
@@ -23,12 +23,12 @@ func NewColorizer(mode domain.ColorMode, out io.Writer) *Colorizer {
 	case domain.ColorNever:
 		use = false
 	default:
-		// auto: если stdout — TTY
+		// auto: if stdout is a TTY
 		if f, ok := out.(*os.File); ok {
 			use = isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 		}
 	}
-	// windows: современные терминалы поддерживают ANSI, fallback не нужен
+	// windows: modern terminals support ANSI, no fallback needed
 	_ = runtime.GOOS
 	return &Colorizer{mode: mode, use: use}
 }
@@ -40,22 +40,22 @@ func (c *Colorizer) wrap(code string, s string) string {
 	return "\x1b[" + code + "m" + s + "\x1b[0m"
 }
 
-// Публичные helpers для ключевых элементов
+// Public helpers for key elements
 func (c *Colorizer) Method(method string) string {
 	up := strings.ToUpper(method)
 	switch up {
 	case "GET":
-		return c.wrap("32", up) // зелёный
+		return c.wrap("32", up) // green
 	case "POST":
-		return c.wrap("36", up) // циан
+		return c.wrap("36", up) // cyan
 	case "PUT":
-		return c.wrap("33", up) // жёлтый
+		return c.wrap("33", up) // yellow
 	case "DELETE":
-		return c.wrap("31", up) // красный
+		return c.wrap("31", up) // red
 	case "PATCH":
-		return c.wrap("35", up) // магента
+		return c.wrap("35", up) // magenta
 	default:
-		return c.wrap("37", up) // серый
+		return c.wrap("37", up) // gray
 	}
 }
 

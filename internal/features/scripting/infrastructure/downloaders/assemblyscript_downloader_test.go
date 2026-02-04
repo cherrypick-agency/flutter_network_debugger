@@ -156,7 +156,7 @@ func TestAssemblyScriptDownloader_Extract_TarGz(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "node.tar.gz")
 
-	// Создаем tar.gz архив с node-* директорией
+	// Create tar.gz archive with node-* directory
 	file, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive: %v", err)
@@ -169,7 +169,7 @@ func TestAssemblyScriptDownloader_Extract_TarGz(t *testing.T) {
 	tarWriter := tar.NewWriter(gzWriter)
 	defer tarWriter.Close()
 
-	// Добавляем директорию node-v20.11.0
+	// Add directory node-v20.11.0
 	header := &tar.Header{
 		Name:     "node-v20.11.0-darwin-x64/",
 		Typeflag: tar.TypeDir,
@@ -179,7 +179,7 @@ func TestAssemblyScriptDownloader_Extract_TarGz(t *testing.T) {
 		t.Fatalf("Failed to write tar header: %v", err)
 	}
 
-	// Добавляем файл в директорию
+	// Add file to directory
 	content := []byte("node binary")
 	header = &tar.Header{
 		Name:     "node-v20.11.0-darwin-x64/bin/node",
@@ -198,13 +198,13 @@ func TestAssemblyScriptDownloader_Extract_TarGz(t *testing.T) {
 	gzWriter.Close()
 	file.Close()
 
-	// Извлекаем
+	// Extract
 	err = downloader.Extract(archivePath, targetDir)
 	if err != nil {
 		t.Fatalf("Extract() error = %v, want nil", err)
 	}
 
-	// Проверяем что файл извлечен в корень targetDir
+	// Check that file is extracted to targetDir root
 	nodeFile := filepath.Join(targetDir, "bin", "node")
 	if _, err := os.Stat(nodeFile); os.IsNotExist(err) {
 		t.Error("node binary was not extracted to target directory root")
@@ -222,7 +222,7 @@ func TestAssemblyScriptDownloader_Extract_NoNodeDir(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "node.tar.gz")
 
-	// Создаем tar.gz архив без node-* директории
+	// Create tar.gz archive without node-* directory
 	file, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive: %v", err)
@@ -235,7 +235,7 @@ func TestAssemblyScriptDownloader_Extract_NoNodeDir(t *testing.T) {
 	tarWriter := tar.NewWriter(gzWriter)
 	defer tarWriter.Close()
 
-	// Добавляем обычный файл
+	// Add regular file
 	content := []byte("test")
 	header := &tar.Header{
 		Name:     "test.txt",
@@ -254,7 +254,7 @@ func TestAssemblyScriptDownloader_Extract_NoNodeDir(t *testing.T) {
 	gzWriter.Close()
 	file.Close()
 
-	// Извлечение должно вернуть ошибку
+	// Extraction should return error
 	err = downloader.Extract(archivePath, targetDir)
 	if err == nil {
 		t.Error("Extract() should return error when node directory not found")

@@ -8,7 +8,7 @@ import (
 func TestRewriteSetCookiesForProxy(t *testing.T) {
 	t.Parallel()
 
-	// Mode=off — без изменений
+	// Mode=off — no changes
 	{
 		h := newHeaderFake()
 		raw := "a=b; Path=/"
@@ -16,11 +16,11 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		rewriteSetCookiesForProxy(h, CookieRewriteOptions{Mode: CookieModeOff})
 		vals := h.Values("Set-Cookie")
 		if len(vals) != 1 || vals[0] != raw {
-			t.Fatalf("ожидалось без изменений, получили: %#v", vals)
+			t.Fatalf("expected no changes, got: %#v", vals)
 		}
 	}
 
-	// isolate + hostOnly — переименование и удаление Domain
+	// isolate + hostOnly — rename and remove Domain
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "id=1; Domain=example.com; Path=/")
@@ -32,17 +32,17 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		vals := h.Values("Set-Cookie")
 		if len(vals) != 1 {
-			t.Fatalf("ожидался 1 заголовок, получили: %d", len(vals))
+			t.Fatalf("expected 1 header, got: %d", len(vals))
 		}
 		if !strings.HasPrefix(vals[0], "gpx_ns__id=") {
-			t.Fatalf("ожидалось переименование с namespace, получили: %q", vals[0])
+			t.Fatalf("expected rename with namespace, got: %q", vals[0])
 		}
 		if strings.Contains(vals[0], "Domain=") {
-			t.Fatalf("при hostOnly домен должен удаляться: %q", vals[0])
+			t.Fatalf("with hostOnly domain should be removed: %q", vals[0])
 		}
 	}
 
-	// proxyHost c безопасным доменом
+	// proxyHost with safe domain
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "s=v; Path=/")
@@ -55,11 +55,11 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		out := h.Values("Set-Cookie")[0]
 		if !strings.Contains(out, "; Domain=proxy.example") {
-			t.Fatalf("ожидался выставленный домен proxy.example: %q", out)
+			t.Fatalf("expected domain proxy.example to be set: %q", out)
 		}
 	}
 
-	// proxyHost с IP/localhost — домен убирается
+	// proxyHost with IP/localhost — domain is removed
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "s=v; Domain=example.com; Path=/")
@@ -72,11 +72,11 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		out := h.Values("Set-Cookie")[0]
 		if strings.Contains(out, "Domain=") {
-			t.Fatalf("для IP домен должен быть удалён: %q", out)
+			t.Fatalf("for IP domain should be removed: %q", out)
 		}
 	}
 
-	// PathStrategy=prefix — путь префикс
+	// PathStrategy=prefix — path prefix
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "x=1")
@@ -89,11 +89,11 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		out := h.Values("Set-Cookie")[0]
 		if !strings.Contains(out, "; Path=/proxy") {
-			t.Fatalf("ожидался Path=/proxy: %q", out)
+			t.Fatalf("expected Path=/proxy: %q", out)
 		}
 	}
 
-	// __Host- — принудительный Path=/ и без Domain
+	// __Host- — forced Path=/ and no Domain
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "__Host-sid=1; Domain=example.com; Path=/x")
@@ -108,17 +108,17 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		out := h.Values("Set-Cookie")[0]
 		if strings.Contains(out, "Domain=") {
-			t.Fatalf("для __Host- домена быть не должно: %q", out)
+			t.Fatalf("for __Host- domain should not exist: %q", out)
 		}
 		if !strings.Contains(out, "; Path=/") {
-			t.Fatalf("для __Host- путь должен быть /: %q", out)
+			t.Fatalf("for __Host- path should be /: %q", out)
 		}
 		if !strings.Contains(out, "; Secure") {
-			t.Fatalf("для __Host- под HTTPS должен быть Secure: %q", out)
+			t.Fatalf("for __Host- under HTTPS Secure should be set: %q", out)
 		}
 	}
 
-	// HTTPS + SameSite=None — Secure обязателен
+	// HTTPS + SameSite=None — Secure is required
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "a=b; SameSite=None")
@@ -131,11 +131,11 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		out := h.Values("Set-Cookie")[0]
 		if !strings.Contains(out, "; Secure") {
-			t.Fatalf("SameSite=None под HTTPS должен включать Secure: %q", out)
+			t.Fatalf("SameSite=None under HTTPS should include Secure: %q", out)
 		}
 	}
 
-	// множественные + непарсибельная строка
+	// multiple + unparseable string
 	{
 		h := newHeaderFake()
 		h.Add("Set-Cookie", "ok=1; Path=/")
@@ -148,10 +148,10 @@ func TestRewriteSetCookiesForProxy(t *testing.T) {
 		})
 		vals := h.Values("Set-Cookie")
 		if len(vals) != 2 {
-			t.Fatalf("ожидались 2 строки Set-Cookie, получили: %d", len(vals))
+			t.Fatalf("expected 2 Set-Cookie strings, got: %d", len(vals))
 		}
 		if vals[1] != "badtoken" {
-			t.Fatalf("непарсибельная строка должна пройти как есть: %q", vals[1])
+			t.Fatalf("unparseable string should pass as-is: %q", vals[1])
 		}
 	}
 }

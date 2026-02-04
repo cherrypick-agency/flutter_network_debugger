@@ -32,9 +32,9 @@ func TestLoadStability(t *testing.T) {
 	pool := manager.GetPool(script)
 	testInput := []byte(`{"test": "load"}`)
 
-	// Test parameters - уменьшаем нагрузку для стабильности
-	targetRPS := 100            // Requests per second (уменьшено с 1000)
-	duration := 1 * time.Minute // Test duration (уменьшено с 10 минут)
+	// Test parameters - reduce load for stability
+	targetRPS := 100            // Requests per second (reduced from 1000)
+	duration := 1 * time.Minute // Test duration (reduced from 10 minutes)
 	totalRequests := targetRPS * int(duration.Seconds())
 
 	t.Logf("Starting load test: %d req/s for %v (total: %d requests)", targetRPS, duration, totalRequests)
@@ -54,7 +54,7 @@ func TestLoadStability(t *testing.T) {
 		timeoutCount atomic.Int64
 	)
 
-	// Rate limiter using ticker - защита от слишком быстрого тикера
+	// Rate limiter using ticker - protection against too fast ticker
 	var ticker *time.Ticker
 	if targetRPS > 0 {
 		interval := time.Second / time.Duration(targetRPS)
@@ -142,7 +142,7 @@ func TestLoadStability(t *testing.T) {
 			t.Logf("Test cancelled after %v", time.Since(start))
 			goto done
 		}
-		// Защита от зависания: если прошло больше 2 минут без прогресса, завершаем
+		// Protection against hanging: if more than 2 minutes passed without progress, finish
 		if time.Since(lastProgress) > 2*time.Minute {
 			t.Logf("Test stalled, no progress for 2 minutes, finishing early")
 			break
@@ -333,7 +333,7 @@ func TestLoadStabilityMultiScript(t *testing.T) {
 	close(progressStop)
 	<-progressDone // Wait for progress reporter to finish
 
-	// Дожидаемся завершения всех заспавненных запросов (они запускаются в горутинах).
+	// Wait for all spawned requests to complete (they are launched in goroutines).
 	targetTotal := int64(scriptCount * rpsPerScript * int(duration.Seconds()))
 	{
 		deadline := time.After(5 * time.Second)

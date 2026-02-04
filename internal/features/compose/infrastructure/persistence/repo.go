@@ -27,7 +27,7 @@ func (r *LibraryRepo) LoadLibrary(ctx context.Context) (domain.ComposeLibrary, e
 	}
 	var lib domain.ComposeLibrary
 	if err := json.Unmarshal([]byte(m.JSON), &lib); err != nil {
-		// вернём пустую библиотеку при ошибке формата
+		// return an empty library on format error
 		return domain.ComposeLibrary{Collections: []domain.ComposeCollection{}, RequestsByID: map[string]domain.ComposeRequestTemplate{}}, nil
 	}
 	if lib.RequestsByID == nil {

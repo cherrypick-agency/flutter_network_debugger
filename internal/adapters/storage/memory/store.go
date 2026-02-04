@@ -235,9 +235,9 @@ func (s *Store) ListSessions(ctx context.Context, f usecase.SessionFilter) ([]do
 		}
 		// capture filter
 		if f.CaptureID != nil {
-			// Если клиент явно попросил includeUnassigned, добавляем сюда и "paused/unassigned" сессии.
-			// Это нужно, чтобы UI мог показать сессии, которые появились пока запись была остановлена,
-			// не теряя при этом фокус на текущем captureId.
+			// If client explicitly requested includeUnassigned, also include "paused/unassigned" sessions here.
+			// This is needed so that UI can show sessions that appeared while recording was stopped,
+			// without losing focus on current captureId.
 			if f.IncludeUnassigned && e.session.CaptureID == nil {
 				// ok
 			} else {
@@ -420,7 +420,7 @@ func (s *Store) AppendEvent(ctx context.Context, sessionID string, ev domain.Eve
 			s.droppedEventsTotal++
 		}
 		e.events = append(e.events, ev)
-		// не учитываем системные события в пользовательской статистике
+		// don't count system events in user statistics
 		if ev.Namespace != "/_sys" {
 			e.session.Events.Total++
 			e.session.Events.SIO++
@@ -506,8 +506,8 @@ func (s *Store) ListHTTPTransactions(ctx context.Context, sessionID string, from
 	return out, next, nil
 }
 
-// FindHTTPTransaction возвращает транзакцию по её ID для указанной сессии.
-// Идём от конца списка к началу, так как чаще нужен последний элемент.
+// FindHTTPTransaction returns transaction by its ID for the specified session.
+// Iterating from end to start, as the last element is more often needed.
 func (s *Store) FindHTTPTransaction(sessionID string, txID string) (domain.HTTPTransaction, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -32,19 +32,19 @@ func Test_hexPreview(t *testing.T) {
 	if hexPreview([]byte{}) != "" {
 		t.Fatalf("empty -> empty string expected")
 	}
-	// Маленький буфер
+	// Small buffer
 	small := []byte{0x00, 0x01, 0xFA}
 	if got := hexPreview(small); got != "0001fa" {
 		t.Fatalf("unexpected hex: %q", got)
 	}
-	// Ограничение 256 байт
+	// 256 byte limit
 	big := bytes.Repeat([]byte{0xAB}, 300)
 	got := hexPreview(big)
-	// ожидаем длину кодировки 256 байт -> 512 символов hex
+	// expect encoding length 256 bytes -> 512 hex characters
 	if len(got) != 512 {
 		t.Fatalf("expected 512 hex chars, got %d", len(got))
 	}
-	// и что все символы соответствуют 0xAB => "ab"
+	// and that all characters correspond to 0xAB => "ab"
 	for i := 0; i < len(got); i += 2 {
 		if got[i:i+2] != "ab" {
 			t.Fatalf("unexpected pair at %d: %q", i, got[i:i+2])

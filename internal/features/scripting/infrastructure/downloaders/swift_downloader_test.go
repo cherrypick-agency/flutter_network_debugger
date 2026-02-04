@@ -193,7 +193,7 @@ func TestSwiftDownloader_Extract_TarGz(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "swift.tar.gz")
 
-	// Создаем tar.gz архив
+	// Create tar.gz archive
 	file, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive: %v", err)
@@ -206,7 +206,7 @@ func TestSwiftDownloader_Extract_TarGz(t *testing.T) {
 	tarWriter := tar.NewWriter(gzWriter)
 	defer tarWriter.Close()
 
-	// Добавляем файл
+	// Add file
 	content := []byte("swift wasm sdk")
 	header := &tar.Header{
 		Name:     "swift.txt",
@@ -225,13 +225,13 @@ func TestSwiftDownloader_Extract_TarGz(t *testing.T) {
 	gzWriter.Close()
 	file.Close()
 
-	// Извлекаем
+	// Extract
 	err = downloader.Extract(archivePath, targetDir)
 	if err != nil {
 		t.Fatalf("Extract() error = %v, want nil", err)
 	}
 
-	// Проверяем что файл извлечен
+	// Check that file is extracted
 	swiftFile := filepath.Join(targetDir, "swift.txt")
 	if _, err := os.Stat(swiftFile); os.IsNotExist(err) {
 		t.Error("swift file was not extracted")

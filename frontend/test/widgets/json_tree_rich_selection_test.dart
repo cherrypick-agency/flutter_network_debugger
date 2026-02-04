@@ -6,7 +6,7 @@ import 'package:frontend/theme/app_theme.dart';
 
 void main() {
   testWidgets(
-    'JsonTreeRich: в строках нет recognizer у TextSpan (выделение не блокируется)',
+    'JsonTreeRich: no recognizer on TextSpan in strings (selection is not blocked)',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(

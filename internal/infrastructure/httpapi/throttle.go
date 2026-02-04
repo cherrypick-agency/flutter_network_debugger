@@ -11,7 +11,7 @@ import (
 	"network-debugger/internal/infrastructure/config"
 )
 
-// byteTokenBucket — простой токен‑бакет для ограничения по байтам в секунду.
+// byteTokenBucket — simple token bucket for rate limiting by bytes per second.
 type byteTokenBucket struct {
 	rateBytesPerSec float64
 	capacity        float64
@@ -25,12 +25,12 @@ func newBucket(bytesPerSec int) *byteTokenBucket {
 		return nil
 	}
 	r := float64(bytesPerSec)
-	// небольшая ёмкость, чтобы позволить мелкие всплески
+	// small capacity to allow minor bursts
 	cap := 2 * r
 	return &byteTokenBucket{rateBytesPerSec: r, capacity: cap, tokens: cap, last: time.Now()}
 }
 
-// waitN блокирует текущую горутину, пока не накопится минимум n токенов.
+// waitN blocks the current goroutine until at least n tokens accumulate.
 func (b *byteTokenBucket) waitN(n int) {
 	if b == nil || n <= 0 {
 		return
@@ -38,7 +38,7 @@ func (b *byteTokenBucket) waitN(n int) {
 	need := float64(n)
 	for {
 		b.mu.Lock()
-		// пополним
+		// refill
 		now := time.Now()
 		elapsed := now.Sub(b.last).Seconds()
 		if elapsed > 0 {
@@ -53,9 +53,9 @@ func (b *byteTokenBucket) waitN(n int) {
 			b.mu.Unlock()
 			return
 		}
-		// сколько ждать до появления недостающих токенов
+		// how long to wait until missing tokens appear
 		deficit := need - b.tokens
-		// минимальный слип 1мс, чтобы не крутить цикл
+		// minimum sleep 1ms to avoid spinning the loop
 		sleep := time.Duration(deficit / b.rateBytesPerSec * float64(time.Second))
 		if sleep < time.Millisecond {
 			sleep = time.Millisecond
@@ -65,7 +65,7 @@ func (b *byteTokenBucket) waitN(n int) {
 	}
 }
 
-// throttledReader — читает из base и ограничивает пропускную способность.
+// throttledReader — reads from base and limits throughput.
 type throttledReader struct {
 	base io.Reader
 	bkt  *byteTokenBucket
@@ -79,7 +79,7 @@ func (r *throttledReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// lossyReader — имитирует потерю пакетов: иногда прерывает поток ошибкой.
+// lossyReader — simulates packet loss: sometimes interrupts the stream with an error.
 type lossyReader struct {
 	base    io.Reader
 	rng     *rand.Rand
@@ -87,25 +87,25 @@ type lossyReader struct {
 }
 
 func (r *lossyReader) Read(p []byte) (int, error) {
-	// мелкая вероятность прервать чтение до реального I/O
+	// small probability to interrupt read before actual I/O
 	if r.losePct > 0 && r.rng.Intn(100) < r.losePct {
 		return 0, io.ErrUnexpectedEOF
 	}
 	return r.base.Read(p)
 }
 
-// throttledConnRead — оборачивает net.Conn и ограничивает скорость чтения.
+// throttledConnRead — wraps net.Conn and limits read speed.
 type throttledConnRead struct {
 	net.Conn
 	bkt *byteTokenBucket
-	// для имитации потерь
+	// for simulating losses
 	rng     *rand.Rand
 	losePct int
 }
 
 func (c *throttledConnRead) Read(p []byte) (int, error) {
 	if c.losePct > 0 && c.rng.Intn(100) < c.losePct {
-		// имитируем обрыв соединения
+		// simulate connection drop
 		return 0, io.ErrUnexpectedEOF
 	}
 	n, err := c.Conn.Read(p)
@@ -120,7 +120,7 @@ func kbpsToBytesPerSec(kbps int) int { // kbit/s -> bytes/s
 	if kbps <= 0 {
 		return 0
 	}
-	// 1000/8 ~= 125; используем 1000 для привычной сетевой величины
+	// 1000/8 ~= 125; using 1000 for familiar network unit
 	return int(float64(kbps) * 1000.0 / 8.0)
 }
 
@@ -143,7 +143,7 @@ func wrapConnForThrottle(cfg *config.Config, conn net.Conn, direction string) ne
 		return conn
 	}
 	if cfg.ThrottleOffline {
-		// немедленный обрыв даст клиенту представление об оффлайне
+		// immediate disconnect will give client an impression of being offline
 		_ = conn.Close()
 		return conn
 	}
@@ -152,13 +152,13 @@ func wrapConnForThrottle(cfg *config.Config, conn net.Conn, direction string) ne
 		return conn
 	}
 
-	// Применяем latency wrapper первым (самый внутренний слой)
-	// Latency должна быть на самом низком уровне, чтобы влиять на каждый пакет
+	// Apply latency wrapper first (innermost layer)
+	// Latency should be at the lowest level to affect every packet
 	if cfg.ThrottleLatencyMs > 0 {
 		conn = wrapConnWithLatency(conn, cfg.ThrottleLatencyMs, cfg.ThrottleLatencyJitter)
 	}
 
-	// Затем применяем bandwidth throttling и packet loss (если настроены)
+	// Then apply bandwidth throttling and packet loss (if configured)
 	var bps int
 	switch direction {
 	case "down": // upstream -> client
@@ -169,7 +169,7 @@ func wrapConnForThrottle(cfg *config.Config, conn net.Conn, direction string) ne
 		bps = 0
 	}
 
-	// Применяем bandwidth/packet loss wrapper если есть что применять
+	// Apply bandwidth/packet loss wrapper if there's something to apply
 	if bps > 0 || cfg.ThrottlePacketLoss > 0 {
 		conn = &throttledConnRead{
 			Conn:    conn,
@@ -182,8 +182,8 @@ func wrapConnForThrottle(cfg *config.Config, conn net.Conn, direction string) ne
 	return conn
 }
 
-// throttleSleepWS — для путей, где нет прямого доступа к net.Conn (gorilla/websocket).
-// Засыпает пропорционально размеру сообщения.
+// throttleSleepWS — for paths where there's no direct access to net.Conn (gorilla/websocket).
+// Sleeps proportionally to message size.
 func (d *Deps) throttleSleepWS(direction domain.Direction, n int) {
 	if n <= 0 || !d.Cfg.ThrottleEnabled {
 		return
@@ -205,23 +205,23 @@ func (d *Deps) throttleSleepWS(direction domain.Direction, n int) {
 	time.Sleep(sleep)
 }
 
-// injectLatency — добавляет искусственную задержку для симуляции высокой latency (RTT/ping).
-// В отличие от bandwidth throttling, который замедляет передачу данных пропорционально их размеру,
-// latency injection добавляет фиксированную задержку к каждой операции независимо от размера данных.
-// Это симулирует географическое расстояние, спутниковые каналы или перегруженные сети.
+// injectLatency — adds artificial delay to simulate high latency (RTT/ping).
+// Unlike bandwidth throttling, which slows data transfer proportionally to data size,
+// latency injection adds a fixed delay to each operation regardless of data size.
+// This simulates geographic distance, satellite links, or congested networks.
 func (d *Deps) injectLatency() {
 	if !d.Cfg.ThrottleEnabled || d.Cfg.ThrottleLatencyMs <= 0 {
 		return
 	}
 	baseLatency := time.Duration(d.Cfg.ThrottleLatencyMs) * time.Millisecond
 
-	// Добавляем jitter (случайную вариацию) если настроен
+	// Add jitter (random variation) if configured
 	if d.Cfg.ThrottleLatencyJitter > 0 {
 		jitter := rand.Intn(d.Cfg.ThrottleLatencyJitter*2+1) - d.Cfg.ThrottleLatencyJitter
 		baseLatency += time.Duration(jitter) * time.Millisecond
 	}
 
-	// Не даём latency стать отрицательной из-за jitter
+	// Don't let latency become negative due to jitter
 	if baseLatency < 0 {
 		baseLatency = 0
 	}
@@ -229,8 +229,8 @@ func (d *Deps) injectLatency() {
 	time.Sleep(baseLatency)
 }
 
-// latencyConnWrapper — обёртка для net.Conn, добавляющая latency к каждой операции Read/Write.
-// Это симулирует RTT (Round Trip Time) для каждого пакета данных.
+// latencyConnWrapper — wrapper for net.Conn that adds latency to each Read/Write operation.
+// This simulates RTT (Round Trip Time) for each data packet.
 type latencyConnWrapper struct {
 	net.Conn
 	latencyMs int
@@ -262,7 +262,7 @@ func (c *latencyConnWrapper) injectDelay() {
 	}
 }
 
-// wrapConnWithLatency — оборачивает connection для добавления latency injection.
+// wrapConnWithLatency — wraps connection to add latency injection.
 func wrapConnWithLatency(conn net.Conn, latencyMs int, jitterMs int) net.Conn {
 	if conn == nil || latencyMs <= 0 {
 		return conn

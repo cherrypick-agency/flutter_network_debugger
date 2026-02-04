@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Минимальный тест ws:// через forward‑proxy: Upgrade 101 и один фрейм эхо
+// Minimal ws:// test via forward-proxy: Upgrade 101 and one echo frame
 func TestForwardProxy_WS_UpgradeAndEcho(t *testing.T) {
 
 	echoSrv, echoWS := startEchoWSServer(t)

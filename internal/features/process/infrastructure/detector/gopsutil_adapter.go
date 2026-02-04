@@ -11,17 +11,17 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// gopsutilAdapter - универсальный детектор используя gopsutil (fallback для всех платформ)
+// gopsutilAdapter - universal detector using gopsutil (fallback for all platforms)
 type gopsutilAdapter struct{}
 
-// DetectByPort - найти процесс по локальному порту
+// DetectByPort - find process by local port
 func (g *gopsutilAdapter) DetectByPort(ctx context.Context, port uint32) (*domain.ProcessInfo, error) {
 	conns, err := net.ConnectionsWithContext(ctx, "tcp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connections: %w", err)
 	}
 
-	// Найти соединение по порту
+	// Find connection by port
 	for _, conn := range conns {
 		if conn.Laddr.Port == port {
 			return g.DetectByPID(ctx, conn.Pid)
@@ -31,7 +31,7 @@ func (g *gopsutilAdapter) DetectByPort(ctx context.Context, port uint32) (*domai
 	return nil, fmt.Errorf("no process found for port %d", port)
 }
 
-// DetectByPID - получить информацию о процессе по PID
+// DetectByPID - get process information by PID
 func (g *gopsutilAdapter) DetectByPID(ctx context.Context, pid int32) (*domain.ProcessInfo, error) {
 	proc, err := process.NewProcessWithContext(ctx, pid)
 	if err != nil {
@@ -49,7 +49,7 @@ func (g *gopsutilAdapter) DetectByPID(ctx context.Context, pid int32) (*domain.P
 	}, nil
 }
 
-// RequiresPrivileges - зависит от платформы
+// RequiresPrivileges - depends on platform
 func (g *gopsutilAdapter) RequiresPrivileges() bool {
 	return false // gopsutil gracefully handles permission errors
 }

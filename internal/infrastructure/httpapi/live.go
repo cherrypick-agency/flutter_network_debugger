@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// LiveSessions хранит активные WS-сессии для инжекта сообщений из API.
+// LiveSessions stores active WS sessions for message injection from API.
 type LiveSessions struct {
 	mu sync.RWMutex
 	m  map[string]*liveWS
@@ -15,7 +15,7 @@ type LiveSessions struct {
 type liveWS struct {
 	client   *websocket.Conn
 	upstream *websocket.Conn
-	// один writer в gorilla/websocket
+	// single writer in gorilla/websocket
 	writeMu sync.Mutex
 }
 
@@ -41,7 +41,7 @@ func (ls *LiveSessions) Unregister(sessionID string) {
 	ls.mu.Unlock()
 }
 
-// CloseAll закрывает все активные WS-сессии (клиент и апстрим), очищая карту.
+// CloseAll closes all active WS sessions (client and upstream), clearing the map.
 func (ls *LiveSessions) CloseAll() {
 	ls.mu.Lock()
 	for id, w := range ls.m {
@@ -56,8 +56,8 @@ func (ls *LiveSessions) CloseAll() {
 	ls.mu.Unlock()
 }
 
-// SendText отправляет текстовый фрейм в заданном направлении.
-// direction: "client->upstream" или "upstream->client".
+// SendText sends a text frame in the specified direction.
+// direction: "client->upstream" or "upstream->client".
 func (ls *LiveSessions) SendText(sessionID string, direction string, payload string) error {
 	ls.mu.RLock()
 	w := ls.m[sessionID]

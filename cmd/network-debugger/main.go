@@ -41,7 +41,7 @@ import (
 
 func main() {
 	loadDotEnv()
-	// Флаги CLI режима вывода сессий
+	// CLI mode session output flags
 	var cliMode bool
 	var cliPreset string
 	var cliFields string
@@ -49,7 +49,7 @@ func main() {
 	var cliColor string
 	var cliFilter string
 	var openBrowserOnStart bool
-	// Флаги для портов (для desktop приложения)
+	// Port flags (for desktop application)
 	var apiPort int
 	var proxyPort int
 	var dataDir string
@@ -66,12 +66,12 @@ func main() {
 	flag.StringVar(&dataDir, "data-dir", "", "data directory for database and files")
 	flag.Parse()
 
-	// Применяем CLI флаги через env variables ДО инициализации конфига
+	// Apply CLI flags via env variables BEFORE config initialization
 	if dataDir != "" {
-		// Переопределяем путь к БД и файлам
+		// Override database and files path
 		dbPath := filepath.Join(dataDir, "network_debugger.db")
 		os.Setenv("DB_PATH", dbPath)
-		// Также создаем директорию если её нет
+		// Also create directory if it doesn't exist
 		if err := os.MkdirAll(dataDir, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to create data directory: %v\n", err)
 			os.Exit(1)
@@ -79,7 +79,7 @@ func main() {
 	}
 
 	if proxyPort > 0 {
-		// Устанавливаем дефолтный порт для forward proxy (используется при первой инициализации БД)
+		// Set default port for forward proxy (used during first DB initialization)
 		os.Setenv("FORWARD_PROXY_DEFAULT_PORT", fmt.Sprintf("%d", proxyPort))
 	}
 
@@ -88,7 +88,7 @@ func main() {
 		cfg.NoBrowser = true
 	}
 
-	// Применяем CLI флаги поверх конфигурации
+	// Apply CLI flags on top of configuration
 	if apiPort > 0 {
 		cfg.Addr = fmt.Sprintf(":%d", apiPort)
 	}
@@ -102,7 +102,7 @@ func main() {
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: cfg, Logger: logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
 
-	// Init SQLite (GORM) — будет использовано фичами (settings/compose)
+	// Init SQLite (GORM) - will be used by features (settings/compose)
 	if dbPath := dbinfra.PathFromEnv(); dbPath != "" {
 		// detect first-run db file creation (best effort)
 		created := false
@@ -115,7 +115,7 @@ func main() {
 			logger.Error().Err(err).Str("path", dbPath).Msg("db init failed")
 		} else {
 			deps.DB = gdb
-			// Автоматическое создание таблиц при первом запуске
+			// Automatic table creation on first run
 			if err := gdb.AutoMigrate(
 				&setp.RuntimeSettingsModel{},
 				&setp.ThrottleProfileModel{},
@@ -133,8 +133,8 @@ func main() {
 			); err != nil {
 				logger.Error().Err(err).Msg("db automigrate failed")
 			}
-			// Дополнительные индексы/ограничения, которых нет в моделях GORM (композитные UNIQUE)
-			// Это устраняет ошибку SQLite: "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint".
+			// Additional indexes/constraints not present in GORM models (composite UNIQUE)
+			// This fixes SQLite error: "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint".
 			if err := gdb.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_tags_unique ON session_tags(session_id, tag_name)`).Error; err != nil {
 				logger.Warn().Err(err).Msg("failed to ensure idx_session_tags_unique")
 			}
@@ -406,10 +406,10 @@ func main() {
 		}
 	}()
 
-	// CLI режим: запускаем печать сессий после старта сервера
+	// CLI mode: start printing sessions after server starts
 	var cliCancel context.CancelFunc
 	if cliMode {
-		// Подготовим опции
+		// Prepare options
 		opts := cliopts.Options{Preset: cliPreset, BodyPreviewBytes: cliBodyBytes, Filter: cliFilter}
 		switch strings.ToLower(cliColor) {
 		case "always":
@@ -441,8 +441,8 @@ func main() {
 	}
 
 	// Launch browser to downloads page on start (best-effort)
-	// Важно: `network-debugger` — это backend/proxy без embedded Web UI.
-	// Поэтому auto-open делаем только opt-in (флаг или env).
+	// Important: `network-debugger` is a backend/proxy without embedded Web UI.
+	// Therefore auto-open is opt-in only (flag or env).
 	if shouldOpenBrowser(openBrowserOnStart) && !cfg.NoBrowser {
 		go func() {
 			time.Sleep(300 * time.Millisecond)

@@ -7,7 +7,7 @@ import (
 	"network-debugger/internal/features/sessions_cli/presentation/theme"
 )
 
-// LineSection печатает краткую строку с основной информацией.
+// LineSection prints a brief line with main information.
 type LineSection struct {
 	Colors *theme.Colorizer
 }

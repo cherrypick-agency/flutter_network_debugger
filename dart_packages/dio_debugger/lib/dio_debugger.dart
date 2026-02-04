@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_debugger/src/reverse_proxy_interceptor.dart';
 export 'package:dio_debugger/src/reverse_proxy_interceptor.dart';
 
-// Условный импорт: на Web используем заглушку, на IO — читаем OS ENV
+// Conditional import: on Web we use a stub, on IO - we read OS ENV
 import 'package:dio_debugger/src/env/env_reader_stub.dart'
     if (dart.library.io) 'package:dio_debugger/src/env/env_reader_io.dart';
 import 'package:dio_debugger/src/forward_proxy_stub.dart'
@@ -14,7 +14,7 @@ import 'package:dio_debugger/src/platform_stub.dart'
     if (dart.library.io) 'package:dio_debugger/src/platform_io.dart'
     as platform;
 
-// Значения compile-time из --dart-define, при сборке Flutter/Dart
+// Compile-time values from --dart-define, during Flutter/Dart build
 const String _kDefineUpstream = String.fromEnvironment('UPSTREAM_BASE_URL');
 const String _kDefineApiHost = String.fromEnvironment('API_HOST');
 const String _kDefineProxy = String.fromEnvironment('PROXY_BASE_URL');
@@ -30,20 +30,20 @@ const String _kDefineProxyMode = String.fromEnvironment('PROXY_MODE');
 const String _kDefineHttpProxyAllowBadCerts =
     String.fromEnvironment('HTTP_PROXY_ALLOW_BAD_CERTS');
 
-/// Простая утилита для привязки reverse‑proxy к существующему Dio экземпляру.
-/// По умолчанию пытается взять настройки из ENV переменных (через Platform.environment):
-///   - UPSTREAM_BASE_URL (пример: https://dev.api.padelme.app)
-///   - PROXY_BASE_URL (пример: http://localhost:9091 или localhost:9091)
-///   - PROXY_HTTP_PATH (пример: /httpproxy)
-/// Можно явно переопределить через аргументы.
+/// Simple utility for attaching reverse-proxy to an existing Dio instance.
+/// By default, it tries to get settings from ENV variables (via Platform.environment):
+///   - UPSTREAM_BASE_URL (example: https://dev.api.padelme.app)
+///   - PROXY_BASE_URL (example: http://localhost:9091 or localhost:9091)
+///   - PROXY_HTTP_PATH (example: /httpproxy)
+/// Can be explicitly overridden via arguments.
 class DioDebugger {
   DioDebugger._();
 
-  /// Подключает интерсептор reverse‑proxy к [dio]. Возвращает тот же [dio] для чейнинга.
+  /// Attaches the reverse-proxy interceptor to [dio]. Returns the same [dio] for chaining.
   ///
-  /// [resetCaptureOnHotRestart] - если true, отправляет запрос на прокси для очистки
-  /// предыдущих сессий и создания нового capture ID. Полезно для разделения
-  /// hot restart'ов при разработке.
+  /// [resetCaptureOnHotRestart] - if true, sends a request to the proxy to clear
+  /// previous sessions and create a new capture ID. Useful for separating
+  /// hot restarts during development.
   static Dio attach(
     Dio dio, {
     String? upstreamBaseUrl,
@@ -62,9 +62,9 @@ class DioDebugger {
     final enabledEffective = enabled ?? _computeEnabledFromEnv();
     if (!enabledEffective) return dio;
 
-    // Источник upstream в порядке приоритета:
-    // 1) явный аргумент upstreamBaseUrl
-    // 2) dio.options.baseUrl (если не пустой)
+    // Upstream source in priority order:
+    // 1) explicit argument upstreamBaseUrl
+    // 2) dio.options.baseUrl (if not empty)
     // 3) --dart-define / ENV
     String upstream = upstreamBaseUrl ?? '';
     if (upstream.trim().isEmpty) {
@@ -159,7 +159,7 @@ class DioDebugger {
       readEnvVar('DIO_DEBUGGER_ENABLED'),
       readEnvVar('HTTP_PROXY_ENABLED'),
     ]);
-    if (v == null) return true; // по умолчанию включено в dev
+    if (v == null) return true; // enabled by default in dev
     final sv = v.trim().toLowerCase();
     return sv == '1' || sv == 'true' || sv == 'yes' || sv == 'on';
   }

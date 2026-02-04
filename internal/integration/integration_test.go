@@ -111,7 +111,7 @@ func startAppServer(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: config.Config{CORSAllowOrigin: "*"}, Logger: &logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
-	// Поднимем временную SQLite, чтобы была доступна ProxySvc/ProxyRt
+	// Set up temporary SQLite so that ProxySvc/ProxyRt is available
 	tmp := t.TempDir()
 	dbPath := tmp + "/test.db"
 	if gdb, err := dbpkg.NewSQLite(dbPath); err == nil {
@@ -198,7 +198,7 @@ func TestWSProxy_EndToEnd_SessionFramesEventsAndAPI(t *testing.T) {
 		t.Fatalf("proxy dial failed: %v", err)
 	}
 
-	// ждём session_started
+	// wait for session_started
 	var sessionID string
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -222,12 +222,12 @@ started:
 		t.Fatal("no session_started received")
 	}
 
-	// Отправляем простой текст
+	// Send simple text
 	if err := clientConn.WriteMessage(websocket.TextMessage, []byte("hello")); err != nil {
 		t.Fatalf("write hello failed: %v", err)
 	}
 
-	// Отправляем два Socket.IO события: с ack id и без
+	// Send two Socket.IO events: with ack id and without
 	msgAck := "42/chat,17[\"ack\",{\"foo\":\"bar\"}]"
 	msgNoAck := "42/chat,[\"message\",{\"token\":\"secret\"}]"
 	if err := clientConn.WriteMessage(websocket.TextMessage, []byte(msgAck)); err != nil {
@@ -237,12 +237,12 @@ started:
 		t.Fatalf("write sio no-ack failed: %v", err)
 	}
 
-	// Небольшая пауза, чтобы upstream эхо вернул ответы и всё записалось
+	// Short pause so upstream echo returns responses and everything is recorded
 	time.Sleep(300 * time.Millisecond)
 
 	_ = clientConn.Close()
 
-	// Ждём хотя бы один session_ended
+	// Wait for at least one session_ended
 	ended := false
 	endWait := time.Now().Add(3 * time.Second)
 	for time.Now().Before(endWait) && !ended {
@@ -270,7 +270,7 @@ started:
 		t.Fatalf("monitor did not receive event_added events")
 	}
 
-	// REST API проверки
+	// REST API checks
 	httpClient := appSrv.Client()
 
 	// /api/sessions
@@ -947,9 +947,9 @@ func TestSustainedRealtimeSession(t *testing.T) {
 // 		}(s)
 // 	}
 // 	wg.Wait()
-// 	// Даем время на обработку всех событий и фреймов
+// 	// Give time to process all events and frames
 // 	time.Sleep(1 * time.Second)
-// 	// Проверяем, что счетчики обновились, даем дополнительное время если нужно
+// 	// Check that counters updated, give additional time if needed
 // 	deadline := time.Now().Add(2 * time.Second)
 // 	for time.Now().Before(deadline) {
 // 		if atomic.LoadInt32(&monFrames) > 0 && atomic.LoadInt32(&monEvents) > 0 {
@@ -958,7 +958,7 @@ func TestSustainedRealtimeSession(t *testing.T) {
 // 		time.Sleep(100 * time.Millisecond)
 // 	}
 // 	close(monDone)
-// 	// Даем время мониторингу завершить чтение
+// 	// Give time for monitor to finish reading
 // 	time.Sleep(300 * time.Millisecond)
 // 	monWg.Wait()
 //
@@ -1088,13 +1088,13 @@ func TestSustainedRealtimeSession(t *testing.T) {
 // 	// send a couple of client frames too
 // 	_ = c.WriteMessage(websocket.TextMessage, []byte("client-hello"))
 // 	_ = c.WriteMessage(websocket.TextMessage, []byte("42/chat,[\"cli_event\",{}]"))
-// 	// Сервер отправляет события каждые 80ms в течение 5 тиков (400ms), плюс нужно время на обработку
+// 	// Server sends events every 80ms for 5 ticks (400ms), plus processing time needed
 // 	time.Sleep(1 * time.Second)
 // 	_ = c.Close()
-// 	// Даем время на обработку всех событий и фреймов
+// 	// Give time to process all events and frames
 // 	time.Sleep(1 * time.Second)
-// 	// Проверяем, что счетчики обновились, даем дополнительное время если нужно
-// 	// При параллельном выполнении тестов может потребоваться больше времени
+// 	// Check that counters updated, give additional time if needed
+// 	// When running tests in parallel, more time may be required
 // 	deadline := time.Now().Add(4 * time.Second)
 // 	for time.Now().Before(deadline) {
 // 		if atomic.LoadInt32(&hasEvent) > 0 && atomic.LoadInt32(&hasFrame) > 0 {
@@ -1102,7 +1102,7 @@ func TestSustainedRealtimeSession(t *testing.T) {
 // 		}
 // 		time.Sleep(200 * time.Millisecond)
 // 	}
-// 	// Даем еще немного времени мониторингу на завершение чтения
+// 	// Give a bit more time for monitor to finish reading
 // 	time.Sleep(500 * time.Millisecond)
 // 	monCancel()
 // 	monWg.Wait()
@@ -1246,13 +1246,13 @@ func TestUpstreamDialFailureSetsClosedError(t *testing.T) {
 	appSrv, deps := startAppServer(t)
 	defer appSrv.Close()
 
-	badTarget := "ws://127.0.0.1:9/ws" // порт discard, не слушает
+	badTarget := "ws://127.0.0.1:9/ws" // discard port, not listening
 	// create session attempt
 	_, _, _ = websocket.DefaultDialer.Dial(wsURLFromHTTP(appSrv.URL, "/wsproxy")+"?_target="+url.QueryEscape(badTarget), nil)
-	// подождём обработку
+	// wait for processing
 	time.Sleep(200 * time.Millisecond)
 
-	// проверим, что есть сессия с ошибкой/закрытием
+	// check that there's a session with error/closure
 	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000")
 	if err != nil {
 		t.Fatal(err)
@@ -1266,7 +1266,7 @@ func TestUpstreamDialFailureSetsClosedError(t *testing.T) {
 		} `json:"items"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&list)
-	// допускаем, что могла создаться и закрыться
+	// allow that it could have been created and closed
 	hasErr := false
 	for _, it := range list.Items {
 		if it.Error != nil || it.ClosedAt != nil {
@@ -1293,7 +1293,7 @@ func TestListFiltersAndRedaction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
-		// отправим SIO-event и чистый JSON, чтобы preview прошёл через JSON компактор и редактирование
+		// send SIO-event and pure JSON so preview goes through JSON compactor and redaction
 		_ = c.WriteMessage(websocket.TextMessage, []byte("42/chat,[\"payload\",{\"access_token\":\"secret\"}]"))
 		_ = c.WriteMessage(websocket.TextMessage, []byte("{\"access_token\":\"secret\",\"x\":1}"))
 		time.Sleep(50 * time.Millisecond)

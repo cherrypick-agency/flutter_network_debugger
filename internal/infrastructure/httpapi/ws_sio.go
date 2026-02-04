@@ -8,9 +8,9 @@ import (
 	"network-debugger/pkg/shared/id"
 )
 
-// recordSIOIfAny пытается распарсить Socket.IO событие из сырого текста raw
-// и, если получилось, записывает событие в стор и шлёт уведомление в монитор.
-// Возвращает true, если событие распознано и записано.
+// recordSIOIfAny tries to parse Socket.IO event from raw text
+// and if successful, writes event to store and sends notification to monitor.
+// Returns true if event was recognized and recorded.
 func (d *Deps) recordSIOIfAny(sessionID string, raw string, frameID string) bool {
 	if raw == "" {
 		return false
@@ -25,7 +25,7 @@ func (d *Deps) recordSIOIfAny(sessionID string, raw string, frameID string) bool
 		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "event_added", ID: sessionID, Ref: e.ID})
 		return true
 	}
-	// Фолбэки для распространённых форм
+	// Fallbacks for common forms
 	if len(raw) >= 2 && raw[0] == '4' && raw[1] == '3' {
 		if a := tryExtractAckID(raw); a >= 0 {
 			aa := a

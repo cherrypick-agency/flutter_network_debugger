@@ -7,7 +7,7 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// processConfigDTO - DTO для конфигурации детекции процессов
+// processConfigDTO - DTO for process detection configuration
 type processConfigDTO struct {
 	Enabled         bool `json:"enabled"`
 	UseHelperTool   bool `json:"useHelperTool"`
@@ -23,7 +23,7 @@ func (d *Deps) handleV1ProcessConfig(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		// Получить текущую конфигурацию
+		// Get current configuration
 		cfg, err := d.ProcessSvc.GetConfig(ctx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -43,14 +43,14 @@ func (d *Deps) handleV1ProcessConfig(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(dto)
 
 	case http.MethodPost:
-		// Обновить конфигурацию
+		// Update configuration
 		var dto processConfigDTO
 		if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		// Конвертировать DTO в domain entity
+		// Convert DTO to domain entity
 		cfg := &domain.DetectionConfig{
 			ID:              1, // singleton
 			Enabled:         dto.Enabled,
@@ -66,7 +66,7 @@ func (d *Deps) handleV1ProcessConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Вернуть обновленную конфигурацию
+		// Return updated configuration
 		updatedDto := processConfigDTO{
 			Enabled:         cfg.Enabled,
 			UseHelperTool:   cfg.UseHelperTool,

@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// RuntimeSettingsModel — singleton с ID=1
+// RuntimeSettingsModel — singleton with ID=1
 type RuntimeSettingsModel struct {
 	ID                 int64 `gorm:"primaryKey"`
 	ResponseDelayMs    int

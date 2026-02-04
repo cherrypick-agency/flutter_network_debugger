@@ -16,7 +16,7 @@ import (
 	"network-debugger/pkg/shared/id"
 )
 
-// pendingEntry хранит внутреннее состояние ожидания решения
+// pendingEntry stores internal state for pending decision
 type pendingEntry struct {
 	item      InterceptItem
 	decisionR chan any // *HTTPRequestDecision | *HTTPResponseDecision | string("cancel")
@@ -29,10 +29,10 @@ type InterceptorManager struct {
 	monitor *MonitorHub
 	metrics *obs.Metrics
 
-	// Правила, отсортированные по Priority ASC
+	// Rules sorted by Priority ASC
 	rules []InterceptRule
 
-	// Очередь и элементы
+	// Queue and elements
 	items map[string]*pendingEntry
 	queue []string
 }
@@ -56,11 +56,11 @@ func (m *InterceptorManager) interceptTimeout() time.Duration {
 	return timeout
 }
 
-// UpdateRules полностью заменяет набор правил и сортирует по приоритету
+// UpdateRules completely replaces the rule set and sorts by priority
 func (m *InterceptorManager) UpdateRules(rules []InterceptRule) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// нормализуем и сортируем
+	// normalize and sort
 	out := make([]InterceptRule, 0, len(rules))
 	for _, r := range rules {
 		if r.ID == "" {
@@ -95,7 +95,7 @@ func (m *InterceptorManager) ListPending(limit int) []InterceptItem {
 	return out
 }
 
-// PeekItem возвращает снапшот элемента в очереди, если он ещё PENDING
+// PeekItem returns a snapshot of the queue element if it is still PENDING
 func (m *InterceptorManager) PeekItem(id string) (InterceptItem, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -105,7 +105,7 @@ func (m *InterceptorManager) PeekItem(id string) (InterceptItem, bool) {
 	return InterceptItem{}, false
 }
 
-// helper: loopback detection для простого решения auth
+// helper: loopback detection for simple auth decision
 func isLoopback(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -115,7 +115,7 @@ func isLoopback(addr string) bool {
 	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
 }
 
-// enqueue создаёт pending элемент и запускает таймер
+// enqueue creates a pending element and starts the timer
 func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 	pe := &pendingEntry{item: it, decisionR: make(chan any, 1)}
 	timeout := m.interceptTimeout()
@@ -126,7 +126,7 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 			return
 		}
 		pe.item.State = StateTimedOut
-		// По умолчанию — auto-continue
+		// By default — auto-continue
 		select {
 		case pe.decisionR <- "timeout":
 		default:
@@ -149,7 +149,7 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 			m.mu.Unlock()
 			return nil
 		}
-		// auto-continue-oldest: снимаем самый старый без вмешательства
+		// auto-continue-oldest: remove the oldest without intervention
 		oldest := m.queue[0]
 		m.queue = m.queue[1:]
 		if old := m.items[oldest]; old != nil {
@@ -178,7 +178,7 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 	return pe
 }
 
-// finalize снимает элемент из очереди
+// finalize removes element from queue
 func (m *InterceptorManager) finalize(id string, newState InterceptItemState) (*pendingEntry, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -190,7 +190,7 @@ func (m *InterceptorManager) finalize(id string, newState InterceptItemState) (*
 		return nil, false
 	}
 	pe.item.State = newState
-	// удаляем из очереди
+	// remove from queue
 	for i, qid := range m.queue {
 		if qid == id {
 			m.queue = append(m.queue[:i], m.queue[i+1:]...)
@@ -207,12 +207,12 @@ func (m *InterceptorManager) finalize(id string, newState InterceptItemState) (*
 	return pe, true
 }
 
-// InterceptRequest — основной блокирующий перехват запроса
+// InterceptRequest — main blocking request interception
 func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID string, r *http.Request, bodyPreview string, capBody []byte, contentType string) (*HTTPRequestDecision, error) {
 	if m == nil || !m.cfg.InterceptEnabled || !m.cfg.InterceptRequests {
 		return nil, nil
 	}
-	// Матчим правило с учётом StopProcessing; Once — отключает правило после срабатывания
+	// Match rule considering StopProcessing; Once — disables rule after firing
 	var matched *InterceptRule
 	m.mu.Lock()
 	for i := range m.rules {
@@ -228,7 +228,7 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 			if ru.StopProcessing {
 				break
 			}
-			// если StopProcessing=false — продолжаем искать ниже по приоритету
+			// if StopProcessing=false — continue searching lower priority rules
 		}
 	}
 	if matched != nil && matched.Once {
@@ -261,7 +261,7 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 		return nil, nil
 	}
 
-	// Ждём решения/таймаута/контекста
+	// Wait for decision/timeout/context
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -281,7 +281,7 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 	}
 }
 
-// InterceptResponse — блокирующий перехват ответа
+// InterceptResponse — blocking response interception
 func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID string, resp *http.Response, bodyPreview string, capBody []byte, contentType string) (*HTTPResponseDecision, error) {
 	if m == nil || !m.cfg.InterceptEnabled || !m.cfg.InterceptResponses {
 		return nil, nil
@@ -350,7 +350,7 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 	}
 }
 
-// ContinueRequest применяет решение к pending запросу
+// ContinueRequest applies decision to pending request
 func (m *InterceptorManager) ContinueRequest(id string, d *HTTPRequestDecision) bool {
 	pe, ok := m.finalize(id, StateApplied)
 	if !ok {
@@ -366,7 +366,7 @@ func (m *InterceptorManager) ContinueRequest(id string, d *HTTPRequestDecision) 
 	return true
 }
 
-// ContinueResponse применяет решение к pending ответу
+// ContinueResponse applies decision to pending response
 func (m *InterceptorManager) ContinueResponse(id string, d *HTTPResponseDecision) bool {
 	pe, ok := m.finalize(id, StateApplied)
 	if !ok {
@@ -382,7 +382,7 @@ func (m *InterceptorManager) ContinueResponse(id string, d *HTTPResponseDecision
 	return true
 }
 
-// Cancel отменяет pending
+// Cancel cancels pending item
 func (m *InterceptorManager) Cancel(id string) bool {
 	pe, ok := m.finalize(id, StateCanceled)
 	if !ok {

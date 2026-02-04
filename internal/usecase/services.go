@@ -25,7 +25,7 @@ func NewSessionService(s SessionRepository, f FrameRepository, e EventRepository
 	return &SessionService{sessions: s, frames: f, events: e, httpTxs: h}
 }
 
-// SetProcessService - установить сервис детекции процессов (опционально)
+// SetProcessService sets the process detection service (optional)
 func (s *SessionService) SetProcessService(p *processuc.Service) {
 	s.processSvc = p
 }
@@ -34,24 +34,24 @@ func (s *SessionService) SetProcessService(p *processuc.Service) {
 func (s *SessionService) SessionsRepoUnsafe() any { return s.sessions }
 
 func (s *SessionService) Create(ctx context.Context, sess domain.Session) error {
-	// Попытаться детектировать процесс если ProcessService доступен
+	// Try to detect process if ProcessService is available
 	if s.processSvc != nil && sess.ProcessInfo == nil {
-		// Извлечь порт из ClientAddr (формат: "ip:port")
+		// Extract port from ClientAddr (format: "ip:port")
 		if port := extractPortFromAddr(sess.ClientAddr); port > 0 {
 			processInfo, err := s.processSvc.DetectForConnection(ctx, port)
 			if err == nil && processInfo != nil {
 				sess.ProcessInfo = processInfo
 			}
-			// Игнорируем ошибки детекции - это не критично
+			// Ignore detection errors - this is not critical
 		}
 	}
 
 	return s.sessions.CreateSession(ctx, sess)
 }
 
-// extractPortFromAddr - извлечь порт из адреса вида "ip:port"
+// extractPortFromAddr extracts port from address in "ip:port" format
 func extractPortFromAddr(addr string) uint32 {
-	// Простой парсинг последней части после ":"
+	// Simple parsing of the last part after ":"
 	for i := len(addr) - 1; i >= 0; i-- {
 		if addr[i] == ':' {
 			portStr := addr[i+1:]

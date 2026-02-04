@@ -4,51 +4,48 @@ import 'package:frontend/services/prefs.dart';
 
 void main() {
   setUp(() async {
-    // Чистим мок перед каждым тестом
+    // Clear mock before each test
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test(
-    'save/load сохраняет только переданные поля и подставляет дефолты',
-    () async {
-      // Arrange
-      final prefs = PrefsService();
+  test('save/load saves only passed fields and applies defaults', () async {
+    // Arrange
+    final prefs = PrefsService();
 
-      // Act
-      await prefs.save(
-        baseUrl: 'http://x',
-        targetWs: 'ws://y',
-        q: 'abc',
-        httpMinDurationMs: 250,
-        groupBy: 'domain',
-        respDelayEnabled: true,
-        respDelayValue: '1000-2000',
-      );
-      final loaded = await prefs.load();
+    // Act
+    await prefs.save(
+      baseUrl: 'http://x',
+      targetWs: 'ws://y',
+      q: 'abc',
+      httpMinDurationMs: 250,
+      groupBy: 'domain',
+      respDelayEnabled: true,
+      respDelayValue: '1000-2000',
+    );
+    final loaded = await prefs.load();
 
-      // Assert
-      expect(loaded['baseUrl'], 'http://x');
-      expect(loaded['targetWs'], 'ws://y');
-      expect(loaded['q'], 'abc');
-      expect(
-        loaded['httpMethod'],
-        'any',
-        reason: 'не передавали — должен быть дефолт',
-      );
-      expect(
-        loaded['httpStatus'],
-        'any',
-        reason: 'дефолт, если не сохраняли явным образом',
-      );
-      expect(loaded['httpMinDuration'], '250');
-      expect(loaded['groupBy'], 'domain');
-      expect(loaded['respDelayEnabled'], 'true');
-      expect(loaded['respDelayValue'], '1000-2000');
-    },
-  );
+    // Assert
+    expect(loaded['baseUrl'], 'http://x');
+    expect(loaded['targetWs'], 'ws://y');
+    expect(loaded['q'], 'abc');
+    expect(
+      loaded['httpMethod'],
+      'any',
+      reason: 'not passed - should be default',
+    );
+    expect(
+      loaded['httpStatus'],
+      'any',
+      reason: 'default if not explicitly saved',
+    );
+    expect(loaded['httpMinDuration'], '250');
+    expect(loaded['groupBy'], 'domain');
+    expect(loaded['respDelayEnabled'], 'true');
+    expect(loaded['respDelayValue'], '1000-2000');
+  });
 
   test(
-    'saveThemeModeString/loadThemeModeString: дефолт system и запись значения',
+    'saveThemeModeString/loadThemeModeString: default is system and saves value',
     () async {
       // Arrange
       final prefs = PrefsService();
@@ -60,26 +57,29 @@ void main() {
     },
   );
 
-  test('saveSince/loadSince: корректный ISO-UTC и обработка мусора', () async {
-    // Arrange
-    final prefs = PrefsService();
-    final ts = DateTime.utc(2024, 1, 2, 3, 4, 5);
+  test(
+    'saveSince/loadSince: correct ISO-UTC format and garbage handling',
+    () async {
+      // Arrange
+      final prefs = PrefsService();
+      final ts = DateTime.utc(2024, 1, 2, 3, 4, 5);
 
-    // Act
-    await prefs.saveSince(ts);
-    final loaded = await prefs.loadSince();
+      // Act
+      await prefs.saveSince(ts);
+      final loaded = await prefs.loadSince();
 
-    // Assert
-    expect(loaded, isNotNull);
-    expect(loaded!.toUtc(), ts);
+      // Assert
+      expect(loaded, isNotNull);
+      expect(loaded!.toUtc(), ts);
 
-    // Мусорное значение — должно вернуть null
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString('clear_since_ts', 'n/a');
-    expect(await prefs.loadSince(), isNull);
-  });
+      // Garbage value - should return null
+      final sp = await SharedPreferences.getInstance();
+      await sp.setString('clear_since_ts', 'n/a');
+      expect(await prefs.loadSince(), isNull);
+    },
+  );
 
-  test('saveMonitorLog/loadMonitorLog: режет до 500 строк', () async {
+  test('saveMonitorLog/loadMonitorLog: truncates to 500 lines', () async {
     // Arrange
     final prefs = PrefsService();
     final big = List<String>.generate(800, (i) => 'line_$i');
@@ -94,17 +94,20 @@ void main() {
     expect(got.last, 'line_499');
   });
 
-  test('saveIsRecording/loadIsRecording: дефолт true и запись false', () async {
-    // Arrange
-    final prefs = PrefsService();
+  test(
+    'saveIsRecording/loadIsRecording: default is true and saves false',
+    () async {
+      // Arrange
+      final prefs = PrefsService();
 
-    // Act / Assert
-    expect(await prefs.loadIsRecording(), isTrue);
-    await prefs.saveIsRecording(false);
-    expect(await prefs.loadIsRecording(), isFalse);
-  });
+      // Act / Assert
+      expect(await prefs.loadIsRecording(), isTrue);
+      await prefs.saveIsRecording(false);
+      expect(await prefs.loadIsRecording(), isFalse);
+    },
+  );
 
-  test('saveRecentWindow: minutes клэмпится в [1, 1440]', () async {
+  test('saveRecentWindow: minutes is clamped to [1, 1440]', () async {
     // Arrange
     final prefs = PrefsService();
 
@@ -114,24 +117,24 @@ void main() {
 
     // Assert
     expect(await prefs.loadRecentWindowEnabled(), isTrue);
-    // Последнее сохранение берём как истинное состояние
+    // Take the last save as the true state
     expect(await prefs.loadRecentWindowMinutes(), 1440);
   });
 
   test(
-    'saveVisualDensity/loadVisualDensity: дефолт standard и запись значения',
+    'saveVisualDensity/loadVisualDensity: default is standard and saves value',
     () async {
       // Arrange
       final prefs = PrefsService();
 
-      // Act / Assert дефолт
+      // Act / Assert default
       expect(await prefs.loadVisualDensity(), 'standard');
 
-      // Сохраняем compact
+      // Save compact
       await prefs.saveVisualDensity('compact');
       expect(await prefs.loadVisualDensity(), 'compact');
 
-      // Сохраняем comfortable
+      // Save comfortable
       await prefs.saveVisualDensity('comfortable');
       expect(await prefs.loadVisualDensity(), 'comfortable');
     },

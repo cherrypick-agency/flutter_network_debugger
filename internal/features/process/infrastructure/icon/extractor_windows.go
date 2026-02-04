@@ -12,17 +12,17 @@ import (
 
 type windowsExtractor struct{}
 
-// ExtractByPID - извлечь иконку по PID (TODO: реализовать через lxn/win)
+// ExtractByPID - extract icon by PID (TODO: implement via lxn/win)
 func (e *windowsExtractor) ExtractByPID(ctx context.Context, pid int32) (*domain.AppIcon, error) {
-	// TODO: Реализовать через github.com/lxn/win + ExtractIconEx
+	// TODO: Implement via github.com/lxn/win + ExtractIconEx
 	return nil, fmt.Errorf("Windows icon extraction not implemented yet")
 }
 
-// ExtractByPath - извлечь иконку по пути (TODO: реализовать через lxn/win)
+// ExtractByPath - extract icon by path (TODO: implement via lxn/win)
 func (e *windowsExtractor) ExtractByPath(ctx context.Context, path string) (*domain.AppIcon, error) {
-	// TODO: Реализовать через ExtractIconEx API
-	// 1. Использовать win.ExtractIconEx для извлечения HICON
-	// 2. Конвертировать HICON в PNG bytes
-	// 3. Вернуть AppIcon{Format: "png", Data: bytes}
+	// TODO: Implement via ExtractIconEx API
+	// 1. Use win.ExtractIconEx to extract HICON
+	// 2. Convert HICON to PNG bytes
+	// 3. Return AppIcon{Format: "png", Data: bytes}
 	return nil, fmt.Errorf("Windows icon extraction not implemented yet")
 }

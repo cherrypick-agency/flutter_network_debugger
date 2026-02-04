@@ -459,8 +459,8 @@ void main() {
       // Assert - all state cleared
       expect(store.state, ExportImportState.selectMode);
       expect(store.selectedMode, isNull);
-      // Эти значения приходят снаружи (контекст диалога) и остаются,
-      // чтобы при возврате назад опции экспорта не "умирали".
+      // These values come from outside (dialog context) and persist,
+      // so that export options don't "die" when navigating back.
       expect(store.visibleSessionsCount, 10);
       expect(store.importFileData, isNull);
     });

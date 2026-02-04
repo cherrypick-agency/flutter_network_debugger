@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// Тесты придерживаются AAA: Arrange-Act-Assert, F.I.R.S.T.: быстрые, независимые,
-// повторяемые, само-утверждающиеся и своевременные.
+// Tests follow AAA: Arrange-Act-Assert, F.I.R.S.T.: fast, independent,
+// repeatable, self-asserting, and timely.
 
 func Test_computeNamespaceFromURL_variants(t *testing.T) {
 	t.Parallel()
@@ -121,7 +121,7 @@ func Test_parseSetCookieLine_and_buildSetCookieLine_roundtrip(t *testing.T) {
 	}
 
 	got := buildSetCookieLine(p)
-	// Ожидаемый порядок атрибутов соответствует реализации buildSetCookieLine
+	// Expected attribute order matches the buildSetCookieLine implementation
 	want := strings.Join([]string{
 		"N=V",
 		"Domain=.example.com",
@@ -218,7 +218,7 @@ func Test_rewriteOutboundCookieHeaderForUpstream_isolate_filtersByNamespace(t *t
 		t.Fatalf("exactly one Cookie header expected, got %d", len(gotVals))
 	}
 	got := gotVals[0]
-	// Порядок сохраняется как при обходе пар (a=1 затем c=4)
+	// Order is preserved as when iterating pairs (a=1 then c=4)
 	if got != "a=1; c=4" {
 		t.Fatalf("Cookie rewrite expected 'a=1; c=4', got %q", got)
 	}
@@ -237,7 +237,7 @@ func Test_rewriteOutboundCookieHeaderForUpstream_nonIsolate_noChange(t *testing.
 	}
 }
 
-// (продолжение тестов) — используем те же импорты, что и выше
+// (continuation of tests) — using the same imports as above
 
 type headerAdapter http.Header
 
@@ -500,7 +500,7 @@ func TestRewriteSetCookie_PreserveUnknownAttributesAtEnd(t *testing.T) {
 	if !strings.Contains(out, "; Foo=Bar") {
 		t.Fatalf("unknown attribute must be preserved: %s", out)
 	}
-	// должен быть в конце (после стандартных атрибутов)
+	// should be at the end (after standard attributes)
 	if !strings.HasSuffix(out, "; Foo=Bar") {
 		t.Fatalf("unknown attribute should be appended at the end: %s", out)
 	}

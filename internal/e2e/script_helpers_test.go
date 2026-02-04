@@ -74,7 +74,7 @@ func createScript(t *testing.T, baseURL string, wasmData []byte, language string
 
 	payload := map[string]any{
 		"name":        "E2E Test Script - " + language,
-		"description": "Автоматически созданный E2E тест",
+		"description": "Automatically created E2E test",
 		"runtime":     "extism",
 		"code":        base64.StdEncoding.EncodeToString(wasmData),
 		"language":    language,

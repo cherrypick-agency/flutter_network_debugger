@@ -5,29 +5,29 @@ import (
 	"time"
 )
 
-// IConfigRepository - интерфейс для персистентности конфигурации детекции
+// IConfigRepository - interface for detection configuration persistence
 type IConfigRepository interface {
-	// Load - загрузить конфигурацию из базы данных
+	// Load - load configuration from database
 	Load(ctx context.Context) (*DetectionConfig, error)
 
-	// Save - сохранить конфигурацию в базу данных
+	// Save - save configuration to database
 	Save(ctx context.Context, cfg *DetectionConfig) error
 }
 
-// IIconCacheRepository - интерфейс для кеша иконок
+// IIconCacheRepository - interface for icon cache
 type IIconCacheRepository interface {
-	// Get - получить иконку из кеша по ключу
+	// Get - get icon from cache by key
 	Get(key string) (*AppIcon, error)
 
-	// Set - сохранить иконку в кеш с указанным TTL
+	// Set - save icon to cache with specified TTL
 	Set(key string, icon *AppIcon, ttl time.Duration) error
 
-	// Delete - удалить иконку из кеша
+	// Delete - delete icon from cache
 	Delete(key string) error
 
-	// Clear - очистить весь кеш
+	// Clear - clear entire cache
 	Clear() error
 
-	// CleanupExpired - удалить истекшие записи из кеша
+	// CleanupExpired - remove expired entries from cache
 	CleanupExpired() error
 }

@@ -81,7 +81,7 @@ func rewriteSetCookiesForProxy(h HeaderLike, opts CookieRewriteOptions) {
 	for _, raw := range orig {
 		p, ok := parseSetCookieLine(raw)
 		if !ok {
-			// не смогли распарсить — оставляем как есть
+			// failed to parse — leave as-is
 			h.Add("Set-Cookie", raw)
 			continue
 		}
@@ -157,7 +157,7 @@ func rewriteOutboundCookieHeaderForUpstream(h HeaderLike, opts CookieRewriteOpti
 		val := strings.TrimSpace(p[eq+1:])
 		if strings.HasPrefix(name, pfx) {
 			origName := strings.TrimPrefix(name, pfx)
-			// только куки текущего namespace попадут наверх
+			// only cookies from current namespace will be sent upstream
 			out = append(out, origName+"="+val)
 		}
 	}

@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// MapRuleModel — GORM модель таблицы map_rules
+// MapRuleModel — GORM model for map_rules table
 type MapRuleModel struct {
 	ID             string `gorm:"type:text;primaryKey"`
 	Enabled        bool
@@ -17,7 +17,7 @@ type MapRuleModel struct {
 	Kind           string `gorm:"type:text"`
 	StopProcessing bool
 
-	MethodsJSON string `gorm:"type:text"` // JSON массива методов
+	MethodsJSON string `gorm:"type:text"` // JSON array of methods
 	HostPattern string `gorm:"type:text"`
 	PathPattern string `gorm:"type:text"`
 	PatternType string `gorm:"type:text"`

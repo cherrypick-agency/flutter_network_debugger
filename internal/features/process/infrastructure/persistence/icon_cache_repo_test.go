@@ -56,7 +56,7 @@ func TestIconCacheRepo_Set_Get(t *testing.T) {
 		t.Fatalf("Set() error = %v, want nil", err)
 	}
 
-	// Получаем иконку
+	// Get the icon
 	retrieved, err := repo.Get(key)
 	if err != nil {
 		t.Fatalf("Get() error = %v, want nil", err)
@@ -105,13 +105,13 @@ func TestIconCacheRepo_Get_Expired(t *testing.T) {
 		Data:   []byte("test data"),
 	}
 
-	// Устанавливаем с отрицательным TTL (уже истек)
+	// Set with negative TTL (already expired)
 	err := repo.Set(key, icon, -1*time.Hour)
 	if err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
-	// Пытаемся получить - должно вернуть ошибку
+	// Try to get - should return error
 	_, err = repo.Get(key)
 	if err == nil {
 		t.Error("Get() with expired key should return error")
@@ -129,18 +129,18 @@ func TestIconCacheRepo_Delete(t *testing.T) {
 		Data:   []byte("test data"),
 	}
 
-	// Устанавливаем
+	// Set
 	if err := repo.Set(key, icon, 5*time.Minute); err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
-	// Удаляем
+	// Delete
 	err := repo.Delete(key)
 	if err != nil {
 		t.Fatalf("Delete() error = %v, want nil", err)
 	}
 
-	// Проверяем что удалено
+	// Check that it was deleted
 	_, err = repo.Get(key)
 	if err == nil {
 		t.Error("Get() after Delete() should return error")
@@ -152,7 +152,7 @@ func TestIconCacheRepo_Delete_Nonexistent(t *testing.T) {
 	db := setupIconCacheTestDB(t)
 	repo := NewIconCacheRepo(db)
 
-	// Удаление несуществующего ключа не должно возвращать ошибку
+	// Deleting a non-existent key should not return error
 	err := repo.Delete("nonexistent-key")
 	if err != nil {
 		t.Errorf("Delete() nonexistent key error = %v, want nil", err)
@@ -164,7 +164,7 @@ func TestIconCacheRepo_Clear(t *testing.T) {
 	db := setupIconCacheTestDB(t)
 	repo := NewIconCacheRepo(db)
 
-	// Устанавливаем несколько иконок
+	// Set several icons
 	icons := []struct {
 		key  string
 		icon *domain.AppIcon
@@ -180,13 +180,13 @@ func TestIconCacheRepo_Clear(t *testing.T) {
 		}
 	}
 
-	// Очищаем
+	// Clear
 	err := repo.Clear()
 	if err != nil {
 		t.Fatalf("Clear() error = %v, want nil", err)
 	}
 
-	// Проверяем что все удалено
+	// Check that all were deleted
 	for _, item := range icons {
 		_, err := repo.Get(item.key)
 		if err == nil {
@@ -200,7 +200,7 @@ func TestIconCacheRepo_CleanupExpired(t *testing.T) {
 	db := setupIconCacheTestDB(t)
 	repo := NewIconCacheRepo(db)
 
-	// Устанавливаем иконку с истекшим сроком
+	// Set an icon with expired TTL
 	expiredKey := "expired-key"
 	expiredIcon := &domain.AppIcon{
 		Format: "png",
@@ -210,7 +210,7 @@ func TestIconCacheRepo_CleanupExpired(t *testing.T) {
 		t.Fatalf("Set() expired error = %v", err)
 	}
 
-	// Устанавливаем иконку с валидным сроком
+	// Set an icon with valid TTL
 	validKey := "valid-key"
 	validIcon := &domain.AppIcon{
 		Format: "png",
@@ -220,19 +220,19 @@ func TestIconCacheRepo_CleanupExpired(t *testing.T) {
 		t.Fatalf("Set() valid error = %v", err)
 	}
 
-	// Очищаем истекшие
+	// Cleanup expired
 	err := repo.CleanupExpired()
 	if err != nil {
 		t.Fatalf("CleanupExpired() error = %v, want nil", err)
 	}
 
-	// Проверяем что истекшая удалена
+	// Check that expired one was deleted
 	_, err = repo.Get(expiredKey)
 	if err == nil {
 		t.Error("Get() expired key after CleanupExpired() should return error")
 	}
 
-	// Проверяем что валидная осталась
+	// Check that valid one remained
 	_, err = repo.Get(validKey)
 	if err != nil {
 		t.Errorf("Get() valid key after CleanupExpired() error = %v, want nil", err)
@@ -254,17 +254,17 @@ func TestIconCacheRepo_Set_Update(t *testing.T) {
 		Data:   []byte("data2"),
 	}
 
-	// Устанавливаем первую иконку
+	// Set first icon
 	if err := repo.Set(key, icon1, 5*time.Minute); err != nil {
 		t.Fatalf("Set() first error = %v", err)
 	}
 
-	// Обновляем на вторую
+	// Update to second one
 	if err := repo.Set(key, icon2, 5*time.Minute); err != nil {
 		t.Fatalf("Set() second error = %v", err)
 	}
 
-	// Проверяем что обновилось
+	// Check that it was updated
 	retrieved, err := repo.Get(key)
 	if err != nil {
 		t.Fatalf("Get() after update error = %v", err)

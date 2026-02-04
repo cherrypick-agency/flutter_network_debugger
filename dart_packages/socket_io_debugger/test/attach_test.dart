@@ -35,8 +35,8 @@ void main() {
         enabled: true,
       );
 
-      // proxyHttpPath должен оставаться "путём", без query-хвоста.
-      // Если сюда попадает '?', дальше в URL может появиться мусор типа '%3F_target'.
+      // proxyHttpPath should remain a "path", without query suffix.
+      // If '?' gets here, garbage like '%3F_target' may appear in the URL later.
       expect(cfg.effectivePath.contains('?'), isFalse);
     });
   });

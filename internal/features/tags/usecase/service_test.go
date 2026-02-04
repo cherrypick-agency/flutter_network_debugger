@@ -17,7 +17,7 @@ func TestNewService(t *testing.T) {
 		t.Fatal("NewService returned nil")
 	}
 
-	// Проверяем что repository установлен (не можем сравнить напрямую из-за интерфейса)
+	// Verify that the repository is set (can't compare directly due to interface)
 	if service.repo == nil {
 		t.Error("Repository not set")
 	}
@@ -28,7 +28,7 @@ func TestService_ListPredefinedTags(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем теги в mock
+	// Add tags to mock
 	repo.predefinedTags = []domain.PredefinedTag{
 		{ID: "tag-1", Name: "important", Color: "#ff0000"},
 		{ID: "tag-2", Name: "urgent", Color: "#00ff00"},
@@ -72,7 +72,7 @@ func TestService_DeletePredefinedTag(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем тег
+	// Add the tag
 	repo.predefinedTags = []domain.PredefinedTag{
 		{ID: "tag-to-delete", Name: "delete-me"},
 	}
@@ -94,7 +94,7 @@ func TestService_GetSessionTags(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем теги для сессии
+	// Add tags for the session
 	repo.sessionTags["session-1"] = []domain.SessionTag{
 		{ID: "st-1", SessionID: "session-1", TagName: "important"},
 		{ID: "st-2", SessionID: "session-1", TagName: "urgent"},
@@ -141,13 +141,13 @@ func TestService_AddTagToSession_EmptyParams(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Пустой sessionID
+	// Empty sessionID
 	err := service.AddTagToSession(ctx, "", "tag")
 	if err == nil {
 		t.Error("AddTagToSession() should fail with empty sessionID")
 	}
 
-	// Пустой tagName
+	// Empty tagName
 	err = service.AddTagToSession(ctx, "session-1", "")
 	if err == nil {
 		t.Error("AddTagToSession() should fail with empty tagName")
@@ -159,7 +159,7 @@ func TestService_RemoveTagFromSession(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем тег
+	// Add the tag
 	repo.sessionTags["session-1"] = []domain.SessionTag{
 		{ID: "st-1", SessionID: "session-1", TagName: "important"},
 	}
@@ -206,7 +206,7 @@ func TestService_BulkAddTags(t *testing.T) {
 		t.Errorf("BulkAddTags() error = %v, want nil", err)
 	}
 
-	// Проверяем что теги добавлены
+	// Verify that the tags were added
 	if len(repo.sessionTags["session-1"]) != 2 {
 		t.Errorf("Expected 2 tags for session-1, got %d", len(repo.sessionTags["session-1"]))
 	}
@@ -219,13 +219,13 @@ func TestService_BulkAddTags_EmptyParams(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Пустые sessionIDs
+	// Empty sessionIDs
 	err := service.BulkAddTags(ctx, []string{}, []string{"tag1"})
 	if err == nil {
 		t.Error("BulkAddTags() should fail with empty sessionIDs")
 	}
 
-	// Пустые tagNames
+	// Empty tagNames
 	err = service.BulkAddTags(ctx, []string{"session-1"}, []string{})
 	if err == nil {
 		t.Error("BulkAddTags() should fail with empty tagNames")
@@ -237,7 +237,7 @@ func TestService_BulkRemoveTags(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем теги
+	// Add tags
 	repo.sessionTags["session-1"] = []domain.SessionTag{
 		{ID: "st-1", SessionID: "session-1", TagName: "tag1"},
 		{ID: "st-2", SessionID: "session-1", TagName: "tag2"},
@@ -277,7 +277,7 @@ func TestService_DeleteAllSessionTags(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем теги
+	// Add tags
 	repo.sessionTags["session-1"] = []domain.SessionTag{
 		{ID: "st-1", SessionID: "session-1", TagName: "tag1"},
 		{ID: "st-2", SessionID: "session-1", TagName: "tag2"},
@@ -312,7 +312,7 @@ func TestService_FindSessionIDsByTags(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем теги
+	// Add tags
 	repo.sessionTags["session-1"] = []domain.SessionTag{
 		{ID: "st-1", SessionID: "session-1", TagName: "important"},
 	}
@@ -378,13 +378,13 @@ func TestService_UpsertAnnotation_EmptyParams(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Пустой sessionID
+	// Empty sessionID
 	err := service.UpsertAnnotation(ctx, "", "key", "value")
 	if err == nil {
 		t.Error("UpsertAnnotation() should fail with empty sessionID")
 	}
 
-	// Пустой key
+	// Empty key
 	err = service.UpsertAnnotation(ctx, "session-1", "", "value")
 	if err == nil {
 		t.Error("UpsertAnnotation() should fail with empty key")
@@ -396,7 +396,7 @@ func TestService_DeleteAnnotation(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем аннотацию
+	// Add the annotation
 	repo.sessionAnnotations["session-1"] = []domain.SessionAnnotation{
 		{ID: "ann-1", SessionID: "session-1", Key: "key1", Value: "value1"},
 	}
@@ -436,7 +436,7 @@ func TestService_DeleteAllAnnotations(t *testing.T) {
 	repo := newMockRepo()
 	service := NewService(repo)
 
-	// Добавляем аннотации
+	// Add annotations
 	repo.sessionAnnotations["session-1"] = []domain.SessionAnnotation{
 		{ID: "ann-1", SessionID: "session-1", Key: "key1", Value: "value1"},
 		{ID: "ann-2", SessionID: "session-1", Key: "key2", Value: "value2"},

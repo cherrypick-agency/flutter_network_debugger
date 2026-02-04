@@ -7,7 +7,7 @@ import (
 	"network-debugger/internal/features/sessions_cli/presentation/theme"
 )
 
-// Renderer печатает представление по выбранным секциям.
+// Renderer prints representation by selected sections.
 type Renderer interface {
 	RenderHTTP(w io.Writer, v domain.HTTPView, opts domain.Options) error
 }
@@ -22,7 +22,7 @@ func NewDefaultRenderer(opts domain.Options, out io.Writer) Renderer {
 }
 
 func (r *defaultRenderer) RenderHTTP(w io.Writer, v domain.HTTPView, opts domain.Options) error {
-	// Пока печатаем только строку. Остальные секции добавим в следующих шагах.
+	// For now we only print the line. Other sections will be added in subsequent steps.
 	if opts.Fields["line"] {
 		if err := r.line.Render(w, v); err != nil {
 			return err

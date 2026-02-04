@@ -4,8 +4,8 @@ import (
 	"time"
 )
 
-// pollUntil выполняет fn до тех пор, пока он не вернёт true или не истечёт timeout.
-// Между попытками используется экспоненциальная задержка от initial до maxDelay.
+// pollUntil executes fn until it returns true or timeout expires.
+// Exponential delay from initial to maxDelay is used between attempts.
 func pollUntil(timeout time.Duration, initial time.Duration, maxDelay time.Duration, fn func() bool) bool {
 	deadline := time.Now().Add(timeout)
 	delay := initial

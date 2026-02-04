@@ -6,7 +6,7 @@ import (
 	pdomain "network-debugger/internal/features/proxy/domain"
 )
 
-// ProxyConfigModel — singleton с ID=1
+// ProxyConfigModel - singleton with ID=1
 type ProxyConfigModel struct {
 	ID int64 `gorm:"primaryKey"`
 

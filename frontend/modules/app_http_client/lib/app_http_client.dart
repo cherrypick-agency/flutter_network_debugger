@@ -59,6 +59,6 @@ class AppHttpClientModuleResult extends module.ModuleResult {
   AppHttpClientModuleResult(this.httpClient);
 }
 
-/// 2. Функция-инициализатор микропакета
+/// 2. Micropackage initializer function
 // @InjectableInit.microPackage()
 // void initAppHttpClientPackage(ContainerDI getIt) => $initGetIt(getIt);

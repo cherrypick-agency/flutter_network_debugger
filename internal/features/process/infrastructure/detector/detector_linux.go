@@ -17,21 +17,21 @@ import (
 
 type linuxDetector struct{}
 
-// DetectByPort - найти процесс по локальному порту через /proc/net/tcp
+// DetectByPort - find process by local port via /proc/net/tcp
 func (l *linuxDetector) DetectByPort(ctx context.Context, port uint32) (*domain.ProcessInfo, error) {
-	// 1. Читать /proc/net/tcp
+	// 1. Read /proc/net/tcp
 	tcpData, err := os.ReadFile("/proc/net/tcp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read /proc/net/tcp: %w", err)
 	}
 
-	// 2. Найти inode по порту
+	// 2. Find inode by port
 	inode, err := findInodeByPort(string(tcpData), port)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Найти PID по inode
+	// 3. Find PID by inode
 	pid, err := findPIDByInode(inode)
 	if err != nil {
 		return nil, err
@@ -40,16 +40,16 @@ func (l *linuxDetector) DetectByPort(ctx context.Context, port uint32) (*domain.
 	return l.DetectByPID(ctx, int32(pid))
 }
 
-// DetectByPID - получить информацию о процессе по PID через /proc/[pid]
+// DetectByPID - get process information by PID via /proc/[pid]
 func (l *linuxDetector) DetectByPID(ctx context.Context, pid int32) (*domain.ProcessInfo, error) {
-	// Читать /proc/[pid]/comm для имени
+	// Read /proc/[pid]/comm for name
 	commPath := fmt.Sprintf("/proc/%d/comm", pid)
 	commData, err := os.ReadFile(commPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read comm: %w", err)
 	}
 
-	// Читать /proc/[pid]/exe для пути
+	// Read /proc/[pid]/exe for path
 	exePath := fmt.Sprintf("/proc/%d/exe", pid)
 	exe, _ := os.Readlink(exePath)
 
@@ -61,29 +61,29 @@ func (l *linuxDetector) DetectByPID(ctx context.Context, pid int32) (*domain.Pro
 	}, nil
 }
 
-// RequiresPrivileges - /proc/net/tcp доступен, но /proc/[pid]/fd может требовать прав
+// RequiresPrivileges - /proc/net/tcp is accessible, but /proc/[pid]/fd may require permissions
 func (l *linuxDetector) RequiresPrivileges() bool {
 	return false
 }
 
-// findInodeByPort - найти inode сокета по порту в /proc/net/tcp
+// findInodeByPort - find socket inode by port in /proc/net/tcp
 func findInodeByPort(tcpData string, port uint32) (uint64, error) {
 	lines := strings.Split(tcpData, "\n")
 
-	for _, line := range lines[1:] { // пропустить заголовок
+	for _, line := range lines[1:] { // skip header
 		fields := strings.Fields(line)
 		if len(fields) < 10 {
 			continue
 		}
 
-		// local_address в hex: "0100007F:1F90" = 127.0.0.1:8080
+		// local_address in hex: "0100007F:1F90" = 127.0.0.1:8080
 		localAddr := fields[1]
 		parts := strings.Split(localAddr, ":")
 		if len(parts) != 2 {
 			continue
 		}
 
-		// Парсинг hex порта
+		// Parse hex port
 		portHex := parts[1]
 		p, err := strconv.ParseUint(portHex, 16, 32)
 		if err != nil {
@@ -91,7 +91,7 @@ func findInodeByPort(tcpData string, port uint32) (uint64, error) {
 		}
 
 		if uint32(p) == port {
-			// inode в 9-м поле
+			// inode in 9th field
 			inode, _ := strconv.ParseUint(fields[9], 10, 64)
 			return inode, nil
 		}
@@ -100,9 +100,9 @@ func findInodeByPort(tcpData string, port uint32) (uint64, error) {
 	return 0, fmt.Errorf("port %d not found in /proc/net/tcp", port)
 }
 
-// findPIDByInode - найти PID процесса по inode сокета
+// findPIDByInode - find process PID by socket inode
 func findPIDByInode(inode uint64) (int, error) {
-	// Перебрать все /proc/[pid]/fd/* в поисках socket:[inode]
+	// Iterate over all /proc/[pid]/fd/* looking for socket:[inode]
 	procDir := "/proc"
 	entries, err := os.ReadDir(procDir)
 	if err != nil {

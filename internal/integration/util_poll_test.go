@@ -72,7 +72,7 @@ func TestPollUntil_ExponentialBackoff(t *testing.T) {
 
 	pollUntil(500*time.Millisecond, 10*time.Millisecond, 100*time.Millisecond, func() bool {
 		calls = append(calls, time.Now())
-		// Проверяем экспоненциальный рост задержки
+		// Check exponential delay growth
 		if len(calls) >= 3 {
 			return true
 		}

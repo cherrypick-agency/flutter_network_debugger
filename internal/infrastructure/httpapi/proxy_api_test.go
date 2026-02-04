@@ -169,8 +169,8 @@ func TestHandleV1ProxyConfig_POST_WithPort(t *testing.T) {
 	d := setupProxyDeps(t)
 
 	payload := map[string]any{
-		// Не используем фиксированные порты: они могут быть заняты на машине, где гоняются тесты.
-		// Для этого теста важно, что конфиг применился, а не конкретное число порта.
+		// Don't use fixed ports: they may be occupied on machines where tests run.
+		// For this test what matters is that config was applied, not the specific port number.
 		"forward": map[string]any{"enabled": true, "port": 0, "addr": "127.0.0.1:0"},
 		"socks":   map[string]any{"enabled": true, "port": 0, "addr": "127.0.0.1:0", "authMode": "none"},
 	}
@@ -202,7 +202,7 @@ func TestHandleV1ProxyConfig_POST_WithAddr(t *testing.T) {
 	d := setupProxyDeps(t)
 
 	payload := map[string]any{
-		// Аналогично: используем :0, чтобы не зависеть от занятости портов в окружении теста.
+		// Similarly: use :0 to not depend on port availability in test environment.
 		"forward": map[string]any{"enabled": true, "port": 0, "addr": "127.0.0.1:0"},
 		"socks":   map[string]any{"enabled": true, "port": 0, "addr": "127.0.0.1:0"},
 	}

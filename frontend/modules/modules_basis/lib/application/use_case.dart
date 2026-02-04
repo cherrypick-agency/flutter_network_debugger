@@ -1,4 +1,4 @@
 abstract class UseCase<R> {
-  // Пока закоментил, а то не удобно передавать параметры
+  // Commented out for now because it's inconvenient to pass parameters
   // R execute(params);
 }

@@ -41,7 +41,7 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 		b.truncated = true
 	}
 
-	// Важно: всегда "принимаем" все байты, чтобы не блокировать reader процессов.
+	// Important: always "accept" all bytes to avoid blocking process readers.
 	return len(p), nil
 }
 
@@ -171,7 +171,7 @@ func mkdirAllNoSymlink(baseDir, dirPath string, perm os.FileMode) error {
 			return fmt.Errorf("stat %s: %w", cur, err)
 		}
 		if err := os.Mkdir(cur, perm); err != nil {
-			// Если гонка — перепроверим.
+			// If there's a race — double-check.
 			if fi2, err2 := os.Lstat(cur); err2 == nil {
 				if fi2.Mode()&os.ModeSymlink != 0 {
 					return fmt.Errorf("refusing to follow symlink in path: %s", cur)

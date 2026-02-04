@@ -162,9 +162,9 @@ func (e *DartExecutor) Validate(ctx context.Context, script domain.Script) error
 	}
 	tmpFile.Close()
 
-	// Для синтаксической проверки достаточно `dart format`:
-	// - не требует pubspec.yaml
-	// - падает на ошибках парсинга
+	// For syntax checking `dart format` is sufficient:
+	// - does not require pubspec.yaml
+	// - fails on parsing errors
 	analyzeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -226,7 +226,7 @@ func killAndWait(proc *DartProcess) {
 		return
 	}
 	_ = proc.cmd.Process.Kill()
-	// Важно: Wait нужен, иначе процесс может остаться зомби на unix.
+	// Important: Wait is needed, otherwise the process may remain a zombie on unix.
 	_ = proc.cmd.Wait()
 }
 
@@ -312,7 +312,7 @@ func (p *ProcessPool) Release(proc *DartProcess) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			// Канал могли закрыть на shutdown между Load() и send.
+			// The channel could have been closed during shutdown between Load() and send.
 			p.decrementCount()
 			killAndWait(proc)
 		}
@@ -403,7 +403,7 @@ func (p *ProcessPool) startProcess() (*DartProcess, error) {
 		}(),
 	}
 
-	// Ping handshake: если dart run завис/не поднялся, не возвращаем процесс в пул.
+	// Ping handshake: if dart run hangs/fails to start, don't return the process to the pool.
 	{
 		pingReq := map[string]any{
 			"jsonrpc": "2.0",

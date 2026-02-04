@@ -308,12 +308,12 @@ func TestTinyGoCompiler_GenerateMinimalGoMod(t *testing.T) {
 		t.Fatalf("generateMinimalGoMod failed: %v", err)
 	}
 
-	// Проверяем что go.mod создан
+	// Check that go.mod was created
 	if !ws.FileExists("go.mod") {
 		t.Fatal("go.mod file was not created")
 	}
 
-	// Проверяем содержимое
+	// Check contents
 	content, err := ws.ReadFile("go.mod")
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -323,7 +323,7 @@ func TestTinyGoCompiler_GenerateMinimalGoMod(t *testing.T) {
 		t.Error("go.mod content is empty")
 	}
 
-	// Проверяем что содержимое содержит ожидаемые строки
+	// Check that content contains expected strings
 	contentStr := string(content)
 	if !contains(contentStr, "module script") {
 		t.Error("go.mod should contain 'module script'")
@@ -339,13 +339,13 @@ func TestRustCompiler_GetRustEnv(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewRustCompiler(cache)
 
-	// Тест без установленных путей
+	// Test without set paths
 	env := compiler.getRustEnv()
 	if len(env) == 0 {
 		t.Error("getRustEnv should return at least some environment variables")
 	}
 
-	// Устанавливаем пути
+	// Set paths
 	compiler.rustupHome = "/test/rustup"
 	compiler.cargoHome = "/test/cargo"
 
@@ -354,7 +354,7 @@ func TestRustCompiler_GetRustEnv(t *testing.T) {
 		t.Error("getRustEnv should return environment variables")
 	}
 
-	// Проверяем что RUSTUP_HOME установлен
+	// Check that RUSTUP_HOME is set
 	foundRustupHome := false
 	for _, e := range env {
 		if contains(e, "RUSTUP_HOME=/test/rustup") {
@@ -366,7 +366,7 @@ func TestRustCompiler_GetRustEnv(t *testing.T) {
 		t.Error("RUSTUP_HOME should be set in environment")
 	}
 
-	// Проверяем что CARGO_HOME установлен
+	// Check that CARGO_HOME is set
 	foundCargoHome := false
 	for _, e := range env {
 		if contains(e, "CARGO_HOME=/test/cargo") {
@@ -410,8 +410,8 @@ func TestTinyGoCompiler_IsAvailable(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewTinyGoCompiler(cache)
 
-	// IsAvailable может вернуть true или false в зависимости от окружения
-	// Просто проверяем что метод не падает
+	// IsAvailable may return true or false depending on environment
+	// Just check that the method doesn't panic
 	_ = compiler.IsAvailable()
 }
 
@@ -420,8 +420,8 @@ func TestTinyGoCompiler_GetTinyGoBinary(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewTinyGoCompiler(cache)
 
-	// getTinyGoBinary может вернуть ошибку если tinygo не в кеше
-	// Просто проверяем что метод не падает
+	// getTinyGoBinary may return an error if tinygo is not in cache
+	// Just check that the method doesn't panic
 	_, _ = compiler.getTinyGoBinary()
 }
 
@@ -430,8 +430,8 @@ func TestRustCompiler_GetRustPaths(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewRustCompiler(cache)
 
-	// getRustPaths может вернуть ошибку если rust не в кеше
-	// Просто проверяем что метод не падает
+	// getRustPaths may return an error if rust is not in cache
+	// Just check that the method doesn't panic
 	_, _, _ = compiler.getRustPaths()
 }
 
@@ -440,8 +440,8 @@ func TestRustCompiler_IsAvailable(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewRustCompiler(cache)
 
-	// IsAvailable может вернуть true или false в зависимости от окружения
-	// Просто проверяем что метод не падает
+	// IsAvailable may return true or false depending on environment
+	// Just check that the method doesn't panic
 	_ = compiler.IsAvailable()
 }
 
@@ -450,7 +450,7 @@ func TestRustCompiler_ValidateDependencies(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewRustCompiler(cache)
 
-	// Валидный Cargo.toml
+	// Valid Cargo.toml
 	validDeps := map[string]string{
 		"Cargo.toml": "[package]\nname = \"test\"\nversion = \"0.1.0\"\n\n[lib]\ncrate-type = [\"cdylib\"]",
 	}
@@ -460,7 +460,7 @@ func TestRustCompiler_ValidateDependencies(t *testing.T) {
 		t.Errorf("ValidateDependencies() error = %v, want nil", err)
 	}
 
-	// Невалидный Cargo.toml (нет [package])
+	// Invalid Cargo.toml (no [package])
 	invalidDeps := map[string]string{
 		"Cargo.toml": "name = \"test\"",
 	}
@@ -470,7 +470,7 @@ func TestRustCompiler_ValidateDependencies(t *testing.T) {
 		t.Error("ValidateDependencies() should return error for invalid Cargo.toml")
 	}
 
-	// Пустые зависимости
+	// Empty dependencies
 	emptyDeps := map[string]string{}
 
 	err = compiler.ValidateDependencies(emptyDeps)
@@ -490,7 +490,7 @@ func TestRustCompiler_GenerateMinimalCargoToml(t *testing.T) {
 		t.Error("generateMinimalCargoToml() should return non-empty string")
 	}
 
-	// Проверяем что содержимое содержит ожидаемые строки
+	// Check that content contains expected strings
 	if !contains(toml, "[package]") {
 		t.Error("Cargo.toml should contain '[package]'")
 	}
@@ -509,7 +509,7 @@ func TestTinyGoCompiler_ValidateDependencies(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewTinyGoCompiler(cache)
 
-	// Валидный go.mod
+	// Valid go.mod
 	validDeps := map[string]string{
 		"go.mod": "module test\n\ngo 1.21",
 	}
@@ -519,7 +519,7 @@ func TestTinyGoCompiler_ValidateDependencies(t *testing.T) {
 		t.Errorf("ValidateDependencies() error = %v, want nil", err)
 	}
 
-	// Невалидный go.mod (нет module)
+	// Invalid go.mod (no module)
 	invalidDeps := map[string]string{
 		"go.mod": "go 1.21",
 	}
@@ -529,7 +529,7 @@ func TestTinyGoCompiler_ValidateDependencies(t *testing.T) {
 		t.Error("ValidateDependencies() should return error for invalid go.mod")
 	}
 
-	// Пустые зависимости
+	// Empty dependencies
 	emptyDeps := map[string]string{}
 
 	err = compiler.ValidateDependencies(emptyDeps)
@@ -558,7 +558,7 @@ func TestAssemblyScriptCompiler_ValidateDependencies(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewAssemblyScriptCompiler(cache)
 
-	// Валидный package.json
+	// Valid package.json
 	validDeps := map[string]string{
 		"package.json": `{"name": "test", "version": "1.0.0"}`,
 	}
@@ -568,7 +568,7 @@ func TestAssemblyScriptCompiler_ValidateDependencies(t *testing.T) {
 		t.Errorf("ValidateDependencies() error = %v, want nil", err)
 	}
 
-	// Невалидный JSON
+	// Invalid JSON
 	invalidDeps := map[string]string{
 		"package.json": `{invalid json}`,
 	}
@@ -578,7 +578,7 @@ func TestAssemblyScriptCompiler_ValidateDependencies(t *testing.T) {
 		t.Error("ValidateDependencies() should return error for invalid JSON")
 	}
 
-	// Пустые зависимости
+	// Empty dependencies
 	emptyDeps := map[string]string{}
 
 	err = compiler.ValidateDependencies(emptyDeps)
@@ -648,7 +648,7 @@ func TestCCPPCompiler_ValidateDependencies(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewCCPPCompiler(cache)
 
-	// Валидные зависимости (header файлы)
+	// Valid dependencies (header files)
 	validDeps := map[string]string{
 		"header.h":   "#define TEST 1",
 		"header.hpp": "#include <iostream>",
@@ -661,7 +661,7 @@ func TestCCPPCompiler_ValidateDependencies(t *testing.T) {
 		t.Errorf("ValidateDependencies() error = %v, want nil", err)
 	}
 
-	// Невалидное расширение
+	// Invalid extension
 	invalidDeps := map[string]string{
 		"file.txt": "some content",
 	}
@@ -671,7 +671,7 @@ func TestCCPPCompiler_ValidateDependencies(t *testing.T) {
 		t.Error("ValidateDependencies() should return error for invalid extension")
 	}
 
-	// Пустые зависимости
+	// Empty dependencies
 	emptyDeps := map[string]string{}
 
 	err = compiler.ValidateDependencies(emptyDeps)
@@ -685,7 +685,7 @@ func TestCCPPCompiler_ValidateDependencies(t *testing.T) {
 func TestPythonCompiler_ValidateDependencies(t *testing.T) {
 	compiler := NewPythonCompiler()
 
-	// Валидные зависимости
+	// Valid dependencies
 	validDeps := map[string]string{
 		"utils.py":         "def test(): pass",
 		"requirements.txt": "requests==1.0.0",
@@ -696,7 +696,7 @@ func TestPythonCompiler_ValidateDependencies(t *testing.T) {
 		t.Errorf("ValidateDependencies() error = %v, want nil", err)
 	}
 
-	// Невалидная зависимость
+	// Invalid dependency
 	invalidDeps := map[string]string{
 		"file.txt": "some content",
 	}
@@ -706,7 +706,7 @@ func TestPythonCompiler_ValidateDependencies(t *testing.T) {
 		t.Error("ValidateDependencies() should return error for invalid dependency")
 	}
 
-	// Пустые зависимости
+	// Empty dependencies
 	emptyDeps := map[string]string{}
 
 	err = compiler.ValidateDependencies(emptyDeps)
@@ -733,7 +733,7 @@ func TestPythonCompiler_ValidateSyntax_BalancedBrackets(t *testing.T) {
 	compiler := NewPythonCompiler()
 	ctx := context.Background()
 
-	// Несбалансированные скобки
+	// Unbalanced brackets
 	req := domain.CompileRequest{
 		SourceCode: "def test():\n    if True:\n        pass\n)",
 	}
@@ -752,7 +752,7 @@ func TestRustCompiler_OptimizeWASM_InvalidPath(t *testing.T) {
 
 	ctx := context.Background()
 	err := compiler.OptimizeWASM(ctx, "nonexistent.wasm")
-	// Если wasm-opt не найден, вернется nil
-	// Если найден, вернется ошибка о несуществующем файле
+	// If wasm-opt is not found, nil will be returned
+	// If found, an error about non-existent file will be returned
 	_ = err
 }

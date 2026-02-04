@@ -16,8 +16,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Manager управляет отдельными листенерами forward‑proxy и SOCKS5.
-// Перезапуск листенеров происходит graceful через Shutdown/Close.
+// Manager manages separate listeners for forward-proxy and SOCKS5.
+// Listener restarts are graceful via Shutdown/Close.
 type Manager struct {
 	log *zerolog.Logger
 
@@ -34,12 +34,12 @@ type Manager struct {
 
 func New(log *zerolog.Logger) *Manager { return &Manager{log: log} }
 
-// StartForward запускает HTTP сервер на addr с переданным handler.
+// StartForward starts an HTTP server on addr with the provided handler.
 func (m *Manager) StartForward(addr string, handler http.Handler) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.fwdLn != nil {
-		// уже запущен — сначала останавливаем
+		// already running - stop first
 		_ = m.stopForwardLocked(context.Background())
 	}
 	ln, err := net.Listen("tcp", addr)
@@ -65,7 +65,7 @@ func (m *Manager) StartForward(addr string, handler http.Handler) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	// Захватим ссылку локально, чтобы избежать гонки при StopForward()
+	// Capture reference locally to avoid race condition with StopForward()
 	srv := m.fwdSrv
 	go func() {
 		err := srv.Serve(ln)
@@ -73,9 +73,9 @@ func (m *Manager) StartForward(addr string, handler http.Handler) error {
 			if m.log != nil {
 				m.log.Error().Err(err).Msg("forward proxy server error")
 			}
-			// Если Serve внезапно завершился, порт может остаться "слушать" без accept loop,
-			// и клиенты будут успешно коннектиться по TCP, но никогда не получат HTTP-ответ.
-			// Закрываем листенер и чистим состояние, чтобы проблема была заметна и лечилась рестартом.
+			// If Serve unexpectedly terminates, the port may remain "listening" without accept loop,
+			// and clients will successfully connect via TCP but never receive an HTTP response.
+			// Close the listener and clean up state so the problem is visible and can be fixed by restart.
 			_ = ln.Close()
 			m.mu.Lock()
 			if m.fwdLn == ln {
@@ -121,8 +121,8 @@ func (m *Manager) stopForwardLocked(ctx context.Context) error {
 	return nil
 }
 
-// StartSocks запускает SOCKS5 сервер на addr с опциональной аутентификацией.
-// authMode: "none" | "userpass"; user/pass используются только для userpass.
+// StartSocks starts a SOCKS5 server on addr with optional authentication.
+// authMode: "none" | "userpass"; user/pass are only used for userpass.
 func (m *Manager) StartSocks(addr, authMode, user, pass string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -190,7 +190,7 @@ func (m *Manager) stopSocksLocked() error {
 	return nil
 }
 
-// Apply включает/перезапускает листенеры согласно предоставленной конфигурации.
+// Apply enables/restarts listeners according to the provided configuration.
 type ApplyConfig struct {
 	ForwardEnabled bool
 	ForwardAddr    string
@@ -202,7 +202,7 @@ type ApplyConfig struct {
 	SocksPass     string
 }
 
-// ForwardAddr возвращает фактический адрес forward‑proxy (если запущен).
+// ForwardAddr returns the actual forward-proxy address (if running).
 func (m *Manager) ForwardAddr() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -212,7 +212,7 @@ func (m *Manager) ForwardAddr() string {
 	return m.fwdLn.Addr().String()
 }
 
-// SocksAddr возвращает фактический адрес SOCKS5 (если запущен).
+// SocksAddr returns the actual SOCKS5 address (if running).
 func (m *Manager) SocksAddr() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -222,7 +222,7 @@ func (m *Manager) SocksAddr() string {
 	return m.socksLn.Addr().String()
 }
 
-// Apply принимает handler для forward‑proxy.
+// Apply accepts a handler for forward-proxy.
 func (m *Manager) Apply(ctx context.Context, cfg ApplyConfig, forwardHandler http.Handler) error {
 	// Forward
 	if cfg.ForwardEnabled {

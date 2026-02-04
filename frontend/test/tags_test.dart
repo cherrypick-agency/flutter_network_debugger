@@ -162,8 +162,8 @@ void main() {
   });
 
   group('Predefined Tags', () {
-    test('loadPredefinedTags успешно загружает теги', () async {
-      // Подготовка
+    test('loadPredefinedTags successfully loads tags', () async {
+      // Setup
       await mockRepo.createPredefinedTag(
         name: 'Bug',
         color: '#ff0000',
@@ -177,10 +177,10 @@ void main() {
         displayOrder: 2,
       );
 
-      // Действие
+      // Action
       await store.loadPredefinedTags();
 
-      // Проверка
+      // Verification
       expect(store.predefinedTags.length, 2);
       expect(store.predefinedTags[0].name, 'Bug');
       expect(store.predefinedTags[1].name, 'Feature');
@@ -188,21 +188,21 @@ void main() {
       expect(store.error, null);
     });
 
-    test('loadPredefinedTags обрабатывает ошибки', () async {
-      // Подготовка
+    test('loadPredefinedTags handles errors', () async {
+      // Setup
       mockRepo.shouldThrowError = true;
 
-      // Действие
+      // Action
       await store.loadPredefinedTags();
 
-      // Проверка
+      // Verification
       expect(store.predefinedTags.isEmpty, true);
       expect(store.loading, false);
       expect(store.error, isNotNull);
     });
 
-    test('createPredefinedTag создает новый тег', () async {
-      // Действие
+    test('createPredefinedTag creates new tag', () async {
+      // Action
       await store.createPredefinedTag(
         name: 'Critical',
         color: '#ff0000',
@@ -210,13 +210,13 @@ void main() {
         displayOrder: 1,
       );
 
-      // Проверка
+      // Verification
       expect(store.predefinedTags.length, 1);
       expect(store.predefinedTags[0].name, 'Critical');
     });
 
-    test('deletePredefinedTag удаляет тег', () async {
-      // Подготовка
+    test('deletePredefinedTag deletes tag', () async {
+      // Setup
       await store.createPredefinedTag(
         name: 'Bug',
         color: '#ff0000',
@@ -225,102 +225,102 @@ void main() {
       );
       final tagId = store.predefinedTags[0].id;
 
-      // Действие
+      // Action
       await store.deletePredefinedTag(tagId);
 
-      // Проверка
+      // Verification
       expect(store.predefinedTags.isEmpty, true);
     });
   });
 
   group('Session Tags', () {
-    test('loadSessionTags загружает теги сессии', () async {
-      // Подготовка
+    test('loadSessionTags loads session tags', () async {
+      // Setup
       const sessionId = 'session-1';
       await mockRepo.addSessionTag(sessionId, 'important');
       await mockRepo.addSessionTag(sessionId, 'bug');
 
-      // Действие
+      // Action
       final tags = await store.loadSessionTags(sessionId);
 
-      // Проверка
+      // Verification
       expect(tags.length, 2);
       expect(tags[0].tagName, 'important');
       expect(tags[1].tagName, 'bug');
       expect(store.sessionTagsCache[sessionId]?.length, 2);
     });
 
-    test('loadSessionTags обрабатывает ошибки', () async {
-      // Подготовка
+    test('loadSessionTags handles errors', () async {
+      // Setup
       mockRepo.shouldThrowError = true;
 
-      // Действие
+      // Action
       final tags = await store.loadSessionTags('session-1');
 
-      // Проверка
+      // Verification
       expect(tags.isEmpty, true);
       expect(store.error, isNotNull);
     });
 
-    test('addSessionTag добавляет тег к сессии', () async {
-      // Подготовка
+    test('addSessionTag adds tag to session', () async {
+      // Setup
       const sessionId = 'session-1';
 
-      // Действие
+      // Action
       await store.addSessionTag(sessionId, 'urgent');
 
-      // Проверка
+      // Verification
       final tags = store.sessionTagsCache[sessionId];
       expect(tags?.length, 1);
       expect(tags?.first.tagName, 'urgent');
     });
 
-    test('removeSessionTag удаляет тег из сессии', () async {
-      // Подготовка
+    test('removeSessionTag removes tag from session', () async {
+      // Setup
       const sessionId = 'session-1';
       await store.addSessionTag(sessionId, 'urgent');
 
-      // Действие
+      // Action
       await store.removeSessionTag(sessionId, 'urgent');
 
-      // Проверка
+      // Verification
       final tags = store.sessionTagsCache[sessionId];
       expect(tags?.isEmpty, true);
     });
 
-    test('bulkAddTags добавляет теги к нескольким сессиям', () async {
-      // Подготовка
+    test('bulkAddTags adds tags to multiple sessions', () async {
+      // Setup
       final sessionIds = ['s1', 's2', 's3'];
       final tagNames = ['bug', 'critical'];
 
-      // Действие
+      // Action
       await store.bulkAddTags(sessionIds, tagNames);
 
-      // Проверка
+      // Verification
       for (final sessionId in sessionIds) {
         final tags = store.sessionTagsCache[sessionId];
         expect(tags?.length, 2);
       }
     });
 
-    test('bulkRemoveTags удаляет теги из нескольких сессий', () async {
-      // Подготовка
+    test('bulkRemoveTags removes tags from multiple sessions', () async {
+      // Setup
       final sessionIds = ['s1', 's2'];
       final tagNames = ['bug', 'critical'];
       await store.bulkAddTags(sessionIds, tagNames);
 
-      // Действие
+      // Action
       await store.bulkRemoveTags(sessionIds, tagNames);
 
-      // Проверка
+      // Verification
       for (final sessionId in sessionIds) {
         final tags = store.sessionTagsCache[sessionId];
         expect(tags?.isEmpty, true);
       }
     });
 
-    test('getSessionTagsFromCache возвращает теги из кеша', () {
-      // Подготовка
+    test('getSessionTagsFromCache returns tags from cache', () {
+      // Setup
       const sessionId = 'session-1';
       store.sessionTagsCache[sessionId] = [
         SessionTag(
@@ -331,81 +331,81 @@ void main() {
         ),
       ];
 
-      // Действие
+      // Action
       final tags = store.getSessionTagsFromCache(sessionId);
 
-      // Проверка
+      // Verification
       expect(tags.length, 1);
       expect(tags.first.tagName, 'cached-tag');
     });
 
-    test('getSessionTagsFromCache возвращает пустой список если нет кеша', () {
-      // Действие
+    test('getSessionTagsFromCache returns empty list if no cache', () {
+      // Action
       final tags = store.getSessionTagsFromCache('non-existent');
 
-      // Проверка
+      // Verification
       expect(tags.isEmpty, true);
     });
   });
 
   group('Session Annotations', () {
-    test('loadSessionAnnotations загружает аннотации', () async {
-      // Подготовка
+    test('loadSessionAnnotations loads annotations', () async {
+      // Setup
       const sessionId = 'session-1';
       await mockRepo.upsertSessionAnnotation(sessionId, 'env', 'production');
       await mockRepo.upsertSessionAnnotation(sessionId, 'region', 'us-east-1');
 
-      // Действие
+      // Action
       final annotations = await store.loadSessionAnnotations(sessionId);
 
-      // Проверка
+      // Verification
       expect(annotations.length, 2);
       expect(store.sessionAnnotationsCache[sessionId]?.length, 2);
     });
 
-    test('upsertSessionAnnotation создает новую аннотацию', () async {
-      // Подготовка
+    test('upsertSessionAnnotation creates new annotation', () async {
+      // Setup
       const sessionId = 'session-1';
 
-      // Действие
+      // Action
       await store.upsertSessionAnnotation(sessionId, 'env', 'staging');
 
-      // Проверка
+      // Verification
       final annotations = store.sessionAnnotationsCache[sessionId];
       expect(annotations?.length, 1);
       expect(annotations?.first.key, 'env');
       expect(annotations?.first.value, 'staging');
     });
 
-    test('upsertSessionAnnotation обновляет существующую аннотацию', () async {
-      // Подготовка
+    test('upsertSessionAnnotation updates existing annotation', () async {
+      // Setup
       const sessionId = 'session-1';
       await store.upsertSessionAnnotation(sessionId, 'env', 'production');
 
-      // Действие - обновление
+      // Action - update
       await store.upsertSessionAnnotation(sessionId, 'env', 'staging');
 
-      // Проверка
+      // Verification
       final annotations = store.sessionAnnotationsCache[sessionId];
       expect(annotations?.length, 1);
       expect(annotations?.first.value, 'staging');
     });
 
-    test('deleteSessionAnnotation удаляет аннотацию', () async {
-      // Подготовка
+    test('deleteSessionAnnotation deletes annotation', () async {
+      // Setup
       const sessionId = 'session-1';
       await store.upsertSessionAnnotation(sessionId, 'env', 'production');
 
-      // Действие
+      // Action
       await store.deleteSessionAnnotation(sessionId, 'env');
 
-      // Проверка
+      // Verification
       final annotations = store.sessionAnnotationsCache[sessionId];
       expect(annotations?.isEmpty, true);
     });
 
-    test('getSessionAnnotationsFromCache возвращает аннотации из кеша', () {
-      // Подготовка
+    test('getSessionAnnotationsFromCache returns annotations from cache', () {
+      // Setup
       const sessionId = 'session-1';
       store.sessionAnnotationsCache[sessionId] = [
         SessionAnnotation(
@@ -418,34 +418,29 @@ void main() {
         ),
       ];
 
-      // Действие
+      // Action
       final annotations = store.getSessionAnnotationsFromCache(sessionId);
 
-      // Проверка
+      // Verification
       expect(annotations.length, 1);
       expect(annotations.first.key, 'env');
     });
 
-    test(
-      'getSessionAnnotationsFromCache возвращает пустой список если нет кеша',
-      () {
-        // Действие
-        final annotations = store.getSessionAnnotationsFromCache(
-          'non-existent',
-        );
+    test('getSessionAnnotationsFromCache returns empty list if no cache', () {
+      // Action
+      final annotations = store.getSessionAnnotationsFromCache('non-existent');
 
-        // Проверка
-        expect(annotations.isEmpty, true);
-      },
-    );
+      // Verification
+      expect(annotations.isEmpty, true);
+    });
   });
 
   group('Error handling', () {
-    test('обработка ошибок при создании предопределенного тега', () async {
-      // Подготовка
+    test('error handling when creating predefined tag', () async {
+      // Setup
       mockRepo.shouldThrowError = true;
 
-      // Действие & Проверка
+      // Action & Verification
       try {
         await store.createPredefinedTag(
           name: 'Bug',
@@ -460,11 +455,11 @@ void main() {
       }
     });
 
-    test('обработка ошибок при удалении предопределенного тега', () async {
-      // Подготовка
+    test('error handling when deleting predefined tag', () async {
+      // Setup
       mockRepo.shouldThrowError = true;
 
-      // Действие & Проверка
+      // Action & Verification
       try {
         await store.deletePredefinedTag('tag-1');
         fail('Expected exception');
@@ -474,11 +469,11 @@ void main() {
       }
     });
 
-    test('обработка ошибок при добавлении тега к сессии', () async {
-      // Подготовка
+    test('error handling when adding tag to session', () async {
+      // Setup
       mockRepo.shouldThrowError = true;
 
-      // Действие & Проверка
+      // Action & Verification
       try {
         await store.addSessionTag('session-1', 'tag');
         fail('Expected exception');

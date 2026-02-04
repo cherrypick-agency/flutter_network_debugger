@@ -95,7 +95,7 @@ func LoadCertAuthorityFromPEM(certPEM, keyPEM []byte) (*CertAuthority, error) {
 	}
 	kblk, _ := pem.Decode(keyPEM)
 	if kblk == nil {
-		return nil, errors.New("mitм: некорректный PEM ключа CA")
+		return nil, errors.New("mitm: invalid CA key PEM")
 	}
 	var caKey *rsa.PrivateKey
 	if kblk.Type == "RSA PRIVATE KEY" {

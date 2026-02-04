@@ -11,7 +11,7 @@ void main() {
   );
 
   testWidgets(
-    'CommonSearchBar: onChanged и запрет навигации при canNavigate=false',
+    'CommonSearchBar: onChanged and navigation disabled when canNavigate=false',
     (tester) async {
       // Arrange
       final ctrl = TextEditingController();
@@ -43,7 +43,7 @@ void main() {
       // Assert
       expect(changes, greaterThan(0));
 
-      // Нажимаем кнопки next/prev — не должны сработать
+      // Press next/prev buttons - should not trigger
       await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
       await tester.tap(find.byIcon(Icons.keyboard_arrow_up));
       await tester.pump();
@@ -52,7 +52,7 @@ void main() {
     },
   );
 
-  testWidgets('CommonSearchBar: горячие клавиши Enter/Shift+Enter/Escape', (
+  testWidgets('CommonSearchBar: hotkeys Enter/Shift+Enter/Escape', (
     tester,
   ) async {
     // Arrange

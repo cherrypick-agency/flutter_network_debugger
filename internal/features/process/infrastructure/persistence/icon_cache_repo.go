@@ -8,17 +8,17 @@ import (
 	"network-debugger/internal/features/process/domain"
 )
 
-// IconCacheRepo - реализация IIconCacheRepository для GORM/SQLite
+// IconCacheRepo - implementation of IIconCacheRepository for GORM/SQLite
 type IconCacheRepo struct {
 	db *gorm.DB
 }
 
-// NewIconCacheRepo - создать новый репозиторий кеша иконок
+// NewIconCacheRepo - create new icon cache repository
 func NewIconCacheRepo(db *gorm.DB) *IconCacheRepo {
 	return &IconCacheRepo{db: db}
 }
 
-// Get - получить иконку из кеша по ключу
+// Get - get icon from cache by key
 func (r *IconCacheRepo) Get(key string) (*domain.AppIcon, error) {
 	var model IconCacheModel
 
@@ -36,7 +36,7 @@ func (r *IconCacheRepo) Get(key string) (*domain.AppIcon, error) {
 	}, nil
 }
 
-// Set - сохранить иконку в кеш с указанным TTL
+// Set - save icon to cache with specified TTL
 func (r *IconCacheRepo) Set(key string, icon *domain.AppIcon, ttl time.Duration) error {
 	model := IconCacheModel{
 		CacheKey:   key,
@@ -49,17 +49,17 @@ func (r *IconCacheRepo) Set(key string, icon *domain.AppIcon, ttl time.Duration)
 	return r.db.Save(&model).Error
 }
 
-// Delete - удалить иконку из кеша
+// Delete - delete icon from cache
 func (r *IconCacheRepo) Delete(key string) error {
 	return r.db.Delete(&IconCacheModel{}, "cache_key = ?", key).Error
 }
 
-// Clear - очистить весь кеш
+// Clear - clear entire cache
 func (r *IconCacheRepo) Clear() error {
 	return r.db.Exec("DELETE FROM icon_cache").Error
 }
 
-// CleanupExpired - удалить истекшие записи из кеша
+// CleanupExpired - remove expired entries from cache
 func (r *IconCacheRepo) CleanupExpired() error {
 	return r.db.Delete(&IconCacheModel{}, "expires_at < ?", time.Now()).Error
 }

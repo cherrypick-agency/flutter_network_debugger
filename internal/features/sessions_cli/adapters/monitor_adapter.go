@@ -6,7 +6,7 @@ import (
 	httpapi "network-debugger/internal/infrastructure/httpapi"
 )
 
-// MonitorEventStream — адаптер MonitorHub → ports.EventStream.
+// MonitorEventStream — adapter MonitorHub → ports.EventStream.
 type MonitorEventStream struct {
 	hub *httpapi.MonitorHub
 }
@@ -19,7 +19,7 @@ func (m *MonitorEventStream) Subscribe(ctx context.Context) (<-chan ports.Event,
 	src := m.hub.Subscribe()
 	out := make(chan ports.Event, 256)
 
-	// Проксируем события и маппим типы.
+	// Proxy events and map types.
 	go func() {
 		defer close(out)
 		for {
@@ -39,7 +39,7 @@ func (m *MonitorEventStream) Subscribe(ctx context.Context) (<-chan ports.Event,
 				case "http_tx_added":
 					t = ports.EventHTTPTxAdded
 				default:
-					// игнорируем прочие
+					// ignore others
 					continue
 				}
 				out <- ports.Event{Type: t, SessionID: ev.ID, Ref: ev.Ref}

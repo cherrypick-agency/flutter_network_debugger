@@ -39,22 +39,22 @@ var plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 </dict>
 </plist>`
 
-// darwinInstaller - installer для macOS
+// darwinInstaller - installer for macOS
 type darwinInstaller struct{}
 
-// NewInstaller - создать installer для текущей платформы
+// NewInstaller - create installer for the current platform
 func NewInstaller() Installer {
 	return &darwinInstaller{}
 }
 
-// IsInstalled - проверить установлен ли helper
+// IsInstalled - check if helper is installed
 func (i *darwinInstaller) IsInstalled() bool {
-	// Проверить что plist файл существует
+	// Check that plist file exists
 	if _, err := os.Stat(plistPath); os.IsNotExist(err) {
 		return false
 	}
 
-	// Проверить что binary существует
+	// Check that binary exists
 	if _, err := os.Stat(helperInstallPath); os.IsNotExist(err) {
 		return false
 	}
@@ -62,21 +62,21 @@ func (i *darwinInstaller) IsInstalled() bool {
 	return true
 }
 
-// Install - установить helper tool
+// Install - install helper tool
 func (i *darwinInstaller) Install(helperBinaryPath string) error {
-	// Проверить что source binary существует
+	// Check that source binary exists
 	if _, err := os.Stat(helperBinaryPath); os.IsNotExist(err) {
 		return fmt.Errorf("helper binary not found: %s", helperBinaryPath)
 	}
 
-	// Создать временный plist файл
+	// Create temporary plist file
 	tmpPlist := "/tmp/com.networkdebugger.helper.plist"
 	if err := os.WriteFile(tmpPlist, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("failed to create temp plist: %w", err)
 	}
 	defer os.Remove(tmpPlist)
 
-	// Команда для установки (с password prompt через osascript)
+	// Installation command (with password prompt via osascript)
 	script := fmt.Sprintf(`do shell script "cp '%s' '%s' && chmod 755 '%s' && cp '%s' '%s' && chmod 644 '%s' && launchctl load -w '%s'" with administrator privileges`,
 		helperBinaryPath, helperInstallPath, helperInstallPath,
 		tmpPlist, plistPath, plistPath,
@@ -97,13 +97,13 @@ func (i *darwinInstaller) Install(helperBinaryPath string) error {
 	return nil
 }
 
-// Uninstall - удалить helper tool
+// Uninstall - uninstall helper tool
 func (i *darwinInstaller) Uninstall() error {
-	// Unload daemon (не требует пароля если daemon уже запущен от root)
+	// Unload daemon (doesn't require password if daemon is already running as root)
 	cmd := exec.Command("launchctl", "unload", plistPath)
-	_ = cmd.Run() // игнорируем ошибку если уже unloaded
+	_ = cmd.Run() // ignore error if already unloaded
 
-	// Удалить файлы (требует пароля)
+	// Delete files (requires password)
 	script := fmt.Sprintf(`do shell script "rm -f '%s' '%s'" with administrator privileges`,
 		plistPath, helperInstallPath)
 
@@ -122,18 +122,18 @@ func (i *darwinInstaller) Uninstall() error {
 	return nil
 }
 
-// GetVersion - получить версию helper
+// GetVersion - get helper version
 func (i *darwinInstaller) GetVersion() string {
 	if !i.IsInstalled() {
 		return ""
 	}
 
-	// Попытаться получить версию через ping
+	// Try to get version via ping
 	client := NewHelperClient()
 	defer client.Close()
 
 	if client.IsRunning() {
-		return helperVersion // hardcoded пока
+		return helperVersion // hardcoded for now
 	}
 
 	return ""

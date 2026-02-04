@@ -11,7 +11,7 @@ func sleepResponseDelay(cfg config.Config) {
 		if delta < 0 {
 			delta = 0
 		}
-		// Небольшая псевдослучайность на основе времени — для дев/демо достаточно
+		// Simple time-based pseudorandomness — sufficient for dev/demo purposes
 		n := time.Now().UnixNano()
 		rnd := int(n % int64(delta+1))
 		time.Sleep(time.Duration(cfg.ResponseDelayMinMs+rnd) * time.Millisecond)

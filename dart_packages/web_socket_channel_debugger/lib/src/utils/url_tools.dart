@@ -27,7 +27,7 @@ String normalizeProxyHostPort(String proxy) {
 }
 
 String buildEngineIoTarget(String baseUrl, String socketPath) {
-  // ws(s) -> http(s), плюс EIO=4&transport=websocket как минимальный набор для WS proxy.
+  // ws(s) -> http(s), plus EIO=4&transport=websocket as the minimum set for WS proxy.
   var base = baseUrl.trim();
   final lower = base.toLowerCase();
   if (lower.startsWith('wss://')) base = 'https://' + base.substring(6);
@@ -46,7 +46,7 @@ String buildWsTarget(String baseUrl) {
   final lower = base.toLowerCase();
   if (lower.startsWith('http://')) return 'ws://' + base.substring(7);
   if (lower.startsWith('https://')) return 'wss://' + base.substring(8);
-  return base; // предполагаем ws:// или wss:// уже передан
+  return base; // assume ws:// or wss:// is already passed
 }
 
 String ensureWsScheme(String value) {

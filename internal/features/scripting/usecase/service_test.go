@@ -47,7 +47,7 @@ func TestScriptService_RegisterExecutor(t *testing.T) {
 		t.Error("Executor not registered correctly")
 	}
 
-	// Регистрация второго executor
+	// Register second executor
 	executor2 := &mockExecutor{runtime: domain.RuntimeDart}
 	service.RegisterExecutor(executor2)
 
@@ -631,7 +631,7 @@ type mockExecutor struct {
 }
 
 func (m *mockExecutor) Execute(ctx context.Context, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
-	// Возвращаем валидный JSON результат для тестов
+	// Return valid JSON result for tests
 	output := []byte(`{"modified":false}`)
 	return domain.ExecutionResult{
 		Output: output,
@@ -684,7 +684,7 @@ func TestScriptService_ExecuteForRequest(t *testing.T) {
 		"script-1": script,
 	}
 
-	// Устанавливаем функцию List
+	// Set List function
 	repo.listFunc = func(ctx context.Context, filter domain.ScriptFilter) ([]*domain.Script, error) {
 		if filter.TriggerType == domain.TriggerRequest {
 			return []*domain.Script{script}, nil
@@ -863,7 +863,7 @@ func TestScriptService_InvalidatePluginCache_NoExecutor(t *testing.T) {
 	repo := &mockScriptRepository{}
 	service := NewScriptService(repo)
 
-	// Не должно паниковать если executor не зарегистрирован
+	// Should not panic if executor is not registered
 	service.invalidatePluginCache("test-script-id", domain.RuntimeExtism)
 }
 
@@ -872,11 +872,11 @@ func TestScriptService_InvalidatePluginCache_NoRemoveMethod(t *testing.T) {
 	repo := &mockScriptRepository{}
 	service := NewScriptService(repo)
 
-	// Executor без метода RemovePlugin
+	// Executor without RemovePlugin method
 	executor := &mockExecutor{runtime: domain.RuntimeExtism}
 	service.RegisterExecutor(executor)
 
-	// Не должно паниковать
+	// Should not panic
 	service.invalidatePluginCache("test-script-id", domain.RuntimeExtism)
 }
 

@@ -20,12 +20,12 @@ import (
 // handleForwardOrNotFound routes absolute-URI and CONNECT requests as a standard forward proxy.
 // Non-proxy requests fall back to 404 so that REST/WS routes are handled by other handlers.
 func (d *Deps) handleForwardOrNotFound(w http.ResponseWriter, r *http.Request) {
-	// Для серверных запросов в net/http абсолютный URI может прийти в RequestURI,
-	// при этом r.URL.Scheme/Host могут быть пустыми. Учтём оба случая.
+	// For server requests in net/http, absolute URI may come in RequestURI,
+	// while r.URL.Scheme/Host may be empty. Handle both cases.
 	if r.Method == http.MethodConnect ||
 		(r.URL != nil && r.URL.Scheme != "" && r.URL.Host != "") ||
 		isAbsoluteURL(r.RequestURI) {
-		// Если URL ещё не разобран, но RequestURI — абсолютный, восстановим r.URL
+		// If URL is not parsed yet but RequestURI is absolute, restore r.URL
 		if r.Method != http.MethodConnect && (r.URL == nil || r.URL.Scheme == "" || r.URL.Host == "") && isAbsoluteURL(r.RequestURI) {
 			if u, err := url.Parse(r.RequestURI); err == nil {
 				r.URL = u
@@ -44,7 +44,7 @@ func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodConnect {
-		// Если MITM включен и домен подходит — перехватываем TLS
+		// If MITM is enabled and domain matches — intercept TLS
 		if d.MITM != nil && d.MITM.CA != nil && d.MITM.shouldIntercept(r.Host) {
 			d.handleConnectMITM(w, r)
 			return
@@ -53,12 +53,12 @@ func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// WebSocket upgrade over plain HTTP (ws://) via forward proxy
-	// Если схема ws — считаем это WS‑апгрейдом, даже если Upgrade заголовок нестандартный.
+	// If scheme is ws — treat it as WS upgrade, even if Upgrade header is non-standard.
 	if r.URL != nil && r.URL.Scheme == "ws" {
 		d.handleHTTPForwardWebSocket(w, r)
 		return
 	}
-	// Либо явный Upgrade на ws поверх обычного http абсолютного URL
+	// Or explicit Upgrade to ws over plain http absolute URL
 	if isWebSocketRequest(r) && (r.URL != nil && r.URL.Scheme == "http") {
 		d.handleHTTPForwardWebSocket(w, r)
 		return
@@ -67,14 +67,14 @@ func (d *Deps) handleForwardProxy(w http.ResponseWriter, r *http.Request) {
 	d.handleHTTPForwardRequest(w, r)
 }
 
-// handleHTTPForwardWebSocket проксирует WebSocket Upgrade (ws://) в режиме forward‑proxy.
-// Делает hijack клиентского соединения, устанавливает соединение к апстриму,
-// передаёт исходный Upgrade‑запрос (origin‑form) и после 101 прокачивает байты в обе стороны.
+// handleHTTPForwardWebSocket proxies WebSocket Upgrade (ws://) in forward-proxy mode.
+// Hijacks the client connection, establishes connection to upstream,
+// forwards the original Upgrade request (origin-form) and after 101 pipes bytes bidirectionally.
 func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Check if target should be monitored (exclude monitoring endpoints)
 	shouldMonitor := d.shouldMonitorTarget(r.URL.Path)
 
-	// Создаём сессию (ws)
+	// Create session (ws)
 	sessionID := id.New()
 	if shouldMonitor {
 		_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: r.URL.String(), ClientAddr: r.RemoteAddr, StartedAt: time.Now().UTC(), Kind: "ws"})
@@ -82,7 +82,7 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		d.Metrics.ActiveSessions.Inc()
 	}
 
-	// Hijack клиента
+	// Hijack client
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "HIJACK_NOT_SUPPORTED", "proxy: hijacking not supported", nil)
@@ -103,14 +103,14 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Dial к апстриму (ws:// => tcp:80)
+	// Dial to upstream (ws:// => tcp:80)
 	upstreamAddr := r.URL.Host
 	if !strings.Contains(upstreamAddr, ":") {
 		upstreamAddr = net.JoinHostPort(upstreamAddr, "80")
 	}
 	upstreamConn, err := net.DialTimeout("tcp", upstreamAddr, 10*time.Second)
 	if err != nil {
-		// Сообщаем клиенту о 502 и закрываем
+		// Notify client with 502 and close
 		_, _ = clientBuf.WriteString("HTTP/1.1 502 Bad Gateway\r\n\r\n")
 		_ = clientBuf.Flush()
 		_ = clientConn.Close()
@@ -122,18 +122,18 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Подготовим исходящий запрос к апстриму (origin-form)
+	// Prepare outgoing request to upstream (origin-form)
 	outReq := r.Clone(contextWithNoCancel())
-	// Origin-form: пустой RequestURI, URL указывает на цель (scheme/host для Host заголовка)
+	// Origin-form: empty RequestURI, URL points to target (scheme/host for Host header)
 	outURL := *r.URL
 	outURL.Scheme = "http"
 	outReq.URL = &outURL
 	outReq.Host = outURL.Host
-	outReq.RequestURI = "" // важно для корректной записи origin-form
-	// Удаляем hop-by-hop, но сохраняем Upgrade/Connection
+	outReq.RequestURI = "" // important for correct origin-form writing
+	// Remove hop-by-hop headers but keep Upgrade/Connection
 	sanitizeForUpgrade(outReq.Header)
 
-	// Лёгкое превью запроса (кадр вниз по потоку)
+	// Light request preview (downstream frame)
 	if shouldMonitor {
 		reqPreview := buildHTTPRequestPreview(outReq, nil)
 		fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: 0, Preview: reqPreview}
@@ -142,7 +142,7 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 	}
 
-	// Пишем апстриму Upgrade‑запрос
+	// Write Upgrade request to upstream
 	if err := outReq.Write(upstreamConn); err != nil {
 		_, _ = clientBuf.WriteString("HTTP/1.1 502 Bad Gateway\r\n\r\n")
 		_ = clientBuf.Flush()
@@ -156,7 +156,7 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Читаем ответ апстрима и отдаем клиенту «как есть»
+	// Read upstream response and send to client as-is
 	upr := bufio.NewReader(upstreamConn)
 	resp, err := http.ReadResponse(upr, outReq)
 	if err != nil {
@@ -171,13 +171,13 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
-	// Отдадим клиенту статус/заголовки
+	// Send status/headers to client
 	_ = resp.Write(clientBuf)
 	_ = clientBuf.Flush()
 
-	// 101 — переключаемся на двунаправленную прокачку WebSocket кадров
+	// 101 — switch to bidirectional WebSocket frame piping
 	if resp.StatusCode == http.StatusSwitchingProtocols {
-		// Учтём возможные байты, уже буферизированные в upr (первые WS‑кадры) и у клиента
+		// Account for bytes possibly already buffered in upr (first WS frames) and at client
 		if n := upr.Buffered(); n > 0 {
 			if b, _ := upr.Peek(n); len(b) > 0 {
 				upstreamConn = &prependConn{Conn: upstreamConn, r: bytes.NewReader(append([]byte(nil), b...))}
@@ -188,8 +188,8 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 				clientConn = &prependConn{Conn: clientConn, r: bytes.NewReader(append([]byte(nil), b...))}
 			}
 		}
-		// Сигнализируем в монитор о факте апгрейда (минимальное событие),
-		// далее полноценные события будут приходить из pipeWSMessages при разборе SIO
+		// Signal monitor about upgrade fact (minimal event),
+		// full events will come from pipeWSMessages during SIO parsing
 		if shouldMonitor {
 			e := domain.Event{ID: id.New(), Ts: time.Now().UTC(), Namespace: "/_sys", Name: "upgraded", ArgsPreview: "[]"}
 			_ = d.Svc.AddEvent(contextWithNoCancel(), sessionID, e)
@@ -201,7 +201,7 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Не 101 — считаем завершённой попытку Upgrade
+	// Not 101 — consider the Upgrade attempt completed
 	_ = clientConn.Close()
 	_ = upstreamConn.Close()
 	if shouldMonitor {
@@ -211,14 +211,14 @@ func (d *Deps) handleHTTPForwardWebSocket(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// sanitizeForUpgrade удаляет hop-by-hop заголовки, оставляя Upgrade/Connection.
+// sanitizeForUpgrade removes hop-by-hop headers, keeping Upgrade/Connection.
 func sanitizeForUpgrade(h http.Header) {
-	// Базовый список hop‑by‑hop без Upgrade/Connection
+	// Basic list of hop-by-hop headers without Upgrade/Connection
 	hop := []string{"Proxy-Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding"}
 	for _, k := range hop {
 		h.Del(k)
 	}
-	// Оставляем Upgrade и Connection как есть
+	// Keep Upgrade and Connection as-is
 }
 
 func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
@@ -267,9 +267,9 @@ func (d *Deps) handleConnectTunnel(w http.ResponseWriter, r *http.Request) {
 	d.Metrics.ActiveSessions.Dec()
 }
 
-// handleConnectMITM: устанавливает TLS с клиентом, используя leaf-сертификат от локального CA,
-// и параллельно инициирует исходящее соединение к upstream (TLS). Все HTTP/1.1 запросы/ответы
-// внутри TLS расшифрованы и могут быть проинструментированы аналогично reverse proxy.
+// handleConnectMITM: establishes TLS with client using a leaf certificate from local CA,
+// and simultaneously initiates an outgoing connection to upstream (TLS). All HTTP/1.1 requests/responses
+// inside TLS are decrypted and can be instrumented similarly to reverse proxy.
 func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 	upstream := r.Host
 	hj, ok := w.(http.Hijacker)
@@ -281,33 +281,33 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	// Отвечаем клиенту, что туннель установлен
+	// Respond to client that tunnel is established
 	_, _ = bufrw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
 	_ = bufrw.Flush()
 
-	// Получаем сертификат под этот host
+	// Get certificate for this host
 	leaf, err := d.MITM.CA.IssueFor(upstream)
 	if err != nil {
 		_ = clientConn.Close()
 		return
 	}
-	// Настраиваем TLS сервер для клиента
+	// Configure TLS server for client
 	tlsSrv := tls.Server(clientConn, &tls.Config{
 		Certificates: []tls.Certificate{leaf},
-		NextProtos:   []string{"http/1.1"}, // упрощаем: только H1 внутри
+		NextProtos:   []string{"http/1.1"}, // simplified: only H1 inside
 	})
 	if err := tlsSrv.Handshake(); err != nil {
 		_ = tlsSrv.Close()
 		return
 	}
 
-	// Dial к upstream TCP, затем TLS клиент
+	// Dial to upstream TCP, then TLS client
 	upstreamTCP, err := net.DialTimeout("tcp", upstream, 10*time.Second)
 	if err != nil {
 		_ = tlsSrv.Close()
 		return
 	}
-	// Клиентская сторона TLS к реальному серверу
+	// TLS client side to real server
 	serverName := upstream
 	if h, _, err := net.SplitHostPort(upstream); err == nil {
 		serverName = h
@@ -319,14 +319,14 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Создаем сессию (тип http), будем логировать запросы/ответы
+	// Create session (type http), will log requests/responses
 	sessionID := id.New()
 	_ = d.Svc.Create(contextWithNoCancel(), domain.Session{ID: sessionID, Target: "mitm://" + upstream, ClientAddr: r.RemoteAddr, StartedAt: time.Now().UTC(), Kind: "http"})
 	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID})
 	d.Metrics.ActiveSessions.Inc()
 
-	// Простой цикл: читаем HTTP запросы от клиента, отправляем к апстриму, читаем ответ, отдаем назад.
-	// Работает для keep-alive последовательности запросов.
+	// Simple loop: read HTTP requests from client, send to upstream, read response, send back.
+	// Works for keep-alive request sequences.
 	go func() {
 		defer func() {
 			_ = tlsCli.Close()
@@ -347,12 +347,12 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 		clientBR := bufio.NewReader(srcConn)
 		serverBR := bufio.NewReader(tlsCli)
 		for {
-			// Читаем запрос от клиента
+			// Read request from client
 			req, err := http.ReadRequest(clientBR)
 			if err != nil {
 				return
 			}
-			// Переписываем схему/хост для апстрима
+			// Rewrite scheme/host for upstream
 			req.URL.Scheme = "https"
 			req.URL.Host = upstream
 			req.RequestURI = ""
@@ -363,7 +363,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			}
 			req.Header.Set("Via", "network-debugger")
 
-			// Для превью: аккуратно пикнем тело
+			// For preview: carefully peek body
 			var reqBodyBuf []byte
 			if req.Body != nil {
 				peekSize := int(previewMaxBytes.Load())
@@ -380,7 +380,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 					req.Body = io.NopCloser(io.MultiReader(bytes.NewReader(reqBodyBuf), req.Body))
 				}
 			}
-			// Логируем запрос как в reverse proxy
+			// Log request like in reverse proxy
 			rPrev := &http.Request{Method: req.Method, URL: req.URL, Header: req.Header}
 			reqPreview := buildHTTPRequestPreview(rPrev, reqBodyBuf)
 			fr := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(req.ContentLength), Preview: reqPreview}
@@ -388,7 +388,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
-			// Mapping (MITM): оценим и применим до отправки апстриму
+			// Mapping (MITM): evaluate and apply before sending to upstream
 			if d.Cfg.MappingEnabled && d.MapRt != nil {
 				if dec, ok := d.MapRt.EvalRequest(req); ok {
 					if dec.Kind == "local" {
@@ -488,28 +488,28 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// Отправляем запрос к апстриму
+			// Send request to upstream
 			if err := req.Write(tlsCli); err != nil {
 				return
 			}
-			// Читаем ответ
+			// Read response
 			resp, err := http.ReadResponse(serverBR, req)
 			if err != nil {
 				return
 			}
-			// Если апгрейд (например, WebSocket) — после записи 101 переключаемся на тупой прокач байтов
+			// If upgrade (e.g., WebSocket) — after writing 101 switch to raw byte piping
 			preview := buildHTTPResponsePreview(resp)
 			fr2 := domain.Frame{ID: id.New(), Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
 			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr2)
 			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr2.ID})
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 
-			// Ограничим скорость выгрузки апстрима клиенту
+			// Limit upstream to client download speed
 			if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleDownKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && resp.Body != nil {
 				bps := kbpsToBytesPerSec(d.Cfg.ThrottleDownKbps)
 				resp.Body = io.NopCloser(wrapReaderThrottleLoss(resp.Body, bps, d.Cfg.ThrottlePacketLoss))
 			}
-			// Отдаём ответ клиенту
+			// Send response to client
 			if err := resp.Write(tlsSrv); err != nil {
 				return
 			}
@@ -551,7 +551,7 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if resp.StatusCode == http.StatusSwitchingProtocols {
-				// После 101 HTTP больше нет — переключаемся на прокачку WS с логированием кадров.
+				// After 101 HTTP is no longer present — switch to WS piping with frame logging.
 				// Check if this specific request path should be monitored
 				shouldMonitor := d.shouldMonitorTarget(req.URL.Path)
 				go d.pipeWSMessages(sessionID, tlsSrv, tlsCli, domain.DirectionClientToUpstream, shouldMonitor)
@@ -627,7 +627,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	if d.Cfg.MappingEnabled && d.MapRt != nil {
 		if dec, ok := d.MapRt.EvalRequest(outReq); ok {
 			if dec.Kind == "local" {
-				// Прочитаем файл/блоб
+				// Read file/blob
 				var bodyAll []byte
 				var readErr error
 				if dec.LocalFilePath != nil && *dec.LocalFilePath != "" {
@@ -666,7 +666,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 					}
 					return
 				}
-				// Сформируем ответ
+				// Build response
 				headers := http.Header{}
 				if dec.ContentTypeOverride != "" {
 					headers.Set("Content-Type", dec.ContentTypeOverride)
@@ -691,7 +691,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 					d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
 				}
 
-				// Отдаём клиенту
+				// Send to client
 				copyHeader(w.Header(), headers)
 				w.Header().Set("Connection", "close")
 				w.Header().Set("Content-Length", strconv.Itoa(len(bodyAll)))
@@ -706,7 +706,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 				}
 				return
 			}
-			// Remote — переписываем URL
+			// Remote — rewrite URL
 			if u, err := url.Parse(dec.RemoteURL); err == nil {
 				outReq.URL = u
 				if !dec.PreserveHost {
@@ -751,7 +751,7 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 						outReq.URL = u
 						outReq.Host = u.Host
 					} else {
-						// относительный путь
+						// relative path
 						newURL := *outReq.URL
 						newURL.Path = u.Path
 						newURL.RawQuery = u.RawQuery
@@ -938,7 +938,7 @@ func copyHeader(dst http.Header, src http.Header) {
 	}
 }
 
-// prependConn сначала читает подготовленные байты из r, затем читает из базового соединения.
+// prependConn first reads prepared bytes from r, then reads from the underlying connection.
 type prependConn struct {
 	net.Conn
 	r io.Reader
@@ -952,7 +952,7 @@ func (p *prependConn) Read(b []byte) (int, error) {
 			if n > 0 {
 				return n, nil
 			}
-			// перейти к чтению из Conn
+			// proceed to reading from Conn
 		} else if n > 0 || err != nil {
 			return n, err
 		}

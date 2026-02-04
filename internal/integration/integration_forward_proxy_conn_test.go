@@ -43,7 +43,7 @@ func TestForwardProxy_AbsoluteURI_StealthOff_AndHopByHopStripped(t *testing.T) {
 
 	app, deps := startHTTPApp(t)
 	defer app.Close()
-	// Явно выключаем stealth, чтобы проверять, что заголовки выставляются
+	// Explicitly disable stealth to verify that headers are set
 	deps.Cfg.StealthHeaders = false
 
 	proxyHost := ensureForwardProxyAddr(t, app, deps)
@@ -80,10 +80,10 @@ func TestForwardProxy_AbsoluteURI_StealthOff_AndHopByHopStripped(t *testing.T) {
 	var got map[string]string
 	_ = json.Unmarshal(body, &got)
 	if got["xfp"] == "" || got["via"] == "" {
-		t.Fatalf("stealth off — ожидаем заполненные Via/X-Forwarded-Proto: %+v", got)
+		t.Fatalf("stealth off - expect filled Via/X-Forwarded-Proto: %+v", got)
 	}
 	if got["conn"] != "" || got["pc"] != "" {
-		t.Fatalf("hop-by-hop должны быть стёрты: %+v", got)
+		t.Fatalf("hop-by-hop should be stripped: %+v", got)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
 		t.Fatalf("refused must be 502, got %q", line2)
 	}
 
-	// Timeout: создаём upstream, который принимает, но не отвечает
+	// Timeout: create upstream that accepts but doesn't respond
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -122,7 +122,7 @@ func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
 		c, _ := ln.Accept()
 		if c != nil {
 			defer c.Close()
-			// просто молчим достаточно долго
+			// just stay silent long enough
 			time.Sleep(2 * time.Second)
 		}
 	}()
@@ -131,11 +131,11 @@ func TestForwardProxy_Errors_DNS_Refused_Timeout(t *testing.T) {
 	br3 := bufio.NewReader(conn3)
 	_ = conn3.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 	if _, err := br3.ReadString('\n'); err == nil {
-		// Если вдруг что-то ответили — это тоже ок, но ожидаем таймаут
+		// If something responds - that's also ok, but we expect timeout
 		_ = conn3.Close()
 	} else if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
 		_ = conn3.Close()
-		t.Fatalf("ожидался timeout, получили: %v", err)
+		t.Fatalf("expected timeout, got: %v", err)
 	}
 }
 

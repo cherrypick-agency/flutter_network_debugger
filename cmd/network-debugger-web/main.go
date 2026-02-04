@@ -57,7 +57,7 @@ func main() {
 			logger.Error().Err(err).Str("path", dbPath).Msg("db init failed")
 		} else {
 			deps.DB = gdb
-			// Автоматическое создание таблиц при первом запуске
+			// Automatic table creation on first run
 			if err := gdb.AutoMigrate(
 				&setp.RuntimeSettingsModel{},
 				&setp.ThrottleProfileModel{},

@@ -27,12 +27,12 @@ func TestNewWorkspace(t *testing.T) {
 		t.Fatal("Workspace path is empty")
 	}
 
-	// Проверяем что директория создана
+	// Check that directory was created
 	if _, err := os.Stat(ws.Path); os.IsNotExist(err) {
 		t.Fatalf("Workspace directory was not created: %s", ws.Path)
 	}
 
-	// Проверяем что путь лежит внутри os.TempDir()
+	// Check that path is within os.TempDir()
 	rel, err := filepath.Rel(os.TempDir(), ws.Path)
 	if err != nil {
 		t.Fatalf("Rel failed: %v", err)
@@ -41,7 +41,7 @@ func TestNewWorkspace(t *testing.T) {
 		t.Errorf("Workspace path should be within temp dir: %s", ws.Path)
 	}
 
-	// Проверяем что директория похожа на наш префикс
+	// Check that directory matches our prefix
 	if !strings.HasPrefix(filepath.Base(ws.Path), "go-proxy-compile-") {
 		t.Errorf("Workspace base should start with go-proxy-compile-: %s", ws.Path)
 	}
@@ -97,7 +97,7 @@ func TestWorkspace_WriteFile(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Тест записи простого файла
+	// Test writing simple file
 	filename := "test.txt"
 	content := []byte("hello world")
 	err = ws.WriteFile(filename, content)
@@ -105,12 +105,12 @@ func TestWorkspace_WriteFile(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Проверяем что файл создан
+	// Check that file was created
 	if !ws.FileExists(filename) {
 		t.Fatal("File was not created")
 	}
 
-	// Проверяем содержимое
+	// Check contents
 	readContent, err := ws.ReadFile(filename)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -129,7 +129,7 @@ func TestWorkspace_WriteFile_WithSubdirectory(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Тест записи файла в поддиректорию
+	// Test writing file to subdirectory
 	filename := "subdir/test.txt"
 	content := []byte("nested content")
 	err = ws.WriteFile(filename, content)
@@ -137,12 +137,12 @@ func TestWorkspace_WriteFile_WithSubdirectory(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Проверяем что файл создан
+	// Check that file was created
 	if !ws.FileExists(filename) {
 		t.Fatal("File in subdirectory was not created")
 	}
 
-	// Проверяем содержимое
+	// Check contents
 	readContent, err := ws.ReadFile(filename)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -175,18 +175,18 @@ func TestWorkspace_FileExists(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Файл не существует
+	// File does not exist
 	if ws.FileExists("nonexistent.txt") {
 		t.Fatal("FileExists should return false for nonexistent file")
 	}
 
-	// Создаем файл
+	// Create file
 	err = ws.WriteFile("exists.txt", []byte("test"))
 	if err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Файл существует
+	// File exists
 	if !ws.FileExists("exists.txt") {
 		t.Fatal("FileExists should return true for existing file")
 	}
@@ -202,7 +202,7 @@ func TestWorkspace_ExecuteCommand(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Тест выполнения простой команды (echo)
+	// Test executing simple command (echo)
 	output, err := ws.ExecuteCommand(ctx, "echo", "hello")
 	if err != nil {
 		t.Fatalf("ExecuteCommand failed: %v", err)
@@ -222,11 +222,11 @@ func TestWorkspace_ExecuteCommand_WithTimeout(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Создаем контекст с таймаутом
+	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// Команда которая будет выполняться дольше таймаута
+	// Command that will run longer than timeout
 	_, err = ws.ExecuteCommand(ctx, "sleep", "1")
 	if err == nil {
 		t.Fatal("ExecuteCommand should fail with timeout")
@@ -243,7 +243,7 @@ func TestWorkspace_ExecuteCommandSeparate(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Тест выполнения команды с раздельным выводом
+	// Test executing command with separate outputs
 	stdout, stderr, err := ws.ExecuteCommandSeparate(ctx, "sh", "-c", "echo stdout; echo stderr >&2")
 	if err != nil {
 		t.Fatalf("ExecuteCommandSeparate failed: %v", err)
@@ -256,7 +256,7 @@ func TestWorkspace_ExecuteCommandSeparate(t *testing.T) {
 		t.Fatal("Stdout is empty")
 	}
 
-	// Проверяем что stderr отделен от stdout
+	// Check that stderr is separated from stdout
 	if stderrStr == "" {
 		t.Fatal("Stderr is empty")
 	}
@@ -271,23 +271,23 @@ func TestWorkspace_Cleanup(t *testing.T) {
 
 	path := ws.Path
 
-	// Проверяем что директория существует
+	// Check that directory exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatalf("Workspace directory does not exist: %s", path)
 	}
 
-	// Очищаем
+	// Clean up
 	err = ws.Cleanup()
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
 	}
 
-	// Проверяем что директория удалена
+	// Check that directory was removed
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("Workspace directory was not removed")
 	}
 
-	// Повторная очистка не должна падать
+	// Second cleanup should not panic
 	err = ws.Cleanup()
 	if err != nil {
 		t.Fatalf("Second cleanup failed: %v", err)
@@ -298,7 +298,7 @@ func TestWorkspace_Cleanup(t *testing.T) {
 func TestWorkspace_Cleanup_EmptyPath(t *testing.T) {
 	ws := &Workspace{Path: ""}
 
-	// Очистка пустого пути не должна падать
+	// Cleanup with empty path should not panic
 	err := ws.Cleanup()
 	if err != nil {
 		t.Fatalf("Cleanup with empty path failed: %v", err)
@@ -331,7 +331,7 @@ func TestWorkspace_ListFiles(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Создаем несколько файлов
+	// Create several files
 	files := map[string][]byte{
 		"file1.txt":        []byte("content1"),
 		"file2.txt":        []byte("content2"),
@@ -345,19 +345,19 @@ func TestWorkspace_ListFiles(t *testing.T) {
 		}
 	}
 
-	// Получаем список файлов
+	// Get file list
 	listedFiles, err := ws.ListFiles()
 	if err != nil {
 		t.Fatalf("ListFiles failed: %v", err)
 	}
 
-	// Проверяем что все файлы найдены
+	// Check that all files were found
 	if len(listedFiles) != len(files) {
 		t.Errorf("Expected %d files, got %d", len(files), len(listedFiles))
 	}
 
-	// Проверяем наличие каждого файла
-	// Нормализуем пути для кроссплатформенного сравнения
+	// Check presence of each file
+	// Normalize paths for cross-platform comparison
 	normalizedListed := make(map[string]bool)
 	for _, listed := range listedFiles {
 		normalizedListed[filepath.ToSlash(listed)] = true
@@ -381,7 +381,7 @@ func TestWorkspace_ExecuteCommandSeparate_Error(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Тест с несуществующей командой
+	// Test with nonexistent command
 	_, _, err = ws.ExecuteCommandSeparate(ctx, "nonexistent-command-12345", "arg1")
 	if err == nil {
 		t.Fatal("ExecuteCommandSeparate should fail for nonexistent command")
@@ -398,13 +398,13 @@ func TestWorkspace_ExecuteCommandSeparate_CommandFails(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Команда которая завершается с ошибкой
+	// Command that fails with error
 	stdout, stderr, err := ws.ExecuteCommandSeparate(ctx, "sh", "-c", "echo stdout; echo stderr >&2; exit 1")
 	if err == nil {
 		t.Fatal("ExecuteCommandSeparate should return error for failing command")
 	}
 
-	// Проверяем что вывод все равно получен
+	// Check that output was still received
 	if len(stdout) == 0 {
 		t.Error("Stdout should not be empty even if command fails")
 	}
@@ -421,7 +421,7 @@ func TestWorkspace_WriteFile_LongPath(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Создаем очень длинный путь
+	// Create very long path
 	longPath := "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.txt"
 	content := []byte("test content")
 
@@ -430,12 +430,12 @@ func TestWorkspace_WriteFile_LongPath(t *testing.T) {
 		t.Fatalf("WriteFile failed for long path: %v", err)
 	}
 
-	// Проверяем что файл создан
+	// Check that file was created
 	if !ws.FileExists(longPath) {
 		t.Fatal("File with long path was not created")
 	}
 
-	// Проверяем содержимое
+	// Check contents
 	readContent, err := ws.ReadFile(longPath)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -454,18 +454,18 @@ func TestWorkspace_WriteFile_EmptyContent(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Записываем пустой файл
+	// Write empty file
 	err = ws.WriteFile("empty.txt", []byte{})
 	if err != nil {
 		t.Fatalf("WriteFile failed for empty content: %v", err)
 	}
 
-	// Проверяем что файл создан
+	// Check that file was created
 	if !ws.FileExists("empty.txt") {
 		t.Fatal("Empty file was not created")
 	}
 
-	// Проверяем содержимое
+	// Check contents
 	readContent, err := ws.ReadFile("empty.txt")
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -484,7 +484,7 @@ func TestWorkspace_ReadFile_LargeFile(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Создаем большой файл (1MB)
+	// Create large file (1MB)
 	largeContent := make([]byte, 1024*1024)
 	for i := range largeContent {
 		largeContent[i] = byte(i % 256)
@@ -495,7 +495,7 @@ func TestWorkspace_ReadFile_LargeFile(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Читаем большой файл
+	// Read large file
 	readContent, err := ws.ReadFile("large.bin")
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -505,7 +505,7 @@ func TestWorkspace_ReadFile_LargeFile(t *testing.T) {
 		t.Errorf("Expected %d bytes, got %d", len(largeContent), len(readContent))
 	}
 
-	// Проверяем первые и последние байты
+	// Check first and last bytes
 	if readContent[0] != largeContent[0] {
 		t.Error("First byte mismatch")
 	}
@@ -522,7 +522,7 @@ func TestWorkspace_ListFiles_WithErrors(t *testing.T) {
 	}
 	defer ws.Cleanup()
 
-	// Создаем файлы
+	// Create files
 	err = ws.WriteFile("file1.txt", []byte("content1"))
 	if err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
@@ -533,13 +533,13 @@ func TestWorkspace_ListFiles_WithErrors(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Получаем список файлов
+	// Get file list
 	files, err := ws.ListFiles()
 	if err != nil {
 		t.Fatalf("ListFiles failed: %v", err)
 	}
 
-	// Проверяем что файлы найдены
+	// Check that files were found
 	if len(files) < 2 {
 		t.Errorf("Expected at least 2 files, got %d", len(files))
 	}
@@ -555,13 +555,13 @@ func TestWorkspace_ExecuteCommand_EmptyOutput(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Команда которая не выводит ничего
+	// Command that outputs nothing
 	output, err := ws.ExecuteCommand(ctx, "true")
 	if err != nil {
 		t.Fatalf("ExecuteCommand failed: %v", err)
 	}
 
-	// Вывод может быть пустым или содержать перевод строки
+	// Output may be empty or contain newline
 	_ = output
 }
 
@@ -575,13 +575,13 @@ func TestWorkspace_ExecuteCommand_WithErrorOutput(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Команда которая выводит в stderr
+	// Command that outputs to stderr
 	output, err := ws.ExecuteCommand(ctx, "sh", "-c", "echo 'error message' >&2; exit 1")
 	if err == nil {
 		t.Fatal("ExecuteCommand should return error for failing command")
 	}
 
-	// Проверяем что вывод содержит сообщение об ошибке
+	// Check that output contains error message
 	outputStr := string(output)
 	if outputStr == "" {
 		t.Error("Command output should not be empty")

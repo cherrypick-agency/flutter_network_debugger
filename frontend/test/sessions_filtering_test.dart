@@ -116,7 +116,7 @@ void main() {
     store.items = ObservableList.of([s1, s2, s3, s4]);
   });
 
-  test('фильтр по httpMethod=GET', () {
+  test('filter by httpMethod=GET', () {
     // Arrange
     filters.setHttpMethod('GET');
 
@@ -137,7 +137,7 @@ void main() {
     expect(ids, isNot(contains('2')));
   });
 
-  test('фильтр по httpStatus=4xx', () {
+  test('filter by httpStatus=4xx', () {
     filters.setHttpStatus('4xx');
     final res = filterVisibleSessions(
       store: store,
@@ -151,7 +151,7 @@ void main() {
     expect(res.map((e) => e.id), ['2']);
   });
 
-  test('фильтр по минимальной длительности', () {
+  test('filter by minimum duration', () {
     filters.setHttpMinDurationMs(600);
     final res = filterVisibleSessions(
       store: store,
@@ -166,7 +166,7 @@ void main() {
     expect(res.map((e) => e.id), isNot(contains('1')));
   });
 
-  test('фильтр по mime содержит json', () {
+  test('filter by mime contains json', () {
     filters.setHttpMime('json');
     final res = filterVisibleSessions(
       store: store,
@@ -180,7 +180,7 @@ void main() {
     expect(res.map((e) => e.id).toList(), ['1']);
   });
 
-  test('фильтр по заголовкам (ключ обязателен, значение опционально)', () {
+  test('filter by headers (key is required, value is optional)', () {
     filters
       ..setHeaderKey('x-req-id')
       ..setHeaderVal('abc');
@@ -195,7 +195,7 @@ void main() {
     );
     expect(res.map((e) => e.id).toList(), ['1']);
 
-    // Если значение не совпало — пусто
+    // If value doesn't match - result is empty
     filters.setHeaderVal('zzz');
     res = filterVisibleSessions(
       store: store,
@@ -208,7 +208,7 @@ void main() {
     );
     expect(res, isEmpty);
 
-    // Если значение пустое, но ключ есть — вернёт только если заголовок присутствует
+    // If value is empty but key exists - returns only if header is present
     filters.setHeaderVal('');
     res = filterVisibleSessions(
       store: store,
@@ -222,7 +222,7 @@ void main() {
     expect(res.map((e) => e.id).toList(), ['1']);
   });
 
-  test('selectedDomains фильтрует по домену target', () {
+  test('selectedDomains filters by target domain', () {
     final res = filterVisibleSessions(
       store: store,
       filters: filters,
@@ -236,7 +236,7 @@ void main() {
     expect(res.map((e) => e.id), isNot(contains('2')));
   });
 
-  test('since исключает завершённые до порога', () {
+  test('since excludes sessions closed before threshold', () {
     final since = DateTime.now().toUtc().subtract(const Duration(minutes: 8));
     final res = filterVisibleSessions(
       store: store,
@@ -247,11 +247,11 @@ void main() {
       since: since,
       ignoredIds: <String>{},
     );
-    // s1 завершилась 9 минут назад — должна быть отфильтрована
+    // s1 was closed 9 minutes ago - should be filtered out
     expect(res.map((e) => e.id), isNot(contains('1')));
   });
 
-  test('selectedRange: включаются сессии, пересекающие диапазон', () {
+  test('selectedRange: includes sessions intersecting the range', () {
     final now = DateTime.now().toUtc();
     final range = DateTimeRangeWrapper(
       start: now.subtract(const Duration(minutes: 6)),
@@ -266,13 +266,13 @@ void main() {
       since: null,
       ignoredIds: <String>{},
     );
-    // В диапазон попадает s2 (5..4 мин назад), а s1 (10..9) не попадает
+    // s2 (5..4 min ago) falls within range, while s1 (10..9) does not
     final ids = res.map((e) => e.id).toList();
     expect(ids, contains('2'));
     expect(ids, isNot(contains('1')));
   });
 
-  test('groupBy=domain сортирует по домену', () {
+  test('groupBy=domain sorts by domain', () {
     filters.setGroupBy('domain');
     final res = filterVisibleSessions(
       store: store,

@@ -117,7 +117,7 @@ func TestKotlinDownloader_Extract_Success(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "kotlin.zip")
 
-	// Создаем zip архив с kotlinc директорией
+	// Create zip archive with kotlinc directory
 	zipFile, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create zip: %v", err)
@@ -127,13 +127,13 @@ func TestKotlinDownloader_Extract_Success(t *testing.T) {
 	zipWriter := zip.NewWriter(zipFile)
 	defer zipWriter.Close()
 
-	// Добавляем директорию kotlinc
+	// Add kotlinc directory
 	_, err = zipWriter.Create("kotlinc/")
 	if err != nil {
 		t.Fatalf("Failed to create directory in zip: %v", err)
 	}
 
-	// Добавляем файл в kotlinc
+	// Add file to kotlinc
 	f, err := zipWriter.Create("kotlinc/bin/kotlinc")
 	if err != nil {
 		t.Fatalf("Failed to create file in zip: %v", err)
@@ -146,13 +146,13 @@ func TestKotlinDownloader_Extract_Success(t *testing.T) {
 	zipWriter.Close()
 	zipFile.Close()
 
-	// Извлекаем
+	// Extract
 	err = downloader.Extract(archivePath, targetDir)
 	if err != nil {
 		t.Fatalf("Extract() error = %v, want nil", err)
 	}
 
-	// Проверяем что файл извлечен в корень targetDir
+	// Check that file is extracted to targetDir root
 	kotlincFile := filepath.Join(targetDir, "bin", "kotlinc")
 	if _, err := os.Stat(kotlincFile); os.IsNotExist(err) {
 		t.Error("kotlinc binary was not extracted to target directory root")
@@ -166,7 +166,7 @@ func TestKotlinDownloader_Extract_NoKotlincDir(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "kotlin.zip")
 
-	// Создаем zip архив без kotlinc директории
+	// Create zip archive without kotlinc directory
 	zipFile, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create zip: %v", err)
@@ -176,7 +176,7 @@ func TestKotlinDownloader_Extract_NoKotlincDir(t *testing.T) {
 	zipWriter := zip.NewWriter(zipFile)
 	defer zipWriter.Close()
 
-	// Добавляем обычный файл
+	// Add regular file
 	f, err := zipWriter.Create("test.txt")
 	if err != nil {
 		t.Fatalf("Failed to create file in zip: %v", err)
@@ -189,7 +189,7 @@ func TestKotlinDownloader_Extract_NoKotlincDir(t *testing.T) {
 	zipWriter.Close()
 	zipFile.Close()
 
-	// Извлечение должно пройти успешно (kotlinc директория не обязательна)
+	// Extraction should succeed (kotlinc directory is optional)
 	err = downloader.Extract(archivePath, targetDir)
 	if err != nil {
 		t.Fatalf("Extract() error = %v, want nil (kotlinc dir is optional)", err)

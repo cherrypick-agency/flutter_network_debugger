@@ -1,6 +1,6 @@
 package domain
 
-// ColorMode управляет раскраской вывода.
+// ColorMode controls output coloring.
 type ColorMode string
 
 const (
@@ -9,16 +9,16 @@ const (
 	ColorNever  ColorMode = "never"
 )
 
-// Options — параметры CLI‑вывода.
+// Options — CLI output parameters.
 type Options struct {
 	Preset           string
-	Fields           map[string]bool // включённые секции
+	Fields           map[string]bool // enabled sections
 	BodyPreviewBytes int
 	Color            ColorMode
-	Filter           string // простая подстрока для фильтрации
+	Filter           string // simple substring for filtering
 }
 
-// EnsureFieldsFromPreset заполняет Fields на основе пресета, если явно не указано.
+// EnsureFieldsFromPreset populates Fields based on preset, if not explicitly specified.
 func (o *Options) EnsureFieldsFromPreset() {
 	if len(o.Fields) > 0 {
 		return
@@ -48,7 +48,7 @@ func (o *Options) EnsureFieldsFromPreset() {
 		o.Fields["cookies"] = true
 		o.Fields["ids"] = true
 	default:
-		// по умолчанию basic
+		// default is basic
 		o.Fields["line"] = true
 		o.Fields["sizes"] = true
 	}

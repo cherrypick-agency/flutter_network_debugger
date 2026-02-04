@@ -14,7 +14,7 @@ import (
 	mdomain "network-debugger/internal/features/mapping/domain"
 )
 
-// Decision описывает результат сопоставления
+// Decision describes the matching result
 type Decision struct {
 	Kind   mdomain.Kind
 	RuleID string
@@ -28,11 +28,11 @@ type Decision struct {
 	PreserveHost bool
 }
 
-// Manager хранит предкомпилированные правила и осуществляет быстрый matching
+// Manager stores precompiled rules and performs fast matching
 type Manager struct {
 	mu    sync.RWMutex
 	rules []compiledRule
-	// отслеживание изменений локальных файлов (без внешних зависимостей)
+	// tracking local file changes (without external dependencies)
 	fileMTime    map[string]int64
 	onFileChange func(ruleID string, path string)
 }
@@ -48,9 +48,9 @@ type compiledRule struct {
 
 func New() *Manager { return &Manager{rules: []compiledRule{}, fileMTime: make(map[string]int64)} }
 
-// Update заменяет набор правил (ожидается отсортированный по priority ASC)
+// Update replaces the rule set (expected sorted by priority ASC)
 func (m *Manager) Update(rules []mdomain.MapRule) {
-	// На всякий случай сортируем сами, чтобы рантайм не зависел от порядка списка.
+	// Just in case, we sort ourselves so runtime doesn't depend on list order.
 	sorted := append([]mdomain.MapRule(nil), rules...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].Priority < sorted[j].Priority
@@ -84,7 +84,7 @@ func (m *Manager) Update(rules []mdomain.MapRule) {
 	}
 	m.mu.Lock()
 	m.rules = cr
-	// переинициализируем кеш mtime для локальных путей
+	// reinitialize mtime cache for local paths
 	m.fileMTime = make(map[string]int64)
 	for _, r := range sorted {
 		if r.FilePath != nil && *r.FilePath != "" {
@@ -96,11 +96,11 @@ func (m *Manager) Update(rules []mdomain.MapRule) {
 	m.mu.Unlock()
 }
 
-// EvalRequest возвращает решение по маппингу.
+// EvalRequest returns the mapping decision.
 //
-// Важно: если remote-правило имеет stopProcessing=false, мы применяем его
-// (как переписывание URL) и продолжаем матчить следующие правила на уже
-// переписанном URL.
+// Important: if a remote rule has stopProcessing=false, we apply it
+// (as URL rewriting) and continue matching subsequent rules on the
+// already rewritten URL.
 func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 	m.mu.RLock()
 	rules := m.rules
@@ -143,9 +143,9 @@ func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 		if !matchHostPath(cr, host, path) {
 			continue
 		}
-		// Совпало — формируем решение
+		// Matched — form a decision
 		if cr.src.Kind == mdomain.KindLocal {
-			// проверим изменение файла (best-effort)
+			// check file change (best-effort)
 			if cr.src.FilePath != nil && *cr.src.FilePath != "" {
 				p := *cr.src.FilePath
 				if fi, err := os.Stat(p); err == nil {
@@ -168,11 +168,11 @@ func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 		// Remote
 		to := cr.src.TargetURLTemplate
 		if cr.isRegex && cr.pathRe != nil && curURL != nil {
-			// применим подстановки $1.. по path
+			// apply substitutions $1.. by path
 			to = cr.pathRe.ReplaceAllString(curURL.Path, cr.src.TargetURLTemplate)
 		}
 		to = applyTemplateTokens(to, &http.Request{Method: r.Method, URL: curURL, Host: curHostHeader})
-		// нормализуем целевой URL
+		// normalize target URL
 		if u, err := url.Parse(to); err == nil {
 			lastRemote = Decision{
 				Kind:         mdomain.KindRemote,
@@ -192,7 +192,7 @@ func (m *Manager) EvalRequest(r *http.Request) (Decision, bool) {
 			}
 			continue
 		}
-		// если шаблон не распарсился — игнорируем правило
+		// if template failed to parse — ignore the rule
 	}
 	if haveRemote {
 		return lastRemote, true
@@ -256,7 +256,7 @@ func hostNoPort(hostport string) string {
 	if err == nil && h != "" {
 		return h
 	}
-	// net.SplitHostPort падает на "example.com" без порта — это нормальный кейс.
+	// net.SplitHostPort fails on "example.com" without port — this is a normal case.
 	return hostport
 }
 
@@ -289,7 +289,7 @@ func applyTemplateTokens(tpl string, r *http.Request) string {
 	).Replace(tpl)
 }
 
-// SetOnFileChange регистрирует коллбек на изменения локальных файлов правил
+// SetOnFileChange registers a callback for local rule file changes
 func (m *Manager) SetOnFileChange(cb func(ruleID string, path string)) {
 	m.mu.Lock()
 	m.onFileChange = cb

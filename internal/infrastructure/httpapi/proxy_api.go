@@ -45,7 +45,7 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 		out.Socks.Addr = pc.SocksAddr
 		out.Socks.Port = addrPort(pc.SocksAddr)
 		out.Socks.AuthMode = pc.SocksAuthMode
-		// user/pass не возвращаем, только если установлены и явно нужны – опустим для простоты UX
+		// don't return user/pass, only if set and explicitly needed – omit for UX simplicity
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
 		return
@@ -55,7 +55,7 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid json", nil)
 			return
 		}
-		// Валидация
+		// Validation
 		if in.Forward.Port < 0 || in.Forward.Port > 65535 || in.Socks.Port < 0 || in.Socks.Port > 65535 {
 			writeError(w, http.StatusBadRequest, "BAD_PORT", "port must be 0..65535", nil)
 			return
@@ -64,8 +64,8 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "BAD_AUTH_MODE", "authMode must be none or userpass", nil)
 			return
 		}
-		// Не даём случайно посадить SOCKS и forward на один и тот же порт:
-		// в таком случае клиенты будут успешно подключаться по TCP, но HTTP к proxy-порту работать не будет.
+		// Don't allow accidentally putting SOCKS and forward on the same port:
+		// in that case clients will successfully connect via TCP, but HTTP to proxy port won't work.
 		if in.Forward.Enabled && in.Socks.Enabled && in.Forward.Port > 0 && in.Forward.Port == in.Socks.Port {
 			writeError(w, http.StatusBadRequest, "PORT_CONFLICT", "forward and socks ports must be different", nil)
 			return
@@ -97,7 +97,7 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 		if in.Socks.Pass != "" {
 			pc.SocksPass = in.Socks.Pass
 		}
-		// Сохраняем и применяем
+		// Save and apply
 		saved, err := d.ProxySvc.Save(contextWithNoCancel(), pc)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "SAVE_FAILED", err.Error(), nil)
@@ -116,7 +116,7 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Ответим текущей конфигурацией
+		// Respond with current configuration
 		out := proxyCfgDTO{}
 		out.Forward.Enabled = saved.ForwardEnabled
 		out.Forward.Addr = saved.ForwardAddr
@@ -135,7 +135,7 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func addrPort(addr string) int {
-	// Форматы: ":8888" | "127.0.0.1:8888" | "localhost:8888"
+	// Formats: ":8888" | "127.0.0.1:8888" | "localhost:8888"
 	i := strings.LastIndex(addr, ":")
 	if i < 0 || i == len(addr)-1 {
 		return 0

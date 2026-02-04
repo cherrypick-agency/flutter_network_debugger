@@ -2,7 +2,7 @@ package ports
 
 import "context"
 
-// EventType описывает тип события мониторинга, интересующий CLI.
+// EventType describes the type of monitoring event relevant to CLI.
 type EventType string
 
 const (
@@ -11,16 +11,16 @@ const (
 	EventHTTPTxAdded    EventType = "http_tx_added"
 )
 
-// Event — упрощённая модель события для CLI.
+// Event — simplified event model for CLI.
 type Event struct {
 	Type      EventType
 	SessionID string
-	Ref       string // например, id http-транзакции
+	Ref       string // e.g., http transaction id
 }
 
-// EventStream — порт подписки на события из рантайма.
+// EventStream — port for subscribing to runtime events.
 //
-// SRP/DIP: CLI зависит только от абстракции, а не от конкретного MonitorHub.
+// SRP/DIP: CLI depends only on the abstraction, not on the concrete MonitorHub.
 type EventStream interface {
 	Subscribe(ctx context.Context) (<-chan Event, func(), error)
 }

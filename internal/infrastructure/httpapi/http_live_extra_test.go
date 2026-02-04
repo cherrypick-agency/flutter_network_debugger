@@ -4,7 +4,7 @@ import "testing"
 
 func TestLiveSessions_SendText_InvalidDirection(t *testing.T) {
 	ls := NewLiveSessions()
-	// зарегистрируем с пустыми ws, чтобы дошло до ветки invalid direction
+	// register with nil ws to reach invalid direction branch
 	ls.Register("s1", nil, nil)
 	if err := ls.SendText("s1", "wrong", "x"); err == nil {
 		t.Fatalf("expected error for invalid direction")

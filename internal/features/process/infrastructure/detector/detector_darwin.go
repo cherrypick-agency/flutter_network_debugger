@@ -16,7 +16,7 @@ import (
 
 type darwinDetector struct{}
 
-// DetectByPort - найти процесс по локальному порту используя lsof
+// DetectByPort - find process by local port using lsof
 func (d *darwinDetector) DetectByPort(ctx context.Context, port uint32) (*domain.ProcessInfo, error) {
 	// lsof -i :PORT -P -n -F (field output mode)
 	cmd := exec.CommandContext(
@@ -33,7 +33,7 @@ func (d *darwinDetector) DetectByPort(ctx context.Context, port uint32) (*domain
 		return nil, fmt.Errorf("lsof failed: %w", err)
 	}
 
-	// Парсинг вывода lsof
+	// Parse lsof output
 	info, err := parseLsofOutput(string(output))
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (d *darwinDetector) DetectByPort(ctx context.Context, port uint32) (*domain
 	return info, nil
 }
 
-// DetectByPID - получить информацию о процессе по PID используя ps
+// DetectByPID - get process information by PID using ps
 func (d *darwinDetector) DetectByPID(ctx context.Context, pid int32) (*domain.ProcessInfo, error) {
 	// ps -p PID -o comm=,args=
 	cmd := exec.CommandContext(ctx, "ps", "-p", fmt.Sprint(pid), "-o", "comm=,args=")
@@ -69,12 +69,12 @@ func (d *darwinDetector) DetectByPID(ctx context.Context, pid int32) (*domain.Pr
 	}, nil
 }
 
-// RequiresPrivileges - lsof работает для своих процессов без sudo
+// RequiresPrivileges - lsof works for own processes without sudo
 func (d *darwinDetector) RequiresPrivileges() bool {
 	return false
 }
 
-// parseLsofOutput - парсинг вывода lsof в field mode
+// parseLsofOutput - parse lsof output in field mode
 // Format:
 // p<PID>
 // c<command>

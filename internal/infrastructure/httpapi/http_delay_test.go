@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Без t.Parallel — измеряем время сна.
+// No t.Parallel — measuring sleep time.
 
 func TestSleepResponseDelay_Fixed(t *testing.T) {
 	cfg := cfgpkg.Config{ResponseDelayMs: 15}
@@ -22,7 +22,7 @@ func TestSleepResponseDelay_Fixed(t *testing.T) {
 }
 
 func TestSleepResponseDelay_Range(t *testing.T) {
-	// Узкий диапазон, чтобы тест был быстрым, и без флаков
+	// Narrow range to keep test fast and flake-free
 	cfg := cfgpkg.Config{ResponseDelayMinMs: 5, ResponseDelayMaxMs: 10}
 	start := time.Now()
 	sleepResponseDelay(cfg)
@@ -30,7 +30,7 @@ func TestSleepResponseDelay_Range(t *testing.T) {
 	if elapsed < 5*time.Millisecond {
 		t.Fatalf("delay below min: %v", elapsed)
 	}
-	// Верхнюю границу не проверяем строго из‑за планировщика, важно что >= min
+	// Don't check upper bound strictly due to scheduler, important that >= min
 }
 
 func TestHandleV1Settings_GetAndPost(t *testing.T) {

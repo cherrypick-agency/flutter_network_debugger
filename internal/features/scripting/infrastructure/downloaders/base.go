@@ -66,8 +66,8 @@ func readAllLimited(r io.Reader, maxBytes int64) ([]byte, error) {
 }
 
 func sanitizeArchiveFileMode(mode int64) os.FileMode {
-	// В tar/zip могут прилететь странные биты (setuid/setgid/sticky и т.п.).
-	// Нам нужны только обычные rwx-права.
+	// Tar/zip archives may contain strange bits (setuid/setgid/sticky, etc.).
+	// We only need regular rwx permissions.
 	m := os.FileMode(mode) & 0o777
 	if m == 0 {
 		return 0o644
@@ -108,8 +108,8 @@ func safeSymlinkTarget(targetDir, linkPath, linkName string) error {
 		return fmt.Errorf("invalid symlink target in archive: %s", linkName)
 	}
 
-	// Для относительных ссылок цель считается относительно директории ссылки.
-	// Важно: мы проверяем итоговый resolved путь не вылезает за targetDir.
+	// For relative links, target is considered relative to the link directory.
+	// Important: we verify the resolved path doesn't escape targetDir.
 	resolved := filepath.Clean(filepath.Join(filepath.Dir(linkPath), linkName))
 	rel, err := filepath.Rel(targetDir, resolved)
 	if err != nil {
@@ -154,7 +154,7 @@ func mkdirAllNoSymlink(baseDir, dirPath string, perm os.FileMode) error {
 			return fmt.Errorf("stat %s: %w", cur, err)
 		}
 		if err := os.Mkdir(cur, perm); err != nil {
-			// Если гонка — перепроверим.
+			// If there's a race — double-check.
 			if fi2, err2 := os.Lstat(cur); err2 == nil {
 				if fi2.Mode()&os.ModeSymlink != 0 {
 					return fmt.Errorf("refusing to follow symlink in path: %s", cur)
@@ -302,9 +302,9 @@ func (b *BaseDownloader) attemptDownload(
 	destPath string,
 	progressCb func(domain.DownloadProgress),
 ) error {
-	// На некоторых серверах Range может игнорироваться. В таком случае:
-	// - не аппендим к .partial (иначе файл тихо ломается)
-	// - один раз перезапускаем скачивание с нуля
+	// On some servers Range may be ignored. In this case:
+	// - don't append to .partial (otherwise the file silently gets corrupted)
+	// - restart the download from scratch once
 	const maxResumeFallbacks = 1
 
 	// Check if partial file exists (for resume)
@@ -504,7 +504,7 @@ func (b *BaseDownloader) attemptDownload(
 
 // ExtractTarXz extracts a .tar.xz archive to target directory
 func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
-	// Базовая директория должна существовать, иначе нельзя безопасно создавать вложенные пути.
+	// Base directory must exist, otherwise nested paths cannot be created safely.
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
@@ -547,7 +547,7 @@ func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			// Create directory (не следуем по symlink-цепочкам)
+			// Create directory (don't follow symlink chains)
 			if err := mkdirAllNoSymlink(targetDir, targetPath, 0755); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
@@ -586,7 +586,7 @@ func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
 				continue
 			}
 		case tar.TypeLink:
-			// Hard links в архивах нам не нужны и часто создают сюрпризы в безопасности.
+			// Hard links in archives are not needed and often create security surprises.
 			continue
 		}
 	}
@@ -596,7 +596,7 @@ func (b *BaseDownloader) ExtractTarXz(archivePath, targetDir string) error {
 
 // ExtractTarGz extracts a .tar.gz archive to target directory
 func (b *BaseDownloader) ExtractTarGz(archivePath, targetDir string) error {
-	// Базовая директория должна существовать, иначе нельзя безопасно создавать вложенные пути.
+	// Base directory must exist, otherwise nested paths cannot be created safely.
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
@@ -682,7 +682,7 @@ func (b *BaseDownloader) ExtractTarGz(archivePath, targetDir string) error {
 
 // ExtractZip extracts a .zip archive to target directory
 func (b *BaseDownloader) ExtractZip(archivePath, targetDir string) error {
-	// Базовая директория должна существовать, иначе нельзя безопасно создавать вложенные пути.
+	// Base directory must exist, otherwise nested paths cannot be created safely.
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}

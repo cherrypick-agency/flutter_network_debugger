@@ -4,7 +4,7 @@ import 'package:frontend/core/utils/debouncer.dart';
 
 void main() {
   group('Debouncer', () {
-    test('выполняет действие один раз после задержки', () {
+    test('executes action once after delay', () {
       // Arrange
       int calls = 0;
       final d = Debouncer(const Duration(milliseconds: 200));
@@ -13,7 +13,7 @@ void main() {
       fakeAsync((async) {
         d.run(() => calls++);
         async.elapse(const Duration(milliseconds: 199));
-        // Assert до наступления таймера
+        // Assert before timer fires
         expect(calls, 0);
 
         async.elapse(const Duration(milliseconds: 1));
@@ -21,7 +21,7 @@ void main() {
       });
     });
 
-    test('последний вызов побеждает (предыдущий отменяется)', () {
+    test('last call wins (previous is cancelled)', () {
       // Arrange
       final d = Debouncer(const Duration(milliseconds: 100));
       int value = 0;
@@ -32,17 +32,17 @@ void main() {
         async.elapse(const Duration(milliseconds: 60));
         d.run(() => value = 2);
         async.elapse(const Duration(milliseconds: 39));
-        // Assert — ещё рано
+        // Assert - too early
         expect(value, 0);
 
-        // Дождёмся полного интервала для второго вызова
+        // Wait for full interval for the second call
         async.elapse(const Duration(milliseconds: 61));
-        // Assert — сработал только второй вызов
+        // Assert - only the second call was executed
         expect(value, 2);
       });
     });
 
-    test('dispose отменяет запланированное действие', () {
+    test('dispose cancels scheduled action', () {
       // Arrange
       final d = Debouncer(const Duration(milliseconds: 100));
       int calls = 0;

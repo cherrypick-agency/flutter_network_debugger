@@ -91,7 +91,7 @@ func TestPythonCompiler_ValidateSyntax_ValidCode(t *testing.T) {
 	}
 
 	err := compiler.ValidateSyntax(ctx, req)
-	// Может вернуть ошибку если есть проблемы с синтаксисом, но не должен падать
+	// May return an error if there are syntax problems, but should not panic
 	_ = err
 }
 
@@ -105,7 +105,7 @@ func TestPythonCompiler_ValidateSyntax_UnbalancedBrackets(t *testing.T) {
 	}
 
 	err := compiler.ValidateSyntax(ctx, req)
-	// Может вернуть ошибку из-за несбалансированных скобок
+	// May return an error due to unbalanced brackets
 	_ = err
 }
 

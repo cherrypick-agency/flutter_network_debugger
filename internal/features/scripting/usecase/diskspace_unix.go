@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-// getAvailableDiskSpace возвращает доступное дисковое пространство (байт) для указанного пути.
+// getAvailableDiskSpace returns available disk space (bytes) for the specified path.
 func getAvailableDiskSpace(path string) (int64, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {

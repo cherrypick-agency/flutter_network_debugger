@@ -54,7 +54,7 @@ func TestConfigRepo_Load_NotFound(t *testing.T) {
 		t.Fatal("Load() returned nil config")
 	}
 
-	// Проверяем дефолтные значения
+	// Check default values
 	if cfg.ID != 1 {
 		t.Errorf("Load() config.ID = %d, want 1", cfg.ID)
 	}
@@ -91,7 +91,7 @@ func TestConfigRepo_Load_Existing(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Создаем конфигурацию вручную используя прямой SQL чтобы избежать дефолтных значений GORM
+	// Create configuration manually using raw SQL to avoid GORM default values
 	result := db.Exec(`
 		INSERT INTO process_detection_config 
 		(id, enabled, use_helper_tool, helper_installed, cache_enabled, cache_ttl_seconds, fallback_enabled, created_at, updated_at)
@@ -165,7 +165,7 @@ func TestConfigRepo_Save(t *testing.T) {
 		t.Fatalf("Save() error = %v, want nil", err)
 	}
 
-	// Проверяем что сохранилось
+	// Check that it was saved
 	loaded, err := repo.Load(ctx)
 	if err != nil {
 		t.Fatalf("Load() after Save error = %v, want nil", err)
@@ -195,7 +195,7 @@ func TestConfigRepo_Save_Update(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Создаем начальную конфигурацию
+	// Create initial configuration
 	initialCfg := &domain.DetectionConfig{
 		ID:              1,
 		Enabled:         true,
@@ -210,7 +210,7 @@ func TestConfigRepo_Save_Update(t *testing.T) {
 		t.Fatalf("Save() initial error = %v", err)
 	}
 
-	// Обновляем конфигурацию
+	// Update configuration
 	updatedCfg := &domain.DetectionConfig{
 		ID:              1,
 		Enabled:         false,
@@ -225,7 +225,7 @@ func TestConfigRepo_Save_Update(t *testing.T) {
 		t.Fatalf("Save() update error = %v", err)
 	}
 
-	// Проверяем что обновилось
+	// Check that it was updated
 	loaded, err := repo.Load(ctx)
 	if err != nil {
 		t.Fatalf("Load() after update error = %v", err)

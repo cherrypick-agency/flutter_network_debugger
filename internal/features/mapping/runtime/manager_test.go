@@ -104,7 +104,7 @@ func TestManager_InvalidRegex(t *testing.T) {
 	u, _ := url.Parse("https://api.example.com/test")
 	req := &http.Request{Method: http.MethodGet, URL: u}
 	_, ok := m.EvalRequest(req)
-	// Невалидные regex мы игнорируем, чтобы случайно не схватить "match everything".
+	// We ignore invalid regex to avoid accidentally catching "match everything".
 	if ok {
 		t.Fatal("invalid regex should be ignored and must not match")
 	}
@@ -230,7 +230,7 @@ func TestManager_MultipleRulesPriority(t *testing.T) {
 	req := &http.Request{Method: http.MethodGet, URL: u}
 	dec, ok := m.EvalRequest(req)
 	if !ok || dec.RuleID != "r2" {
-		t.Fatal("rule with меньшим priority должен матчиться первым")
+		t.Fatal("rule with lower priority should match first")
 	}
 }
 

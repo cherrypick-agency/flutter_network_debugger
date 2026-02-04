@@ -33,7 +33,7 @@ func withMaxTimeout(ctx context.Context, max time.Duration) (context.Context, co
 		return context.WithTimeout(context.Background(), max)
 	}
 	if deadline, ok := ctx.Deadline(); ok {
-		// Если и так короче — оставляем как есть, чтобы не "расширять" таймаут.
+		// If it's already shorter — leave it as is so we don't "extend" the timeout.
 		if time.Until(deadline) <= max {
 			return context.WithCancel(ctx)
 		}
@@ -43,10 +43,10 @@ func withMaxTimeout(ctx context.Context, max time.Duration) (context.Context, co
 
 func newHTTPFetchClient(allowedHosts []string) *http.Client {
 	return &http.Client{
-		Timeout:   0, // управляем таймаутом через контекст запроса
+		Timeout:   0, // manage timeout via request context
 		Transport: httpFetchTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// По умолчанию net/http ограничивает редиректы, но тут добавляем свои проверки.
+			// By default net/http limits redirects, but here we add our own checks.
 			if len(via) >= 10 {
 				return errors.New("too many redirects")
 			}
@@ -166,7 +166,7 @@ func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 				return
 			}
 
-			// Ограничиваем протоколы: только HTTP(S)
+			// Limit protocols: only HTTP(S)
 			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 				errJSON := fmt.Sprintf(`{"error": "Unsupported URL scheme: %q"}`, parsedURL.Scheme)
 				offset, writeErr := plugin.WriteString(errJSON)
@@ -205,7 +205,7 @@ func createHTTPFetchFunction(allowedHosts []string) extism.HostFunction {
 			}
 
 			// Create HTTP request with context to respect script timeout
-			// Даже если ctx без deadline (зависит от Extism), ставим верхний предел.
+			// Even if ctx has no deadline (depends on Extism), set an upper limit.
 			reqCtx, cancel := withMaxTimeout(ctx, 30*time.Second)
 			defer cancel()
 

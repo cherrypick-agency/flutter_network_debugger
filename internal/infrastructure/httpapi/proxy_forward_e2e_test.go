@@ -15,8 +15,8 @@ import (
 	"network-debugger/internal/usecase"
 )
 
-// End-to-end: включаем forward‑proxy на динамическом порту и делаем запрос через него
-// к локальному апстриму, ожидая 200 и тело.
+// End-to-end: enable forward-proxy on dynamic port and make request through it
+// to local upstream, expecting 200 and body.
 func TestForwardProxy_E2E_HTTP(t *testing.T) {
 	// Upstream server
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +24,7 @@ func TestForwardProxy_E2E_HTTP(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	// Deps (минимально достаточные)
+	// Deps (minimally sufficient)
 	logger := obs.NewLogger("warn")
 	deps := &Deps{Cfg: defaultTestConfig(), Logger: logger, Metrics: obs.NewMetrics(), Svc: newTestSessionSvc(), Monitor: NewMonitorHub()}
 
@@ -64,7 +64,7 @@ func TestForwardProxy_E2E_HTTP(t *testing.T) {
 
 // --- helpers ---
 func defaultTestConfig() config.Config {
-	// базовые значения; порт UI не используется
+	// base values; UI port is not used
 	return config.Config{Addr: ":0", PreviewMaxBytes: 1024, ExposeSensitiveHeaders: true, PreviewDecompress: true}
 }
 

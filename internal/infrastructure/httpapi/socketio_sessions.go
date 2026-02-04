@@ -42,7 +42,7 @@ type sioHub struct {
 
 func newSioHub(d *Deps, io *socket.Server) *sioHub {
 	h := &sioHub{d: d, io: io, subs: make(map[*socket.Socket]*sioSubscription), aggTimers: make(map[*socket.Socket]*time.Timer)}
-	// Подписка на внутреннюю шину событий
+	// Subscribe to internal event bus
 	if d.Monitor == nil {
 		d.Logger.Error().Msg("[sioHub] ERROR: d.Monitor is NIL! Cannot subscribe to events!")
 	} else {
@@ -94,7 +94,7 @@ func (h *sioHub) runBroadcast() {
 }
 
 func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
-	// используем актуальную подписку для соединения на момент обработки
+	// use the current subscription for the connection at processing time
 	h.mu.RLock()
 	if cur, ok := h.subs[s.socket]; ok {
 		s = cur
@@ -117,7 +117,7 @@ func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
 			view.Sizes = sz
 		}
 		passFilters := h.passQuickFilters(view, s.filters)
-		// Дополнительная проверка по тегам (если заданы в фильтре)
+		// Additional check by tags (if specified in filter)
 		if passFilters && len(s.filters.Tags) > 0 && h.d.TagsSvc != nil {
 			if !h.sessionHasAnyTag(sessionID, s.filters.Tags) {
 				passFilters = false
@@ -138,7 +138,7 @@ func (h *sioHub) applyEventToSub(evType, sessionID string, s *sioSubscription) {
 	h.scheduleAggregate(s)
 }
 
-// sessionHasAnyTag возвращает true, если у сессии есть хотя бы один из указанных тегов
+// sessionHasAnyTag returns true if the session has at least one of the specified tags
 func (h *sioHub) sessionHasAnyTag(sessionID string, want []string) bool {
 	ctx := contextWithNoCancel()
 	tags, err := h.d.TagsSvc.GetSessionTags(ctx, sessionID)
@@ -157,7 +157,7 @@ func (h *sioHub) sessionHasAnyTag(sessionID string, want []string) bool {
 	return false
 }
 
-// (раньше игнорировали внутренние пути UI, но по требованиям оставляем полную видимость)
+// (previously ignored internal UI paths, but per requirements we keep full visibility)
 
 func (h *sioHub) passCapture(v sessionV1, f sioFilters) bool {
 	if f.CaptureIDExplicit != nil {
@@ -170,11 +170,11 @@ func (h *sioHub) passCapture(v sessionV1, f sioFilters) bool {
 		}
 		return true
 	case "current", "":
-		// Если включён показ «в паузе», пропускаем все (в т.ч. без CaptureID)
+		// If "show paused" is enabled, pass all (including those without CaptureID)
 		if f.IncludeUnassigned {
 			return true
 		}
-		// Для "current" пропускаем ТОЛЬКО сессии текущего capture
+		// For "current" we pass ONLY sessions of the current capture
 		cur := -1
 		if repo := sessionsRepoOf(h.d.Svc); repo != nil {
 			if rs, ok := repo.(interface{ RecordingState() (bool, int) }); ok {
@@ -210,7 +210,7 @@ func (h *sioHub) scheduleAggregate(s *sioSubscription) {
 		return
 	}
 	t := time.AfterFunc(1*time.Second, func() {
-		// берём актуальные фильтры подписки на момент срабатывания таймера
+		// get current subscription filters at timer firing time
 		h.mu.RLock()
 		cur, ok := h.subs[s.socket]
 		h.mu.RUnlock()
@@ -224,7 +224,7 @@ func (h *sioHub) scheduleAggregate(s *sioSubscription) {
 }
 
 func (h *sioHub) emitAggregate(s *sioSubscription) {
-	// Пересчёт агрегатов на основе текущих фильтров подписки (до 1000)
+	// Recalculate aggregates based on current subscription filters (up to 1000)
 	ctx := contextWithNoCancel()
 	uf := toUsecaseFilter(s.filters)
 	list, _, _ := h.d.Svc.List(ctx, uf)
@@ -253,7 +253,7 @@ func (h *sioHub) emitAggregate(s *sioSubscription) {
 	for k, cnt := range agg {
 		groups = append(groups, map[string]any{"key": k, "count": cnt})
 	}
-	// стабилизируем порядок: по count desc, затем по key asc
+	// stabilize order: by count desc, then by key asc
 	sort.Slice(groups, func(i, j int) bool {
 		ci := groups[i]["count"].(int)
 		cj := groups[j]["count"].(int)
@@ -340,7 +340,7 @@ func (h *sioHub) sendInit(s *socket.Socket, f sioFilters) {
 	for k, cnt := range agg {
 		groups = append(groups, map[string]any{"key": k, "count": cnt})
 	}
-	// стабилизируем порядок: по count desc, затем по key asc
+	// stabilize order: by count desc, then by key asc
 	sort.Slice(groups, func(i, j int) bool {
 		ci := groups[i]["count"].(int)
 		cj := groups[j]["count"].(int)
@@ -359,30 +359,30 @@ func (h *sioHub) sendInit(s *socket.Socket, f sioFilters) {
 	s.Emit("sessions:init", map[string]any{"items": views, "aggregate": groups})
 }
 
-// NewSocketIOServer: Socket.IO сервер + подписка sessions:subscribe (initial + инкременты)
+// NewSocketIOServer: Socket.IO server + sessions:subscribe subscription (initial + increments)
 func NewSocketIOServer(d *Deps) http.Handler {
-	// Создаём Socket.IO сервер v3/v4 (zishang520/socket.io/v2)
-	// Библиотека автоматически настраивает WebSocket транспорт и CORS
+	// Create Socket.IO server v3/v4 (zishang520/socket.io/v2)
+	// Library automatically configures WebSocket transport and CORS
 	io := socket.NewServer(nil, nil)
 
 	hub := newSioHub(d, io)
 
 	io.On("connection", func(clients ...any) {
-		// Type assertion для получения Socket из variadic параметра
+		// Type assertion to get Socket from variadic parameter
 		client := clients[0].(*socket.Socket)
 		connID := string(client.Id())
 
 		d.Logger.Info().Str("conn_id", connID).Msg("Socket.IO client connected")
-		// Автоподписка с дефолтными фильтрами, чтобы клиент сразу получил initial
-		// По умолчанию Limit 1000 и текущий capture (passCapture обрабатывает пустой scope как "current")
-		// IncludeUnassigned: true позволяет видеть новые сессии с CaptureID == nil
+		// Auto-subscribe with default filters so client immediately receives initial
+		// Default Limit 1000 and current capture (passCapture treats empty scope as "current")
+		// IncludeUnassigned: true allows seeing new sessions with CaptureID == nil
 		f := sioFilters{Limit: 1000, GroupBy: "domain", IncludeUnassigned: true}
 		hub.addSub(client, f)
 		d.Logger.Info().Str("conn_id", connID).Msg("Sending sessions:init")
 		hub.sendInit(client, f)
 		d.Logger.Info().Str("conn_id", connID).Msg("Sent sessions:init")
 
-		// Регистрируем обработчики событий - теперь variadic any вместо EventPayload
+		// Register event handlers - now variadic any instead of EventPayload
 		client.On("sessions:subscribe", func(datas ...any) {
 			var payload map[string]any
 			if len(datas) > 0 {
@@ -398,7 +398,7 @@ func NewSocketIOServer(d *Deps) http.Handler {
 			hub.sendInit(client, f)
 		})
 
-		// Подписка на конкретную сессию для детальной страницы
+		// Subscribe to specific session for detail page
 		client.On("session:subscribe", func(datas ...any) {
 			var payload map[string]any
 			if len(datas) > 0 {
@@ -415,7 +415,7 @@ func NewSocketIOServer(d *Deps) http.Handler {
 			client.Join(roomName)
 			d.Logger.Info().Str("conn_id", connID).Str("session_id", sessionID).Str("room", string(roomName)).Msg("Client joined session room")
 
-			// Отправка начальных данных (catch-up)
+			// Send initial data (catch-up)
 			ctx := contextWithNoCancel()
 			if frames, _, _ := d.Svc.ListFrames(ctx, sessionID, "", 1000); len(frames) > 0 {
 				client.Emit("session:frames", frames)
@@ -428,7 +428,7 @@ func NewSocketIOServer(d *Deps) http.Handler {
 			}
 		})
 
-		// Отписка от конкретной сессии
+		// Unsubscribe from specific session
 		client.On("session:unsubscribe", func(datas ...any) {
 			var payload map[string]any
 			if len(datas) > 0 {
@@ -532,9 +532,9 @@ func parseSioFilters(m map[string]any) sioFilters {
 	return f
 }
 
-// normalizeHost извлекает и нормализует host из URL (убирает дефолтные порты и userinfo)
+// normalizeHost extracts and normalizes host from URL (removes default ports and userinfo)
 func normalizeHost(targetURL string) string {
-	// Простая парсинг URL: удаляем схему
+	// Simple URL parsing: remove scheme
 	key := targetURL
 	scheme := ""
 	if i := strings.Index(key, "://"); i >= 0 {
@@ -542,17 +542,17 @@ func normalizeHost(targetURL string) string {
 		key = key[i+3:]
 	}
 
-	// Убираем userinfo (если есть)
+	// Remove userinfo (if present)
 	if at := strings.IndexByte(key, '@'); at >= 0 {
 		key = key[at+1:]
 	}
 
-	// Берём часть до первого слеша (host:port или host)
+	// Take part up to first slash (host:port or host)
 	if j := strings.IndexByte(key, '/'); j >= 0 {
 		key = key[:j]
 	}
 
-	// Убираем дефолтные порты
+	// Remove default ports
 	if scheme == "http" && strings.HasSuffix(key, ":80") {
 		key = key[:len(key)-3]
 	} else if scheme == "https" && strings.HasSuffix(key, ":443") {
@@ -562,7 +562,7 @@ func normalizeHost(targetURL string) string {
 	return key
 }
 
-// groupKeyFor вычисляет ключ группировки по настройке groupBy.
+// groupKeyFor calculates the grouping key based on groupBy setting.
 func groupKeyFor(v sessionV1, groupBy string) string {
 	gb := strings.ToLower(strings.TrimSpace(groupBy))
 	switch gb {
@@ -601,8 +601,8 @@ func groupKeyFor(v sessionV1, groupBy string) string {
 }
 
 func toUsecaseFilter(f sioFilters) usecase.SessionFilter {
-	// Берём широкий лимит для сервисного списка, так как далее мы фильтруем по
-	// типам/статусам и применяем пользовательский Limit уже ПОСЛЕ фильтров.
+	// Take wide limit for service list, since later we filter by
+	// types/statuses and apply user Limit AFTER filters.
 	out := usecase.SessionFilter{Q: f.Q, Target: f.Target, Limit: 1000, Offset: 0}
 	if f.CaptureIDExplicit != nil {
 		out.CaptureID = f.CaptureIDExplicit
@@ -610,7 +610,7 @@ func toUsecaseFilter(f sioFilters) usecase.SessionFilter {
 		switch strings.ToLower(strings.TrimSpace(f.CaptureScope)) {
 		case "all":
 			out.CaptureID = nil
-			// Уважать includeUnassigned из фильтра (не принуждать к true)
+			// Respect includeUnassigned from filter (don't force to true)
 			if f.IncludeUnassigned {
 				out.IncludeUnassigned = true
 			}

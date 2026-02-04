@@ -115,7 +115,7 @@ func TestZigDownloader_Extract_Success(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "zig.tar.xz")
 
-	// Создаем tar.xz архив с zig-* директорией
+	// Create tar.xz archive with zig-* directory
 	file, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive: %v", err)
@@ -131,7 +131,7 @@ func TestZigDownloader_Extract_Success(t *testing.T) {
 	tarWriter := tar.NewWriter(xzWriter)
 	defer tarWriter.Close()
 
-	// Добавляем директорию zig-0.14.0
+	// Add directory zig-0.14.0
 	header := &tar.Header{
 		Name:     "zig-darwin-arm64-0.14.0/",
 		Typeflag: tar.TypeDir,
@@ -141,7 +141,7 @@ func TestZigDownloader_Extract_Success(t *testing.T) {
 		t.Fatalf("Failed to write tar header: %v", err)
 	}
 
-	// Добавляем файл в директорию
+	// Add file to directory
 	content := []byte("zig binary")
 	header = &tar.Header{
 		Name:     "zig-darwin-arm64-0.14.0/zig",
@@ -160,13 +160,13 @@ func TestZigDownloader_Extract_Success(t *testing.T) {
 	xzWriter.Close()
 	file.Close()
 
-	// Извлекаем
+	// Extract
 	err = downloader.Extract(archivePath, targetDir)
 	if err != nil {
 		t.Fatalf("Extract() error = %v, want nil", err)
 	}
 
-	// Проверяем что файл извлечен в корень targetDir
+	// Check that file is extracted to targetDir root
 	zigFile := filepath.Join(targetDir, "zig")
 	if _, err := os.Stat(zigFile); os.IsNotExist(err) {
 		t.Error("zig binary was not extracted to target directory root")
@@ -180,7 +180,7 @@ func TestZigDownloader_Extract_NoZigDir(t *testing.T) {
 	targetDir := filepath.Join(tmpDir, "target")
 	archivePath := filepath.Join(tmpDir, "zig.tar.xz")
 
-	// Создаем tar.xz архив без zig-* директории
+	// Create tar.xz archive without zig-* directory
 	file, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive: %v", err)
@@ -196,7 +196,7 @@ func TestZigDownloader_Extract_NoZigDir(t *testing.T) {
 	tarWriter := tar.NewWriter(xzWriter)
 	defer tarWriter.Close()
 
-	// Добавляем обычный файл без zig-* директории
+	// Add regular file without zig-* directory
 	content := []byte("test")
 	header := &tar.Header{
 		Name:     "test.txt",
@@ -215,7 +215,7 @@ func TestZigDownloader_Extract_NoZigDir(t *testing.T) {
 	xzWriter.Close()
 	file.Close()
 
-	// Извлечение должно вернуть ошибку
+	// Extraction should return error
 	err = downloader.Extract(archivePath, targetDir)
 	if err == nil {
 		t.Error("Extract() should return error when zig directory not found")

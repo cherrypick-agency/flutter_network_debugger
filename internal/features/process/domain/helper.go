@@ -1,19 +1,19 @@
 package domain
 
-// IHelperClient - интерфейс для коммуникации с привилегированным helper tool
+// IHelperClient - interface for communication with privileged helper tool
 type IHelperClient interface {
-	// IsRunning - проверить, запущен ли helper tool
+	// IsRunning - check if helper tool is running
 	IsRunning() bool
 
-	// DetectProcess - детекция процесса через helper (с привилегиями)
+	// DetectProcess - detect process via helper (with privileges)
 	DetectProcess(port uint32) (*ProcessInfo, error)
 
-	// ExtractIcon - извлечение иконки через helper (с привилегиями)
+	// ExtractIcon - extract icon via helper (with privileges)
 	ExtractIcon(pid int32) (*AppIcon, error)
 
-	// Ping - проверка доступности helper tool
+	// Ping - check helper tool availability
 	Ping() error
 
-	// Close - закрыть соединение с helper tool
+	// Close - close connection to helper tool
 	Close() error
 }

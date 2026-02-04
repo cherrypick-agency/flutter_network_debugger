@@ -20,7 +20,7 @@ func writeError(w http.ResponseWriter, status int, code string, message string, 
 		code = http.StatusText(status)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	// Явно просим сервер закрыть соединение, чтобы клиенты, читающие до EOF, не зависали
+	// Explicitly ask server to close connection so clients reading until EOF don't hang
 	w.Header().Set("Connection", "close")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(apiErrorBody{Error: apiError{Code: code, Message: message, Details: details}})

@@ -22,10 +22,10 @@ import (
 	"time"
 )
 
-// В тестах ниже не используем t.Parallel, т.к. меняем package-level флаги.
+// Tests below don't use t.Parallel because they modify package-level flags.
 
 func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
-	// Сохраняем и восстанавливаем глобальные настройки
+	// Save and restore global settings
 	oldExpose := exposeSensitiveHeaders.Load()
 	oldDecomp := previewDecompress.Load()
 	oldMax := previewMaxBytes.Load()
@@ -35,7 +35,7 @@ func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
 		previewMaxBytes.Store(oldMax)
 	}()
 
-	// Явно включим декомпрессию и маскировку
+	// Explicitly enable decompression and masking
 	t.Setenv("PREVIEW_DECOMPRESS", "1")
 	previewDecompress.Store(true)
 	exposeSensitiveHeaders.Store(false)
@@ -51,7 +51,7 @@ func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
 		_ = zw.Close()
 		return buf.Bytes()
 	}
-	// (deflate ветку можно проверить отдельно при необходимости)
+	// (deflate branch can be tested separately if needed)
 
 	cases := []struct {
 		name string
@@ -86,7 +86,7 @@ func TestHTTPResponsePreview_Gzip_Deflate_MaskAndTruncate(t *testing.T) {
 				t.Fatalf("JSON fields should not be redacted (redaction is disabled): %s", body)
 			}
 
-			// Усечение
+			// Truncation
 			previewMaxBytes.Store(8)
 			resp = &http.Response{
 				StatusCode: 200,
@@ -111,7 +111,7 @@ func TestHTTPRequestPreview_HeadersRedaction_Toggle(t *testing.T) {
 	oldExpose := exposeSensitiveHeaders.Load()
 	defer func() { exposeSensitiveHeaders.Store(oldExpose) }()
 
-	// false: только маски, без headersRaw
+	// false: only masks, no headersRaw
 	t.Setenv("EXPOSE_SENSITIVE_HEADERS", "0")
 	exposeSensitiveHeaders.Store(false)
 	req, _ := http.NewRequest(http.MethodPost, "http://example.com/x", bytes.NewReader([]byte("a=1")))
@@ -129,7 +129,7 @@ func TestHTTPRequestPreview_HeadersRedaction_Toggle(t *testing.T) {
 		t.Fatalf("headersRaw must be absent when expose=false")
 	}
 
-	// true: присутствует headersRaw с исходными значениями
+	// true: headersRaw with original values is present
 	t.Setenv("EXPOSE_SENSITIVE_HEADERS", "1")
 	exposeSensitiveHeaders.Store(true)
 	out2 := buildHTTPRequestPreview(req, []byte("{}"))
@@ -198,7 +198,7 @@ func TestBuildHTTPRequestPreview_FormURLEncoded_Truncation(t *testing.T) {
 	}
 }
 
-// локальные утилиты
+// local utilities
 func strContains(s, sub string) bool { return len(s) >= len(sub) && strIndex(s, sub) >= 0 }
 func strIndex(s, sub string) int {
 	for i := 0; i+len(sub) <= len(s); i++ {
@@ -507,7 +507,7 @@ func TestPrependConn_Read(t *testing.T) {
 	a, b := net.Pipe()
 	defer a.Close()
 	defer b.Close()
-	// Запишем в базовое соединение продолжение
+	// Write continuation to underlying connection
 	go func() { _, _ = b.Write([]byte("WORLD")) }()
 	pc := &prependConn{Conn: a, r: bytes.NewReader(prefix)}
 	buf := make([]byte, 11)

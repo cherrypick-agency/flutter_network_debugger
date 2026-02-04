@@ -24,7 +24,7 @@ type mappingConfigDTO struct {
 	UploadMaxMB int  `json:"uploadMaxMB"`
 }
 
-// mapRuleDTO — DTO для отдачи наружу (включая метадату времени).
+// mapRuleDTO — DTO for external response (including time metadata).
 type mapRuleDTO struct {
 	ID                  string    `json:"id"`
 	Enabled             bool      `json:"enabled"`
@@ -45,10 +45,10 @@ type mapRuleDTO struct {
 	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
-// mapRuleInputDTO — DTO для приёма с фронта.
+// mapRuleInputDTO — DTO for receiving from frontend.
 //
-// Важно: часть полей сделана указателями, чтобы принимать JSON null без падения
-// и чтобы отличать "не прислали" от "прислали значение по умолчанию".
+// Important: some fields are pointers to accept JSON null without crashing
+// and to distinguish "not sent" from "sent default value".
 type mapRuleInputDTO struct {
 	ID             string   `json:"id"`
 	Enabled        bool     `json:"enabled"`
@@ -94,7 +94,7 @@ func toDTO(d mdomain.MapRule) mapRuleDTO {
 }
 
 func fromDTO(r mapRuleInputDTO) mdomain.MapRule {
-	// нормализуем методы: пустые/пробелы выбрасываем
+	// normalize methods: discard empty/whitespace
 	methods := make([]string, 0, len(r.Methods))
 	for _, m := range r.Methods {
 		m = strings.TrimSpace(strings.ToUpper(m))
@@ -239,7 +239,7 @@ func validateRule(r mdomain.MapRule) (string, string, map[string]any, bool) {
 		if strings.ContainsAny(tpl, "\n\r\t ") {
 			return "BAD_RULE", "targetURLTemplate must not contain whitespace", map[string]any{"field": "targetURLTemplate"}, false
 		}
-		// best-effort parse (с подстановкой токенов)
+		// best-effort parse (with token substitution)
 		mat := materializeRemoteTemplateForValidation(tpl)
 		u, err := url.Parse(mat)
 		if err != nil || u.Scheme == "" || u.Host == "" {
@@ -249,13 +249,13 @@ func validateRule(r mdomain.MapRule) (string, string, map[string]any, bool) {
 			return "BAD_RULE", "targetURLTemplate scheme must be http or https", map[string]any{"field": "targetURLTemplate", "scheme": u.Scheme}, false
 		}
 	}
-	// Local: file/blob опциональны — можно отдать пустое тело с нужным статусом.
+	// Local: file/blob are optional — can return empty body with desired status.
 	return "", "", nil, true
 }
 
 func materializeRemoteTemplateForValidation(tpl string) string {
-	// Подменяем токены на валидные значения, чтобы проверить, что итоговый URL будет парситься.
-	// Это позволяет принимать шаблоны вроде "https://example.com{path}".
+	// Replace tokens with valid values to verify that resulting URL will parse.
+	// This allows accepting templates like "https://example.com{path}".
 	return strings.NewReplacer(
 		"{scheme}", "https",
 		"{host}", "example.com",
@@ -270,7 +270,7 @@ func materializeRemoteTemplateForValidation(tpl string) string {
 	).Replace(tpl)
 }
 
-// handleMappingConfig возвращает/принимает конфиг фичи (MVP без персистентности)
+// handleMappingConfig returns/accepts feature config (MVP without persistence)
 func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 	if !d.interceptAuthOK(r) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
@@ -282,7 +282,7 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 			Enabled:     d.Cfg.MappingEnabled,
 			UploadMaxMB: d.Cfg.MappingUploadMaxMB,
 		}
-		// Если доступна БД — берём фактические значения из runtime_settings
+		// If DB is available — get actual values from runtime_settings
 		if d.Settings != nil {
 			if rs, err := d.Settings.Load(contextWithNoCancel()); err == nil {
 				cfg.Enabled = rs.MappingEnabled
@@ -297,7 +297,7 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(cfg)
 	case http.MethodPost:
-		// Принимаем и сохраняем в runtime_settings (если доступно)
+		// Accept and save to runtime_settings (if available)
 		var in mappingConfigDTO
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
@@ -306,7 +306,7 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 		if in.UploadMaxMB <= 0 {
 			in.UploadMaxMB = 20
 		}
-		// верхний предел — чтобы случайно не выставить гигабайты и не убить диск
+		// upper limit — to avoid accidentally setting gigabytes and killing disk
 		if in.UploadMaxMB > 512 {
 			writeError(w, http.StatusBadRequest, "BAD_VALUE", "uploadMaxMB must be <= 512", nil)
 			return
@@ -319,7 +319,7 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 			cur, _ := d.Settings.Load(contextWithNoCancel())
 			cur.MappingEnabled = d.Cfg.MappingEnabled
 			cur.MappingUploadMaxMB = d.Cfg.MappingUploadMaxMB
-			// сохраняем прочие настройки, чтобы не потерять их при апдейте
+			// save other settings to avoid losing them on update
 			cur.ResponseDelayMs = d.Cfg.ResponseDelayMs
 			cur.ResponseDelayMinMs = d.Cfg.ResponseDelayMinMs
 			cur.ResponseDelayMaxMs = d.Cfg.ResponseDelayMaxMs
@@ -338,7 +338,7 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleMappingRules управляет CRUD правил
+// handleMappingRules manages rules CRUD
 func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 	if !d.interceptAuthOK(r) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
@@ -362,7 +362,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
 	case http.MethodPost:
-		// либо upsert одной записи, либо reorder (если path оканчивается на /reorder)
+		// either upsert single record, or reorder (if path ends with /reorder)
 		if strings.HasSuffix(r.URL.Path, "/reorder") {
 			var ids []string
 			if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
@@ -397,7 +397,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "REORDER_FAILED", err.Error(), nil)
 				return
 			}
-			// обновим рантайм
+			// update runtime
 			if d.MapRt != nil {
 				if rules, err := d.Mapping.List(r.Context()); err == nil {
 					d.MapRt.Update(rules)
@@ -412,7 +412,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// для уборки orphan blobs: найдём старый blobPath, если это апдейт
+		// for orphan blob cleanup: find old blobPath if this is an update
 		oldBlob := ""
 		if strings.TrimSpace(in.ID) != "" {
 			if list, err := d.Mapping.List(r.Context()); err == nil {
@@ -440,7 +440,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 				d.MapRt.Update(rules)
 			}
 		}
-		// если blobPath изменился/убран — попробуем удалить старый файл (безопасно)
+		// if blobPath changed/removed — try to delete old file (safely)
 		if oldBlob != "" && (saved.BlobPath == nil || strings.TrimSpace(*saved.BlobPath) == "" || strings.TrimSpace(*saved.BlobPath) != strings.TrimSpace(oldBlob)) {
 			d.tryRemoveOrphanMappingBlob(r.Context(), oldBlob)
 		}
@@ -470,7 +470,7 @@ func (d *Deps) handleMappingRuleByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "MISSING_ID", "", nil)
 		return
 	}
-	// запомним blobPath до удаления (чтобы убрать orphan файл)
+	// remember blobPath before deletion (to remove orphan file)
 	oldBlob := ""
 	if list, err := d.Mapping.List(r.Context()); err == nil {
 		for _, it := range list {
@@ -500,7 +500,7 @@ func (d *Deps) tryRemoveOrphanMappingBlob(ctx context.Context, blobPath string) 
 	if blobPath == "" || d.Mapping == nil {
 		return
 	}
-	// удаляем только те файлы, которые мы сами создаём
+	// only delete files that we created ourselves
 	base := filepath.Base(blobPath)
 	if !strings.HasPrefix(base, "gpx-map-") {
 		return
@@ -516,7 +516,7 @@ func (d *Deps) tryRemoveOrphanMappingBlob(ctx context.Context, blobPath string) 
 		return
 	}
 
-	// если на этот blob всё ещё кто-то ссылается — не трогаем
+	// if someone still references this blob — don't touch it
 	list, err := d.Mapping.List(ctx)
 	if err != nil {
 		return
@@ -541,7 +541,7 @@ func isWithinDir(dirAbs, pathAbs string) bool {
 	return rel != "." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != ".."
 }
 
-// handleMappingUpload — загрузка файла (Web)
+// handleMappingUpload — file upload (Web)
 func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 	if !d.interceptAuthOK(r) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
@@ -551,12 +551,12 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 		return
 	}
-	// Определим лимит (MB → bytes). Источник истины — runtime settings / config.
+	// Determine limit (MB → bytes). Source of truth — runtime settings / config.
 	uploadMaxMB := d.Cfg.MappingUploadMaxMB
 	if uploadMaxMB <= 0 {
 		uploadMaxMB = 20
 	}
-	// Для dev-режима можно уменьшить лимит через query param, но не увеличить
+	// For dev-mode you can decrease limit via query param, but not increase
 	if v := r.URL.Query().Get("maxMB"); v != "" {
 		if n, _ := strconv.Atoi(v); n > 0 && n < uploadMaxMB {
 			uploadMaxMB = n
@@ -599,7 +599,7 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Очень приблизительная оценка content-type по расширению имени файла
+	// Very rough content-type estimate based on filename extension
 	ct := hdr.Header.Get("Content-Type")
 	if ct == "" {
 		ct = guessContentTypeByName(hdr.Filename)
@@ -649,7 +649,7 @@ func (d *Deps) spoolMultipartFile(file multipart.File, maxBytes int64, kind stri
 	}
 	defer func() { _ = f.Sync() }()
 
-	// maxBytes + 1: чтобы отличить "влезло ровно" от "перелимит".
+	// maxBytes + 1: to distinguish "fits exactly" from "over limit".
 	n, copyErr := io.CopyN(f, file, maxBytes+1)
 	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
 		_ = f.Close()

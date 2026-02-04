@@ -39,7 +39,7 @@ void main() {
       await proxy?.stop();
     });
 
-    test('reverse proxy: запрос доходит до upstream и фиксируется в Go',
+    test('reverse proxy: request reaches upstream and is recorded in Go',
         () async {
       final upstreamBase = 'http://127.0.0.1:${upstream!.port}';
 
@@ -70,7 +70,8 @@ void main() {
             (s['kind'] == 'http') &&
             (s['target'] as String).contains('$upstreamBase/hello')),
         isTrue,
-        reason: 'не нашли http-сессию, связанную с запросом через /httpproxy',
+        reason:
+            'did not find http-session associated with request through /httpproxy',
       );
     }, timeout: const Timeout(Duration(seconds: 60)));
   }, skip: GoNetworkDebuggerProcess.hasGo() ? false : 'go not found');

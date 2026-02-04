@@ -296,7 +296,7 @@ func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *dom
 				}
 			}
 
-			// Если URL не распарсился — просто не матчим host/path правила, но продолжаем цикл.
+			// If URL failed to parse — just don't match host/path rules, but continue the loop.
 			if parseErr != nil || parsedURL == nil {
 				continue
 			}
@@ -306,7 +306,7 @@ func (s *ScriptService) filterMatchingScripts(scripts []*domain.Script, req *dom
 		if script.MatchRules.HostPattern != "" {
 			hostToMatch := parsedURL.Hostname()
 			if hostToMatch == "" {
-				// На всякий случай: если Hostname пустой, то host-правило не матчит.
+				// Just in case: if Hostname is empty, then the host rule doesn't match.
 				continue
 			}
 			hostMatched := s.matchPattern(hostToMatch, script.MatchRules.HostPattern, script.MatchRules.PatternType)

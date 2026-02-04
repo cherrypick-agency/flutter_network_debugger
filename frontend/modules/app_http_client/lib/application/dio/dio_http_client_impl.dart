@@ -110,13 +110,13 @@ class DioHttpClientImpl implements AppHttpClient {
         false;
     final isFormData = body is FormData;
     final internalHeaders = <String, dynamic>{
-      // Для FormData нельзя подставлять application/json, иначе ломается multipart.
-      // Dio сам проставит корректный content-type с boundary.
+      // For FormData, we cannot set application/json, otherwise multipart breaks.
+      // Dio will automatically set the correct content-type with boundary.
       if (!haveContentTypeHeader && !isFormData)
         HttpHeaders.contentTypeHeader:
             ContentType('application', 'json', charset: 'utf-8').toString(),
       if (token != null && token!.isNotEmpty)
-        // На имени HttpHeaders.authorizationHeader завязан другой код!
+        // Other code depends on the HttpHeaders.authorizationHeader name!
         HttpHeaders.authorizationHeader: 'Bearer $token',
       HttpHeaders.acceptHeader:
           ContentType('application', 'json', charset: 'utf-8').toString(),
@@ -144,7 +144,7 @@ class DioHttpClientImpl implements AppHttpClient {
           type: _exceptionAdapter.adapt(e.type),
         );
 
-        // Проверяем, есть ли AppHttp401Exception в error
+        // Check if AppHttp401Exception is in error
         if (e.error is AppHttp401Exception) {
           throw e.error as AppHttp401Exception;
         } else if (e.response!.statusCode == 401) {
@@ -152,7 +152,7 @@ class DioHttpClientImpl implements AppHttpClient {
           throw exception;
         }
 
-        // Пытаемся распарсить стандартную ошибку бэка: { error: { code, message, details } }
+        // Try to parse the standard backend error: { error: { code, message, details } }
         try {
           final data = e.response!.data;
           final Map<String, dynamic> body = (data is Map<String, dynamic>)
@@ -313,7 +313,7 @@ class DioHttpClientImpl implements AppHttpClient {
   @override
   Future<void> clearTokens() => _tokensStorage.clear();
 
-  /// Преобразует HttpMethod в строку HTTP метода
+  /// Converts HttpMethod to HTTP method string
   String _getHttpMethodString(HttpMethod method) {
     switch (method) {
       case HttpMethod.get:
@@ -347,7 +347,7 @@ class DioHttpClientImpl implements AppHttpClient {
     try {
       final data = value.data;
 
-      // Токены могут приходить как в корне, так и внутри meta
+      // Tokens can come either in the root or inside meta
       final accessToken = data[TokensStorageKeys.token] as String? ??
           (data['meta']?[TokensStorageKeys.token] as String?);
       final refreshToken = data[TokensStorageKeys.refreshToken] as String? ??

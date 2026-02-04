@@ -9,7 +9,7 @@ import '../lib/src/downloader.dart';
 import '../lib/src/server.dart';
 
 Future<int> main(List<String> args) async {
-  // Команды:
+  // Commands:
   // network-debugger [flags]
   // network-debugger serve-artifacts --dir <path> [--port 8099]
   final parser = ArgParser()
@@ -112,7 +112,7 @@ Future<int> main(List<String> args) async {
     final code = await runBinary(execPath: exec);
     return code;
   } catch (e, st) {
-    stderr.writeln('[network-debugger] Ошибка: $e');
+    stderr.writeln('[network-debugger] Error: $e');
     stderr.writeln(st);
     return 1;
   }

@@ -9,7 +9,7 @@ import (
 func TestFrame_JSON_OmitemptyAndEdges(t *testing.T) {
 	t.Parallel()
 
-	// zero-value: omitempty для BodyFile
+	// zero-value: omitempty for BodyFile
 	f0 := Frame{}
 	b0, err := json.Marshal(f0)
 	if err != nil {
@@ -23,7 +23,7 @@ func TestFrame_JSON_OmitemptyAndEdges(t *testing.T) {
 		t.Fatalf("expected base keys present on zero-value: %s", s0)
 	}
 
-	// заполненный: BodyFile должен появиться только если непустой
+	// filled: BodyFile should only appear if non-empty
 	f := Frame{
 		ID:        "id",
 		Ts:        time.Unix(0, 0).UTC(),
@@ -42,7 +42,7 @@ func TestFrame_JSON_OmitemptyAndEdges(t *testing.T) {
 		t.Fatalf("missing keys: %s", s)
 	}
 
-	// крайние значения Size
+	// edge values for Size
 	f.Size = 1<<31 - 1
 	if err := json.Unmarshal(b, &f); err != nil {
 		t.Fatalf("unmarshal back: %v", err)

@@ -22,7 +22,7 @@ func Test_mapToStringMap_and_toString(t *testing.T) {
 	if out["B"] != "123" {
 		t.Fatalf("B mismatch: %q", out["B"])
 	}
-	// для объектов — json строка
+	// for objects — json string
 	var m map[string]int
 	if err := json.Unmarshal([]byte(out["C"]), &m); err != nil || m["x"] != 1 {
 		t.Fatalf("C not json: %q err=%v", out["C"], err)

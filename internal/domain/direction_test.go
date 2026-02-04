@@ -8,7 +8,7 @@ import (
 func TestDirection_ConstantsAndJSON(t *testing.T) {
 	t.Parallel()
 
-	// Проверяем стабильность строковых значений
+	// Check stability of string values
 	if string(DirectionClientToUpstream) != "client->upstream" {
 		t.Fatalf("DirectionClientToUpstream changed: %q", DirectionClientToUpstream)
 	}
@@ -16,7 +16,7 @@ func TestDirection_ConstantsAndJSON(t *testing.T) {
 		t.Fatalf("DirectionUpstreamToClient changed: %q", DirectionUpstreamToClient)
 	}
 
-	// JSON roundtrip в обёртке
+	// JSON roundtrip in wrapper
 	type wrap struct {
 		D Direction `json:"d"`
 	}

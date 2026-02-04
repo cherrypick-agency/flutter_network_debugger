@@ -12,34 +12,34 @@ import (
 func TestCheckDiskSpace(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Тест с достаточным местом (запрашиваем 1 байт)
+	// Test with sufficient space (requesting 1 byte)
 	err := checkDiskSpace(tmpDir, 1)
 	if err != nil {
 		t.Errorf("checkDiskSpace() with sufficient space error = %v, want nil", err)
 	}
 
-	// Тест с очень большим запросом (должен вернуть ошибку если места недостаточно)
-	// Но на большинстве систем это не сработает, так как места достаточно
-	// Поэтому просто проверяем что функция не паникует
-	err = checkDiskSpace(tmpDir, 1<<60) // 1 экзабайт
-	// Может вернуть ошибку или nil в зависимости от системы
+	// Test with very large request (should return error if space is insufficient)
+	// But on most systems this won't work because there's enough space
+	// So we just check that the function doesn't panic
+	err = checkDiskSpace(tmpDir, 1<<60) // 1 exabyte
+	// May return error or nil depending on the system
 	_ = err
 }
 
 // Composer 1.
 func TestCheckDiskSpace_InvalidDir(t *testing.T) {
-	// Тест с несуществующей директорией
-	// Функция должна вернуть nil (продолжить работу)
+	// Test with non-existent directory
+	// Function should return nil (continue work)
 	err := checkDiskSpace("/nonexistent/directory/12345", 1000)
 	if err != nil {
-		// Если вернула ошибку - это тоже нормально, главное что не паникует
+		// If it returns error - that's also fine, the main thing is it doesn't panic
 		_ = err
 	}
 }
 
 // Composer 1.
 func TestCheckDiskSpace_CurrentDir(t *testing.T) {
-	// Тест с текущей директорией
+	// Test with current directory
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
@@ -47,14 +47,14 @@ func TestCheckDiskSpace_CurrentDir(t *testing.T) {
 
 	err = checkDiskSpace(wd, 1000)
 	if err != nil {
-		// Может вернуть ошибку если места недостаточно
+		// May return error if space is insufficient
 		_ = err
 	}
 }
 
 // Composer 1.
 func TestCheckDiskSpace_TempDir(t *testing.T) {
-	// Тест с временной директорией
+	// Test with temporary directory
 	tmpDir := t.TempDir()
 	testDir := filepath.Join(tmpDir, "subdir")
 	if err := os.MkdirAll(testDir, 0755); err != nil {
@@ -63,7 +63,7 @@ func TestCheckDiskSpace_TempDir(t *testing.T) {
 
 	err := checkDiskSpace(testDir, 1000)
 	if err != nil {
-		// Может вернуть ошибку если места недостаточно
+		// May return error if space is insufficient
 		_ = err
 	}
 }

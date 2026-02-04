@@ -18,7 +18,7 @@ func (r *SettingsRepo) Load(ctx context.Context) (sdomain.RuntimeSettings, error
 	tx := r.db.WithContext(ctx).First(&m, 1)
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
-			// создадим дефолтную запись
+			// create a default record
 			now := time.Now().UTC()
 			def := RuntimeSettingsModel{ID: 1, UpdatedAt: now}
 			if err := r.db.WithContext(ctx).Create(&def).Error; err != nil {
@@ -76,6 +76,6 @@ func (r *ThrottleProfilesRepo) Delete(ctx context.Context, id string) error {
 
 // --- helpers ---
 func newUUID() string {
-	// простая зависимость уже есть
+	// simple dependency already exists
 	return uuidNew()
 }

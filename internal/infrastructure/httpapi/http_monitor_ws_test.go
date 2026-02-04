@@ -20,7 +20,7 @@ func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial ws: %v", err)
 	}
-	// ждём пока клиент зарегистрируется в hub
+	// wait until client registers in hub
 	deadline := time.Now().Add(2 * time.Second)
 	for hub.ClientCount() == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
@@ -28,7 +28,7 @@ func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
 	if hub.ClientCount() == 0 {
 		t.Fatal("client not registered in hub")
 	}
-	// после подключения пошлём событие и убедимся, что оно доезжает
+	// after connecting, send event and verify it arrives
 	hub.Broadcast(domain.MonitorEvent{Type: "test", ID: "1"})
 	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
 	_, msg, err := c.ReadMessage()
@@ -36,6 +36,6 @@ func TestMonitorHub_HandleWS_BasicUpgradeAndClose(t *testing.T) {
 		t.Fatalf("expected message from hub, err=%v", err)
 	}
 	_ = c.Close()
-	// дать серверу время обработать закрытие и убрать клиента
+	// give server time to process close and remove client
 	time.Sleep(50 * time.Millisecond)
 }

@@ -82,7 +82,7 @@ class RecentFilesPlugin extends BaseEditorPlugin with StatefulPlugin {
   @override
   void onFileOpen(FileDocument file) {
     safeExecute('Add to recent files', () {
-      // Пытаемся аккуратно получить данные из FileDocument, без жёсткой зависимости
+      // Try to carefully get data from FileDocument without tight coupling
       String fileId;
       String fileName;
       try {
@@ -130,7 +130,7 @@ class RecentFilesPlugin extends BaseEditorPlugin with StatefulPlugin {
           return {
             'id': entry.fileId,
             'title': entry.fileName,
-            'subtitle': entry.formattedTime, // Показываем относительное время
+            'subtitle': entry.formattedTime, // Show relative time
             'iconCode': 0xe24d, // Icons.insert_drive_file
             'onTap': 'openFile',
           };

@@ -9,7 +9,7 @@ import (
 
 type responseDelayDTO struct {
 	Enabled bool   `json:"enabled"`
-	Value   string `json:"value"` // "1500" или диапазон "1000-3000"
+	Value   string `json:"value"` // "1500" or range "1000-3000"
 }
 
 type settingsDTO struct {
@@ -18,8 +18,8 @@ type settingsDTO struct {
 	HighlightTheme string           `json:"highlightTheme,omitempty"`
 }
 
-// handleV1Settings — простой рантайм-эндпоинт для чтения/записи настроек прокси.
-// Сейчас поддерживается только Response Delay (фикс или диапазон в мс).
+// handleV1Settings — simple runtime endpoint for reading/writing proxy settings.
+// Currently only Response Delay is supported (fixed or range in ms).
 func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -60,7 +60,7 @@ func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rd := in.ResponseDelay
-		// Выключено — обнуляем всё. Иначе парсим value (число или диапазон min-max в мс)
+		// Disabled — reset everything. Otherwise parse value (number or range min-max in ms)
 		if !rd.Enabled || strings.TrimSpace(rd.Value) == "" || strings.TrimSpace(rd.Value) == "0" {
 			d.Cfg.ResponseDelayMs = 0
 			d.Cfg.ResponseDelayMinMs = 0
@@ -95,7 +95,7 @@ func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Persist to DB if available; сохраним fontScale и highlightTheme, если переданы
+		// Persist to DB if available; save fontScale and highlightTheme if provided
 		if d.Settings != nil {
 			cur, _ := d.Settings.Load(contextWithNoCancel())
 			cur.ResponseDelayMs = d.Cfg.ResponseDelayMs
@@ -115,7 +115,7 @@ func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
 			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), cur)
 		}
 
-		// Вернём актуальные значения аналогично GET
+		// Return current values similar to GET
 		w.Header().Set("Content-Type", "application/json")
 		cur := settingsDTO{}
 		if d.Cfg.ResponseDelayMinMs > 0 && d.Cfg.ResponseDelayMaxMs > 0 {

@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 
-/// Интерсептор, который переписывает исходные запросы на reverse‑proxy эндпоинт
-/// вида: {proxyBaseUrl}{proxyHttpPath}?_target=<FULL_UPSTREAM_URL>
+/// Interceptor that rewrites original requests to a reverse-proxy endpoint
+/// of the form: {proxyBaseUrl}{proxyHttpPath}?_target=<FULL_UPSTREAM_URL>
 class ReverseProxyInterceptor extends Interceptor {
   ReverseProxyInterceptor({
     required String upstreamBaseUrl,
@@ -19,44 +19,45 @@ class ReverseProxyInterceptor extends Interceptor {
         _proxyHttpPath =
             proxyHttpPath.startsWith('/') ? proxyHttpPath : '/$proxyHttpPath';
 
-  final String _upstreamBaseUrl; // реальный upstream, куда хотим ходить
-  final String _proxyBaseUrl; // адрес прокси (может быть без схемы в ENV)
-  final String _proxyHttpPath; // путь на прокси, обычно /httpproxy
+  final String
+      _upstreamBaseUrl; // actual upstream where we want to send requests
+  final String _proxyBaseUrl; // proxy address (may be without scheme in ENV)
+  final String _proxyHttpPath; // path on proxy, usually /httpproxy
 
-  // Фильтры: если allow* заданы, то проксируем только совпадающие, иначе —
-  // если skip* заданы, то пропускаем совпадающие.
+  // Filters: if allow* are set, we proxy only matching ones, otherwise -
+  // if skip* are set, we skip matching ones.
   final List<Pattern>? skipPaths;
   final List<Pattern>? skipHosts;
-  final List<String>? skipMethods; // в верхнем регистре
+  final List<String>? skipMethods; // in upper case
   final List<Pattern>? allowPaths;
   final List<Pattern>? allowHosts;
-  final List<String>? allowMethods; // в верхнем регистре
+  final List<String>? allowMethods; // in upper case
 
-  // Reset capture: если true, добавляет _resetCapture=true к первому запросу
+  // Reset capture: if true, adds _resetCapture=true to the first request
   final bool resetCaptureOnFirstRequest;
   bool _isFirstRequest = true;
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    // Если уже идём через прокси endpoint — не трогаем, чтобы избежать двойной переписки
+    // If already going through proxy endpoint - don't touch to avoid double rewriting
     if (options.path.startsWith(_proxyHttpPath) &&
         options.baseUrl.startsWith(_proxyBaseUrl)) {
       return handler.next(options);
     }
 
-    // Определяем, следует ли обходить прокси по фильтрам
+    // Determine whether to bypass proxy based on filters
     if (_shouldBypassProxy(options)) {
       return handler.next(options);
     }
 
-    // Целевой URL: если path абсолютный http(s), используем его как target;
-    // иначе собираем из upstreamBaseUrl + path + query. Значения query нормализуем в строки.
+    // Target URL: if path is absolute http(s), use it as target;
+    // otherwise build from upstreamBaseUrl + path + query. Normalize query values to strings.
     final Uri target = _buildTargetUri(options);
 
-    // Формируем query параметры для прокси
+    // Build query parameters for proxy
     final proxyQueryParams = <String, String>{'_target': target.toString()};
 
-    // Добавляем _resetCapture=true для первого запроса если требуется
+    // Add _resetCapture=true for the first request if required
     if (resetCaptureOnFirstRequest && _isFirstRequest) {
       proxyQueryParams['_resetCapture'] = 'true';
       _isFirstRequest = false;
@@ -73,12 +74,12 @@ class ReverseProxyInterceptor extends Interceptor {
   bool _shouldBypassProxy(RequestOptions options) {
     final method = options.method.toUpperCase();
     final path = options.path;
-    // host может быть в options.uri, он уже комбинированный; если path абсолютный — берём из него
+    // host can be in options.uri, it's already combined; if path is absolute - take from it
     final Uri effectiveUri =
         _isAbsoluteHttpUrl(path) ? Uri.parse(path) : options.uri;
     final host = effectiveUri.host;
 
-    // Если указаны allow-листы — применяем их (должно совпасть хотя бы что-то)
+    // If allow-lists are specified - apply them (must match at least something)
     final hasAllow = (allowPaths?.isNotEmpty ?? false) ||
         (allowHosts?.isNotEmpty ?? false) ||
         (allowMethods?.isNotEmpty ?? false);
@@ -88,10 +89,10 @@ class ReverseProxyInterceptor extends Interceptor {
       final okMethod = allowMethods == null || allowMethods!.contains(method);
       return !(okPath &&
           okHost &&
-          okMethod); // если не прошёл allow — обойти прокси
+          okMethod); // if didn't pass allow - bypass proxy
     }
 
-    // Иначе, если есть skip-листы — обходим прокси при совпадении любого
+    // Otherwise, if there are skip-lists - bypass proxy when any matches
     final skipByPath = (skipPaths != null && _matchesAny(path, skipPaths!));
     final skipByHost = (skipHosts != null && _matchesAny(host, skipHosts!));
     final skipByMethod = (skipMethods != null && skipMethods!.contains(method));
@@ -124,12 +125,12 @@ class ReverseProxyInterceptor extends Interceptor {
     required Map<String, dynamic> overrideQuery,
   }) {
     final qpAll = <String, List<String>>{};
-    // из baseQuery (уже String -> String)
+    // from baseQuery (already String -> String)
     baseQuery.forEach((k, v) {
       final key = k.startsWith('?') ? k.substring(1) : k;
       qpAll[key] = [v];
     });
-    // из overrideQuery (dynamic)
+    // from overrideQuery (dynamic)
     overrideQuery.forEach((k, v) {
       if (v == null) return;
       final kk = k.toString();
@@ -146,7 +147,7 @@ class ReverseProxyInterceptor extends Interceptor {
       }
     });
 
-    // Сборка query строки вручную, затем безопасно подставляем через Uri.replace
+    // Build query string manually, then safely substitute via Uri.replace
     final parts = <String>[];
     qpAll.forEach((k, values) {
       for (final v in values) {
@@ -155,7 +156,7 @@ class ReverseProxyInterceptor extends Interceptor {
       }
     });
     final q = parts.join('&');
-    // Убираем возможный существующий query из base и подставляем новый
+    // Remove possible existing query from base and substitute new one
     final cleanBase = base.replace(query: null, queryParameters: null);
     return cleanBase.replace(query: q);
   }
@@ -190,7 +191,7 @@ class ReverseProxyInterceptor extends Interceptor {
       if (p is RegExp) {
         if (p.hasMatch(value)) return true;
       } else {
-        // String/Pattern: простая проверка вхождения
+        // String/Pattern: simple containment check
         if (value.contains(p)) return true;
       }
     }

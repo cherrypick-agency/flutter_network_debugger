@@ -14,7 +14,7 @@ import (
 func TestRustCompiler_Compile_NotAvailable(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewRustCompiler(cache)
-	compiler.cargoPath = "" // Убеждаемся что путь не установлен
+	compiler.cargoPath = "" // Make sure path is not set
 
 	ctx := context.Background()
 	req := domain.CompileRequest{
@@ -283,17 +283,17 @@ func TestRustCompiler_ValidateSyntax_NotAvailable(t *testing.T) {
 	compiler.cargoPath = ""
 	compiler.rustupPath = ""
 
-	// Устанавливаем IsAvailable в false, переопределяя проверку
-	// Это симулирует ситуацию когда компилятор недоступен
+	// Set IsAvailable to false by overriding the check
+	// This simulates a situation when the compiler is not available
 	ctx := context.Background()
 	req := domain.CompileRequest{
 		SourceCode: "fn main() {}",
 	}
 
-	// ValidateSyntax проверяет IsAvailable, который может вернуть true если Rust есть в системе
-	// Поэтому просто проверяем что метод не падает
+	// ValidateSyntax checks IsAvailable, which may return true if Rust is in the system
+	// So we just check that the method doesn't crash
 	err := compiler.ValidateSyntax(ctx, req)
-	// Может вернуть ошибку или нет в зависимости от наличия Rust в системе
+	// May return error or not depending on Rust presence in the system
 	_ = err
 }
 
@@ -436,9 +436,9 @@ func TestRustCompiler_OptimizeWASM_NotAvailable(t *testing.T) {
 	ctx := context.Background()
 	wasmPath := "/tmp/test.wasm"
 
-	// OptimizeWASM возвращает nil если wasm-opt не найден
+	// OptimizeWASM returns nil if wasm-opt is not found
 	err := compiler.OptimizeWASM(ctx, wasmPath)
-	// Может вернуть nil или ошибку в зависимости от наличия wasm-opt
+	// May return nil or error depending on wasm-opt presence
 	_ = err
 }
 
@@ -456,7 +456,7 @@ func TestRustCompiler_Compile_WithRustEnv(t *testing.T) {
 	}
 
 	_, err := compiler.Compile(ctx, req)
-	// Ожидаем ошибку так как компилятор недоступен
+	// Expect error since compiler is not available
 	if err == nil {
 		t.Fatal("Compile() should return error when compiler not available")
 	}
@@ -570,7 +570,7 @@ func TestRustCompiler_IsAvailable_WithCachedRust(t *testing.T) {
 	}
 	compiler := NewRustCompiler(cache)
 
-	// IsAvailable проверяет wasm32 target для кешированного Rust
+	// IsAvailable checks wasm32 target for cached Rust
 	_ = compiler.IsAvailable()
 }
 
@@ -579,7 +579,7 @@ func TestRustCompiler_IsAvailable_SystemCargoWithoutRustup(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewRustCompiler(cache)
 
-	// IsAvailable может вернуть false если rustup не найден
+	// IsAvailable may return false if rustup is not found
 	_ = compiler.IsAvailable()
 }
 
@@ -588,7 +588,7 @@ func TestRustCompiler_IsAvailable_SystemRustWithoutWasm32Target(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewRustCompiler(cache)
 
-	// IsAvailable может вернуть false если wasm32 target не установлен
+	// IsAvailable may return false if wasm32 target is not installed
 	_ = compiler.IsAvailable()
 }
 
@@ -657,7 +657,7 @@ error[E0425]: cannot find value 'foo' in this scope
 		t.Fatal("parseRustError() should return CompilationError")
 	}
 
-	// Должен извлечь первую ошибку
+	// Should extract first error
 	if compErr.Code != "E0308" {
 		t.Errorf("Code = %q, want %q", compErr.Code, "E0308")
 	}
@@ -705,7 +705,7 @@ func TestRustCompiler_GetRustEnv_WithBothHomes(t *testing.T) {
 	// Expected path with proper OS separators
 	expectedCargoBin := filepath.Join("/test/cargo", "bin")
 
-	// Проверяем что RUSTUP_HOME установлен
+	// Check that RUSTUP_HOME is set
 	foundRustupHome := false
 	foundCargoHome := false
 	foundPath := false

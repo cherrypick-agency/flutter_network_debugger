@@ -1,5 +1,5 @@
-// Пример Go скрипта для создания mock response
-// Компиляция: tinygo build -o mock_response.wasm -target wasi mock_response.go
+// Example Go script for creating mock response
+// Compilation: tinygo build -o mock_response.wasm -target wasi mock_response.go
 
 //go:build tinygo.wasm || wasm
 // +build tinygo.wasm wasm
@@ -28,7 +28,7 @@ type HTTPResponse struct {
 
 //export process
 func process() int32 {
-	// Читаем input (request)
+	// Read input (request)
 	input := pdk.Input()
 
 	var req HTTPRequest
@@ -39,7 +39,7 @@ func process() int32 {
 
 	pdk.Log(pdk.LogInfo, "Processing: "+req.Method+" "+req.URL)
 
-	// Если URL содержит /api/mock - возвращаем mock response
+	// If URL contains /api/mock - return mock response
 	if strings.Contains(req.URL, "/api/mock") {
 		mockResp := HTTPResponse{
 			Status: 200,
@@ -65,14 +65,14 @@ func process() int32 {
 		return 0
 	}
 
-	// Иначе пропускаем request без изменений
+	// Otherwise pass request without changes
 	output, _ := json.Marshal(req)
 	pdk.OutputMemory(output)
 	return 0
 }
 
 func getCurrentTime() string {
-	// Простая реализация без time package (не поддерживается в TinyGo WASI)
+	// Simple implementation without time package (not supported in TinyGo WASI)
 	return "2025-11-03T12:00:00Z"
 }
 

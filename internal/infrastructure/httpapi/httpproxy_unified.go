@@ -12,9 +12,9 @@ import (
 )
 
 // handleUnifiedProxy dispatches to WS or HTTP reverse proxy based on Upgrade header.
-// Один URL: /proxy. Если заголовки указывают на WebSocket Upgrade — используем WS‑прокси.
-// Иначе — HTTP reverse. Для простоты можно не указывать target в URL, если сервер
-// сконфигурирован с DEFAULT_TARGET: тогда /proxy/.. будет проксировать на этот target.
+// Single URL: /proxy. If headers indicate WebSocket Upgrade — use WS proxy.
+// Otherwise — HTTP reverse. For simplicity, target can be omitted in URL if server
+// is configured with DEFAULT_TARGET: then /proxy/.. will proxy to that target.
 func (d *Deps) handleUnifiedProxy(w http.ResponseWriter, r *http.Request) {
 	if isWebSocketRequest(r) {
 		d.handleWSProxy(w, r)
@@ -38,14 +38,14 @@ func isWebSocketRequest(r *http.Request) bool {
 func newTransport(cfg config.Config) *http.Transport {
 	tr := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
-		// Жёсткий таймаут на установление TCP-соединения к апстриму,
-		// чтобы не зависать и не доводить клиента до connectTimeout
+		// Hard timeout for establishing TCP connection to upstream,
+		// to avoid hanging and reaching client's connectTimeout
 		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		// Сколько ждём заголовки ответа от апстрима после установления соединения
+		// How long to wait for response headers from upstream after connection is established
 		ResponseHeaderTimeout: 25 * time.Second,
 	}
 	if cfg.InsecureTLS {

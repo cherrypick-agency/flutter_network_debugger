@@ -90,6 +90,6 @@ abstract class AppHttpClient {
     Map<String, String>? fields,
   });
 
-  /// Путь энд-поинта обновления токена, например "/refresh_token".
+  /// Token refresh endpoint path, e.g., "/refresh_token".
   String get refreshPath;
 }

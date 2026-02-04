@@ -38,7 +38,7 @@ func TestOpcode_ConstantsAndJSON(t *testing.T) {
 		}
 	}
 
-	// произвольное значение остаётся строкой
+	// arbitrary value remains as string
 	b, _ := json.Marshal(wrap{Op: Opcode("x")})
 	var w wrap
 	_ = json.Unmarshal(b, &w)

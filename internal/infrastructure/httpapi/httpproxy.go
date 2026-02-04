@@ -79,7 +79,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	if suffix == "/" {
 		suffix = ""
 	}
-	// Если суффикс пустой — не добавляем завершающий "/" к исходному пути таргета
+	// If suffix is empty — don't add trailing "/" to target path
 	if suffix != "" && !strings.HasPrefix(suffix, "/") {
 		suffix = "/" + suffix
 	}
@@ -89,17 +89,17 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		upstream.Path = strings.TrimRight(upstream.Path, "/") + suffix
 	}
 
-	// Объединяем query из таргета и входящего запроса (кроме `_target`)
-	// Важно: параметры из запроса имеют приоритет поверх параметров таргета
-	// Бывают случаи, когда в таргете или во входящих параметрах ключи приходят с ведущим '?'
-	// (например, если клиент ошибочно включил '?' в имя параметра). Нормализуем такие ключи.
+	// Merge query from target and incoming request (except `_target`)
+	// Important: incoming request params have priority over target params
+	// There are cases when keys in target or incoming params have leading '?'
+	// (e.g., if client mistakenly included '?' in param name). Normalize such keys.
 	rawTargetQ := strings.TrimPrefix(u.RawQuery, "?")
 	targetQ, _ := url.ParseQuery(rawTargetQ)
 
 	incomingQ := r.URL.Query()
 	incomingQ.Del("_target")
 	incomingQ.Del("_resetCapture")
-	// Нормализуем ключи входящих параметров: убираем ведущий '?'
+	// Normalize incoming param keys: remove leading '?'
 	cleanedIncoming := url.Values{}
 	for k, vv := range incomingQ {
 		ck := strings.TrimPrefix(k, "?")
@@ -108,7 +108,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for k, vv := range cleanedIncoming {
-		// затираем существующие значения из таргета значениями из входящего запроса
+		// overwrite existing target values with incoming request values
 		delete(targetQ, k)
 		for _, v := range vv {
 			targetQ.Add(k, v)
@@ -116,7 +116,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	upstream.RawQuery = targetQ.Encode()
 	if upstream.RawQuery == "" {
-		// если итоговый query пуст, не форсируем `?`
+		// if resulting query is empty, don't force `?`
 		upstream.ForceQuery = false
 	}
 
@@ -165,8 +165,8 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		ClientAddr: r.RemoteAddr,
 		StartedAt:  time.Now().UTC(),
 		Kind:       "http",
-		// Для reverse‑proxy сессий не запускаем детекцию локального процесса.
-		// Иначе будет отображаться приложение UI (например, "Runner"), что сбивает с толку.
+		// For reverse-proxy sessions, don't run local process detection.
+		// Otherwise UI app (e.g., "Runner") will be displayed, which is confusing.
 		ProcessInfo: &processdomain.ProcessInfo{Name: "Reverse Proxy"},
 	}
 	// Always create session regardless of shouldMonitor
@@ -179,7 +179,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	d.Logger.Info().Str("session_id", sessionID).Msg("[HTTPPROXY] Broadcasted session_started event")
 	d.Metrics.ActiveSessions.Inc()
 
-	// Mapping (Map Remote/Local) — оценим по итоговому upstream URL
+	// Mapping (Map Remote/Local) — evaluate against final upstream URL
 	mappedPreserveHost := false
 	if d.Cfg.MappingEnabled && d.MapRt != nil {
 		prevReq := r.Clone(r.Context())
@@ -283,7 +283,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		}
 		// Clean hop-by-hop headers; httputil will remove most, but ensure here for clarity
 		removeHopHeaders(req.Header)
-		// In isolate mode переписываем Cookie: оставляем только текущий namespace и разворачиваем имена
+		// In isolate mode rewrite Cookie: keep only current namespace and unwrap names
 		rewriteOutboundCookieHeaderForUpstream(req.Header, opts)
 	}
 
@@ -324,21 +324,21 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			}
 			// Artificial response delay (to visualize timeline)
 			sleepResponseDelay(d.Cfg)
-			// Переписываем Set-Cookie под домен/путь прокси (и изолируем имена при необходимости)
+			// Rewrite Set-Cookie for proxy domain/path (and isolate names if needed)
 			origCookies := append([]string(nil), resp.Header.Values("Set-Cookie")...)
 			rewriteSetCookiesForProxy(resp.Header, opts)
-			// Если по какой-то причине заголовок исчез — восстановим оригинальные
+			// If header disappeared for some reason — restore originals
 			if len(resp.Header.Values("Set-Cookie")) == 0 && len(origCookies) > 0 {
 				for _, c := range origCookies {
 					resp.Header.Add("Set-Cookie", c)
 				}
 			}
-			// Последний рубеж: на некоторых окружениях заголовок может быть выкинут стеком.
-			// Добавим нейтральную куку с SameSite=None, чтобы сохранить семантику теста на HTTPS.
+			// Last resort: on some environments header may be stripped by the stack.
+			// Add neutral cookie with SameSite=None to preserve HTTPS test semantics.
 			if len(resp.Header.Values("Set-Cookie")) == 0 && opts.HTTPS {
 				resp.Header.Add("Set-Cookie", "ndebug=1; Path=/; SameSite=None")
 			}
-			// Переписываем Location для 3xx, чтобы клиент продолжил цепочку через прокси
+			// Rewrite Location for 3xx so client continues chain through proxy
 			if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 				loc := resp.Header.Get("Location")
 				if loc != "" {
@@ -348,12 +348,12 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 							base = lurl
 						}
 						resolved := base.ResolveReference(lurl)
-						// Сконструируем прокси‑URL: <prefix><path>?_target=<scheme://host>[&origQuery]
+						// Construct proxy URL: <prefix><path>?_target=<scheme://host>[&origQuery]
 						proxyURL := url.URL{Path: prefix + resolved.EscapedPath()}
 						q := url.Values{}
 						q.Set("_target", base.Scheme+"://"+base.Host)
 						if rq := resolved.RawQuery; rq != "" {
-							// Добавим исходные параметры редиректа
+							// Add original redirect params
 							if rqVals, err := url.ParseQuery(rq); err == nil {
 								for k, vv := range rqVals {
 									for _, v := range vv {
@@ -398,7 +398,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 						resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
 					}
 				}
-				// Декомпрессия для превью/редактирования
+				// Decompression for preview/editing
 				origEnc := strings.ToLower(resp.Header.Get("Content-Encoding"))
 				decCap, _ := decodeForIntercept(capBuf, origEnc, d.Cfg.InterceptBodyMaxBytes)
 				ct := strings.ToLower(resp.Header.Get("Content-Type"))
@@ -587,7 +587,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Interception: request (MVP) — после предпросмотра, до отправки
+	// Interception: request (MVP) — after preview, before sending
 	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
 		capBody := reqBodyBuf
 		if max := d.Cfg.InterceptBodyMaxBytes; max > 0 && len(capBody) > max {
@@ -614,7 +614,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 						r.URL = u
 						r.Host = u.Host
 					} else {
-						// относительный путь
+						// relative path
 						newURL := *r.URL
 						newURL.Path = u.Path
 						newURL.RawQuery = u.RawQuery
@@ -667,19 +667,19 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		},
 	}))
 
-	// Standard forwarding headers (optional в stealth-режиме)
+	// Standard forwarding headers (optional in stealth mode)
 	if !stealth {
-		// X-Forwarded-For — IP клиента
+		// X-Forwarded-For — client IP
 		if ip := clientHost(r.RemoteAddr); ip != "" {
 			r.Header.Set("X-Forwarded-For", ip)
 		}
-		// X-Forwarded-Proto — как на входе (схема клиента)
+		// X-Forwarded-Proto — as received (client's scheme)
 		if r.TLS != nil {
 			r.Header.Set("X-Forwarded-Proto", "https")
 		} else {
 			r.Header.Set("X-Forwarded-Proto", "http")
 		}
-		// Via — указывает на прокси
+		// Via — indicates proxy
 		r.Header.Set("Via", "network-debugger")
 	}
 
@@ -749,12 +749,12 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 			}
 		}
 
-		// Попробуем распознать form-data/urlencoded по Content-Type
+		// Try to parse form-data/urlencoded by Content-Type
 		ct := strings.ToLower(r.Header.Get("Content-Type"))
-		// urlencoded: разбираем пары ключ-значение
+		// urlencoded: parse key-value pairs
 		if strings.Contains(ct, "application/x-www-form-urlencoded") {
-			// Для превью достаточно распарсить первые байты
-			// Внимание: body может быть усечён, это нормально для предпросмотра
+			// For preview, parsing first bytes is sufficient
+			// Note: body may be truncated, this is normal for preview
 			vals, err := url.ParseQuery(string(b))
 			if err == nil && len(vals) > 0 {
 				fields := make([]map[string]any, 0, len(vals))
@@ -772,9 +772,9 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 				}
 			}
 		} else if strings.Contains(ct, "multipart/form-data") {
-			// multipart: пробежимся по частям, читаем немного из каждой части
+			// multipart: iterate over parts, read a little from each part
 			if mr := multipartReaderFrom(ct, b); mr != nil {
-				const perPartLimit = 2048 // ~2KB на часть для превью
+				const perPartLimit = 2048 // ~2KB per part for preview
 				fields := make([]map[string]any, 0, 8)
 				files := make([]map[string]any, 0, 4)
 				for {
@@ -786,7 +786,7 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 					filename := part.FileName()
 					pct := part.Header.Get("Content-Type")
 
-					// Считаем ограниченное количество байт, чтобы не раздувать превью
+					// Read limited number of bytes to avoid bloating the preview
 					buf := make([]byte, perPartLimit+1)
 					n, _ := io.ReadFull(part, buf)
 					truncated := n > perPartLimit
@@ -800,14 +800,14 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 					data := buf[:n]
 
 					if filename == "" {
-						// Обычное текстовое поле формы
+						// Regular text form field
 						fields = append(fields, map[string]any{
 							"name":         name,
 							"valuePreview": string(data),
 							"truncated":    truncated,
 						})
 					} else {
-						// Файл: показываем метаданные и небольшой превью для текстовых типов
+						// File: show metadata and small preview for text types
 						file := map[string]any{
 							"name":        name,
 							"filename":    filename,
@@ -832,7 +832,7 @@ func buildHTTPRequestPreview(r *http.Request, body []byte) string {
 			}
 		}
 
-		// Сохраним также сырой body в превью (усечённый), чтобы не терять исходник
+		// Also save raw body in preview (truncated) to preserve original
 		if tryJSON := tryCompactJSON(b); tryJSON != "" {
 			if len(tryJSON) > max {
 				tryJSON = tryJSON[:max]
@@ -1175,7 +1175,7 @@ func durationMs(from time.Time, to time.Time) int64 {
 	return ms
 }
 
-// useOrFallback returns a if set, otherwise b. Helps when TLS phase отсутствует (plain HTTP).
+// useOrFallback returns a if set, otherwise b. Helps when TLS phase is absent (plain HTTP).
 func useOrFallback(a, b time.Time) time.Time {
 	if a.IsZero() {
 		return b
@@ -1183,7 +1183,7 @@ func useOrFallback(a, b time.Time) time.Time {
 	return a
 }
 
-// timeFromUnixNanoOrZero конвертирует монотонно-независимые наносекунды в time.Time или возвращает нулевое время.
+// timeFromUnixNanoOrZero converts monotonic-independent nanoseconds to time.Time or returns zero time.
 func timeFromUnixNanoOrZero(ns int64) time.Time {
 	if ns <= 0 {
 		return time.Time{}

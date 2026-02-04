@@ -65,8 +65,8 @@ func (e *ExtismExecutor) Execute(ctx context.Context, req domain.ExecutionReques
 	}
 
 	// Track execution error for pool metrics.
-	// Важно: при таймауте/отмене мы НЕ возвращаем инстанс обратно в пул, потому что он может быть
-	// в неопределённом состоянии. Это поведение реализовано внутри PluginPool.Release().
+	// Important: on timeout/cancel we do NOT return the instance to the pool because it may be
+	// in an undefined state. This behavior is implemented inside PluginPool.Release().
 	var execErr error
 	defer func() {
 		pool.Release(instance, execErr)

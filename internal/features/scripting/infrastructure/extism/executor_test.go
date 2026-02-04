@@ -152,16 +152,16 @@ func TestExtismExecutor_Execute_Timeout(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	result, err := executor.Execute(ctx, req)
-	// Execute может вернуть ошибку при таймауте на этапе Acquire
+	// Execute may return error on timeout during Acquire
 	if err != nil {
-		// Это нормально - таймаут может произойти при получении плагина из пула
+		// This is normal - timeout may occur when getting plugin from pool
 		if !contains(err.Error(), "deadline exceeded") && !contains(err.Error(), "timeout") {
 			t.Errorf("Execute() error = %v, expected timeout-related error", err)
 		}
 		return
 	}
 
-	// Или вернуть результат с ошибкой
+	// Or return result with error
 	if result.Error == "" {
 		t.Error("Execute() with timeout should return error in result or as error")
 	}
@@ -187,16 +187,16 @@ func TestExtismExecutor_Execute_Cancellation(t *testing.T) {
 	}()
 
 	result, err := executor.Execute(ctx, req)
-	// Execute может вернуть ошибку при отмене на этапе Acquire
+	// Execute may return error on cancel during Acquire
 	if err != nil {
-		// Это нормально - отмена может произойти при получении плагина из пула
+		// This is normal - cancel may occur when getting plugin from pool
 		if !contains(err.Error(), "canceled") && !contains(err.Error(), "cancelled") {
 			t.Errorf("Execute() error = %v, expected cancellation-related error", err)
 		}
 		return
 	}
 
-	// Или вернуть результат с ошибкой
+	// Or return result with error
 	if result.Error == "" {
 		t.Error("Execute() with cancellation should return error in result or as error")
 	}

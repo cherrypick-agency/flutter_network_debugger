@@ -94,7 +94,7 @@ func TestE2E_ForwardProxy_RequestInterceptDrop(t *testing.T) {
 	d := &Deps{Cfg: cfg, Logger: &logger, Metrics: m, Monitor: NewMonitorHub(), Live: NewLiveSessions()}
 	store := memory.NewStore(256, 1024, 5*time.Minute)
 	d.Svc = usecase.NewSessionService(store, store, store)
-	// Для теста поднимаем сервер с обёрткой forward‑proxy поверх базового роутера
+	// For test, start server with forward-proxy wrapper on top of base router
 	srv := httptest.NewServer(withForwardProxy(d, NewRouterWithoutForwardProxy(d)))
 	defer srv.Close()
 

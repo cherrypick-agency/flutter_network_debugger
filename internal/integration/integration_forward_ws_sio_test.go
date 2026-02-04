@@ -19,7 +19,7 @@ func TestForwardProxy_WSSIOEvents(t *testing.T) {
 	appSrv, deps := startAppServer(t)
 	defer appSrv.Close()
 
-	// monitor not strictly required here; будем проверять через REST
+	// monitor not strictly required here; will check via REST
 
 	// forward via http proxy
 	proxyHost := ensureForwardProxyAddr(t, appSrv, deps)
@@ -37,11 +37,11 @@ func TestForwardProxy_WSSIOEvents(t *testing.T) {
 	// also send one client SIO event
 	_ = c.WriteMessage(websocket.TextMessage, []byte("42/chat,[\"cli_event\",{}]"))
 
-	// дождёмся, чтобы кадры/события успели записаться
+	// wait for frames/events to be recorded
 	time.Sleep(400 * time.Millisecond)
 	_ = c.Close()
 
-	// проверим через REST, что события появились (фильтруем по хосту target через q)
+	// check via REST that events appeared (filter by target host via q)
 	uu, _ := url.Parse(echoWS)
 	resp, err := appSrv.Client().Get(appSrv.URL + "/api/sessions?limit=1000&q=" + url.QueryEscape(uu.Host))
 	if err != nil {
@@ -56,7 +56,7 @@ func TestForwardProxy_WSSIOEvents(t *testing.T) {
 		t.Fatalf("no sessions")
 	}
 	sid := list.Items[len(list.Items)-1].ID
-	// Поллинг событий: ожидаем хотя бы одно распознанное SIO‑событие
+	// Polling events: expect at least one recognized SIO event
 	ok := pollUntil(2*time.Second, 50*time.Millisecond, 200*time.Millisecond, func() bool {
 		r2, err := appSrv.Client().Get(appSrv.URL + "/api/sessions/" + sid + "/events?limit=1000")
 		if err != nil {

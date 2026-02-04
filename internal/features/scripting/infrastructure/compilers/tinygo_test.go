@@ -13,7 +13,7 @@ import (
 func TestTinyGoCompiler_Compile_NotAvailable(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewTinyGoCompiler(cache)
-	compiler.tinygoPath = "" // Убеждаемся что путь не установлен
+	compiler.tinygoPath = "" // Make sure path is not set
 
 	ctx := context.Background()
 	req := domain.CompileRequest{
@@ -45,7 +45,7 @@ func TestTinyGoCompiler_Compile_WorkspaceCreation(t *testing.T) {
 		SourceCode: "package main\nfunc main() {}",
 	}
 
-	// Устанавливаем невалидный путь чтобы вызвать ошибку IsAvailable
+	// Set invalid path to trigger IsAvailable error
 	compiler.tinygoPath = ""
 
 	_, err := compiler.Compile(ctx, req)
@@ -53,7 +53,7 @@ func TestTinyGoCompiler_Compile_WorkspaceCreation(t *testing.T) {
 		t.Fatal("Compile() should return error")
 	}
 
-	// Проверяем что ошибка связана с недоступностью компилятора
+	// Check that error is related to compiler unavailability
 	if err.Error() == "" {
 		t.Error("Error message should not be empty")
 	}
@@ -75,7 +75,7 @@ func TestTinyGoCompiler_Compile_WithGoMod(t *testing.T) {
 	compiler.tinygoPath = ""
 
 	_, err := compiler.Compile(ctx, req)
-	// Ожидаем ошибку так как компилятор недоступен
+	// Expect error since compiler is not available
 	if err == nil {
 		t.Fatal("Compile() should return error when compiler not available")
 	}
@@ -107,11 +107,11 @@ func TestTinyGoCompiler_Compile_WithTimeout(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewTinyGoCompiler(cache)
 
-	// Создаем контекст с таймаутом
+	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 	defer cancel()
 
-	// Ждем немного чтобы контекст точно истек
+	// Wait a bit to make sure context has expired
 	time.Sleep(10 * time.Millisecond)
 
 	req := domain.CompileRequest{
@@ -121,7 +121,7 @@ func TestTinyGoCompiler_Compile_WithTimeout(t *testing.T) {
 	compiler.tinygoPath = ""
 
 	_, err := compiler.Compile(ctx, req)
-	// Ожидаем ошибку (либо из-за недоступности компилятора, либо из-за таймаута)
+	// Expect error (either due to compiler unavailability or timeout)
 	if err == nil {
 		t.Fatal("Compile() should return error")
 	}
@@ -172,8 +172,8 @@ func TestTinyGoCompiler_IsAvailable_WithCache(t *testing.T) {
 	}
 	compiler := NewTinyGoCompiler(cache)
 
-	// IsAvailable может вернуть true или false в зависимости от окружения
-	// Просто проверяем что метод не падает
+	// IsAvailable may return true or false depending on environment
+	// Just check that method doesn't crash
 	_ = compiler.IsAvailable()
 }
 
@@ -182,8 +182,8 @@ func TestTinyGoCompiler_IsAvailable_WithoutCache(t *testing.T) {
 	cache := &mockCacheManager{}
 	compiler := NewTinyGoCompiler(cache)
 
-	// IsAvailable может вернуть true или false в зависимости от окружения
-	// Просто проверяем что метод не падает
+	// IsAvailable may return true or false depending on environment
+	// Just check that method doesn't crash
 	_ = compiler.IsAvailable()
 }
 
@@ -208,7 +208,7 @@ func TestTinyGoCompiler_ValidateDependencies_InvalidGoMod(t *testing.T) {
 	compiler := NewTinyGoCompiler(cache)
 
 	deps := map[string]string{
-		"go.mod": "go 1.21", // Нет module declaration
+		"go.mod": "go 1.21", // No module declaration
 	}
 
 	err := compiler.ValidateDependencies(deps)
@@ -253,7 +253,7 @@ func TestTinyGoCompiler_GetTinyGoBinary_WithCache(t *testing.T) {
 	compiler := NewTinyGoCompiler(cache)
 
 	path, err := compiler.getTinyGoBinary()
-	// Может вернуть ошибку если путь не существует, но это нормально
+	// May return error if path doesn't exist, but that's fine
 	_ = path
 	_ = err
 }
@@ -264,7 +264,7 @@ func TestTinyGoCompiler_GetTinyGoBinary_WithoutCache(t *testing.T) {
 	compiler := NewTinyGoCompiler(cache)
 
 	_, err := compiler.getTinyGoBinary()
-	// Ожидаем ошибку так как компилятор не в кеше
+	// Expect error since compiler is not in cache
 	if err == nil {
 		t.Error("getTinyGoBinary() should return error when compiler not in cache")
 	}
@@ -349,7 +349,7 @@ func TestTinyGoCompiler_IsAvailable_SystemFallback(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewTinyGoCompiler(cache)
 
-	// IsAvailable может вернуть true если tinygo есть в системе
+	// IsAvailable may return true if tinygo is in the system
 	_ = compiler.IsAvailable()
 }
 
@@ -432,7 +432,7 @@ func TestTinyGoCompiler_ValidateSyntax_WithGoMod(t *testing.T) {
 	}
 }
 
-// Mock CacheManager с поддержкой пути компилятора
+// Mock CacheManager with compiler path support
 type mockCacheManagerWithPath struct {
 	compilerPath string
 }
@@ -476,7 +476,7 @@ func (m *mockCacheManagerWithPath) GetCompilerBinaryPath(language string) (strin
 	return "", nil
 }
 
-// Mock CacheManager который возвращает ошибку при GetCompilerPath
+// Mock CacheManager that returns error on GetCompilerPath
 type mockCacheManagerWithError struct{}
 
 func (m *mockCacheManagerWithError) GetCacheDir() string {

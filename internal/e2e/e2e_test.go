@@ -593,7 +593,7 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 	}
 	defer c.Close()
 
-	// Send Socket.IO connect: '40' (engine.io open packet may arrive but мы не читаем, чтобы избежать зависаний)
+	// Send Socket.IO connect: '40' (engine.io open packet may arrive but we don't read to avoid hangs)
 	if err := c.WriteMessage(websocket.TextMessage, []byte("40")); err != nil {
 		t.Fatalf("write 40: %v", err)
 	}
@@ -609,7 +609,7 @@ func TestE2E_SocketIO_StrictRaw(t *testing.T) {
 	}
 	gotRoom := false
 
-	// We не читаем обратно из сокета (это flaky в e2e). Закрываем и проверяем события через REST.
+	// We don't read back from socket (this is flaky in e2e). Close and check events via REST.
 	time.Sleep(300 * time.Millisecond)
 	_ = c.Close()
 
@@ -1077,10 +1077,10 @@ func TestE2E_UpstreamDropAndReconnect(t *testing.T) {
 	}
 }
 
-// Высоконагрузочный тест: 150 параллельных клиентов (HTTP+WS), проверка отсутствия паник/зависаний
+// High-load test: 150 parallel clients (HTTP+WS), checking for absence of panics/hangs
 func TestE2E_Load_ParallelClients_150(t *testing.T) {
 	t.Parallel()
-	// upstreams: WS echo и HTTP simple
+	// upstreams: WS echo and HTTP simple
 	echoSrv, echoURL := startEchoWS(t)
 	defer echoSrv.Shutdown(context.Background())
 	httpMux := http.NewServeMux()
@@ -1180,7 +1180,7 @@ func TestE2E_Load_ParallelClients_150(t *testing.T) {
 	}
 	wg.Wait()
 
-	// sanity: получить список сессий (хотя бы несколько должны появиться)
+	// sanity: get list of sessions (at least some should appear)
 	resp, err := http.Get(baseURL + "/api/sessions?limit=1000")
 	if err != nil {
 		t.Fatalf("sessions: %v", err)

@@ -4,7 +4,7 @@ import (
 	"net/textproto"
 )
 
-// Простая in-memory реализация HeaderLike для юнит-тестов
+// Simple in-memory implementation of HeaderLike for unit tests
 type headerFake struct {
 	m map[string][]string
 }
@@ -20,7 +20,7 @@ func (h *headerFake) key(k string) string {
 func (h *headerFake) Values(key string) []string {
 	k := h.key(key)
 	v := h.m[k]
-	// копия, чтобы тесты случайно не мутировали внутреннее состояние
+	// copy to prevent tests from accidentally mutating internal state
 	out := make([]string, len(v))
 	copy(out, v)
 	return out

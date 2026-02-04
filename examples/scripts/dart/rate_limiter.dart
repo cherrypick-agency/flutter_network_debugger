@@ -1,6 +1,6 @@
-// Пример Dart скрипта для rate limiting
-// Запуск: dart run rate_limiter.dart
-// Этот скрипт работает через subprocess executor (не WASM)
+// Example Dart script for rate limiting
+// Run: dart run rate_limiter.dart
+// This script works via subprocess executor (not WASM)
 
 import 'dart:convert';
 import 'dart:io';
@@ -50,7 +50,7 @@ class HTTPResponse {
   }
 }
 
-// Простой in-memory rate limiter
+// Simple in-memory rate limiter
 class RateLimiter {
   final Map<String, List<DateTime>> _requests = {};
   final int maxRequests;
@@ -62,7 +62,7 @@ class RateLimiter {
     final now = DateTime.now();
     final requests = _requests[clientIP] ?? [];
 
-    // Удаляем старые запросы
+    // Remove old requests
     requests.removeWhere((time) => now.difference(time) > window);
 
     if (requests.length >= maxRequests) {
@@ -87,7 +87,7 @@ void main() {
     window: Duration(minutes: 1),
   );
 
-  // Читаем JSON-RPC запросы из stdin
+  // Read JSON-RPC requests from stdin
   stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
     try {
       final rpcRequest = jsonDecode(line);
@@ -96,7 +96,7 @@ void main() {
       if (params['request'] != null) {
         final req = HTTPRequest.fromJson(params['request']);
 
-        // Извлекаем IP клиента
+        // Extract client IP
         final clientIP =
             params['session']?['clientAddr'] as String? ?? 'unknown';
 
@@ -104,9 +104,9 @@ void main() {
           '[Dart] Processing request from $clientIP to ${req.url}',
         );
 
-        // Проверяем rate limit
+        // Check rate limit
         if (!rateLimiter.isAllowed(clientIP)) {
-          // Блокируем запрос - возвращаем 429 Too Many Requests
+          // Block request - return 429 Too Many Requests
           final response = HTTPResponse(
             status: 429,
             headers: {
@@ -136,13 +136,13 @@ void main() {
           return;
         }
 
-        // Rate limit OK - добавляем заголовки и пропускаем
+        // Rate limit OK - add headers and pass through
         req.headers['X-RateLimit-Limit'] = ['${rateLimiter.maxRequests}'];
         req.headers['X-RateLimit-Remaining'] = [
           '${rateLimiter.getRemainingRequests(clientIP)}',
         ];
 
-        // JSON-RPC response с модифицированным request
+        // JSON-RPC response with modified request
         final rpcResponse = {
           'jsonrpc': '2.0',
           'id': rpcRequest['id'],

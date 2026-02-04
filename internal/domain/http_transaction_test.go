@@ -9,13 +9,13 @@ import (
 func TestHTTPTransaction_JSON_TagsAndZeroValue(t *testing.T) {
 	t.Parallel()
 
-	// zero-value безопасен
+	// zero-value is safe
 	var tx HTTPTransaction
 	if _, err := json.Marshal(tx); err != nil {
 		t.Fatalf("marshal zero: %v", err)
 	}
 
-	// заполненный
+	// filled
 	tx = HTTPTransaction{
 		ID:        "t1",
 		SessionID: "s1",
@@ -27,14 +27,14 @@ func TestHTTPTransaction_JSON_TagsAndZeroValue(t *testing.T) {
 		StartedAt: time.Unix(0, 0).UTC(),
 		EndedAt:   time.Unix(1, 0).UTC(),
 		Timings:   HTTPTimings{DNS: 1, Connect: 2, TLS: 3, TTFB: 4, Total: 5},
-		// omitempty для ContentType/ReqBodyFile/RespBodyFile
+		// omitempty for ContentType/ReqBodyFile/RespBodyFile
 	}
 	b, err := json.Marshal(tx)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	s := string(b)
-	// ключи с нужными тегами
+	// keys with required tags
 	if !(containsAll(s, `"id"`, `"sessionId"`, `"method"`, `"url"`, `"status"`, `"reqSize"`, `"respSize"`, `"startedAt"`, `"endedAt"`, `"timings"`)) {
 		t.Fatalf("missing keys: %s", s)
 	}
@@ -42,7 +42,7 @@ func TestHTTPTransaction_JSON_TagsAndZeroValue(t *testing.T) {
 		t.Fatalf("omitempty fields must be omitted when empty: %s", s)
 	}
 
-	// Когда заданы — должны появляться
+	// When set - should appear
 	tx.ContentType = "application/json"
 	tx.ReqBodyFile = "req.bin"
 	tx.RespBodyFile = "resp.bin"

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 )
 
-// TODO: Нужна возможность настраивать маскировку через UI
-// Проблема: много разных режимов отображения (preview, HAR export, WS frames)
-// Требуется единая система управления sensitive data redaction
-// Временно отключено - показываем все токены полностью
+// TODO: Need ability to configure masking via UI
+// Problem: many different display modes (preview, HAR export, WS frames)
+// A unified sensitive data redaction management system is required
+// Temporarily disabled - showing all tokens completely
 // var sensitiveKeys = []string{"authorization", "cookie", "access_token", "id_token", "session", "apikey"}
 
 // RedactJSON masks sensitive fields in a JSON string best-effort.

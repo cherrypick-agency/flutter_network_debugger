@@ -31,7 +31,7 @@ func TestRepo_ListPredefinedTags(t *testing.T) {
 	repo := NewRepo(db)
 	ctx := context.Background()
 
-	// Создаем теги
+	// Create tags
 	tag1 := domain.PredefinedTag{
 		ID:           "tag-1",
 		Name:         "important",
@@ -58,7 +58,7 @@ func TestRepo_ListPredefinedTags(t *testing.T) {
 		t.Fatalf("CreatePredefinedTag failed: %v", err)
 	}
 
-	// Получаем список
+	// Get the list
 	tags, err := repo.ListPredefinedTags(ctx)
 	if err != nil {
 		t.Fatalf("ListPredefinedTags failed: %v", err)
@@ -88,7 +88,7 @@ func TestRepo_CreatePredefinedTag(t *testing.T) {
 		t.Fatalf("CreatePredefinedTag failed: %v", err)
 	}
 
-	// Проверяем что тег создан
+	// Verify that the tag was created
 	tags, err := repo.ListPredefinedTags(ctx)
 	if err != nil {
 		t.Fatalf("ListPredefinedTags failed: %v", err)
@@ -122,12 +122,12 @@ func TestRepo_DeletePredefinedTag(t *testing.T) {
 		t.Fatalf("CreatePredefinedTag failed: %v", err)
 	}
 
-	// Удаляем
+	// Delete
 	if err := repo.DeletePredefinedTag(ctx, tag.ID); err != nil {
 		t.Fatalf("DeletePredefinedTag failed: %v", err)
 	}
 
-	// Проверяем что тег удален
+	// Verify that the tag was deleted
 	tags, err := repo.ListPredefinedTags(ctx)
 	if err != nil {
 		t.Fatalf("ListPredefinedTags failed: %v", err)
@@ -155,7 +155,7 @@ func TestRepo_GetSessionTags(t *testing.T) {
 		t.Fatalf("AddSessionTag failed: %v", err)
 	}
 
-	// Получаем теги сессии
+	// Get session tags
 	tags, err := repo.GetSessionTags(ctx, "session-123")
 	if err != nil {
 		t.Fatalf("GetSessionTags failed: %v", err)
@@ -187,7 +187,7 @@ func TestRepo_AddSessionTag(t *testing.T) {
 		t.Fatalf("AddSessionTag failed: %v", err)
 	}
 
-	// Проверяем что тег добавлен
+	// Verify that the tag was added
 	tags, err := repo.GetSessionTags(ctx, "session-456")
 	if err != nil {
 		t.Fatalf("GetSessionTags failed: %v", err)
@@ -215,12 +215,12 @@ func TestRepo_RemoveSessionTag(t *testing.T) {
 		t.Fatalf("AddSessionTag failed: %v", err)
 	}
 
-	// Удаляем тег
+	// Remove the tag
 	if err := repo.RemoveSessionTag(ctx, "session-789", "to-remove"); err != nil {
 		t.Fatalf("RemoveSessionTag failed: %v", err)
 	}
 
-	// Проверяем что тег удален
+	// Verify that the tag was removed
 	tags, err := repo.GetSessionTags(ctx, "session-789")
 	if err != nil {
 		t.Fatalf("GetSessionTags failed: %v", err)
@@ -244,7 +244,7 @@ func TestRepo_BulkAddSessionTags(t *testing.T) {
 		t.Fatalf("BulkAddSessionTags failed: %v", err)
 	}
 
-	// Проверяем что теги добавлены
+	// Verify that the tags were added
 	for _, sessionID := range sessionIDs {
 		tags, err := repo.GetSessionTags(ctx, sessionID)
 		if err != nil {
@@ -263,7 +263,7 @@ func TestRepo_BulkAddSessionTags_Empty(t *testing.T) {
 	repo := NewRepo(db)
 	ctx := context.Background()
 
-	// Пустые списки не должны вызывать ошибку
+	// Empty lists should not cause an error
 	if err := repo.BulkAddSessionTags(ctx, []string{}, []string{"tag1"}); err != nil {
 		t.Fatalf("BulkAddSessionTags with empty sessionIDs should not fail: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestRepo_BulkRemoveSessionTags(t *testing.T) {
 	repo := NewRepo(db)
 	ctx := context.Background()
 
-	// Добавляем теги
+	// Add tags
 	sessionIDs := []string{"session-1", "session-2"}
 	tagNames := []string{"tag1", "tag2"}
 
@@ -287,12 +287,12 @@ func TestRepo_BulkRemoveSessionTags(t *testing.T) {
 		t.Fatalf("BulkAddSessionTags failed: %v", err)
 	}
 
-	// Удаляем один тег из всех сессий
+	// Remove one tag from all sessions
 	if err := repo.BulkRemoveSessionTags(ctx, sessionIDs, []string{"tag1"}); err != nil {
 		t.Fatalf("BulkRemoveSessionTags failed: %v", err)
 	}
 
-	// Проверяем что tag1 удален, но tag2 остался
+	// Verify that tag1 was removed, but tag2 remains
 	for _, sessionID := range sessionIDs {
 		tags, err := repo.GetSessionTags(ctx, sessionID)
 		if err != nil {
@@ -315,7 +315,7 @@ func TestRepo_DeleteAllSessionTags(t *testing.T) {
 	repo := NewRepo(db)
 	ctx := context.Background()
 
-	// Добавляем несколько тегов
+	// Add several tags
 	tag1 := domain.SessionTag{
 		ID:        "st-1",
 		SessionID: "session-all",
@@ -338,12 +338,12 @@ func TestRepo_DeleteAllSessionTags(t *testing.T) {
 		t.Fatalf("AddSessionTag failed: %v", err)
 	}
 
-	// Удаляем все теги сессии
+	// Delete all tags of the session
 	if err := repo.DeleteAllSessionTags(ctx, "session-all"); err != nil {
 		t.Fatalf("DeleteAllSessionTags failed: %v", err)
 	}
 
-	// Проверяем что все теги удалены
+	// Verify that all tags were deleted
 	tags, err := repo.GetSessionTags(ctx, "session-all")
 	if err != nil {
 		t.Fatalf("GetSessionTags failed: %v", err)
@@ -360,7 +360,7 @@ func TestRepo_FindSessionIDsByTags(t *testing.T) {
 	repo := NewRepo(db)
 	ctx := context.Background()
 
-	// Добавляем теги для разных сессий
+	// Add tags for different sessions
 	repo.AddSessionTag(ctx, domain.SessionTag{
 		ID:        "st-1",
 		SessionID: "session-1",
@@ -382,7 +382,7 @@ func TestRepo_FindSessionIDsByTags(t *testing.T) {
 		CreatedAt: time.Now(),
 	})
 
-	// Ищем сессии с тегом "important"
+	// Search for sessions with the tag "important"
 	sessionIDs, err := repo.FindSessionIDsByTags(ctx, []string{"important"})
 	if err != nil {
 		t.Fatalf("FindSessionIDsByTags failed: %v", err)
@@ -432,7 +432,7 @@ func TestRepo_GetSessionAnnotations(t *testing.T) {
 		t.Fatalf("UpsertSessionAnnotation failed: %v", err)
 	}
 
-	// Получаем аннотации
+	// Get annotations
 	annotations, err := repo.GetSessionAnnotations(ctx, "session-annot")
 	if err != nil {
 		t.Fatalf("GetSessionAnnotations failed: %v", err)
@@ -466,13 +466,13 @@ func TestRepo_UpsertSessionAnnotation(t *testing.T) {
 		t.Fatalf("UpsertSessionAnnotation failed: %v", err)
 	}
 
-	// Обновляем значение
+	// Update the value
 	annotation.Value = "inactive"
 	if err := repo.UpsertSessionAnnotation(ctx, annotation); err != nil {
 		t.Fatalf("UpsertSessionAnnotation update failed: %v", err)
 	}
 
-	// Проверяем что значение обновлено
+	// Verify that the value was updated
 	annotations, err := repo.GetSessionAnnotations(ctx, "session-upsert")
 	if err != nil {
 		t.Fatalf("GetSessionAnnotations failed: %v", err)
@@ -506,12 +506,12 @@ func TestRepo_DeleteSessionAnnotation(t *testing.T) {
 		t.Fatalf("UpsertSessionAnnotation failed: %v", err)
 	}
 
-	// Удаляем аннотацию
+	// Delete the annotation
 	if err := repo.DeleteSessionAnnotation(ctx, "session-delete", "to-delete"); err != nil {
 		t.Fatalf("DeleteSessionAnnotation failed: %v", err)
 	}
 
-	// Проверяем что аннотация удалена
+	// Verify that the annotation was deleted
 	annotations, err := repo.GetSessionAnnotations(ctx, "session-delete")
 	if err != nil {
 		t.Fatalf("GetSessionAnnotations failed: %v", err)
@@ -528,7 +528,7 @@ func TestRepo_DeleteAllSessionAnnotations(t *testing.T) {
 	repo := NewRepo(db)
 	ctx := context.Background()
 
-	// Добавляем несколько аннотаций
+	// Add several annotations
 	ann1 := domain.SessionAnnotation{
 		ID:        "ann-1",
 		SessionID: "session-all",
@@ -555,12 +555,12 @@ func TestRepo_DeleteAllSessionAnnotations(t *testing.T) {
 		t.Fatalf("UpsertSessionAnnotation failed: %v", err)
 	}
 
-	// Удаляем все аннотации сессии
+	// Delete all session annotations
 	if err := repo.DeleteAllSessionAnnotations(ctx, "session-all"); err != nil {
 		t.Fatalf("DeleteAllSessionAnnotations failed: %v", err)
 	}
 
-	// Проверяем что все аннотации удалены
+	// Verify that all annotations were deleted
 	annotations, err := repo.GetSessionAnnotations(ctx, "session-all")
 	if err != nil {
 		t.Fatalf("GetSessionAnnotations failed: %v", err)
@@ -584,12 +584,12 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to migrate: %v", err)
 	}
 
-	// Создаем уникальный индекс для session_tags (session_id, tag_name)
+	// Create a unique index for session_tags (session_id, tag_name)
 	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_session_tags_unique ON session_tags(session_id, tag_name)").Error; err != nil {
 		t.Fatalf("Failed to create unique index: %v", err)
 	}
 
-	// Создаем уникальный индекс для session_annotations (session_id, key)
+	// Create a unique index for session_annotations (session_id, key)
 	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_session_annotations_unique ON session_annotations(session_id, key)").Error; err != nil {
 		t.Fatalf("Failed to create unique index for annotations: %v", err)
 	}

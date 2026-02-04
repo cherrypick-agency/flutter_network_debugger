@@ -54,7 +54,7 @@ func TestRepo_Load_DefaultConfig(t *testing.T) {
 	r := NewRepo(db)
 	ctx := context.Background()
 
-	// Удаляем возможную существующую запись, чтобы проверить создание по умолчанию
+	// Delete possible existing record to check default creation
 	db.WithContext(ctx).Exec("DELETE FROM proxy_config WHERE id = 1")
 
 	pc, err := r.Load(ctx)
@@ -127,24 +127,24 @@ func TestRepo_Load_AfterSave(t *testing.T) {
 	r := NewRepo(db)
 	ctx := context.Background()
 
-	// Загружаем конфигурацию
+	// Load configuration
 	pc, err := r.Load(ctx)
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil", err)
 	}
 
-	// Изменяем конфигурацию
+	// Modify configuration
 	pc.ForwardAddr = ":8888"
 	pc.SocksEnabled = true
 	pc.SocksAddr = ":7777"
 
-	// Сохраняем
+	// Save
 	err = r.Save(ctx, pc)
 	if err != nil {
 		t.Fatalf("Save() error = %v, want nil", err)
 	}
 
-	// Загружаем снова
+	// Load again
 	pc2, err := r.Load(ctx)
 	if err != nil {
 		t.Fatalf("Second Load() error = %v, want nil", err)

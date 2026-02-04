@@ -2,7 +2,7 @@ package persistence
 
 import "time"
 
-// ProcessDetectionConfigModel - GORM модель для конфигурации детекции процессов
+// ProcessDetectionConfigModel - GORM model for process detection configuration
 type ProcessDetectionConfigModel struct {
 	ID              int64     `gorm:"primaryKey"`
 	Enabled         bool      `gorm:"not null;default:true"`
@@ -15,12 +15,12 @@ type ProcessDetectionConfigModel struct {
 	UpdatedAt       time.Time `gorm:"autoUpdateTime"`
 }
 
-// TableName - имя таблицы в базе данных
+// TableName - table name in database
 func (ProcessDetectionConfigModel) TableName() string {
 	return "process_detection_config"
 }
 
-// IconCacheModel - GORM модель для кеша иконок
+// IconCacheModel - GORM model for icon cache
 type IconCacheModel struct {
 	CacheKey   string `gorm:"primaryKey"`
 	IconFormat string `gorm:"not null"`
@@ -30,7 +30,7 @@ type IconCacheModel struct {
 	CreatedAt  time.Time `gorm:"autoCreateTime"`
 }
 
-// TableName - имя таблицы в базе данных
+// TableName - table name in database
 func (IconCacheModel) TableName() string {
 	return "icon_cache"
 }

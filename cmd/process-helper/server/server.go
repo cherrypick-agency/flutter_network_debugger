@@ -14,22 +14,22 @@ import (
 )
 
 const (
-	// MaxConcurrentConnections - максимум одновременных соединений
+	// MaxConcurrentConnections - maximum concurrent connections
 	MaxConcurrentConnections = 10
-	// MaxRequestSize - максимальный размер одного request в байтах (1 MB)
+	// MaxRequestSize - maximum size of a single request in bytes (1 MB)
 	MaxRequestSize = 1024 * 1024
 )
 
-// Server - IPC server для обработки запросов от main app
+// Server - IPC server for handling requests from main app
 type Server struct {
 	listener net.Listener
 	handler  *Handler
 	logger   zerolog.Logger
 	wg       sync.WaitGroup
-	connSem  chan struct{} // семафор для ограничения concurrent connections
+	connSem  chan struct{} // semaphore for limiting concurrent connections
 }
 
-// NewServer - создать новый server
+// NewServer - create new server
 func NewServer(listener net.Listener, handler *Handler, logger zerolog.Logger) *Server {
 	return &Server{
 		listener: listener,
@@ -39,19 +39,19 @@ func NewServer(listener net.Listener, handler *Handler, logger zerolog.Logger) *
 	}
 }
 
-// Serve - запустить accept loop
+// Serve - start accept loop
 func (s *Server) Serve(ctx context.Context) error {
 	s.logger.Info().Msg("Helper daemon server started, waiting for connections")
 
-	// Создать errCh для обработки ошибок из accept()
+	// Create errCh for handling errors from accept()
 	errCh := make(chan error, 1)
 
-	// Запустить accept loop в отдельной goroutine
+	// Start accept loop in separate goroutine
 	go func() {
 		for {
 			conn, err := s.listener.Accept()
 			if err != nil {
-				// Проверить если это shutdown
+				// Check if this is shutdown
 				select {
 				case <-ctx.Done():
 					errCh <- nil
@@ -62,32 +62,32 @@ func (s *Server) Serve(ctx context.Context) error {
 				}
 			}
 
-			// Попытаться захватить семафор (неблокирующе)
+			// Try to acquire semaphore (non-blocking)
 			select {
 			case s.connSem <- struct{}{}:
-				// Успешно захватили слот, запускаем goroutine
+				// Successfully acquired slot, start goroutine
 				s.wg.Add(1)
 				go s.handleConnection(conn)
 			case <-ctx.Done():
-				// Shutdown во время ожидания слота
+				// Shutdown while waiting for slot
 				conn.Close()
 				errCh <- nil
 				return
 			default:
-				// Нет доступных слотов - отклонить соединение
+				// No available slots - reject connection
 				s.logger.Warn().Msg("Max concurrent connections reached, rejecting connection")
 				conn.Close()
 			}
 		}
 	}()
 
-	// Ждать shutdown
+	// Wait for shutdown
 	select {
 	case <-ctx.Done():
 		s.logger.Info().Msg("Shutting down server, waiting for active connections...")
-		// Закрыть listener чтобы прервать Accept()
+		// Close listener to interrupt Accept()
 		s.listener.Close()
-		// Дождаться завершения всех goroutines
+		// Wait for all goroutines to complete
 		s.wg.Wait()
 		s.logger.Info().Msg("All connections closed, server stopped")
 		return ctx.Err()
@@ -98,25 +98,25 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
-// handleConnection - обработать одно соединение
+// handleConnection - handle single connection
 func (s *Server) handleConnection(conn net.Conn) {
 	defer func() {
 		conn.Close()
-		<-s.connSem // освободить слот в семафоре
+		<-s.connSem // release slot in semaphore
 		s.wg.Done()
 	}()
 
 	s.logger.Debug().Str("remote", conn.RemoteAddr().String()).Msg("Connection accepted")
 
 	scanner := bufio.NewScanner(conn)
-	// Установить максимальный размер буфера для защиты от OOM
+	// Set maximum buffer size for OOM protection
 	scanner.Buffer(make([]byte, 4096), MaxRequestSize)
 	writer := bufio.NewWriter(conn)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
 
-		// Парсинг request
+		// Parse request
 		var req ipc.Request
 		if err := json.Unmarshal(line, &req); err != nil {
 			s.logger.Error().Err(err).Msg("Failed to parse request")
@@ -124,7 +124,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 			continue
 		}
 
-		// Валидация request ID
+		// Validate request ID
 		if req.ID == "" {
 			s.logger.Error().Msg("Request ID is empty")
 			s.sendError(writer, "", ipc.ErrInvalidRequest, "Request ID is required")
@@ -133,16 +133,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		s.logger.Debug().Str("id", req.ID).Str("method", req.Method).Msg("Received request")
 
-		// Обработать request
+		// Handle request
 		resp := s.handler.Handle(&req)
 
-		// Отправить response
+		// Send response
 		if err := s.sendResponse(writer, resp); err != nil {
 			s.logger.Error().Err(err).Msg("Failed to send response")
 		}
 	}
 
-	// Проверить причину завершения сканирования
+	// Check reason for scan completion
 	if err := scanner.Err(); err != nil {
 		s.logger.Error().Err(err).Msg("Scanner error during connection")
 	} else {
@@ -150,7 +150,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-// sendResponse - отправить response в connection
+// sendResponse - send response to connection
 func (s *Server) sendResponse(w *bufio.Writer, resp *ipc.Response) error {
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -172,7 +172,7 @@ func (s *Server) sendResponse(w *bufio.Writer, resp *ipc.Response) error {
 	return nil
 }
 
-// sendError - отправить error response
+// sendError - send error response
 func (s *Server) sendError(w *bufio.Writer, reqID string, code int, message string) {
 	resp := &ipc.Response{
 		ID: reqID,

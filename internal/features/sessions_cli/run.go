@@ -10,7 +10,7 @@ import (
 	httpapi "network-debugger/internal/infrastructure/httpapi"
 )
 
-// Run — точка входа фичи из main.
+// Run — feature entry point from main.
 func Run(ctx context.Context, deps *httpapi.Deps, opts domain.Options, out io.Writer) error {
 	opts.EnsureFieldsFromPreset()
 	ev := adapters.NewMonitorEventStream(deps.Monitor)

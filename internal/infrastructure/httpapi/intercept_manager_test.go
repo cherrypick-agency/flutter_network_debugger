@@ -27,7 +27,7 @@ func testDepsForMgr() (*InterceptorManager, *config.Config) {
 
 func TestInterceptorManager_TimeoutAutoContinue(t *testing.T) {
 	mgr, _ := testDepsForMgr()
-	// правило: любые GET
+	// rule: any GET
 	mgr.UpdateRules([]InterceptRule{{Enabled: true, Priority: 1, Action: "request", When: InterceptWhen{Method: []string{"GET"}}}})
 	req, _ := http.NewRequest(http.MethodGet, "http://example.com/", nil)
 	done := make(chan struct{})
@@ -60,7 +60,7 @@ func TestInterceptorManager_ContinueRequest(t *testing.T) {
 		}
 		done <- dec
 	}()
-	// подождём появления pending
+	// wait for pending to appear
 	var itemID string
 	for i := 0; i < 50; i++ {
 		items := mgr.ListPending(10)
@@ -127,16 +127,16 @@ func TestInterceptorManager_OverflowPolicy(t *testing.T) {
 	mgr.UpdateRules([]InterceptRule{{Enabled: true, Priority: 1, Action: "request", When: InterceptWhen{Method: []string{"GET"}}}})
 	req1, _ := http.NewRequest(http.MethodGet, "http://a/", nil)
 	req2, _ := http.NewRequest(http.MethodGet, "http://b/", nil)
-	// первый зависнет
+	// first will hang
 	go func() { _, _ = mgr.InterceptRequest(context.Background(), "sessA", req1, "", nil, "") }()
-	// дождаться очереди
+	// wait for queue
 	for i := 0; i < 50; i++ {
 		if len(mgr.ListPending(10)) > 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	// второй вызов приведёт к auto-continue-oldest
+	// second call will trigger auto-continue-oldest
 	done := make(chan struct{})
 	go func() { _, _ = mgr.InterceptRequest(context.Background(), "sessB", req2, "", nil, ""); close(done) }()
 	select {

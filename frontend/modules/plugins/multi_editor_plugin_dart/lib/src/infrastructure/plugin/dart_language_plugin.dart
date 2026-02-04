@@ -127,7 +127,7 @@ class DartLanguagePlugin extends LanguagePlugin {
 
   @override
   void onFileOpen(FileDocument file) {
-    // Регистрируем сниппеты при открытии файла; не полагаемся на поля FileDocument
+    // Register snippets on file open; do not rely on FileDocument fields
     if (!_snippetsRegistered) {
       _scheduleSnippetRegistration();
     }

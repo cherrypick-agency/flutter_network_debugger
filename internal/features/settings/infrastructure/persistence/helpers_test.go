@@ -30,8 +30,8 @@ func TestUuidNew(t *testing.T) {
 		t.Error("uuidNew() returned same UUID twice")
 	}
 
-	// Проверяем что это валидный UUID через id.New()
-	// id.New() должен возвращать непустую строку
+	// Verify that this is a valid UUID via id.New()
+	// id.New() should return a non-empty string
 	if len(uuid1) == 0 {
 		t.Error("uuidNew() returned empty UUID")
 	}
@@ -39,7 +39,7 @@ func TestUuidNew(t *testing.T) {
 
 // Composer 1.
 func TestUuidNew_Uniqueness(t *testing.T) {
-	// Генерируем много UUID и проверяем уникальность
+	// Generate many UUIDs and verify uniqueness
 	uuids := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		uuid := uuidNew()

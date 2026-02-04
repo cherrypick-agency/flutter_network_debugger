@@ -24,9 +24,9 @@ func (s *Service) Save(ctx context.Context, c pdomain.ProxyConfig) (pdomain.Prox
 	return s.repo.Load(ctx)
 }
 
-// ApplyOverlay переносит значения в runtime‑config для обратной совместимости.
+// ApplyOverlay transfers values to runtime-config for backward compatibility.
 func ApplyOverlay(cfg *config.Config, pc pdomain.ProxyConfig) {
-	// Сейчас в cfg нет полей для портов прокси — оставляем пустым для совместимости.
-	_ = cfg // на будущее
+	// Currently cfg has no fields for proxy ports - leaving empty for compatibility.
+	_ = cfg // for future use
 	_ = pc
 }

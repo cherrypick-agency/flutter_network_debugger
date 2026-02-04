@@ -330,7 +330,7 @@ func TestKotlinCompiler_IsAvailable_SystemFallback(t *testing.T) {
 	cache := &mockCacheManagerWithError{}
 	compiler := NewKotlinCompiler(cache)
 
-	// IsAvailable может вернуть true если kotlinc есть в системе
+	// IsAvailable may return true if kotlinc is in the system
 	_ = compiler.IsAvailable()
 }
 
