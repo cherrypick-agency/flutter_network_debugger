@@ -47,7 +47,8 @@ class MappingRuleEditorMethodsRow extends StatelessWidget {
             SizedBox(
               width: 160,
               child: DropdownButtonFormField<String>(
-                value: patternType,
+                key: ValueKey('patternType-$patternType'),
+                initialValue: patternType,
                 isDense: true,
                 items: const [
                   DropdownMenuItem(value: 'glob', child: Text('glob')),

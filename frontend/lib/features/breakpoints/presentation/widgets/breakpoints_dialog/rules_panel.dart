@@ -24,6 +24,8 @@ class _RulesPanelState extends State<RulesPanel> {
   bool _savingCfg = false;
   bool _savingRules = false;
   bool _initScheduled = false;
+  bool _configDirty = false;
+  bool _rulesDirty = false;
 
   void _scheduleInitFromStore(BreakpointsStore bp) {
     if (_initScheduled) return;
@@ -36,6 +38,8 @@ class _RulesPanelState extends State<RulesPanel> {
       setState(() {
         _draftConfig = bp.config;
         _draftRules = _cloneRules(bp.rules);
+        _configDirty = false;
+        _rulesDirty = false;
       });
     });
   }
@@ -79,18 +83,21 @@ class _RulesPanelState extends State<RulesPanel> {
           when: const InterceptWhen(),
         ),
       );
+      _rulesDirty = true;
     });
   }
 
   void _resetConfigFromStore(BreakpointsStore bp) {
     setState(() {
       _draftConfig = bp.config;
+      _configDirty = false;
     });
   }
 
   void _resetRulesFromStore(BreakpointsStore bp) {
     setState(() {
       _draftRules = _cloneRules(bp.rules);
+      _rulesDirty = false;
     });
   }
 
@@ -111,18 +118,19 @@ class _RulesPanelState extends State<RulesPanel> {
           BreakpointsSectionCard(
             title: 'Config',
             subtitle:
-                'Global intercept behavior: timeouts, queue size, and body limits.',
+                'Global intercept behavior: timeouts, queue size, and body limits.'
+                '${_configDirty ? '  •  Unsaved changes' : ''}',
             actions: Wrap(
               spacing: 8,
               children: [
                 TextButton(
-                  onPressed: bp.config == null
+                  onPressed: (cfg == null || !_configDirty)
                       ? null
                       : () => _resetConfigFromStore(bp),
                   child: const Text('Reset'),
                 ),
                 ElevatedButton(
-                  onPressed: _savingCfg || cfg == null
+                  onPressed: _savingCfg || cfg == null || !_configDirty
                       ? null
                       : () async {
                           setState(() => _savingCfg = true);
@@ -130,6 +138,9 @@ class _RulesPanelState extends State<RulesPanel> {
                             await bp.saveConfig(cfg);
                             if (!mounted) return;
                             setState(() => _draftConfig = bp.config);
+                            if (mounted) {
+                              setState(() => _configDirty = false);
+                            }
                             sl<NotificationsService>().info(
                               'Breakpoints',
                               'Config saved',
@@ -158,7 +169,10 @@ class _RulesPanelState extends State<RulesPanel> {
                 if (cfg != null)
                   InterceptConfigForm(
                     cfg: cfg,
-                    onChanged: (c) => setState(() => _draftConfig = c),
+                    onChanged: (c) => setState(() {
+                      _draftConfig = c;
+                      _configDirty = true;
+                    }),
                   ),
               ],
             ),
@@ -167,12 +181,13 @@ class _RulesPanelState extends State<RulesPanel> {
           BreakpointsSectionCard(
             title: 'Rules',
             subtitle:
-                'Match traffic and pause it for inspection or modification.',
+                'Match traffic and pause it for inspection or modification.'
+                '${_rulesDirty ? '  •  Unsaved changes' : ''}',
             actions: Wrap(
               spacing: 8,
               children: [
                 TextButton(
-                  onPressed: bp.rules.isEmpty
+                  onPressed: (rules == null || !_rulesDirty)
                       ? null
                       : () => _resetRulesFromStore(bp),
                   child: const Text('Reset'),
@@ -183,7 +198,7 @@ class _RulesPanelState extends State<RulesPanel> {
                   label: const Text('Add'),
                 ),
                 ElevatedButton(
-                  onPressed: _savingRules || rules == null
+                  onPressed: _savingRules || rules == null || !_rulesDirty
                       ? null
                       : () async {
                           setState(() => _savingRules = true);
@@ -194,6 +209,7 @@ class _RulesPanelState extends State<RulesPanel> {
                             setState(() {
                               _draftRules = _cloneRules(bp.rules);
                               _draftConfig ??= bp.config;
+                              _rulesDirty = false;
                             });
                             sl<NotificationsService>().info(
                               'Breakpoints',
@@ -237,12 +253,14 @@ class _RulesPanelState extends State<RulesPanel> {
                           setState(() {
                             rules[i] = nr;
                             _draftRules = rules;
+                            _rulesDirty = true;
                           });
                         },
                         onDelete: () {
                           setState(() {
                             rules.removeAt(i);
                             _draftRules = rules;
+                            _rulesDirty = true;
                           });
                         },
                       );

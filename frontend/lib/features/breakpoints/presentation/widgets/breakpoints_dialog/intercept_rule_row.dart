@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../domain/entities/intercept_rule.dart';
 
@@ -22,6 +23,8 @@ class InterceptRuleRow extends StatefulWidget {
 
 class _InterceptRuleRowState extends State<InterceptRuleRow> {
   late final TextEditingController _priorityCtrl;
+  late final FocusNode _priorityFocus;
+  late int _priorityLastValid;
 
   @override
   void initState() {
@@ -29,37 +32,48 @@ class _InterceptRuleRowState extends State<InterceptRuleRow> {
     _priorityCtrl = TextEditingController(
       text: widget.rule.priority.toString(),
     );
+    _priorityFocus = FocusNode();
+    _priorityLastValid = widget.rule.priority;
+
+    _priorityFocus.addListener(() {
+      if (_priorityFocus.hasFocus) return;
+      final n = int.tryParse(_priorityCtrl.text.trim());
+      if (n != null) {
+        _priorityLastValid = n;
+        return;
+      }
+      _priorityCtrl.text = _priorityLastValid.toString();
+      _emit(priority: _priorityLastValid);
+      setState(() {});
+    });
   }
 
   @override
   void didUpdateWidget(covariant InterceptRuleRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_priorityCtrl.text != widget.rule.priority.toString()) {
+    if (!_priorityFocus.hasFocus &&
+        _priorityCtrl.text != widget.rule.priority.toString()) {
       _priorityCtrl.text = widget.rule.priority.toString();
+      _priorityLastValid = widget.rule.priority;
     }
   }
 
   @override
   void dispose() {
     _priorityCtrl.dispose();
+    _priorityFocus.dispose();
     super.dispose();
   }
 
-  void _emit({
-    bool? enabled,
-    int? priority,
-    String? action,
-    bool? once,
-    bool? stopProcessing,
-  }) {
+  void _emit({bool? enabled, int? priority, String? action}) {
     widget.onChanged(
       InterceptRule(
         id: widget.rule.id,
         enabled: enabled ?? widget.rule.enabled,
         priority: priority ?? widget.rule.priority,
         action: action ?? widget.rule.action,
-        once: once ?? widget.rule.once,
-        stopProcessing: stopProcessing ?? widget.rule.stopProcessing,
+        once: widget.rule.once,
+        stopProcessing: widget.rule.stopProcessing,
         when: widget.rule.when,
       ),
     );
@@ -79,11 +93,14 @@ class _InterceptRuleRowState extends State<InterceptRuleRow> {
             width: 90,
             child: TextField(
               controller: _priorityCtrl,
+              focusNode: _priorityFocus,
               decoration: const InputDecoration(labelText: 'Priority'),
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onChanged: (v) {
                 final n = int.tryParse(v.trim());
                 if (n == null) return;
+                _priorityLastValid = n;
                 _emit(priority: n);
               },
             ),
@@ -92,7 +109,8 @@ class _InterceptRuleRowState extends State<InterceptRuleRow> {
           SizedBox(
             width: 140,
             child: DropdownButtonFormField<String>(
-              value: widget.rule.action,
+              key: ValueKey('action-${widget.rule.action}'),
+              initialValue: widget.rule.action,
               decoration: const InputDecoration(labelText: 'Action'),
               onChanged: (v) => _emit(action: v ?? widget.rule.action),
               items: const [
@@ -103,17 +121,6 @@ class _InterceptRuleRowState extends State<InterceptRuleRow> {
             ),
           ),
           const SizedBox(width: 8),
-          FilterChip(
-            selected: widget.rule.once,
-            label: const Text('Once'),
-            onSelected: (v) => _emit(once: v),
-          ),
-          const SizedBox(width: 8),
-          FilterChip(
-            selected: widget.rule.stopProcessing,
-            label: const Text('Stop'),
-            onSelected: (v) => _emit(stopProcessing: v),
-          ),
           const Spacer(),
           widget.trailing,
         ],

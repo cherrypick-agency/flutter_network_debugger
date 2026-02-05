@@ -162,7 +162,8 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
         Expanded(
           flex: 2,
           child: DropdownButtonFormField<_MatchKind>(
-            value: _kind,
+            key: ValueKey('matchKind-$_kind'),
+            initialValue: _kind,
             decoration: InputDecoration(labelText: widget.label),
             items: const [
               DropdownMenuItem(

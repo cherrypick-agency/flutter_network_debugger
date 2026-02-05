@@ -243,7 +243,8 @@ class _InterceptConfigFormState extends State<InterceptConfigForm> {
         SizedBox(
           width: 220,
           child: DropdownButtonFormField<String>(
-            value: widget.cfg.overflow,
+            key: ValueKey('overflow-${widget.cfg.overflow}'),
+            initialValue: widget.cfg.overflow,
             decoration: const InputDecoration(labelText: 'Overflow policy'),
             onChanged: (v) => _emit(overflow: v ?? widget.cfg.overflow),
             items: const [

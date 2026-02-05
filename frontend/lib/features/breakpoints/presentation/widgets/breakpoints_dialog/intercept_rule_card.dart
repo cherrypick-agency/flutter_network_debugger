@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../../theme/context_ext.dart';
 import '../../../domain/entities/intercept_rule.dart';
 import 'intercept_rule_row.dart';
+import 'intercept_rule_options.dart';
 import 'intercept_when_editor.dart';
 
 class InterceptRuleCard extends StatefulWidget {
@@ -23,6 +24,10 @@ class InterceptRuleCard extends StatefulWidget {
 
 class _InterceptRuleCardState extends State<InterceptRuleCard> {
   bool _expanded = false;
+
+  void _emitOptions(InterceptRule next) {
+    widget.onChanged(next);
+  }
 
   void _emitWhen(InterceptWhen w) {
     widget.onChanged(
@@ -74,6 +79,8 @@ class _InterceptRuleCardState extends State<InterceptRuleCard> {
             if (_expanded) ...[
               const Divider(height: 1),
               const SizedBox(height: 8),
+              InterceptRuleOptions(rule: widget.rule, onChanged: _emitOptions),
+              const SizedBox(height: 12),
               InterceptWhenEditor(
                 value: widget.rule.when,
                 onChanged: _emitWhen,
