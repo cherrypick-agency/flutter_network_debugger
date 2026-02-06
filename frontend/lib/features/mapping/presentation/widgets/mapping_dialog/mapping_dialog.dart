@@ -28,9 +28,13 @@ class _MappingDialogState extends State<MappingDialog>
     Future.microtask(() async {
       try {
         await sl<MappingStore>().load();
+      } catch (e) {
+        sl<NotificationsService>().error('Mapping rules', e.toString());
+      }
+      try {
         await sl<MappingConfigStore>().load();
       } catch (e) {
-        sl<NotificationsService>().error('Mapping', e.toString());
+        sl<NotificationsService>().error('Mapping config', e.toString());
       }
     });
   }

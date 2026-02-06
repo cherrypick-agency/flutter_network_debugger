@@ -181,7 +181,10 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Mapping (Map Remote/Local) — evaluate against final upstream URL
 	mappedPreserveHost := false
-	if d.Cfg.MappingEnabled && d.MapRt != nil {
+	d.CfgMu.RLock()
+	mappingEnabled := d.Cfg.MappingEnabled
+	d.CfgMu.RUnlock()
+	if mappingEnabled && d.MapRt != nil {
 		prevReq := r.Clone(r.Context())
 		u2 := upstream
 		prevReq.URL = &u2

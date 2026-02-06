@@ -31,8 +31,14 @@ class MappingConfigStore extends ChangeNotifier {
 
   Future<void> save(MappingConfig c) async {
     _lastError = null;
-    final response = await _repo.setConfig(c);
-    _config = response;
-    notifyListeners();
+    try {
+      final response = await _repo.setConfig(c);
+      _config = response;
+      notifyListeners();
+    } catch (e) {
+      _lastError = e.toString();
+      notifyListeners();
+      rethrow;
+    }
   }
 }

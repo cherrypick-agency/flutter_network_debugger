@@ -31,30 +31,48 @@ class MappingStore extends ChangeNotifier {
 
   Future<void> upsert(MappingRule r) async {
     _lastError = null;
-    final saved = await _repo.upsert(r);
-    final i = _rules.indexWhere((e) => e.id == saved.id);
-    if (i >= 0) {
-      _rules = List.of(_rules)..[i] = saved;
-    } else {
-      _rules = [..._rules, saved];
+    try {
+      final saved = await _repo.upsert(r);
+      final i = _rules.indexWhere((e) => e.id == saved.id);
+      if (i >= 0) {
+        _rules = List.of(_rules)..[i] = saved;
+      } else {
+        _rules = [..._rules, saved];
+      }
+      final sorted = _rules.toList()
+        ..sort((a, b) => a.priority.compareTo(b.priority));
+      _rules = sorted;
+      notifyListeners();
+    } catch (e) {
+      _lastError = e.toString();
+      notifyListeners();
+      rethrow;
     }
-    final sorted = _rules.toList()
-      ..sort((a, b) => a.priority.compareTo(b.priority));
-    _rules = sorted;
-    notifyListeners();
   }
 
   Future<void> delete(String id) async {
     _lastError = null;
-    await _repo.delete(id);
-    _rules = _rules.where((e) => e.id != id).toList();
-    notifyListeners();
+    try {
+      await _repo.delete(id);
+      _rules = _rules.where((e) => e.id != id).toList();
+      notifyListeners();
+    } catch (e) {
+      _lastError = e.toString();
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> reorder(List<String> ids) async {
     _lastError = null;
-    await _repo.reorder(ids);
-    // After reorder, priorities change on the backend. It's simpler and more reliable to reload.
-    await load();
+    try {
+      await _repo.reorder(ids);
+      // After reorder, priorities change on the backend. It's simpler and more reliable to reload.
+      await load();
+    } catch (e) {
+      _lastError = e.toString();
+      notifyListeners();
+      rethrow;
+    }
   }
 }

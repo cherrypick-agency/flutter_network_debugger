@@ -187,6 +187,22 @@ func validateRule(r mdomain.MapRule) (string, string, map[string]any, bool) {
 		}
 	}
 
+	if len(r.HostPattern) > 4096 {
+		return "BAD_RULE", "hostPattern too long (max 4096)", map[string]any{"field": "hostPattern"}, false
+	}
+	if len(r.PathPattern) > 4096 {
+		return "BAD_RULE", "pathPattern too long (max 4096)", map[string]any{"field": "pathPattern"}, false
+	}
+	if len(r.ContentTypeOverride) > 512 {
+		return "BAD_RULE", "contentTypeOverride too long (max 512)", map[string]any{"field": "contentTypeOverride"}, false
+	}
+	if r.FilePath != nil && len(*r.FilePath) > 4096 {
+		return "BAD_RULE", "filePath too long (max 4096)", map[string]any{"field": "filePath"}, false
+	}
+	if r.TargetURLTemplate != "" && len(r.TargetURLTemplate) > 4096 {
+		return "BAD_RULE", "targetURLTemplate too long (max 4096)", map[string]any{"field": "targetURLTemplate"}, false
+	}
+
 	if strings.ContainsAny(r.HostPattern, "\n\r\t") {
 		return "BAD_RULE", "hostPattern must not contain control whitespace", map[string]any{"field": "hostPattern"}, false
 	}
@@ -280,9 +296,13 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
+		d.CfgMu.RLock()
+		cfgEnabled := d.Cfg.MappingEnabled
+		cfgUploadMaxMB := d.Cfg.MappingUploadMaxMB
+		d.CfgMu.RUnlock()
 		cfg := mappingConfigDTO{
-			Enabled:     d.Cfg.MappingEnabled,
-			UploadMaxMB: d.Cfg.MappingUploadMaxMB,
+			Enabled:     cfgEnabled,
+			UploadMaxMB: cfgUploadMaxMB,
 		}
 		// If DB is available — get actual values from runtime_settings
 		if d.Settings != nil {
@@ -302,6 +322,7 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	case http.MethodPost:
 		// Accept and save to runtime_settings (if available)
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var in mappingConfigDTO
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
@@ -353,7 +374,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 		list, err := d.Mapping.List(r.Context())
 		if err != nil {
 			log.Printf("[MappingHandler] list rules: %v", err)
-			writeError(w, http.StatusInternalServerError, "LIST_FAILED", err.Error(), nil)
+			writeError(w, http.StatusInternalServerError, "LIST_FAILED", "internal error", nil)
 			return
 		}
 		out := make([]mapRuleDTO, 0, len(list))
@@ -367,14 +388,17 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		// either upsert single record, or reorder (if path ends with /reorder)
 		if strings.HasSuffix(r.URL.Path, "/reorder") {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			var ids []string
 			if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
 				writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
 				return
 			}
+			for i := range ids {
+				ids[i] = strings.TrimSpace(ids[i])
+			}
 			seen := make(map[string]struct{}, len(ids))
 			for _, idv := range ids {
-				idv = strings.TrimSpace(idv)
 				if idv == "" {
 					writeError(w, http.StatusBadRequest, "BAD_IDS", "ids must not contain empty values", map[string]any{"field": "ids"})
 					return
@@ -389,7 +413,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 			allRules, err := d.Mapping.List(r.Context())
 			if err != nil {
 				log.Printf("[MappingHandler] reorder: failed to list rules: %v", err)
-				writeError(w, http.StatusInternalServerError, "LIST_FAILED", err.Error(), nil)
+				writeError(w, http.StatusInternalServerError, "LIST_FAILED", "internal error", nil)
 				return
 			}
 			if len(ids) != len(allRules) {
@@ -422,7 +446,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				log.Printf("[MappingHandler] reorder rules: %v", err)
-				writeError(w, http.StatusInternalServerError, "REORDER_FAILED", err.Error(), nil)
+				writeError(w, http.StatusInternalServerError, "REORDER_FAILED", "internal error", nil)
 				return
 			}
 			// update runtime
@@ -435,6 +459,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var in mapRuleInputDTO
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
@@ -470,7 +495,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 		saved, err := d.Mapping.Upsert(r.Context(), rule)
 		if err != nil {
 			log.Printf("[MappingHandler] upsert rule: %v", err)
-			writeError(w, http.StatusInternalServerError, "UPSERT_FAILED", err.Error(), nil)
+			writeError(w, http.StatusInternalServerError, "UPSERT_FAILED", "internal error", nil)
 			return
 		}
 		if d.MapRt != nil {
@@ -592,7 +617,9 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Determine limit (MB → bytes). Source of truth — runtime settings / config.
+	d.CfgMu.RLock()
 	uploadMaxMB := d.Cfg.MappingUploadMaxMB
+	d.CfgMu.RUnlock()
 	if uploadMaxMB <= 0 {
 		uploadMaxMB = 20
 	}
@@ -693,7 +720,6 @@ func (d *Deps) spoolMultipartFile(file multipart.File, maxBytes int64, kind stri
 	if err != nil {
 		return "", false, err
 	}
-	defer func() { _ = f.Sync() }()
 
 	// maxBytes + 1: to distinguish "fits exactly" from "over limit".
 	n, copyErr := io.CopyN(f, file, maxBytes+1)
@@ -707,6 +733,7 @@ func (d *Deps) spoolMultipartFile(file multipart.File, maxBytes int64, kind stri
 		_ = os.Remove(f.Name())
 		return "", true, errSpoolTooLarge
 	}
+	_ = f.Sync()
 	_ = f.Close()
 	abs, _ := filepath.Abs(f.Name())
 	return abs, false, nil

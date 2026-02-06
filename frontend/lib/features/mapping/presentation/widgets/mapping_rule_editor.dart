@@ -3,13 +3,12 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
+import '../../../../core/di/di.dart';
 import '../../application/stores/mapping_config_store.dart';
 import '../../application/stores/mapping_store.dart';
 import '../../domain/mapping_rule.dart';
 import '../../domain/repositories/mapping_repository.dart';
-import '../../../../core/di/di.dart';
 import 'package:app_http_client/application/app_http_exception.dart';
 import '../../../../core/notifications/notifications_service.dart';
 import 'mapping_rule_editor/advanced_options_tile.dart';
@@ -54,6 +53,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
   bool _preserveHost = false;
 
   bool _saving = false;
+  bool _uploading = false;
 
   String? _serverErrorCode;
   String? _serverErrorMessage;
@@ -257,6 +257,8 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
   }
 
   Future<void> _pickAndUpload() async {
+    if (_uploading) return;
+    setState(() => _uploading = true);
     try {
       final res = await FilePicker.platform.pickFiles(
         withReadStream: !kIsWeb,
@@ -267,7 +269,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
 
       var maxMB = 20;
       try {
-        maxMB = context.read<MappingConfigStore>().config?.uploadMaxMB ?? 20;
+        maxMB = sl<MappingConfigStore>().config?.uploadMaxMB ?? 20;
       } catch (_) {}
       final maxBytes = maxMB * 1024 * 1024;
       if (picked.size > maxBytes) {
@@ -291,6 +293,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
         sl<NotificationsService>().error('Upload failed', 'Cannot read file');
         return;
       }
+      if (!mounted) return;
       setState(() {
         final blob = (m['blobPath'] ?? '').toString();
         _blobPath = blob.isEmpty ? null : blob;
@@ -309,6 +312,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
       });
     } catch (e) {
       if (e is AppHttpServerException) {
+        if (!mounted) return;
         setState(() {
           _serverErrorCode = e.serverError.code;
           _serverErrorMessage = e.messageFromServer;
@@ -317,6 +321,8 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
         return;
       }
       sl<NotificationsService>().error('Upload failed', e.toString());
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -392,7 +398,7 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
         preserveHost: _kind == 'remote' ? _preserveHost : false,
       );
 
-      final store = context.read<MappingStore>();
+      final store = sl<MappingStore>();
       await store.upsert(rule);
       if (mounted) {
         setState(() {

@@ -89,22 +89,6 @@ class MappingRuleTile extends StatelessWidget {
   }
 
   MappingRule _copyWithEnabled(MappingRule r, bool enabled) {
-    return MappingRule(
-      id: r.id,
-      enabled: enabled,
-      priority: r.priority,
-      kind: r.kind,
-      stopProcessing: r.stopProcessing,
-      methods: r.methods,
-      hostPattern: r.hostPattern,
-      pathPattern: r.pathPattern,
-      patternType: r.patternType,
-      filePath: r.filePath,
-      blobPath: r.blobPath,
-      statusOverride: r.statusOverride,
-      contentTypeOverride: r.contentTypeOverride,
-      targetURLTemplate: r.targetURLTemplate,
-      preserveHost: r.preserveHost,
-    );
+    return r.copyWith(enabled: enabled);
   }
 }

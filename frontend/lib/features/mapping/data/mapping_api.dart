@@ -76,7 +76,7 @@ class MappingApi {
     final headers = await _hdrs() ?? const <String, String>{};
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(
-        Uint8List.fromList(bytes),
+        bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
         filename: fileName,
       ),
     });

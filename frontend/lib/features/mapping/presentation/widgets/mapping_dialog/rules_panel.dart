@@ -67,7 +67,7 @@ class _MappingRulesPanelState extends State<MappingRulesPanel> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: loading
+            child: loading && rows.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : rows.isEmpty
                 ? const _EmptyRulesState()

@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	mdomain "network-debugger/internal/features/mapping/domain"
@@ -33,6 +34,9 @@ func (r *Repo) List(ctx context.Context) ([]mdomain.MapRule, error) {
 func (r *Repo) GetByID(ctx context.Context, id string) (*mdomain.MapRule, error) {
 	var m MapRuleModel
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&m).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, mdomain.RuleNotFoundError{ID: id}
+		}
 		return nil, err
 	}
 	d := toDomain(&m)
@@ -70,6 +74,7 @@ func (r *Repo) Upsert(ctx context.Context, d mdomain.MapRule) (mdomain.MapRule, 
 			"target_url_template",
 			"preserve_host",
 			"updated_at",
+			"deleted_at",
 		}),
 	}
 

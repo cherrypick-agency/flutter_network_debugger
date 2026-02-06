@@ -43,7 +43,7 @@ import (
 )
 
 type Deps struct {
-	CfgMu                   sync.Mutex
+	CfgMu                   sync.RWMutex
 	Cfg                     config.Config
 	Logger                  *zerolog.Logger
 	Metrics                 *obs.Metrics

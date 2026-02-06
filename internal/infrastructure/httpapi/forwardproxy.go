@@ -389,7 +389,10 @@ func (d *Deps) handleConnectMITM(w http.ResponseWriter, r *http.Request) {
 			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
 			// Mapping (MITM): evaluate and apply before sending to upstream
-			if d.Cfg.MappingEnabled && d.MapRt != nil {
+			d.CfgMu.RLock()
+			mappingEnabled := d.Cfg.MappingEnabled
+			d.CfgMu.RUnlock()
+			if mappingEnabled && d.MapRt != nil {
 				if dec, ok := d.MapRt.EvalRequest(req); ok {
 					if dec.Kind == "local" {
 						var bodyAll []byte
@@ -636,7 +639,10 @@ func (d *Deps) handleHTTPForwardRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Mapping: Map Remote/Local
-	if d.Cfg.MappingEnabled && d.MapRt != nil {
+	d.CfgMu.RLock()
+	mappingEnabledFwd := d.Cfg.MappingEnabled
+	d.CfgMu.RUnlock()
+	if mappingEnabledFwd && d.MapRt != nil {
 		if dec, ok := d.MapRt.EvalRequest(outReq); ok {
 			if dec.Kind == "local" {
 				// Read file/blob
