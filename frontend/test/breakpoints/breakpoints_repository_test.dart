@@ -6,7 +6,6 @@ import 'package:app_http_client/application/http_method.dart';
 
 import 'package:frontend/features/breakpoints/data/breakpoints_api.dart';
 import 'package:frontend/features/breakpoints/data/breakpoints_repository_impl.dart';
-import 'package:frontend/features/breakpoints/domain/entities/intercept_rule.dart';
 
 void main() {
   group('BreakpointsRepositoryImpl mapping', () {
@@ -77,11 +76,11 @@ void main() {
       expect(r.when.contentType?.prefix, 'application/json');
       expect(r.when.responseStatus?.is4xx, true);
       expect(r.when.header?.name.equals, 'Authorization');
-      expect(r.when.header?.name.suffix, null);
-      expect(r.when.header?.name.prefix, null);
-      expect(r.when.header?.name.contains, null);
+      expect(r.when.header?.name.suffix, '');
+      expect(r.when.header?.name.prefix, '');
+      expect(r.when.header?.name.contains, '');
       expect(r.when.header?.name.anyOf, isEmpty);
-      expect(r.when.header?.value?.prefix, 'Bearer ');
+      expect(r.when.header?.value.prefix, 'Bearer ');
     });
 
     test('listPending / getItem maps request and response snapshots', () async {

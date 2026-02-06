@@ -400,7 +400,8 @@ func matchWildcard(value, pattern string) bool {
 
 // CreateScript creates a new script with validation
 func (s *ScriptService) CreateScript(ctx context.Context, script *domain.Script) error {
-	// Validate domain rules
+	// Set defaults and validate domain rules
+	script.SetDefaults()
 	if err := script.Validate(); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
@@ -431,6 +432,7 @@ func (s *ScriptService) ListScripts(ctx context.Context) ([]*domain.Script, erro
 
 // UpdateScript updates an existing script
 func (s *ScriptService) UpdateScript(ctx context.Context, script *domain.Script) error {
+	script.SetDefaults()
 	if err := script.Validate(); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
@@ -481,7 +483,8 @@ func (s *ScriptService) ToggleScript(ctx context.Context, id string, enabled boo
 // TestScript executes a script with test request data and returns the result
 // This allows testing scripts before deploying them
 func (s *ScriptService) TestScript(ctx context.Context, script *domain.Script, testReq *domain.HTTPRequest) (*domain.ScriptResult, []string, error) {
-	// Validate script
+	// Set defaults and validate script
+	script.SetDefaults()
 	if err := script.Validate(); err != nil {
 		return nil, nil, fmt.Errorf("validation failed: %w", err)
 	}

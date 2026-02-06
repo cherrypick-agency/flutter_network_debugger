@@ -7,12 +7,6 @@ import 'rule_status_match_editor.dart';
 import 'rule_string_match_editor.dart';
 import 'string_list_editor.dart';
 
-class _Unset {
-  const _Unset();
-}
-
-const _unset = _Unset();
-
 class InterceptWhenEditor extends StatelessWidget {
   const InterceptWhenEditor({
     required this.value,
@@ -22,37 +16,6 @@ class InterceptWhenEditor extends StatelessWidget {
 
   final InterceptWhen value;
   final ValueChanged<InterceptWhen> onChanged;
-
-  void _emit({
-    List<String>? method,
-    List<String>? scheme,
-    Object? host = _unset,
-    Object? port = _unset,
-    Object? path = _unset,
-    Object? contentType = _unset,
-    Object? responseStatus = _unset,
-    Object? header = _unset,
-    Object? bodyContains = _unset,
-  }) {
-    final next = InterceptWhen(
-      method: method ?? value.method,
-      scheme: scheme ?? value.scheme,
-      host: host == _unset ? value.host : host as RuleStringMatch?,
-      port: port == _unset ? value.port : port as RuleStringMatch?,
-      path: path == _unset ? value.path : path as RuleStringMatch?,
-      contentType: contentType == _unset
-          ? value.contentType
-          : contentType as RuleStringMatch?,
-      responseStatus: responseStatus == _unset
-          ? value.responseStatus
-          : responseStatus as RuleStatusMatch?,
-      header: header == _unset ? value.header : header as RuleHeaderMatch?,
-      bodyContains: bodyContains == _unset
-          ? value.bodyContains
-          : bodyContains as String?,
-    );
-    onChanged(next);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +36,7 @@ class InterceptWhenEditor extends StatelessWidget {
               hint: 'GET,POST',
               value: value.method,
               normalize: (s) => s.trim().toUpperCase(),
-              onChanged: (v) => _emit(method: v),
+              onChanged: (v) => onChanged(value.copyWith(method: v)),
             ),
             const SizedBox(height: 12),
             StringListEditor(
@@ -81,46 +44,46 @@ class InterceptWhenEditor extends StatelessWidget {
               hint: 'http,https',
               value: value.scheme,
               normalize: (s) => s.trim().toLowerCase(),
-              onChanged: (v) => _emit(scheme: v),
+              onChanged: (v) => onChanged(value.copyWith(scheme: v)),
             ),
             const SizedBox(height: 12),
             RuleStringMatchEditor(
               label: 'Host',
               value: value.host,
-              onChanged: (v) => _emit(host: v),
+              onChanged: (v) => onChanged(value.copyWith(host: v)),
             ),
             const SizedBox(height: 12),
             RuleStringMatchEditor(
               label: 'Port',
               value: value.port,
-              onChanged: (v) => _emit(port: v),
+              onChanged: (v) => onChanged(value.copyWith(port: v)),
             ),
             const SizedBox(height: 12),
             RuleStringMatchEditor(
               label: 'Path',
               value: value.path,
-              onChanged: (v) => _emit(path: v),
+              onChanged: (v) => onChanged(value.copyWith(path: v)),
             ),
             const SizedBox(height: 12),
             RuleStringMatchEditor(
               label: 'Content-Type',
               value: value.contentType,
-              onChanged: (v) => _emit(contentType: v),
+              onChanged: (v) => onChanged(value.copyWith(contentType: v)),
             ),
             const SizedBox(height: 12),
             RuleStatusMatchEditor(
               value: value.responseStatus,
-              onChanged: (v) => _emit(responseStatus: v),
+              onChanged: (v) => onChanged(value.copyWith(responseStatus: v)),
             ),
             const SizedBox(height: 12),
             RuleHeaderMatchEditor(
               value: value.header,
-              onChanged: (v) => _emit(header: v),
+              onChanged: (v) => onChanged(value.copyWith(header: v)),
             ),
             const SizedBox(height: 12),
             _BodyContainsField(
               value: value.bodyContains,
-              onChanged: (v) => _emit(bodyContains: v),
+              onChanged: (v) => onChanged(value.copyWith(bodyContains: v)),
             ),
             const SizedBox(height: 4),
             Text(

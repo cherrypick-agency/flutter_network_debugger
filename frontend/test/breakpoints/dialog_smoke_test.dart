@@ -12,8 +12,10 @@ import 'package:frontend/features/breakpoints/domain/entities/intercept_config.d
 import 'package:frontend/features/breakpoints/domain/entities/intercept_rule.dart';
 import 'package:frontend/features/breakpoints/domain/entities/intercept_item.dart';
 import 'package:frontend/core/hotkeys/hotkeys_service.dart';
+import 'package:frontend/core/notifications/notifications_service.dart';
 import 'package:frontend/features/breakpoints/domain/entities/decisions.dart';
 import 'package:frontend/features/inspector/application/services/monitor_service.dart';
+import 'package:frontend/theme/app_theme.dart';
 
 void main() {
   testWidgets('BreakpointsDialog smoke', (tester) async {
@@ -33,13 +35,18 @@ void main() {
     sl.registerLazySingleton<InterceptEditorStore>(
       () => InterceptEditorStore(sl<BreakpointsRepository>()),
     );
+    // Notifications
+    sl.registerLazySingleton<NotificationsService>(() => NotificationsService());
     // Hotkeys
     final hk = HotkeysService();
     await hk.init();
     sl.registerSingleton<HotkeysService>(hk);
 
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: BreakpointsDialog())),
+      MaterialApp(
+        theme: buildLightTheme(),
+        home: const Scaffold(body: BreakpointsDialog()),
+      ),
     );
     // initial frame
     await tester.pump(const Duration(milliseconds: 50));

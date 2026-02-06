@@ -30,12 +30,14 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
   void initState() {
     super.initState();
     _equalsCtrl = TextEditingController(
-      text: (widget.value?.equals ?? const <int>[]).join(','),
+      text: (widget.value?.statusEquals ?? const <int>[]).join(','),
     );
     _fromCtrl = TextEditingController(
-      text: widget.value?.from?.toString() ?? '',
+      text: (widget.value != null && widget.value!.from > 0) ? widget.value!.from.toString() : '',
     );
-    _toCtrl = TextEditingController(text: widget.value?.to?.toString() ?? '');
+    _toCtrl = TextEditingController(
+      text: (widget.value != null && widget.value!.to > 0) ? widget.value!.to.toString() : '',
+    );
     _equalsFocus = FocusNode();
     _fromFocus = FocusNode();
     _toFocus = FocusNode();
@@ -46,13 +48,13 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
   void didUpdateWidget(covariant RuleStatusMatchEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     final v = widget.value;
-    final equals = (v?.equals ?? const <int>[]).join(',');
+    final equals = (v?.statusEquals ?? const <int>[]).join(',');
     if (!_equalsFocus.hasFocus && _equalsCtrl.text != equals) {
       _equalsCtrl.text = equals;
     }
-    final from = v?.from?.toString() ?? '';
+    final from = (v != null && v.from > 0) ? v.from.toString() : '';
     if (!_fromFocus.hasFocus && _fromCtrl.text != from) _fromCtrl.text = from;
-    final to = v?.to?.toString() ?? '';
+    final to = (v != null && v.to > 0) ? v.to.toString() : '';
     if (!_toFocus.hasFocus && _toCtrl.text != to) _toCtrl.text = to;
     _revalidate();
   }
@@ -81,16 +83,16 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
 
   RuleStatusMatch? _build({
     required List<int> equals,
-    required int? from,
-    required int? to,
+    required int from,
+    required int to,
     required bool is4xx,
     required bool is5xx,
   }) {
-    if (equals.isEmpty && from == null && to == null && !is4xx && !is5xx) {
+    if (equals.isEmpty && from == 0 && to == 0 && !is4xx && !is5xx) {
       return null;
     }
     return RuleStatusMatch(
-      equals: equals,
+      statusEquals: equals,
       from: from,
       to: to,
       is4xx: is4xx,
@@ -101,10 +103,8 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
   void _emit() {
     final v = widget.value;
     final equals = _parseEquals(_equalsCtrl.text);
-    final from0 = int.tryParse(_fromCtrl.text.trim());
-    final to0 = int.tryParse(_toCtrl.text.trim());
-    final from = (from0 == null || from0 == 0) ? null : from0;
-    final to = (to0 == null || to0 == 0) ? null : to0;
+    final from = int.tryParse(_fromCtrl.text.trim()) ?? 0;
+    final to = int.tryParse(_toCtrl.text.trim()) ?? 0;
     final is4xx = v?.is4xx ?? false;
     final is5xx = v?.is5xx ?? false;
     _revalidate();
@@ -215,10 +215,8 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
                   label: const Text('4xx'),
                   onSelected: (b) {
                     final equals = _parseEquals(_equalsCtrl.text);
-                    final from0 = int.tryParse(_fromCtrl.text.trim());
-                    final to0 = int.tryParse(_toCtrl.text.trim());
-                    final from = (from0 == null || from0 == 0) ? null : from0;
-                    final to = (to0 == null || to0 == 0) ? null : to0;
+                    final from = int.tryParse(_fromCtrl.text.trim()) ?? 0;
+                    final to = int.tryParse(_toCtrl.text.trim()) ?? 0;
                     widget.onChanged(
                       _build(
                         equals: equals,
@@ -235,10 +233,8 @@ class _RuleStatusMatchEditorState extends State<RuleStatusMatchEditor> {
                   label: const Text('5xx'),
                   onSelected: (b) {
                     final equals = _parseEquals(_equalsCtrl.text);
-                    final from0 = int.tryParse(_fromCtrl.text.trim());
-                    final to0 = int.tryParse(_toCtrl.text.trim());
-                    final from = (from0 == null || from0 == 0) ? null : from0;
-                    final to = (to0 == null || to0 == 0) ? null : to0;
+                    final from = int.tryParse(_fromCtrl.text.trim()) ?? 0;
+                    final to = int.tryParse(_toCtrl.text.trim()) ?? 0;
                     widget.onChanged(
                       _build(
                         equals: equals,

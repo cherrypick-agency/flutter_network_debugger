@@ -4,12 +4,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
-	"net/url"
 	"network-debugger/internal/adapters/storage/memory"
+	interceptdomain "network-debugger/internal/features/intercept/domain"
 	"network-debugger/internal/infrastructure/config"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
@@ -34,8 +35,10 @@ func TestE2E_ReverseProxy_ResponseInterceptAndModify(t *testing.T) {
 	srv := httptest.NewServer(NewRouterWithoutForwardProxy(d))
 	defer srv.Close()
 
+	mgr := d.InterceptSvc.Manager()
+
 	// rule: intercept text/plain responses
-	d.Interceptor.UpdateRules([]InterceptRule{{Enabled: true, Priority: 1, Action: "response", When: InterceptWhen{ContentType: &RuleStringMatch{Prefix: "text/plain"}}}})
+	mgr.UpdateRules([]interceptdomain.InterceptRule{{Enabled: true, Priority: 1, Action: "response", When: interceptdomain.InterceptWhen{ContentType: &interceptdomain.RuleStringMatch{Prefix: "text/plain"}}}})
 
 	// start client request (will block on intercept)
 	clientDone := make(chan string, 1)
@@ -55,7 +58,7 @@ func TestE2E_ReverseProxy_ResponseInterceptAndModify(t *testing.T) {
 	var id string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		items := d.Interceptor.ListPending(10)
+		items := mgr.ListPending(10)
 		if len(items) > 0 {
 			id = items[0].ID
 			break
@@ -66,7 +69,7 @@ func TestE2E_ReverseProxy_ResponseInterceptAndModify(t *testing.T) {
 		t.Fatal("no pending response item")
 	}
 	// continue: change body
-	d.Interceptor.ContinueResponse(id, &HTTPResponseDecision{Action: "continue", Body: []byte("patched")})
+	mgr.ContinueResponse(id, &interceptdomain.HTTPResponseDecision{Action: "continue", Body: []byte("patched")})
 	// assert client got patched body
 	select {
 	case body := <-clientDone:
@@ -98,8 +101,10 @@ func TestE2E_ForwardProxy_RequestInterceptDrop(t *testing.T) {
 	srv := httptest.NewServer(withForwardProxy(d, NewRouterWithoutForwardProxy(d)))
 	defer srv.Close()
 
+	mgr := d.InterceptSvc.Manager()
+
 	// rule: intercept any POST and drop
-	d.Interceptor.UpdateRules([]InterceptRule{{Enabled: true, Priority: 1, Action: "request", When: InterceptWhen{Method: []string{"POST"}}}})
+	mgr.UpdateRules([]interceptdomain.InterceptRule{{Enabled: true, Priority: 1, Action: "request", When: interceptdomain.InterceptWhen{Method: []string{"POST"}}}})
 
 	// http client via proxy (srv)
 	proxyURL := srv.URL
@@ -123,7 +128,7 @@ func TestE2E_ForwardProxy_RequestInterceptDrop(t *testing.T) {
 	var id string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		items := d.Interceptor.ListPending(10)
+		items := mgr.ListPending(10)
 		if len(items) > 0 {
 			id = items[0].ID
 			break
@@ -133,9 +138,9 @@ func TestE2E_ForwardProxy_RequestInterceptDrop(t *testing.T) {
 	if id == "" {
 		t.Fatal("no pending request item")
 	}
-	d.Interceptor.ContinueRequest(id, &HTTPRequestDecision{Action: "drop"})
+	mgr.ContinueRequest(id, &interceptdomain.HTTPRequestDecision{Action: "drop"})
 
-	// ensure client received non-200 because proxy terminated (we return 403 in reverse path; in forward path we wrote from handler — here using withForwardProxy path the drop occurs before sending; expect error or non-OK)
+	// ensure client received non-200 because proxy terminated
 	select {
 	case code := <-done:
 		if code == 200 {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_mobx/flutter_mobx.dart';
 
 import '../../../../../core/di/di.dart';
 import '../../../../../core/notifications/notifications_service.dart';
@@ -45,19 +45,7 @@ class _RulesPanelState extends State<RulesPanel> {
   }
 
   List<InterceptRule> _cloneRules(List<InterceptRule> src) {
-    return src
-        .map(
-          (e) => InterceptRule(
-            id: e.id,
-            enabled: e.enabled,
-            priority: e.priority,
-            action: e.action,
-            once: e.once,
-            stopProcessing: e.stopProcessing,
-            when: e.when,
-          ),
-        )
-        .toList(growable: true);
+    return List<InterceptRule>.of(src);
   }
 
   int _nextPriority(List<InterceptRule> rules) {
@@ -103,14 +91,16 @@ class _RulesPanelState extends State<RulesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final bp = context.watch<BreakpointsStore>();
-    _scheduleInitFromStore(bp);
+    final bp = sl<BreakpointsStore>();
 
-    final cfg = _draftConfig ?? bp.config;
-    final rules =
-        _draftRules ?? (bp.rules.isEmpty ? null : _cloneRules(bp.rules));
+    return Observer(builder: (_) {
+      _scheduleInitFromStore(bp);
 
-    return SingleChildScrollView(
+      final cfg = _draftConfig ?? bp.config;
+      final rules =
+          _draftRules ?? (bp.rules.isEmpty ? null : _cloneRules(bp.rules));
+
+      return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,5 +262,6 @@ class _RulesPanelState extends State<RulesPanel> {
         ],
       ),
     );
+    });
   }
 }

@@ -6,7 +6,7 @@ class ToggleScriptUseCase {
 
   ToggleScriptUseCase(this._repository);
 
-  Future<void> call(String id, bool enabled) async {
+  Future<Map<String, dynamic>> call(String id, bool enabled) async {
     if (id.trim().isEmpty) {
       throw ArgumentError('Script ID cannot be empty');
     }

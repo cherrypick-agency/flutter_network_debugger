@@ -17,6 +17,7 @@ func TestScript_Validate(t *testing.T) {
 			script: &Script{
 				Name:        "test",
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				Code:        []byte{1, 2, 3},
 			},
@@ -27,6 +28,7 @@ func TestScript_Validate(t *testing.T) {
 			script: &Script{
 				Name:        "test",
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				SourceCode:  "fn main() {}",
 			},
@@ -37,6 +39,7 @@ func TestScript_Validate(t *testing.T) {
 			script: &Script{
 				Name:        "test",
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				Dependencies: map[string]string{
 					"Cargo.toml": "[package]",
@@ -48,6 +51,7 @@ func TestScript_Validate(t *testing.T) {
 			name: "missing name",
 			script: &Script{
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				Code:        []byte{1, 2, 3},
 			},
@@ -57,6 +61,7 @@ func TestScript_Validate(t *testing.T) {
 			name: "missing runtime",
 			script: &Script{
 				Name:        "test",
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				Code:        []byte{1, 2, 3},
 			},
@@ -65,9 +70,20 @@ func TestScript_Validate(t *testing.T) {
 		{
 			name: "missing trigger type",
 			script: &Script{
-				Name:    "test",
-				Runtime: RuntimeExtism,
-				Code:    []byte{1, 2, 3},
+				Name:     "test",
+				Runtime:  RuntimeExtism,
+				Language: "rust",
+				Code:     []byte{1, 2, 3},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing language",
+			script: &Script{
+				Name:        "test",
+				Runtime:     RuntimeExtism,
+				TriggerType: TriggerRequest,
+				Code:        []byte{1, 2, 3},
 			},
 			wantErr: true,
 		},
@@ -76,6 +92,7 @@ func TestScript_Validate(t *testing.T) {
 			script: &Script{
 				Name:        "test",
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 			},
 			wantErr: true,
@@ -85,6 +102,7 @@ func TestScript_Validate(t *testing.T) {
 			script: &Script{
 				Name:        "test",
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				Code:        []byte{1, 2, 3},
 				Config: ScriptConfig{
@@ -98,6 +116,7 @@ func TestScript_Validate(t *testing.T) {
 			script: &Script{
 				Name:        "test",
 				Runtime:     RuntimeExtism,
+				Language:    "rust",
 				TriggerType: TriggerRequest,
 				Code:        []byte{1, 2, 3},
 				Config: ScriptConfig{
@@ -119,7 +138,7 @@ func TestScript_Validate(t *testing.T) {
 }
 
 // Composer 1.
-func TestScript_Validate_SetsDefaults(t *testing.T) {
+func TestScript_SetDefaults(t *testing.T) {
 	script := &Script{
 		Name:        "test",
 		Runtime:     RuntimeExtism,
@@ -127,12 +146,8 @@ func TestScript_Validate_SetsDefaults(t *testing.T) {
 		Code:        []byte{1, 2, 3},
 	}
 
-	err := script.Validate()
-	if err != nil {
-		t.Fatalf("Validate failed: %v", err)
-	}
+	script.SetDefaults()
 
-	// Check that defaults are set
 	if script.Config.TimeoutMs != 5000 {
 		t.Errorf("Expected default TimeoutMs 5000, got %d", script.Config.TimeoutMs)
 	}
@@ -141,8 +156,33 @@ func TestScript_Validate_SetsDefaults(t *testing.T) {
 		t.Errorf("Expected default MemoryLimitMB 10, got %d", script.Config.MemoryLimitMB)
 	}
 
+	if script.Priority != 10 {
+		t.Errorf("Expected default Priority 10, got %d", script.Priority)
+	}
+
 	if script.CompilationStatus != CompilationNotCompiled {
 		t.Errorf("Expected default CompilationStatus %s, got %s", CompilationNotCompiled, script.CompilationStatus)
+	}
+
+	if script.ValidationStatus != ValidationNotValidated {
+		t.Errorf("Expected default ValidationStatus %s, got %s", ValidationNotValidated, script.ValidationStatus)
+	}
+}
+
+func TestScript_Validate_RequiresLanguage(t *testing.T) {
+	script := &Script{
+		Name:        "test",
+		Runtime:     RuntimeExtism,
+		TriggerType: TriggerRequest,
+		Code:        []byte{1, 2, 3},
+	}
+
+	err := script.Validate()
+	if err == nil {
+		t.Fatal("Expected error for missing language, got nil")
+	}
+	if err.Error() != "script language is required" {
+		t.Errorf("Expected 'script language is required', got %q", err.Error())
 	}
 }
 
@@ -151,6 +191,7 @@ func TestScript_Validate_PreservesExistingValues(t *testing.T) {
 	script := &Script{
 		Name:        "test",
 		Runtime:     RuntimeExtism,
+		Language:    "rust",
 		TriggerType: TriggerRequest,
 		Code:        []byte{1, 2, 3},
 		Config: ScriptConfig{
@@ -160,12 +201,12 @@ func TestScript_Validate_PreservesExistingValues(t *testing.T) {
 		CompilationStatus: CompilationSuccess,
 	}
 
+	script.SetDefaults()
 	err := script.Validate()
 	if err != nil {
 		t.Fatalf("Validate failed: %v", err)
 	}
 
-	// Check that existing values are not overwritten
 	if script.Config.TimeoutMs != 10000 {
 		t.Errorf("Expected TimeoutMs 10000, got %d", script.Config.TimeoutMs)
 	}

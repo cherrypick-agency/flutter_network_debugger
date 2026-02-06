@@ -34,12 +34,12 @@ class InterceptRuleOptions extends StatelessWidget {
                 FilterChip(
                   selected: rule.once,
                   label: const Text('Once'),
-                  onSelected: (v) => onChanged(_copyWith(once: v)),
+                  onSelected: (v) => onChanged(rule.copyWith(once: v)),
                 ),
                 FilterChip(
                   selected: rule.stopProcessing,
                   label: const Text('Stop processing'),
-                  onSelected: (v) => onChanged(_copyWith(stopProcessing: v)),
+                  onSelected: (v) => onChanged(rule.copyWith(stopProcessing: v)),
                 ),
               ],
             ),
@@ -57,15 +57,4 @@ class InterceptRuleOptions extends StatelessWidget {
     );
   }
 
-  InterceptRule _copyWith({bool? once, bool? stopProcessing}) {
-    return InterceptRule(
-      id: rule.id,
-      enabled: rule.enabled,
-      priority: rule.priority,
-      action: rule.action,
-      once: once ?? rule.once,
-      stopProcessing: stopProcessing ?? rule.stopProcessing,
-      when: rule.when,
-    );
-  }
 }

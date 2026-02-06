@@ -29,4 +29,5 @@ const _$PatternTypeEnumMap = {
   PatternType.exact: 'exact',
   PatternType.prefix: 'prefix',
   PatternType.wildcard: 'wildcard',
+  PatternType.regex: 'regex',
 };

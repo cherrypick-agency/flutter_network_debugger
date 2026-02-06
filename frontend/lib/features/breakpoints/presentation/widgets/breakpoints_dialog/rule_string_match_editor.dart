@@ -56,11 +56,11 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
 
   _MatchKind? _kindFromValue(RuleStringMatch? v) {
     if (v == null) return null;
-    if ((v.equals ?? '').isNotEmpty) return _MatchKind.equals;
-    if ((v.prefix ?? '').isNotEmpty) return _MatchKind.prefix;
-    if ((v.suffix ?? '').isNotEmpty) return _MatchKind.suffix;
-    if ((v.contains ?? '').isNotEmpty) return _MatchKind.contains;
-    if ((v.regex ?? '').isNotEmpty) return _MatchKind.regex;
+    if (v.equals.isNotEmpty) return _MatchKind.equals;
+    if (v.prefix.isNotEmpty) return _MatchKind.prefix;
+    if (v.suffix.isNotEmpty) return _MatchKind.suffix;
+    if (v.contains.isNotEmpty) return _MatchKind.contains;
+    if (v.regex.isNotEmpty) return _MatchKind.regex;
     if (v.anyOf.isNotEmpty) return _MatchKind.anyOf;
     return null;
   }
@@ -68,11 +68,11 @@ class _RuleStringMatchEditorState extends State<RuleStringMatchEditor> {
   String _textFromValue(RuleStringMatch? v) {
     if (v == null) return '';
     return switch (_kindFromValue(v)) {
-      _MatchKind.equals => v.equals ?? '',
-      _MatchKind.prefix => v.prefix ?? '',
-      _MatchKind.suffix => v.suffix ?? '',
-      _MatchKind.contains => v.contains ?? '',
-      _MatchKind.regex => v.regex ?? '',
+      _MatchKind.equals => v.equals,
+      _MatchKind.prefix => v.prefix,
+      _MatchKind.suffix => v.suffix,
+      _MatchKind.contains => v.contains,
+      _MatchKind.regex => v.regex,
       _MatchKind.anyOf => v.anyOf.join(','),
       null => '',
     };

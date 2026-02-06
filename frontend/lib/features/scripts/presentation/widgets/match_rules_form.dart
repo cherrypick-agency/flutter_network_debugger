@@ -330,6 +330,8 @@ class MatchRulesForm extends StatelessWidget {
         return '/api';
       case PatternType.exact:
         return '/api/users/123';
+      case PatternType.regex:
+        return r'^/api/v\d+/users';
     }
   }
 
@@ -341,6 +343,8 @@ class MatchRulesForm extends StatelessWidget {
         return 'Matches any path starting with this prefix';
       case PatternType.exact:
         return 'Matches only the exact path';
+      case PatternType.regex:
+        return 'Matches paths using a regular expression pattern';
     }
   }
 }

@@ -51,11 +51,12 @@ class ScriptsApiService {
 
   /// PATCH /_api/v1/scripts/{id}/toggle
   /// Toggle script enabled status
-  Future<void> toggle(String id, bool enabled) async {
-    await _httpClient.patch(
+  Future<Map<String, dynamic>> toggle(String id, bool enabled) async {
+    final response = await _httpClient.patch(
       path: '$_basePath/$id/toggle',
       body: {'enabled': enabled},
     );
+    return response.data as Map<String, dynamic>;
   }
 
   /// POST /_api/v1/scripts/test
@@ -118,72 +119,55 @@ class ScriptsApiService {
   /// POST /_api/v1/scripts/import-zip (with FormData)
   /// Import script from ZIP file using multipart upload
   Future<Map<String, dynamic>> importFromZip(List<int> zipBytes) async {
-    try {
-      // Create FormData with the ZIP file
-      final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(zipBytes, filename: 'script.zip'),
-      });
+    final response = await _httpClient.filesPost(
+      path: '$_basePath/import-zip',
+      files: [
+        MultipartFile.fromBytes(zipBytes, filename: 'script.zip'),
+      ],
+    );
+    return response.data as Map<String, dynamic>;
+  }
 
-      // Use dio directly for multipart upload (AppHttpClient may not support it)
-      // Get the dio instance from _httpClient if available, otherwise create new
-      final dio = Dio();
+  /// POST /_api/v1/scripts/{id}/upload-project
+  /// Upload ZIP with project files
+  Future<Map<String, dynamic>> uploadProject(String id, List<int> zipBytes) async {
+    final response = await _httpClient.filesPost(
+      path: '$_basePath/$id/upload-project',
+      files: [
+        MultipartFile.fromBytes(zipBytes, filename: 'project.zip'),
+      ],
+    );
+    return response.data as Map<String, dynamic>;
+  }
 
-      // Get base URL from somewhere (we need to construct full URL)
-      // AppHttpClient probably has baseUrl, but we can't access it
-      // For now, use relative path and dio will use current host
-      final response = await dio.post(
-        importZipUrl,
-        data: formData,
-        options: Options(headers: {'Content-Type': 'multipart/form-data'}),
-      );
+  /// GET /_api/v1/scripts/{id}/download-project
+  /// Returns download URL for project ZIP
+  String getDownloadProjectUrl(String id) {
+    return '$_basePath/$id/download-project';
+  }
 
-      return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      // Translate DioException to user-friendly error messages
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        throw Exception(
-          'Connection timeout. Please check your network connection.',
-        );
-      } else if (e.type == DioExceptionType.connectionError) {
-        throw Exception('Cannot connect to server. Is the backend running?');
-      } else if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        final responseData = e.response!.data;
+  /// POST /_api/v1/scripts/validate
+  /// Validate script syntax without compilation
+  Future<Map<String, dynamic>> validateSyntax({
+    required String sourceCode,
+    required String language,
+    Map<String, String>? dependencies,
+  }) async {
+    final response = await _httpClient.post(
+      path: '$_basePath/validate',
+      body: {
+        'sourceCode': sourceCode,
+        'language': language,
+        if (dependencies != null) 'dependencies': dependencies,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
 
-        if (statusCode == 413) {
-          throw Exception('ZIP file is too large. Maximum size is 10MB.');
-        } else if (statusCode == 400) {
-          // Try to extract error message from response
-          String errorMsg = 'Invalid ZIP file or request.';
-          if (responseData is Map && responseData.containsKey('error')) {
-            errorMsg = responseData['error'].toString();
-          }
-          throw Exception(errorMsg);
-        } else if (statusCode == 404) {
-          throw Exception(
-            'Import endpoint not found. Please update your backend.',
-          );
-        } else if (statusCode == 500) {
-          // Try to extract error message from server
-          String errorMsg = 'Server error while processing ZIP file.';
-          if (responseData is Map && responseData.containsKey('error')) {
-            errorMsg = responseData['error'].toString();
-          }
-          throw Exception(errorMsg);
-        } else {
-          throw Exception('Upload failed with status code $statusCode');
-        }
-      } else {
-        throw Exception('Network error: ${e.message ?? "Unknown error"}');
-      }
-    } catch (e) {
-      // Re-throw if already an Exception, otherwise wrap it
-      if (e is Exception) {
-        rethrow;
-      }
-      throw Exception('Failed to import script: ${e.toString()}');
-    }
+  /// GET /_api/v1/scripts/{id}/files
+  /// List all files in script project
+  Future<Map<String, dynamic>> listProjectFiles(String id) async {
+    final response = await _httpClient.get(path: '$_basePath/$id/files');
+    return response.data as Map<String, dynamic>;
   }
 }

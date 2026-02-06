@@ -119,7 +119,7 @@ class _InterceptConfigFormState extends State<InterceptConfigForm> {
     String? overflow,
   }) {
     widget.onChanged(
-      InterceptConfig(
+      widget.cfg.copyWith(
         enabled: enabled ?? widget.cfg.enabled,
         requests: requests ?? widget.cfg.requests,
         responses: responses ?? widget.cfg.responses,

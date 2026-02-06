@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:archive/archive.dart';
+import 'package:dio/dio.dart';
 import '../../application/stores/script_editor_store.dart';
 import '../../application/stores/scripts_store.dart';
 import '../../domain/entities/script.dart';
@@ -71,6 +72,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   EditorDI? _editorDI; // Multi-file editor DI (lazy init)
   Future<void>? _initEditorFuture; // fix FutureBuilder jitter
   bool _isSaving = false;
+  bool _isDownloadingProject = false;
   bool _loadingCompilers = true;
   Map<String, bool>?
   _canCompileByLanguage; // compilation availability by language
@@ -453,17 +455,17 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
             if (_editorStore.runtime == ScriptRuntime.extism &&
                 _editorStore.isEditing)
               _buildCompilationStatusBanner(),
+            // Validation status banner
+            _buildValidationStatusBanner(),
             // Mode selector for Extism runtime
             if (_editorStore.runtime == ScriptRuntime.extism)
               CodeModeSelector(
                 selectedMode: _editorStore.codeCreationMode,
                 onModeChanged: _editorStore.setCodeCreationMode,
               ),
-            // Toolbar for Extism runtime (NOT in uploadWasm mode, NOT in empty importZip)
+            // Toolbar for Extism runtime (NOT in uploadWasm mode)
             if (_editorStore.runtime == ScriptRuntime.extism &&
-                _editorStore.codeCreationMode != CodeCreationMode.uploadWasm &&
-                !(_editorStore.codeCreationMode == CodeCreationMode.importZip &&
-                    _editorStore.sourceFiles.isEmpty))
+                _editorStore.codeCreationMode != CodeCreationMode.uploadWasm)
               _buildExtismToolbar(),
             // Content based on mode
             Expanded(child: _buildModeContent()),
@@ -473,22 +475,131 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     );
   }
 
+  Widget _buildValidationStatusBanner() {
+    return Observer(
+      builder: (_) {
+        if (_editorStore.isValidSyntax) {
+          return Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border.all(color: Colors.green.shade200),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Syntax is valid',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: _editorStore.clearValidation,
+                  tooltip: 'Dismiss',
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (_editorStore.syntaxValidationError != null) {
+          return Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              border: Border.all(color: Colors.red.shade200),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red.shade700),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Validation Error',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        _editorStore.syntaxValidationError!,
+                        style: TextStyle(
+                          color: Colors.red.shade900,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: _editorStore.clearValidation,
+                  tooltip: 'Dismiss',
+                ),
+              ],
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
   Widget _buildExtismToolbar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withOpacity(0.2),
-        border: Border(
-          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Re-import ZIP button (only when files are loaded in importZip mode)
-          if (_editorStore.codeCreationMode == CodeCreationMode.importZip &&
-              _editorStore.sourceFiles.isNotEmpty)
+    return Observer(
+      builder: (_) {
+        final hasSourceFiles = _editorStore.sourceFiles.isNotEmpty;
+        final isImportZipWithFiles =
+            _editorStore.codeCreationMode == CodeCreationMode.importZip &&
+            hasSourceFiles;
+        final isEditing = _editorStore.isEditing;
+        final isValidating = _editorStore.isValidating;
+
+        // Build list of toolbar buttons
+        final leftButtons = <Widget>[];
+
+        // Validate button (if source files exist)
+        if (hasSourceFiles) {
+          leftButtons.add(
+            OutlinedButton.icon(
+              onPressed: isValidating ? null : _editorStore.validateSyntax,
+              icon: isValidating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.fact_check_outlined, size: 18),
+              label: Text(isValidating ? 'Validating...' : 'Validate'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Re-import ZIP button
+        if (isImportZipWithFiles) {
+          if (leftButtons.isNotEmpty) leftButtons.add(const SizedBox(width: 8));
+          leftButtons.add(
             OutlinedButton.icon(
               onPressed: () {
                 _editorStore.clearSourceFiles();
@@ -502,8 +613,60 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
                 ),
               ),
             ),
-        ],
-      ),
+          );
+        }
+
+        // Download Project button (right-aligned, only for saved scripts)
+        Widget? rightButton;
+        if (isEditing) {
+          rightButton = OutlinedButton.icon(
+            onPressed: _isDownloadingProject ? null : _downloadProject,
+            icon: _isDownloadingProject
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download, size: 18),
+            label: Text(
+              _isDownloadingProject ? 'Downloading...' : 'Download Project',
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+            ),
+          );
+        }
+
+        // If no buttons at all — don't render the toolbar
+        if (leftButtons.isEmpty && rightButton == null) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withOpacity(0.2),
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).dividerColor,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              ...leftButtons,
+              const Spacer(),
+              if (rightButton != null) rightButton,
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -812,6 +975,11 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
 
         if (importedCount == 0) {
           throw Exception('No valid source files found in ZIP archive');
+        }
+
+        // Upload ZIP to backend if script is already saved
+        if (_editorStore.isEditing) {
+          await _editorStore.uploadProjectZip(bytes);
         }
 
         if (mounted) {
@@ -1177,6 +1345,68 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
             duration: const Duration(seconds: 5),
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _downloadProject() async {
+    if (_isDownloadingProject) return;
+
+    final url = _editorStore.getDownloadProjectUrl();
+    if (url == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot download: script not saved yet'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isDownloadingProject = true);
+
+    try {
+      final dio = Dio();
+      final response = await dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      if (response.data == null) {
+        throw Exception('Failed to download file');
+      }
+
+      final fileName =
+          '${_editorStore.name.replaceAll(RegExp(r'[^\w\s-]'), '_')}_project.zip';
+
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Project',
+        fileName: fileName,
+        bytes: Uint8List.fromList(response.data!),
+      );
+
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project downloaded successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloadingProject = false);
       }
     }
   }

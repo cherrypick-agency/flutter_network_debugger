@@ -505,6 +505,7 @@ class _MyHomePageState extends State<MyHomePage> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Clear'),

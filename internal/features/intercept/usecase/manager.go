@@ -1,55 +1,62 @@
-package httpapi
+package usecase
 
 import (
 	"context"
 	"encoding/base64"
-	"net"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"network-debugger/internal/domain"
-	"network-debugger/internal/infrastructure/config"
-	obs "network-debugger/internal/infrastructure/observability"
+	idomain "network-debugger/internal/features/intercept/domain"
 	"network-debugger/pkg/shared/id"
 )
 
+// EventBroadcaster abstracts monitor hub broadcasting
+type EventBroadcaster interface {
+	Broadcast(ev domain.MonitorEvent)
+}
+
+// MetricsCollector abstracts metrics collection
+type MetricsCollector interface {
+	IncInterceptsTotal(outcome, direction string)
+	SetInterceptsQueue(size float64)
+}
+
 // pendingEntry stores internal state for pending decision
 type pendingEntry struct {
-	item      InterceptItem
-	decisionR chan any // *HTTPRequestDecision | *HTTPResponseDecision | string("cancel")
+	item      idomain.InterceptItem
+	decisionR chan any
 	timer     *time.Timer
 }
 
+// InterceptorManager manages intercept queue and rule matching
 type InterceptorManager struct {
 	mu      sync.RWMutex
-	cfg     *config.Config
-	monitor *MonitorHub
-	metrics *obs.Metrics
+	cfg     idomain.InterceptConfig
+	monitor EventBroadcaster
+	metrics MetricsCollector
 
-	// Rules sorted by Priority ASC
-	rules []InterceptRule
-
-	// Queue and elements
+	rules []idomain.InterceptRule
 	items map[string]*pendingEntry
 	queue []string
 }
 
-func NewInterceptorManager(cfg *config.Config, monitor *MonitorHub, metrics *obs.Metrics) *InterceptorManager {
+// NewInterceptorManager creates a new InterceptorManager
+func NewInterceptorManager(cfg idomain.InterceptConfig, monitor EventBroadcaster, metrics MetricsCollector) *InterceptorManager {
 	return &InterceptorManager{
 		cfg:     cfg,
 		monitor: monitor,
 		metrics: metrics,
-		rules:   []InterceptRule{},
+		rules:   []idomain.InterceptRule{},
 		items:   make(map[string]*pendingEntry),
 		queue:   make([]string, 0, 64),
 	}
 }
 
 func (m *InterceptorManager) interceptTimeout() time.Duration {
-	timeout := time.Duration(m.cfg.InterceptTimeoutMs) * time.Millisecond
+	timeout := time.Duration(m.cfg.TimeoutMs) * time.Millisecond
 	if timeout <= 0 {
 		return 60 * time.Second
 	}
@@ -57,11 +64,10 @@ func (m *InterceptorManager) interceptTimeout() time.Duration {
 }
 
 // UpdateRules completely replaces the rule set and sorts by priority
-func (m *InterceptorManager) UpdateRules(rules []InterceptRule) {
+func (m *InterceptorManager) UpdateRules(rules []idomain.InterceptRule) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// normalize and sort
-	out := make([]InterceptRule, 0, len(rules))
+	out := make([]idomain.InterceptRule, 0, len(rules))
 	for _, r := range rules {
 		if r.ID == "" {
 			r.ID = id.New()
@@ -72,21 +78,37 @@ func (m *InterceptorManager) UpdateRules(rules []InterceptRule) {
 	m.rules = out
 }
 
-func (m *InterceptorManager) ListRules() []InterceptRule {
+// UpdateConfig updates the intercept configuration
+func (m *InterceptorManager) UpdateConfig(cfg idomain.InterceptConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg = cfg
+}
+
+// Config returns the current intercept configuration
+func (m *InterceptorManager) Config() idomain.InterceptConfig {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	cp := make([]InterceptRule, len(m.rules))
+	return m.cfg
+}
+
+// ListRules returns a copy of the current rules
+func (m *InterceptorManager) ListRules() []idomain.InterceptRule {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	cp := make([]idomain.InterceptRule, len(m.rules))
 	copy(cp, m.rules)
 	return cp
 }
 
-func (m *InterceptorManager) ListPending(limit int) []InterceptItem {
+// ListPending returns pending intercept items up to limit
+func (m *InterceptorManager) ListPending(limit int) []idomain.InterceptItem {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if limit <= 0 || limit > len(m.queue) {
 		limit = len(m.queue)
 	}
-	out := make([]InterceptItem, 0, limit)
+	out := make([]idomain.InterceptItem, 0, limit)
 	for i := 0; i < limit; i++ {
 		if pe := m.items[m.queue[i]]; pe != nil {
 			out = append(out, pe.item)
@@ -96,37 +118,26 @@ func (m *InterceptorManager) ListPending(limit int) []InterceptItem {
 }
 
 // PeekItem returns a snapshot of the queue element if it is still PENDING
-func (m *InterceptorManager) PeekItem(id string) (InterceptItem, bool) {
+func (m *InterceptorManager) PeekItem(itemID string) (idomain.InterceptItem, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if pe, ok := m.items[id]; ok && pe.item.State == StatePending {
+	if pe, ok := m.items[itemID]; ok && pe.item.State == idomain.StatePending {
 		return pe.item, true
 	}
-	return InterceptItem{}, false
-}
-
-// helper: loopback detection for simple auth decision
-func isLoopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		host = addr
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+	return idomain.InterceptItem{}, false
 }
 
 // enqueue creates a pending element and starts the timer
-func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
+func (m *InterceptorManager) enqueue(it idomain.InterceptItem) *pendingEntry {
 	pe := &pendingEntry{item: it, decisionR: make(chan any, 1)}
 	timeout := m.interceptTimeout()
 	pe.timer = time.AfterFunc(timeout, func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		if pe.item.State != StatePending {
+		if pe.item.State != idomain.StatePending {
 			return
 		}
-		pe.item.State = StateTimedOut
-		// By default — auto-continue
+		pe.item.State = idomain.StateTimedOut
 		select {
 		case pe.decisionR <- "timeout":
 		default:
@@ -135,32 +146,32 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 			m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_timeout", ID: pe.item.SessionID, Ref: pe.item.ID})
 		}
 		if m.metrics != nil {
-			m.metrics.InterceptsTotal.WithLabelValues("timeout", string(pe.item.Direction)).Inc()
+			m.metrics.IncInterceptsTotal("timeout", string(pe.item.Direction))
 		}
 	})
 	m.mu.Lock()
 	// overflow strategy
-	if m.cfg.InterceptQueueMax > 0 && len(m.queue) >= m.cfg.InterceptQueueMax {
-		if strings.ToLower(m.cfg.InterceptOverflow) == "drop-new" {
+	if m.cfg.QueueMax > 0 && len(m.queue) >= m.cfg.QueueMax {
+		if strings.ToLower(m.cfg.Overflow) == "drop-new" {
 			if m.metrics != nil {
-				m.metrics.InterceptsTotal.WithLabelValues("overflow_drop", string(it.Direction)).Inc()
-				m.metrics.InterceptsQueue.Set(float64(len(m.queue)))
+				m.metrics.IncInterceptsTotal("overflow_drop", string(it.Direction))
+				m.metrics.SetInterceptsQueue(float64(len(m.queue)))
 			}
 			m.mu.Unlock()
 			return nil
 		}
-		// auto-continue-oldest: remove the oldest without intervention
+		// auto-continue-oldest
 		oldest := m.queue[0]
 		m.queue = m.queue[1:]
 		if old := m.items[oldest]; old != nil {
-			old.item.State = StateTimedOut
+			old.item.State = idomain.StateTimedOut
 			select {
 			case old.decisionR <- "overflow":
 			default:
 			}
 			delete(m.items, oldest)
 			if m.metrics != nil {
-				m.metrics.InterceptsTotal.WithLabelValues("overflow_autocontinue", string(old.item.Direction)).Inc()
+				m.metrics.IncInterceptsTotal("overflow_autocontinue", string(old.item.Direction))
 			}
 		}
 	}
@@ -172,48 +183,47 @@ func (m *InterceptorManager) enqueue(it InterceptItem) *pendingEntry {
 		m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_created", ID: it.SessionID, Ref: it.ID})
 	}
 	if m.metrics != nil {
-		m.metrics.InterceptsTotal.WithLabelValues("created", string(it.Direction)).Inc()
-		m.metrics.InterceptsQueue.Set(float64(queueLen))
+		m.metrics.IncInterceptsTotal("created", string(it.Direction))
+		m.metrics.SetInterceptsQueue(float64(queueLen))
 	}
 	return pe
 }
 
 // finalize removes element from queue
-func (m *InterceptorManager) finalize(id string, newState InterceptItemState) (*pendingEntry, bool) {
+func (m *InterceptorManager) finalize(itemID string, newState idomain.InterceptItemState) (*pendingEntry, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	pe, ok := m.items[id]
+	pe, ok := m.items[itemID]
 	if !ok {
 		return nil, false
 	}
-	if pe.item.State != StatePending {
+	if pe.item.State != idomain.StatePending {
 		return nil, false
 	}
 	pe.item.State = newState
-	// remove from queue
 	for i, qid := range m.queue {
-		if qid == id {
+		if qid == itemID {
 			m.queue = append(m.queue[:i], m.queue[i+1:]...)
 			break
 		}
 	}
-	delete(m.items, id)
+	delete(m.items, itemID)
 	if pe.timer != nil {
 		pe.timer.Stop()
 	}
 	if m.metrics != nil {
-		m.metrics.InterceptsQueue.Set(float64(len(m.queue)))
+		m.metrics.SetInterceptsQueue(float64(len(m.queue)))
 	}
 	return pe, true
 }
 
-// InterceptRequest — main blocking request interception
-func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID string, r *http.Request, bodyPreview string, capBody []byte, contentType string) (*HTTPRequestDecision, error) {
-	if m == nil || !m.cfg.InterceptEnabled || !m.cfg.InterceptRequests {
+// InterceptRequest -- main blocking request interception
+func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID string, input idomain.RequestMatchInput, capBody []byte, contentType string) (*idomain.HTTPRequestDecision, error) {
+	if m == nil || !m.cfg.Enabled || !m.cfg.Requests {
 		return nil, nil
 	}
-	// Match rule considering StopProcessing; Once — disables rule after firing
-	var matched *InterceptRule
+
+	var matched *idomain.InterceptRule
 	m.mu.Lock()
 	for i := range m.rules {
 		ru := &m.rules[i]
@@ -223,12 +233,11 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 		if ru.Action != "request" && ru.Action != "both" {
 			continue
 		}
-		if ru.When.requestMatch(r, bodyPreview) {
+		if ru.When.MatchesRequest(input) {
 			matched = ru
 			if ru.StopProcessing {
 				break
 			}
-			// if StopProcessing=false — continue searching lower priority rules
 		}
 	}
 	if matched != nil && matched.Once {
@@ -239,20 +248,27 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 		return nil, nil
 	}
 
-	it := InterceptItem{
+	// Build URL from match input parts
+	reqURL := input.Scheme + "://" + input.Host
+	if input.Port != "" {
+		reqURL += ":" + input.Port
+	}
+	reqURL += input.Path
+
+	it := idomain.InterceptItem{
 		ID:        id.New(),
 		CreatedAt: time.Now().UTC(),
 		Deadline:  time.Now().UTC().Add(m.interceptTimeout()),
-		Direction: DirRequest,
+		Direction: idomain.DirRequest,
 		SessionID: sessionID,
 		RuleID:    matched.ID,
-		State:     StatePending,
-		Req: &HTTPRequestSnapshot{
-			Method:        r.Method,
-			URL:           urlString(r.URL),
-			Headers:       cloneHeader(r.Header),
+		State:     idomain.StatePending,
+		Req: &idomain.HTTPRequestSnapshot{
+			Method:        input.Method,
+			URL:           reqURL,
+			Headers:       cloneHeaders(input.Headers),
 			BodyBase64:    base64.StdEncoding.EncodeToString(capBody),
-			BodyTruncated: len(capBody) >= m.cfg.InterceptBodyMaxBytes,
+			BodyTruncated: len(capBody) >= m.cfg.BodyMaxBytes,
 			ContentType:   contentType,
 		},
 	}
@@ -261,13 +277,12 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 		return nil, nil
 	}
 
-	// Wait for decision/timeout/context
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case v := <-pe.decisionR:
 		switch d := v.(type) {
-		case *HTTPRequestDecision:
+		case *idomain.HTTPRequestDecision:
 			if m.monitor != nil {
 				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_applied", ID: it.SessionID, Ref: it.ID})
 			}
@@ -276,17 +291,18 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 			if m.monitor != nil {
 				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_timeout", ID: it.SessionID, Ref: it.ID})
 			}
-			return nil, nil // auto-continue
+			return nil, nil
 		}
 	}
 }
 
-// InterceptResponse — blocking response interception
-func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID string, resp *http.Response, bodyPreview string, capBody []byte, contentType string) (*HTTPResponseDecision, error) {
-	if m == nil || !m.cfg.InterceptEnabled || !m.cfg.InterceptResponses {
+// InterceptResponse -- blocking response interception
+func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID string, input idomain.ResponseMatchInput, capBody []byte, contentType string) (*idomain.HTTPResponseDecision, error) {
+	if m == nil || !m.cfg.Enabled || !m.cfg.Responses {
 		return nil, nil
 	}
-	var matched *InterceptRule
+
+	var matched *idomain.InterceptRule
 	m.mu.Lock()
 	for i := range m.rules {
 		ru := &m.rules[i]
@@ -296,7 +312,7 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 		if ru.Action != "response" && ru.Action != "both" {
 			continue
 		}
-		if ru.When.responseMatch(resp, bodyPreview) {
+		if ru.When.MatchesResponse(input) {
 			matched = ru
 			if ru.StopProcessing {
 				break
@@ -311,19 +327,19 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 		return nil, nil
 	}
 
-	it := InterceptItem{
+	it := idomain.InterceptItem{
 		ID:        id.New(),
 		CreatedAt: time.Now().UTC(),
 		Deadline:  time.Now().UTC().Add(m.interceptTimeout()),
-		Direction: DirResponse,
+		Direction: idomain.DirResponse,
 		SessionID: sessionID,
 		RuleID:    matched.ID,
-		State:     StatePending,
-		Res: &HTTPResponseSnapshot{
-			Status:        resp.StatusCode,
-			Headers:       cloneHeader(resp.Header),
+		State:     idomain.StatePending,
+		Res: &idomain.HTTPResponseSnapshot{
+			Status:        input.StatusCode,
+			Headers:       cloneHeaders(input.Headers),
 			BodyBase64:    base64.StdEncoding.EncodeToString(capBody),
-			BodyTruncated: len(capBody) >= m.cfg.InterceptBodyMaxBytes,
+			BodyTruncated: len(capBody) >= m.cfg.BodyMaxBytes,
 			ContentType:   contentType,
 		},
 	}
@@ -331,12 +347,13 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 	if pe == nil {
 		return nil, nil
 	}
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case v := <-pe.decisionR:
 		switch d := v.(type) {
-		case *HTTPResponseDecision:
+		case *idomain.HTTPResponseDecision:
 			if m.monitor != nil {
 				m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_applied", ID: it.SessionID, Ref: it.ID})
 			}
@@ -351,8 +368,8 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 }
 
 // ContinueRequest applies decision to pending request
-func (m *InterceptorManager) ContinueRequest(id string, d *HTTPRequestDecision) bool {
-	pe, ok := m.finalize(id, StateApplied)
+func (m *InterceptorManager) ContinueRequest(itemID string, d *idomain.HTTPRequestDecision) bool {
+	pe, ok := m.finalize(itemID, idomain.StateApplied)
 	if !ok {
 		return false
 	}
@@ -361,14 +378,14 @@ func (m *InterceptorManager) ContinueRequest(id string, d *HTTPRequestDecision) 
 	default:
 	}
 	if m.metrics != nil {
-		m.metrics.InterceptsTotal.WithLabelValues("applied", string(pe.item.Direction)).Inc()
+		m.metrics.IncInterceptsTotal("applied", string(pe.item.Direction))
 	}
 	return true
 }
 
 // ContinueResponse applies decision to pending response
-func (m *InterceptorManager) ContinueResponse(id string, d *HTTPResponseDecision) bool {
-	pe, ok := m.finalize(id, StateApplied)
+func (m *InterceptorManager) ContinueResponse(itemID string, d *idomain.HTTPResponseDecision) bool {
+	pe, ok := m.finalize(itemID, idomain.StateApplied)
 	if !ok {
 		return false
 	}
@@ -377,14 +394,14 @@ func (m *InterceptorManager) ContinueResponse(id string, d *HTTPResponseDecision
 	default:
 	}
 	if m.metrics != nil {
-		m.metrics.InterceptsTotal.WithLabelValues("applied", string(pe.item.Direction)).Inc()
+		m.metrics.IncInterceptsTotal("applied", string(pe.item.Direction))
 	}
 	return true
 }
 
 // Cancel cancels pending item
-func (m *InterceptorManager) Cancel(id string) bool {
-	pe, ok := m.finalize(id, StateCanceled)
+func (m *InterceptorManager) Cancel(itemID string) bool {
+	pe, ok := m.finalize(itemID, idomain.StateCanceled)
 	if !ok {
 		return false
 	}
@@ -396,7 +413,21 @@ func (m *InterceptorManager) Cancel(id string) bool {
 		m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_canceled", ID: pe.item.SessionID, Ref: pe.item.ID})
 	}
 	if m.metrics != nil {
-		m.metrics.InterceptsTotal.WithLabelValues("canceled", string(pe.item.Direction)).Inc()
+		m.metrics.IncInterceptsTotal("canceled", string(pe.item.Direction))
 	}
 	return true
+}
+
+// cloneHeaders creates a deep copy of headers map
+func cloneHeaders(h map[string][]string) map[string][]string {
+	if h == nil {
+		return nil
+	}
+	cp := make(map[string][]string, len(h))
+	for k, v := range h {
+		cv := make([]string, len(v))
+		copy(cv, v)
+		cp[k] = cv
+	}
+	return cp
 }

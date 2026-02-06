@@ -142,6 +142,28 @@ mixin _$ScriptsStore on _ScriptsStore, Store {
     });
   }
 
+  late final _$downloadingProjectScriptIdAtom = Atom(
+    name: '_ScriptsStore.downloadingProjectScriptId',
+    context: context,
+  );
+
+  @override
+  String? get downloadingProjectScriptId {
+    _$downloadingProjectScriptIdAtom.reportRead();
+    return super.downloadingProjectScriptId;
+  }
+
+  @override
+  set downloadingProjectScriptId(String? value) {
+    _$downloadingProjectScriptIdAtom.reportWrite(
+      value,
+      super.downloadingProjectScriptId,
+      () {
+        super.downloadingProjectScriptId = value;
+      },
+    );
+  }
+
   late final _$errorMessageAtom = Atom(
     name: '_ScriptsStore.errorMessage',
     context: context,
@@ -474,6 +496,7 @@ isLoading: ${isLoading},
 isImporting: ${isImporting},
 isExporting: ${isExporting},
 exportingScriptId: ${exportingScriptId},
+downloadingProjectScriptId: ${downloadingProjectScriptId},
 errorMessage: ${errorMessage},
 searchQuery: ${searchQuery},
 runtimeFilter: ${runtimeFilter},

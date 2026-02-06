@@ -251,6 +251,36 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
                       );
                     },
                   ),
+                  // Download Project button for Extism scripts with dependencies
+                  if (script.runtime == ScriptRuntime.extism &&
+                      script.dependencies != null &&
+                      script.dependencies!.isNotEmpty)
+                    Observer(
+                      builder: (_) {
+                        final isDownloading =
+                            widget.store.downloadingProjectScriptId ==
+                            script.id;
+                        return TextButton.icon(
+                          onPressed: isDownloading
+                              ? null
+                              : () => _downloadProject(script),
+                          icon: isDownloading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.folder_zip, size: 18),
+                          label: Text(
+                            isDownloading
+                                ? 'Downloading...'
+                                : 'Download Project',
+                          ),
+                        );
+                      },
+                    ),
                   TextButton.icon(
                     onPressed: () => _deleteScript(script),
                     icon: const Icon(Icons.delete, size: 18),
@@ -421,6 +451,54 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
       // Clear exporting flag
       widget.store.exportingScriptId = null;
       widget.store.isExporting = false;
+    }
+  }
+
+  Future<void> _downloadProject(Script script) async {
+    final url = widget.store.getDownloadProjectUrl(script.id);
+    if (url == null) return;
+
+    widget.store.downloadingProjectScriptId = script.id;
+
+    try {
+      final dio = Dio();
+      final response = await dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      if (response.data == null) {
+        throw Exception('Failed to download file');
+      }
+
+      final fileName =
+          '${script.name.replaceAll(RegExp(r'[^\w\s-]'), '_')}_project.zip';
+
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Project',
+        fileName: fileName,
+        bytes: Uint8List.fromList(response.data!),
+      );
+
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project downloaded successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      widget.store.downloadingProjectScriptId = null;
     }
   }
 

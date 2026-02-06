@@ -8,6 +8,7 @@ import '../../domain/usecases/toggle_script_usecase.dart';
 import '../../domain/usecases/compile_script_usecase.dart';
 import '../../domain/usecases/export_script_usecase.dart';
 import '../../domain/usecases/import_script_usecase.dart';
+import '../../domain/usecases/download_project_usecase.dart';
 
 part 'scripts_store.g.dart';
 
@@ -24,6 +25,7 @@ abstract class _ScriptsStore with Store {
   final CompileScriptUseCase _compileUseCase;
   final ExportScriptUseCase _exportUseCase;
   final ImportScriptUseCase _importUseCase;
+  final DownloadProjectUseCase? _downloadProjectUseCase;
 
   _ScriptsStore({
     required GetScriptsUseCase getScriptsUseCase,
@@ -34,6 +36,7 @@ abstract class _ScriptsStore with Store {
     required CompileScriptUseCase compileUseCase,
     required ExportScriptUseCase exportUseCase,
     required ImportScriptUseCase importUseCase,
+    DownloadProjectUseCase? downloadProjectUseCase,
   }) : _getScriptsUseCase = getScriptsUseCase,
        _createUseCase = createUseCase,
        _updateUseCase = updateUseCase,
@@ -41,7 +44,8 @@ abstract class _ScriptsStore with Store {
        _toggleUseCase = toggleUseCase,
        _compileUseCase = compileUseCase,
        _exportUseCase = exportUseCase,
-       _importUseCase = importUseCase;
+       _importUseCase = importUseCase,
+       _downloadProjectUseCase = downloadProjectUseCase;
 
   // Observable state
   @observable
@@ -61,6 +65,9 @@ abstract class _ScriptsStore with Store {
 
   @observable
   String? exportingScriptId; // Track which script is being exported
+
+  @observable
+  String? downloadingProjectScriptId; // Track which script project is being downloaded
 
   @observable
   String? errorMessage;
@@ -195,36 +202,49 @@ abstract class _ScriptsStore with Store {
 
   @action
   Future<void> deleteScript(String id) async {
+    final removedIndex = scripts.indexWhere((s) => s.id == id);
+    if (removedIndex == -1) return;
+    final removedScript = scripts[removedIndex];
+
+    // Optimistic: remove immediately
+    scripts.removeAt(removedIndex);
+    if (selectedScript?.id == id) {
+      selectedScript = null;
+    }
+
     try {
-      isLoading = true;
       errorMessage = null;
-
       await _deleteUseCase(id);
-      scripts.removeWhere((s) => s.id == id);
-
-      if (selectedScript?.id == id) {
-        selectedScript = null;
-      }
     } catch (e) {
+      // Rollback on error
+      scripts.insert(removedIndex, removedScript);
       errorMessage = 'Failed to delete script: ${e.toString()}';
       rethrow;
-    } finally {
-      isLoading = false;
     }
   }
 
   @action
   Future<void> toggleScript(String id, bool enabled) async {
     try {
-      await _toggleUseCase(id, enabled);
+      final responseData = await _toggleUseCase(id, enabled);
+
+      // Try to parse full script from response, fallback to optimistic update
+      Script? updatedScript;
+      if (responseData.containsKey('name')) {
+        try {
+          updatedScript = Script.fromJson(responseData);
+        } catch (_) {
+          // Fallback to optimistic update
+        }
+      }
 
       final index = scripts.indexWhere((s) => s.id == id);
       if (index != -1) {
-        scripts[index] = scripts[index].copyWith(enabled: enabled);
+        scripts[index] = updatedScript ?? scripts[index].copyWith(enabled: enabled);
       }
 
       if (selectedScript?.id == id) {
-        selectedScript = selectedScript!.copyWith(enabled: enabled);
+        selectedScript = updatedScript ?? selectedScript!.copyWith(enabled: enabled);
       }
     } catch (e) {
       errorMessage = 'Failed to toggle script: ${e.toString()}';
@@ -312,6 +332,10 @@ abstract class _ScriptsStore with Store {
   @action
   String getExportZipUrl(String id) {
     return _exportUseCase(id);
+  }
+
+  String? getDownloadProjectUrl(String id) {
+    return _downloadProjectUseCase?.call(id);
   }
 
   /// Import script from ZIP file bytes

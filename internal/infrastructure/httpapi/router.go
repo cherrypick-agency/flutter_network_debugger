@@ -19,6 +19,9 @@ import (
 	"gorm.io/gorm"
 
 	composep "network-debugger/internal/features/compose/infrastructure/persistence"
+	interceptdomain "network-debugger/internal/features/intercept/domain"
+	interceptp "network-debugger/internal/features/intercept/infrastructure/persistence"
+	interceptuc "network-debugger/internal/features/intercept/usecase"
 	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
 	mappingrt "network-debugger/internal/features/mapping/runtime"
 	mappinguc "network-debugger/internal/features/mapping/usecase"
@@ -47,7 +50,7 @@ type Deps struct {
 	Live                    *LiveSessions
 	MITM                    *MITM
 	Compose                 *usecase.ComposeService
-	Interceptor             *InterceptorManager
+	InterceptSvc            *interceptuc.InterceptService
 	DB                      *gorm.DB
 	Settings                *settingsuc.Service
 	ProxySvc                *proxyuc.Service
@@ -290,24 +293,51 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 </html>`))
 	})
 
-	// Lazy init interceptor
-	if d.Interceptor == nil {
-		d.Interceptor = NewInterceptorManager(&d.Cfg, d.Monitor, d.Metrics)
-		// Seed simple rules from env config (MVP convenience)
+	// Lazy init intercept service
+	if d.InterceptSvc == nil {
+		cfg := interceptdomain.InterceptConfig{
+			Enabled:      d.Cfg.InterceptEnabled,
+			Requests:     d.Cfg.InterceptRequests,
+			Responses:    d.Cfg.InterceptResponses,
+			TimeoutMs:    d.Cfg.InterceptTimeoutMs,
+			QueueMax:     d.Cfg.InterceptQueueMax,
+			BodyMaxBytes: d.Cfg.InterceptBodyMaxBytes,
+			Reencode:     d.Cfg.InterceptReencode,
+			Overflow:     d.Cfg.InterceptOverflow,
+		}
+		cfg.SetDefaults()
+		broadcaster := &monitorBroadcaster{hub: d.Monitor}
+		collector := &metricsCollector{m: d.Metrics}
+		manager := interceptuc.NewInterceptorManager(cfg, broadcaster, collector)
+
+		var ruleRepo interceptdomain.RuleRepository
+		var cfgRepo interceptdomain.ConfigRepository
+		if d.DB != nil {
+			ruleRepo = interceptp.NewRuleRepository(d.DB)
+			cfgRepo = interceptp.NewConfigRepository(d.DB)
+		}
+		d.InterceptSvc = interceptuc.NewInterceptService(manager, ruleRepo, cfgRepo)
+
+		// Load from DB if available
+		if d.DB != nil {
+			_ = d.InterceptSvc.LoadAndApplyFromDB(contextWithNoCancel())
+		}
+
+		// Seed simple rules from env config if DB has no rules (first run fallback)
 		if d.Cfg.InterceptEnabled {
-			existing := d.Interceptor.ListRules()
+			existing := d.InterceptSvc.ListRules()
 			if len(existing) == 0 {
-				rules := make([]InterceptRule, 0, 4)
+				rules := make([]interceptdomain.InterceptRule, 0, 4)
 				prio := 10
-				mkRule := func(urlContains string, ct string) InterceptRule {
-					w := InterceptWhen{Method: d.Cfg.InterceptMethods}
+				mkRule := func(urlContains string, ct string) interceptdomain.InterceptRule {
+					w := interceptdomain.InterceptWhen{Method: d.Cfg.InterceptMethods}
 					if strings.TrimSpace(urlContains) != "" {
-						w.Path = &RuleStringMatch{Contains: urlContains}
+						w.Path = &interceptdomain.RuleStringMatch{Contains: urlContains}
 					}
 					if strings.TrimSpace(ct) != "" {
-						w.ContentType = &RuleStringMatch{Prefix: strings.ToLower(ct)}
+						w.ContentType = &interceptdomain.RuleStringMatch{Prefix: strings.ToLower(ct)}
 					}
-					return InterceptRule{ID: "", Enabled: true, Priority: prio, Action: "both", Once: false, StopProcessing: true, When: w}
+					return interceptdomain.InterceptRule{ID: "", Enabled: true, Priority: prio, Action: "both", Once: false, StopProcessing: true, When: w}
 				}
 				if len(d.Cfg.InterceptURLContains) > 0 {
 					for _, u := range d.Cfg.InterceptURLContains {
@@ -330,7 +360,7 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 					rules = append(rules, mkRule("", ""))
 				}
 				if len(rules) > 0 {
-					d.Interceptor.UpdateRules(rules)
+					d.InterceptSvc.Manager().UpdateRules(rules)
 				}
 			}
 		}
@@ -563,6 +593,34 @@ func withCORS(cfg config.Config, h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// monitorBroadcaster adapts MonitorHub to the interceptuc.EventBroadcaster interface
+type monitorBroadcaster struct {
+	hub *MonitorHub
+}
+
+func (b *monitorBroadcaster) Broadcast(ev domain.MonitorEvent) {
+	if b.hub != nil {
+		b.hub.Broadcast(ev)
+	}
+}
+
+// metricsCollector adapts obs.Metrics to the interceptuc.MetricsCollector interface
+type metricsCollector struct {
+	m *obs.Metrics
+}
+
+func (c *metricsCollector) IncInterceptsTotal(outcome, direction string) {
+	if c.m != nil {
+		c.m.InterceptsTotal.WithLabelValues(outcome, direction).Inc()
+	}
+}
+
+func (c *metricsCollector) SetInterceptsQueue(size float64) {
+	if c.m != nil {
+		c.m.InterceptsQueue.Set(size)
+	}
 }
 
 // findHelperBinary - find helper binary using absolute paths

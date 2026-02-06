@@ -54,6 +54,10 @@ import '../../features/scripts/domain/usecases/test_script_usecase.dart';
 import '../../features/scripts/domain/usecases/compile_script_usecase.dart';
 import '../../features/scripts/domain/usecases/export_script_usecase.dart';
 import '../../features/scripts/domain/usecases/import_script_usecase.dart';
+import '../../features/scripts/domain/usecases/upload_project_usecase.dart';
+import '../../features/scripts/domain/usecases/validate_syntax_usecase.dart';
+import '../../features/scripts/domain/usecases/list_project_files_usecase.dart';
+import '../../features/scripts/domain/usecases/download_project_usecase.dart';
 import '../../features/scripts/application/stores/scripts_store.dart';
 import '../../features/scripts/application/stores/script_editor_store.dart';
 import '../../features/compiler_management/data/datasources/compiler_api.dart';
@@ -245,6 +249,18 @@ Future<void> setupDI({
   sl.registerLazySingleton<ImportScriptUseCase>(
     () => ImportScriptUseCase(sl<ScriptsRepository>()),
   );
+  sl.registerLazySingleton<UploadProjectUseCase>(
+    () => UploadProjectUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<ValidateSyntaxUseCase>(
+    () => ValidateSyntaxUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<ListProjectFilesUseCase>(
+    () => ListProjectFilesUseCase(sl<ScriptsRepository>()),
+  );
+  sl.registerLazySingleton<DownloadProjectUseCase>(
+    () => DownloadProjectUseCase(sl<ScriptsRepository>()),
+  );
   // Stores
   sl.registerLazySingleton<ScriptsStore>(
     () => ScriptsStore(
@@ -256,10 +272,17 @@ Future<void> setupDI({
       compileUseCase: sl<CompileScriptUseCase>(),
       exportUseCase: sl<ExportScriptUseCase>(),
       importUseCase: sl<ImportScriptUseCase>(),
+      downloadProjectUseCase: sl<DownloadProjectUseCase>(),
     ),
   );
   sl.registerFactory<ScriptEditorStore>(
-    () => ScriptEditorStore(testUseCase: sl<TestScriptUseCase>()),
+    () => ScriptEditorStore(
+      testUseCase: sl<TestScriptUseCase>(),
+      validateSyntaxUseCase: sl<ValidateSyntaxUseCase>(),
+      uploadProjectUseCase: sl<UploadProjectUseCase>(),
+      listProjectFilesUseCase: sl<ListProjectFilesUseCase>(),
+      downloadProjectUseCase: sl<DownloadProjectUseCase>(),
+    ),
   );
 
   // Compiler Management feature

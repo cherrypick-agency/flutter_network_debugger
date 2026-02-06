@@ -13,6 +13,9 @@ enum PatternType {
 
   @JsonValue('wildcard')
   wildcard, // Simple wildcard with * (e.g., /api/*)
+
+  @JsonValue('regex')
+  regex,
 }
 
 /// Match rules for filtering when script should execute
@@ -80,6 +83,10 @@ extension MatchRulesX on MatchRules {
       examples.add('$method https://$host/any/path');
     }
 
+    if (patternType == PatternType.regex && pathPattern != null) {
+      examples.add('$method https://$host/matching-path (regex: $pathPattern)');
+    }
+
     return examples;
   }
 
@@ -111,6 +118,8 @@ extension MatchRulesX on MatchRules {
         examples.add(
           '$method https://$host/other$pathPattern (different prefix)',
         );
+      } else if (patternType == PatternType.regex) {
+        examples.add('$method https://$host/non-matching (regex mismatch)');
       } else {
         examples.add(
           '$method https://$host$pathPattern/extra (not exact match)',

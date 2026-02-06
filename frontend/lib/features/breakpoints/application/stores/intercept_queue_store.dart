@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
+import 'package:mobx/mobx.dart';
+
 import '../../domain/entities/intercept_item.dart';
 import '../../domain/repositories/breakpoints_repository.dart';
 import '../../../inspector/application/services/monitor_service.dart';
@@ -8,31 +10,36 @@ import '../../../../core/notifications/notifications_service.dart';
 import '../../../../core/utils/debouncer.dart';
 import '../../domain/entities/decisions.dart';
 
-class InterceptQueueStore extends ChangeNotifier {
-  InterceptQueueStore(this._repo);
+part 'intercept_queue_store.g.dart';
+
+class InterceptQueueStore = _InterceptQueueStore with _$InterceptQueueStore;
+
+abstract class _InterceptQueueStore with Store {
   final BreakpointsRepository _repo;
 
-  List<InterceptItem> _items = const [];
-  InterceptItem? _selected;
+  _InterceptQueueStore(this._repo);
+
+  @observable
+  ObservableList<InterceptItem> items = ObservableList<InterceptItem>();
+
+  @observable
+  InterceptItem? selected;
+
+  @observable
+  bool loading = false;
+
+  @observable
+  String? lastError;
+
   MonitorListener? _listener;
   int _refreshStamp = 0;
   final Debouncer _debounced = Debouncer(const Duration(milliseconds: 200));
-  bool _loading = false;
-  String? _lastError;
   Timer? _retryTimer;
   int _retryAttempt = 0;
 
-  List<InterceptItem> get items => _items;
-  InterceptItem? get selected => _selected;
-  bool get loading => _loading;
-  String? get lastError => _lastError;
-
   Future<void> init() async {
     await refresh();
-    // if already subscribed, do not subscribe again
-    if (_listener != null) {
-      return;
-    }
+    if (_listener != null) return;
     final monitor = sl<MonitorService>();
     _listener = (Map<String, dynamic> ev) {
       try {
@@ -59,51 +66,45 @@ class InterceptQueueStore extends ChangeNotifier {
     }
   }
 
+  @action
   Future<void> refresh() async {
     final stamp = ++_refreshStamp;
     _retryTimer?.cancel();
     _retryTimer = null;
-    if (!_loading) {
-      _loading = true;
-      notifyListeners();
+    if (!loading) {
+      loading = true;
     }
     List<InterceptItem> nextItems;
     try {
       nextItems = await _repo.listPending(limit: 200);
     } catch (e) {
       if (stamp != _refreshStamp) return;
-      _lastError = e.toString();
-      _loading = false;
-      // On error, keep the old list/selection - this makes UX more stable during network glitches.
-      notifyListeners();
+      lastError = e.toString();
+      loading = false;
       _scheduleRetry();
       return;
     }
     if (stamp != _refreshStamp) return;
 
-    _items = nextItems;
+    items = ObservableList.of(nextItems);
 
-    // Update the selected item from the pending list (getItem is not needed here -
-    // listPending already returns the full snapshot).
-    if (_selected != null) {
-      final selectedId = _selected!.id;
-      final match = _items.where((e) => e.id == selectedId);
-      _selected = match.isEmpty ? null : match.first;
+    if (selected != null) {
+      final selectedId = selected!.id;
+      final match = items.where((e) => e.id == selectedId);
+      selected = match.isEmpty ? null : match.first;
     }
 
-    if (_selected == null && _items.isNotEmpty) {
-      _selected = _items.first;
+    if (selected == null && items.isNotEmpty) {
+      selected = items.first;
     }
 
     _retryAttempt = 0;
-    _lastError = null;
-    _loading = false;
-    notifyListeners();
+    lastError = null;
+    loading = false;
   }
 
   void _scheduleRetry() {
-    if (_listener == null)
-      return; // if the dialog is already closed, don't retry
+    if (_listener == null) return;
     _retryTimer?.cancel();
     final attempt = _retryAttempt.clamp(0, 6);
     final delayMs = (500 * (1 << attempt)).clamp(500, 10000);
@@ -113,22 +114,20 @@ class InterceptQueueStore extends ChangeNotifier {
     });
   }
 
+  @action
   void select(String id) {
-    for (final it in _items) {
+    for (final it in items) {
       if (it.id == id) {
-        _selected = it;
-        notifyListeners();
+        selected = it;
         return;
       }
     }
-    // If the item is no longer in the list (e.g., queue update arrived),
-    // just keep the current value.
-    notifyListeners();
   }
 
+  @action
   Future<void> quickContinue(String id) async {
     try {
-      final it = _items.firstWhere((e) => e.id == id);
+      final it = items.firstWhere((e) => e.id == id);
       if (it.direction == 'request') {
         await _repo.continueRequest(
           id,
@@ -146,6 +145,7 @@ class InterceptQueueStore extends ChangeNotifier {
     await refresh();
   }
 
+  @action
   Future<void> quickCancel(String id) async {
     try {
       await _repo.cancel(id);
@@ -153,11 +153,5 @@ class InterceptQueueStore extends ChangeNotifier {
       sl<NotificationsService>().error('Cancel', e.toString());
     }
     await refresh();
-  }
-
-  @override
-  void dispose() {
-    detach();
-    super.dispose();
   }
 }

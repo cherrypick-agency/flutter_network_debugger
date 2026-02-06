@@ -36,11 +36,9 @@ void main() {
       expect(repo.canceled, true);
     });
 
-    test('InterceptEditorStore continue/cancel/validation', () async {
+    test('InterceptEditorStore continue/cancel', () async {
       final e = InterceptEditorStore(repo);
       e.setItem(_item());
-      e.validateJson('{');
-      expect(e.bodyJsonError.isNotEmpty, true);
       await e.continueRequest(method: 'POST');
       await e.continueResponse(status: 201);
       await e.cancel();

@@ -4,6 +4,10 @@ import '../../domain/entities/match_rules.dart';
 import '../../domain/entities/script_config.dart';
 import '../../domain/entities/script_test_result.dart';
 import '../../domain/usecases/test_script_usecase.dart';
+import '../../domain/usecases/validate_syntax_usecase.dart';
+import '../../domain/usecases/upload_project_usecase.dart';
+import '../../domain/usecases/list_project_files_usecase.dart';
+import '../../domain/usecases/download_project_usecase.dart';
 
 part 'script_editor_store.g.dart';
 
@@ -20,9 +24,22 @@ class ScriptEditorStore = _ScriptEditorStore with _$ScriptEditorStore;
 
 abstract class _ScriptEditorStore with Store {
   final TestScriptUseCase? _testUseCase;
+  final ValidateSyntaxUseCase? _validateSyntaxUseCase;
+  final UploadProjectUseCase? _uploadProjectUseCase;
+  final ListProjectFilesUseCase? _listProjectFilesUseCase;
+  final DownloadProjectUseCase? _downloadProjectUseCase;
 
-  _ScriptEditorStore({TestScriptUseCase? testUseCase})
-    : _testUseCase = testUseCase;
+  _ScriptEditorStore({
+    TestScriptUseCase? testUseCase,
+    ValidateSyntaxUseCase? validateSyntaxUseCase,
+    UploadProjectUseCase? uploadProjectUseCase,
+    ListProjectFilesUseCase? listProjectFilesUseCase,
+    DownloadProjectUseCase? downloadProjectUseCase,
+  }) : _testUseCase = testUseCase,
+       _validateSyntaxUseCase = validateSyntaxUseCase,
+       _uploadProjectUseCase = uploadProjectUseCase,
+       _listProjectFilesUseCase = listProjectFilesUseCase,
+       _downloadProjectUseCase = downloadProjectUseCase;
 
   // Form fields
   @observable
@@ -85,6 +102,16 @@ abstract class _ScriptEditorStore with Store {
   @observable
   int? memoryLimitMB;
 
+  // Compilation state (preserved during edit)
+  @observable
+  String? compilationStatus;
+
+  @observable
+  String? compilationError;
+
+  @observable
+  DateTime? lastCompiledAt;
+
   // Validation
   @observable
   String? nameError;
@@ -107,6 +134,20 @@ abstract class _ScriptEditorStore with Store {
 
   @observable
   String? testError;
+
+  // Syntax validation state
+  @observable
+  bool isValidating = false;
+
+  @observable
+  bool isValidSyntax = false;
+
+  @observable
+  String? syntaxValidationError;
+
+  // Upload project state
+  @observable
+  bool isUploadingProject = false;
 
   // Tab state
   @observable
@@ -194,6 +235,11 @@ abstract class _ScriptEditorStore with Store {
       timeoutMs = script.config!.timeoutMs;
       memoryLimitMB = script.config!.memoryLimitMB;
     }
+
+    // Compilation state
+    compilationStatus = script.compilationStatus;
+    compilationError = script.compilationError;
+    lastCompiledAt = script.lastCompiledAt;
   }
 
   @action
@@ -217,12 +263,19 @@ abstract class _ScriptEditorStore with Store {
     patternType = PatternType.wildcard;
     timeoutMs = null;
     memoryLimitMB = null;
+    compilationStatus = null;
+    compilationError = null;
+    lastCompiledAt = null;
     nameError = null;
     codeError = null;
     sourceFilesError = null;
     currentTab = 0;
     testResult = null;
     testError = null;
+    isValidating = false;
+    isValidSyntax = false;
+    syntaxValidationError = null;
+    isUploadingProject = false;
   }
 
   @action
@@ -251,6 +304,7 @@ abstract class _ScriptEditorStore with Store {
   @action
   void setCode(String value) {
     code = value;
+    clearValidation();
     validateCode();
   }
 
@@ -329,11 +383,13 @@ abstract class _ScriptEditorStore with Store {
     if (selectedFile == null) {
       selectedFile = filename;
     }
+    clearValidation();
   }
 
   @action
   void updateSourceFile(String filename, String content) {
     sourceFiles[filename] = content;
+    clearValidation();
   }
 
   @action
@@ -344,6 +400,7 @@ abstract class _ScriptEditorStore with Store {
           ? sourceFiles.keys.first
           : null;
     }
+    clearValidation();
   }
 
   @action
@@ -357,6 +414,7 @@ abstract class _ScriptEditorStore with Store {
   void clearSourceFiles() {
     sourceFiles.clear();
     selectedFile = null;
+    clearValidation();
   }
 
   @action
@@ -505,6 +563,83 @@ abstract class _ScriptEditorStore with Store {
     errorMessage = null;
   }
 
+  @action
+  void clearValidation() {
+    isValidSyntax = false;
+    syntaxValidationError = null;
+  }
+
+  @action
+  Future<void> validateSyntax() async {
+    final useCase = _validateSyntaxUseCase;
+    if (useCase == null) return;
+    try {
+      isValidating = true;
+      syntaxValidationError = null;
+      isValidSyntax = false;
+
+      final result = await useCase(
+        sourceCode: code.isNotEmpty ? code : sourceFiles.values.join('\n'),
+        language: language,
+        dependencies: sourceFiles.isNotEmpty
+            ? Map<String, String>.from(sourceFiles)
+            : null,
+      );
+
+      isValidSyntax = result['valid'] == true;
+      if (!isValidSyntax) {
+        syntaxValidationError = result['error']?.toString();
+      }
+    } catch (e) {
+      isValidSyntax = false;
+      syntaxValidationError = e.toString();
+    } finally {
+      isValidating = false;
+    }
+  }
+
+  @action
+  Future<Map<String, dynamic>?> uploadProjectZip(List<int> zipBytes) async {
+    final useCase = _uploadProjectUseCase;
+    final scriptId = editingScriptId;
+    if (useCase == null || scriptId == null) return null;
+    try {
+      isUploadingProject = true;
+      final result = await useCase(scriptId, zipBytes);
+      return result;
+    } catch (e) {
+      errorMessage = 'Failed to upload project: ${e.toString()}';
+      return null;
+    } finally {
+      isUploadingProject = false;
+    }
+  }
+
+  @action
+  Future<List<Map<String, dynamic>>> loadProjectFiles() async {
+    final useCase = _listProjectFilesUseCase;
+    final scriptId = editingScriptId;
+    if (useCase == null || scriptId == null) return [];
+    try {
+      final result = await useCase(scriptId);
+      final files = result['files'];
+      if (files is List) {
+        return files.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      errorMessage = 'Failed to load project files: ${e.toString()}';
+      return [];
+    }
+  }
+
+  String? getDownloadProjectUrl() {
+    final useCase = _downloadProjectUseCase;
+    final scriptId = editingScriptId;
+    if (useCase == null || scriptId == null) return null;
+    return useCase(scriptId);
+  }
+
   /// Build Script entity from form data
   Script buildScript() {
     // Using multi-file editor for all runtimes now
@@ -520,7 +655,7 @@ abstract class _ScriptEditorStore with Store {
     }
 
     return Script(
-      id: editingScriptId ?? '', // Empty for new scripts
+      id: editingScriptId ?? '',
       name: name,
       description: description.isEmpty ? null : description,
       runtime: runtime,
@@ -535,6 +670,11 @@ abstract class _ScriptEditorStore with Store {
       updatedAt: null,
       sourceCode: sourceCodeValue,
       dependencies: dependenciesValue,
+      compilationStatus: compilationStatus,
+      compilationError: compilationError,
+      lastCompiledAt: lastCompiledAt,
+      validationStatus: null,
+      validationError: null,
     );
   }
 

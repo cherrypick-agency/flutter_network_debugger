@@ -3,9 +3,12 @@ package httpapi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+
+	interceptdomain "network-debugger/internal/features/intercept/domain"
 )
 
 func (d *Deps) interceptAuthOK(r *http.Request) bool {
@@ -18,24 +21,37 @@ func (d *Deps) interceptAuthOK(r *http.Request) bool {
 	return tok != "" && tok == d.Cfg.AdminToken
 }
 
+// isLoopback detects loopback address for simple auth decision
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
 func (d *Deps) handleInterceptRules(w http.ResponseWriter, r *http.Request) {
 	if !d.interceptAuthOK(r) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
 		return
 	}
 	if r.Method == http.MethodGet {
-		rules := d.Interceptor.ListRules()
+		rules := d.InterceptSvc.ListRules()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(rules)
 		return
 	}
 	if r.Method == http.MethodPost {
-		var rules []InterceptRule
+		var rules []interceptdomain.InterceptRule
 		if err := json.NewDecoder(r.Body).Decode(&rules); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", err.Error(), nil)
 			return
 		}
-		d.Interceptor.UpdateRules(rules)
+		if err := d.InterceptSvc.UpdateRules(r.Context(), rules); err != nil {
+			writeError(w, http.StatusBadRequest, "VALIDATION", err.Error(), nil)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -47,52 +63,22 @@ func (d *Deps) handleInterceptConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
 		return
 	}
-	type cfgDTO struct {
-		Enabled      bool   `json:"enabled"`
-		Requests     bool   `json:"requests"`
-		Responses    bool   `json:"responses"`
-		TimeoutMs    int    `json:"timeoutMs"`
-		QueueMax     int    `json:"queueMax"`
-		BodyMaxBytes int    `json:"bodyMaxBytes"`
-		Reencode     bool   `json:"reencode"`
-		Overflow     string `json:"overflow"`
-	}
 	if r.Method == http.MethodGet {
-		out := cfgDTO{
-			Enabled:      d.Cfg.InterceptEnabled,
-			Requests:     d.Cfg.InterceptRequests,
-			Responses:    d.Cfg.InterceptResponses,
-			TimeoutMs:    d.Cfg.InterceptTimeoutMs,
-			QueueMax:     d.Cfg.InterceptQueueMax,
-			BodyMaxBytes: d.Cfg.InterceptBodyMaxBytes,
-			Reencode:     d.Cfg.InterceptReencode,
-			Overflow:     d.Cfg.InterceptOverflow,
-		}
+		cfg := d.InterceptSvc.Manager().Config()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
+		_ = json.NewEncoder(w).Encode(cfg)
 		return
 	}
 	if r.Method == http.MethodPost {
-		var in cfgDTO
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		var cfg interceptdomain.InterceptConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", err.Error(), nil)
 			return
 		}
-		d.Cfg.InterceptEnabled = in.Enabled
-		d.Cfg.InterceptRequests = in.Requests
-		d.Cfg.InterceptResponses = in.Responses
-		if in.TimeoutMs > 0 {
-			d.Cfg.InterceptTimeoutMs = in.TimeoutMs
-		}
-		if in.QueueMax >= 0 {
-			d.Cfg.InterceptQueueMax = in.QueueMax
-		}
-		if in.BodyMaxBytes > 0 {
-			d.Cfg.InterceptBodyMaxBytes = in.BodyMaxBytes
-		}
-		d.Cfg.InterceptReencode = in.Reencode
-		if strings.TrimSpace(in.Overflow) != "" {
-			d.Cfg.InterceptOverflow = in.Overflow
+		cfg.SetDefaults()
+		if err := d.InterceptSvc.UpdateConfig(r.Context(), cfg); err != nil {
+			writeError(w, http.StatusBadRequest, "VALIDATION", err.Error(), nil)
+			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -115,7 +101,7 @@ func (d *Deps) handleInterceptPending(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	items := d.Interceptor.ListPending(limit)
+	items := d.InterceptSvc.Manager().ListPending(limit)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(items)
 }
@@ -142,8 +128,10 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 		action = parts[1]
 	}
 
+	mgr := d.InterceptSvc.Manager()
+
 	if r.Method == http.MethodGet && action == "" {
-		if it, ok := d.Interceptor.PeekItem(id); ok {
+		if it, ok := mgr.PeekItem(id); ok {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(it)
 			return
@@ -153,18 +141,18 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost && action == "continue" {
-		it, ok := d.Interceptor.PeekItem(id)
+		it, ok := mgr.PeekItem(id)
 		if !ok {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "no such pending item", nil)
 			return
 		}
-		if it.Direction == DirRequest {
+		if it.Direction == interceptdomain.DirRequest {
 			var payload struct {
-				Action  string      `json:"action"`
-				Method  string      `json:"method"`
-				URL     string      `json:"url"`
-				Headers http.Header `json:"headers"`
-				BodyB64 *string     `json:"bodyBase64"`
+				Action  string              `json:"action"`
+				Method  string              `json:"method"`
+				URL     string              `json:"url"`
+				Headers map[string][]string `json:"headers"`
+				BodyB64 *string             `json:"bodyBase64"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				writeError(w, http.StatusBadRequest, "BAD_JSON", err.Error(), nil)
@@ -176,7 +164,7 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 					body = b
 				}
 			}
-			ok := d.Interceptor.ContinueRequest(id, &HTTPRequestDecision{Action: payload.Action, Method: payload.Method, URL: payload.URL, Headers: payload.Headers, Body: body})
+			ok := mgr.ContinueRequest(id, &interceptdomain.HTTPRequestDecision{Action: payload.Action, Method: payload.Method, URL: payload.URL, Headers: payload.Headers, Body: body})
 			if !ok {
 				writeError(w, http.StatusConflict, "CONFLICT", "already finalized", nil)
 				return
@@ -186,10 +174,10 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 		}
 		// response
 		var payload struct {
-			Action  string      `json:"action"`
-			Status  int         `json:"status"`
-			Headers http.Header `json:"headers"`
-			BodyB64 *string     `json:"bodyBase64"`
+			Action  string              `json:"action"`
+			Status  int                 `json:"status"`
+			Headers map[string][]string `json:"headers"`
+			BodyB64 *string             `json:"bodyBase64"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", err.Error(), nil)
@@ -201,7 +189,7 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 				body = b
 			}
 		}
-		ok = d.Interceptor.ContinueResponse(id, &HTTPResponseDecision{Action: payload.Action, Status: payload.Status, Headers: payload.Headers, Body: body})
+		ok = mgr.ContinueResponse(id, &interceptdomain.HTTPResponseDecision{Action: payload.Action, Status: payload.Status, Headers: payload.Headers, Body: body})
 		if !ok {
 			writeError(w, http.StatusConflict, "CONFLICT", "already finalized", nil)
 			return
@@ -211,7 +199,7 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost && action == "cancel" {
-		if ok := d.Interceptor.Cancel(id); !ok {
+		if ok := mgr.Cancel(id); !ok {
 			writeError(w, http.StatusConflict, "CONFLICT", "already finalized", nil)
 			return
 		}
@@ -220,4 +208,38 @@ func (d *Deps) handleInterceptItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNotFound)
+}
+
+// toRequestMatchInput converts *http.Request into a pure domain.RequestMatchInput
+func toRequestMatchInput(r *http.Request) interceptdomain.RequestMatchInput {
+	scheme := ""
+	host := ""
+	port := ""
+	path := ""
+	if r.URL != nil {
+		scheme = r.URL.Scheme
+		host = r.URL.Hostname()
+		port = r.URL.Port()
+		path = r.URL.EscapedPath()
+	}
+	return interceptdomain.RequestMatchInput{
+		Method:      r.Method,
+		Scheme:      scheme,
+		Host:        host,
+		Port:        port,
+		Path:        path,
+		ContentType: strings.ToLower(r.Header.Get("Content-Type")),
+		Headers:     map[string][]string(r.Header),
+		BodyPreview: "",
+	}
+}
+
+// toResponseMatchInput converts *http.Response into a pure domain.ResponseMatchInput
+func toResponseMatchInput(resp *http.Response) interceptdomain.ResponseMatchInput {
+	return interceptdomain.ResponseMatchInput{
+		StatusCode:  resp.StatusCode,
+		ContentType: strings.ToLower(resp.Header.Get("Content-Type")),
+		Headers:     map[string][]string(resp.Header),
+		BodyPreview: "",
+	}
 }

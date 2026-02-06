@@ -1100,6 +1100,12 @@ func TestScriptHandlers_DeleteScript_ServiceError(t *testing.T) {
 func TestScriptHandlers_ToggleScript_Success(t *testing.T) {
 	scriptID := "test-id"
 	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:   id,
+				Code: []byte("wasm"),
+			}, nil
+		},
 		updateEnabledFunc: func(ctx context.Context, id string, enabled bool) error {
 			if id != scriptID {
 				t.Errorf("Expected id '%s', got '%s'", scriptID, id)
@@ -1130,6 +1136,12 @@ func TestScriptHandlers_ToggleScript_Success(t *testing.T) {
 
 func TestScriptHandlers_ToggleScript_ServiceError(t *testing.T) {
 	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:   id,
+				Code: []byte("wasm"),
+			}, nil
+		},
 		updateEnabledFunc: func(ctx context.Context, id string, enabled bool) error {
 			return errors.New("toggle failed")
 		},

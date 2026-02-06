@@ -65,8 +65,8 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
   }
 
   @override
-  Future<void> toggle(String id, bool enabled) async {
-    await _apiService.toggle(id, enabled);
+  Future<Map<String, dynamic>> toggle(String id, bool enabled) async {
+    return await _apiService.toggle(id, enabled);
   }
 
   @override
@@ -99,4 +99,28 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
     final responseJson = await _apiService.importFromZip(zipBytes);
     return Script.fromJson(responseJson);
   }
+
+  @override
+  Future<Map<String, dynamic>> uploadProject(String id, List<int> zipBytes) =>
+      _apiService.uploadProject(id, zipBytes);
+
+  @override
+  Future<Map<String, dynamic>> validateSyntax({
+    required String sourceCode,
+    required String language,
+    Map<String, String>? dependencies,
+  }) =>
+      _apiService.validateSyntax(
+        sourceCode: sourceCode,
+        language: language,
+        dependencies: dependencies,
+      );
+
+  @override
+  Future<Map<String, dynamic>> listProjectFiles(String id) =>
+      _apiService.listProjectFiles(id);
+
+  @override
+  String getDownloadProjectUrl(String id) =>
+      _apiService.getDownloadProjectUrl(id);
 }

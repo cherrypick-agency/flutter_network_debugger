@@ -37,6 +37,8 @@ _Script _$ScriptFromJson(Map<String, dynamic> json) => _Script(
   lastCompiledAt: json['lastCompiledAt'] == null
       ? null
       : DateTime.parse(json['lastCompiledAt'] as String),
+  validationStatus: json['validationStatus'] as String?,
+  validationError: json['validationError'] as String?,
 );
 
 Map<String, dynamic> _$ScriptToJson(_Script instance) => <String, dynamic>{
@@ -58,6 +60,8 @@ Map<String, dynamic> _$ScriptToJson(_Script instance) => <String, dynamic>{
   'compilationStatus': instance.compilationStatus,
   'compilationError': instance.compilationError,
   'lastCompiledAt': instance.lastCompiledAt?.toIso8601String(),
+  'validationStatus': instance.validationStatus,
+  'validationError': instance.validationError,
 };
 
 const _$ScriptRuntimeEnumMap = {

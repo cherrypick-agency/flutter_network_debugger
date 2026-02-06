@@ -18,8 +18,11 @@ class RuleHeaderMatchEditor extends StatelessWidget {
     required RuleStringMatch? name,
     required RuleStringMatch? val,
   }) {
-    if (name == null) return null;
-    return RuleHeaderMatch(name: name, value: val);
+    if (name == null || name.isEmpty) return null;
+    return RuleHeaderMatch(
+      name: name,
+      value: val ?? const RuleStringMatch(),
+    );
   }
 
   @override

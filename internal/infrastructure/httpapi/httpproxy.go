@@ -385,50 +385,56 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Interception: response (MVP)
-			if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptResponses {
-				var capBuf []byte
-				if resp.Body != nil {
-					lim := d.Cfg.InterceptBodyMaxBytes
-					if lim <= 0 {
-						lim = 1 << 20
-					}
-					buf := make([]byte, lim)
-					if n, _ := io.ReadFull(resp.Body, buf); n > 0 {
-						capBuf = append(capBuf[:0], buf[:n]...)
-						resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
-					}
-				}
-				// Decompression for preview/editing
-				origEnc := strings.ToLower(resp.Header.Get("Content-Encoding"))
-				decCap, _ := decodeForIntercept(capBuf, origEnc, d.Cfg.InterceptBodyMaxBytes)
-				ct := strings.ToLower(resp.Header.Get("Content-Type"))
-				if dec, _ := d.Interceptor.InterceptResponse(r.Context(), sessionID, resp, string(decCap), decCap, ct); dec != nil {
-					if dec.Status > 0 {
-						resp.StatusCode = dec.Status
-						if txt := http.StatusText(dec.Status); txt != "" {
-							resp.Status = strconv.Itoa(dec.Status) + " " + txt
-						} else {
-							resp.Status = strconv.Itoa(dec.Status)
+			if d.InterceptSvc != nil {
+				mgr := d.InterceptSvc.Manager()
+				mgrCfg := mgr.Config()
+				if mgrCfg.Enabled && mgrCfg.Responses {
+					var capBuf []byte
+					if resp.Body != nil {
+						lim := mgrCfg.BodyMaxBytes
+						if lim <= 0 {
+							lim = 1 << 20
+						}
+						buf := make([]byte, lim)
+						if n, _ := io.ReadFull(resp.Body, buf); n > 0 {
+							capBuf = append(capBuf[:0], buf[:n]...)
+							resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
 						}
 					}
-					if dec.Headers != nil {
-						resp.Header = cloneHeader(dec.Headers)
-					}
-					if dec.Body != nil {
-						bodyToWrite := dec.Body
-						if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
-							if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
-								bodyToWrite = encBody
-								resp.Header.Set("Content-Encoding", origEnc)
+					// Decompression for preview/editing
+					origEnc := strings.ToLower(resp.Header.Get("Content-Encoding"))
+					decCap, _ := decodeForIntercept(capBuf, origEnc, mgrCfg.BodyMaxBytes)
+					ct := strings.ToLower(resp.Header.Get("Content-Type"))
+					respInput := toResponseMatchInput(resp)
+					respInput.BodyPreview = string(decCap)
+					if dec, _ := mgr.InterceptResponse(r.Context(), sessionID, respInput, capBuf, ct); dec != nil {
+						if dec.Status > 0 {
+							resp.StatusCode = dec.Status
+							if txt := http.StatusText(dec.Status); txt != "" {
+								resp.Status = strconv.Itoa(dec.Status) + " " + txt
+							} else {
+								resp.Status = strconv.Itoa(dec.Status)
+							}
+						}
+						if dec.Headers != nil {
+							resp.Header = http.Header(dec.Headers)
+						}
+						if dec.Body != nil {
+							bodyToWrite := dec.Body
+							if mgrCfg.Reencode && (origEnc == "gzip" || origEnc == "deflate") {
+								if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+									bodyToWrite = encBody
+									resp.Header.Set("Content-Encoding", origEnc)
+								} else {
+									resp.Header.Del("Content-Encoding")
+								}
 							} else {
 								resp.Header.Del("Content-Encoding")
 							}
-						} else {
-							resp.Header.Del("Content-Encoding")
+							resp.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+							resp.ContentLength = int64(len(bodyToWrite))
+							resp.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
 						}
-						resp.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
-						resp.ContentLength = int64(len(bodyToWrite))
-						resp.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
 					}
 				}
 			}
@@ -588,59 +594,63 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Interception: request (MVP) — after preview, before sending
-	if d.Interceptor != nil && d.Cfg.InterceptEnabled && d.Cfg.InterceptRequests {
-		capBody := reqBodyBuf
-		if max := d.Cfg.InterceptBodyMaxBytes; max > 0 && len(capBody) > max {
-			capBody = capBody[:max]
-		}
-		origEnc := strings.ToLower(r.Header.Get("Content-Encoding"))
-		decCap, _ := decodeForIntercept(capBody, origEnc, d.Cfg.InterceptBodyMaxBytes)
-		ct := strings.ToLower(r.Header.Get("Content-Type"))
-		if dec, _ := d.Interceptor.InterceptRequest(r.Context(), sessionID, r, string(decCap), decCap, ct); dec != nil {
-			if strings.ToLower(dec.Action) == "drop" {
-				writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
-				// Always close session when interceptor drops request
-				_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
-				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
-				d.Metrics.ActiveSessions.Dec()
-				return
+	if d.InterceptSvc != nil {
+		mgr := d.InterceptSvc.Manager()
+		mgrCfg := mgr.Config()
+		if mgrCfg.Enabled && mgrCfg.Requests {
+			capBody := reqBodyBuf
+			if max := mgrCfg.BodyMaxBytes; max > 0 && len(capBody) > max {
+				capBody = capBody[:max]
 			}
-			if dec.Method != "" {
-				r.Method = dec.Method
-			}
-			if dec.URL != "" {
-				if u, err := url.Parse(dec.URL); err == nil {
-					if u.Scheme != "" && u.Host != "" {
-						r.URL = u
-						r.Host = u.Host
-					} else {
-						// relative path
-						newURL := *r.URL
-						newURL.Path = u.Path
-						newURL.RawQuery = u.RawQuery
-						r.URL = &newURL
+			origEnc := strings.ToLower(r.Header.Get("Content-Encoding"))
+			decCap, _ := decodeForIntercept(capBody, origEnc, mgrCfg.BodyMaxBytes)
+			ct := strings.ToLower(r.Header.Get("Content-Type"))
+			input := toRequestMatchInput(r)
+			input.BodyPreview = string(decCap)
+			if dec, _ := mgr.InterceptRequest(r.Context(), sessionID, input, decCap, ct); dec != nil {
+				if strings.ToLower(dec.Action) == "drop" {
+					writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
+					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
+					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
+					d.Metrics.ActiveSessions.Dec()
+					return
+				}
+				if dec.Method != "" {
+					r.Method = dec.Method
+				}
+				if dec.URL != "" {
+					if u, err := url.Parse(dec.URL); err == nil {
+						if u.Scheme != "" && u.Host != "" {
+							r.URL = u
+							r.Host = u.Host
+						} else {
+							newURL := *r.URL
+							newURL.Path = u.Path
+							newURL.RawQuery = u.RawQuery
+							r.URL = &newURL
+						}
 					}
 				}
-			}
-			if dec.Headers != nil {
-				r.Header = cloneHeader(dec.Headers)
-			}
-			if dec.Body != nil {
-				bodyToWrite := dec.Body
-				if d.Cfg.InterceptReencode && (origEnc == "gzip" || origEnc == "deflate") {
-					if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
-						bodyToWrite = encBody
-						r.Header.Set("Content-Encoding", origEnc)
+				if dec.Headers != nil {
+					r.Header = http.Header(dec.Headers)
+				}
+				if dec.Body != nil {
+					bodyToWrite := dec.Body
+					if mgrCfg.Reencode && (origEnc == "gzip" || origEnc == "deflate") {
+						if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
+							bodyToWrite = encBody
+							r.Header.Set("Content-Encoding", origEnc)
+						} else {
+							r.Header.Del("Content-Encoding")
+						}
 					} else {
 						r.Header.Del("Content-Encoding")
 					}
-				} else {
-					r.Header.Del("Content-Encoding")
+					r.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
+					r.ContentLength = int64(len(bodyToWrite))
+					r.Header.Del("Transfer-Encoding")
+					r.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
 				}
-				r.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
-				r.ContentLength = int64(len(bodyToWrite))
-				r.Header.Del("Transfer-Encoding")
-				r.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
 			}
 		}
 	}

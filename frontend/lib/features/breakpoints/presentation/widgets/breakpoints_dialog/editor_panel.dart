@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_mobx/flutter_mobx.dart';
 
 import '../../../../../core/di/di.dart';
 import '../../../../../core/hotkeys/hotkeys_service.dart';
@@ -139,101 +139,103 @@ class _EditorPanelState extends State<EditorPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final ed = context.watch<InterceptEditorStore>();
-    final it = ed.item;
-    if (it == null) {
-      return const Center(child: Text('Queue is empty'));
-    }
+    final ed = sl<InterceptEditorStore>();
 
-    final canAutoSyncFromItem =
-        !_submitting &&
-        !_headersDirty &&
-        !_bodyDirty &&
-        !_methodDirty &&
-        !_urlDirty &&
-        !_statusDirty;
-    if (_lastItemId != it.id) {
-      _populateFromItem(it);
-      _lastItemId = it.id;
-      _lastItemRef = it;
-    } else if (canAutoSyncFromItem && !identical(it, _lastItemRef)) {
-      // Item may be updated (e.g., server refresh) without changing id.
-      _populateFromItem(it);
-      _lastItemRef = it;
-    }
+    return Observer(builder: (_) {
+      final it = ed.item;
+      if (it == null) {
+        return const Center(child: Text('Queue is empty'));
+      }
 
-    final isReq = it.direction == 'request';
-    final hk = sl<HotkeysService>();
-    final bindings = hk.buildHandlers({
-      'breakpoints.applyContinue': () => _applyAndContinue(ed, it),
-      'breakpoints.applyContinue.ctrl': () => _applyAndContinue(ed, it),
-      'breakpoints.cancel': () => _cancelItem(ed),
-    });
+      final canAutoSyncFromItem =
+          !_submitting &&
+          !_headersDirty &&
+          !_bodyDirty &&
+          !_methodDirty &&
+          !_urlDirty &&
+          !_statusDirty;
+      if (_lastItemId != it.id) {
+        _populateFromItem(it);
+        _lastItemId = it.id;
+        _lastItemRef = it;
+      } else if (canAutoSyncFromItem && !identical(it, _lastItemRef)) {
+        // Item may be updated (e.g., server refresh) without changing id.
+        _populateFromItem(it);
+        _lastItemRef = it;
+      }
 
-    return CallbackShortcuts(
-      bindings: bindings,
-      child: Focus(
-        autofocus: true,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              EditorPanelToolbar(
-                isRequest: isReq,
-                methodController: _methodCtrl,
-                urlController: _urlCtrl,
-                statusController: _statusCtrl,
-                responseContentType: it.res?.contentType,
-                submitting: _submitting,
-                onAddAuth: () => _addOrUpdateHeader('Authorization', 'Bearer '),
-                onAddJson: _ensureContentTypeForMode,
-                onDrop: () => _dropRequest(ed),
-                onCancel: () => _cancelItem(ed),
-                onContinue: () => _applyAndContinue(ed, it),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: EditorPanelHeadersEditor(
-                        headers: _headers,
-                        onChanged: (v) {
-                          setState(() {
-                            _headers = v;
-                            _headersDirty = true;
-                            _updateContentInfo();
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: EditorPanelBodySection(
-                        contentType: _contentType,
-                        reencode:
-                            context.read<BreakpointsStore>().config?.reencode ==
-                            true,
-                        isBinary: _isBinary,
-                        isTruncated: _isTruncated,
-                        mode: _mode,
-                        onModeChanged: (m) {
-                          setState(() => _mode = m);
-                          _ensureContentTypeForMode();
-                        },
-                        rawController: _rawCtrl,
-                        jsonController: _jsonCtrl,
-                      ),
-                    ),
-                  ],
+      final isReq = it.direction == 'request';
+      final hk = sl<HotkeysService>();
+      final bindings = hk.buildHandlers({
+        'breakpoints.applyContinue': () => _applyAndContinue(ed, it),
+        'breakpoints.applyContinue.ctrl': () => _applyAndContinue(ed, it),
+        'breakpoints.cancel': () => _cancelItem(ed),
+      });
+
+      return CallbackShortcuts(
+        bindings: bindings,
+        child: Focus(
+          autofocus: true,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                EditorPanelToolbar(
+                  isRequest: isReq,
+                  methodController: _methodCtrl,
+                  urlController: _urlCtrl,
+                  statusController: _statusCtrl,
+                  responseContentType: it.res?.contentType,
+                  submitting: _submitting,
+                  onAddAuth: () => _addOrUpdateHeader('Authorization', 'Bearer '),
+                  onAddJson: _ensureContentTypeForMode,
+                  onDrop: () => _dropRequest(ed),
+                  onCancel: () => _cancelItem(ed),
+                  onContinue: () => _applyAndContinue(ed, it),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: EditorPanelHeadersEditor(
+                          headers: _headers,
+                          onChanged: (v) {
+                            setState(() {
+                              _headers = v;
+                              _headersDirty = true;
+                              _updateContentInfo();
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: EditorPanelBodySection(
+                          contentType: _contentType,
+                          reencode:
+                              sl<BreakpointsStore>().config?.reencode == true,
+                          isBinary: _isBinary,
+                          isTruncated: _isTruncated,
+                          mode: _mode,
+                          onModeChanged: (m) {
+                            setState(() => _mode = m);
+                            _ensureContentTypeForMode();
+                          },
+                          rawController: _rawCtrl,
+                          jsonController: _jsonCtrl,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   Future<void> _applyAndContinue(
@@ -260,7 +262,7 @@ class _EditorPanelState extends State<EditorPanel> {
     final bodyB64 = (_isBinary || _isTruncated || !_bodyDirty)
         ? null
         : base64Encode(utf8.encode(bodyStr));
-    final queue = context.read<InterceptQueueStore>();
+    final queue = sl<InterceptQueueStore>();
 
     setState(() => _submitting = true);
     var success = false;
@@ -318,7 +320,7 @@ class _EditorPanelState extends State<EditorPanel> {
 
   Future<void> _cancelItem(InterceptEditorStore ed) async {
     if (_submitting) return;
-    final queue = context.read<InterceptQueueStore>();
+    final queue = sl<InterceptQueueStore>();
     setState(() => _submitting = true);
     try {
       await ed.cancel();
@@ -338,7 +340,7 @@ class _EditorPanelState extends State<EditorPanel> {
 
   Future<void> _dropRequest(InterceptEditorStore ed) async {
     if (_submitting) return;
-    final queue = context.read<InterceptQueueStore>();
+    final queue = sl<InterceptQueueStore>();
     setState(() => _submitting = true);
     try {
       await ed.continueRequest(drop: true);

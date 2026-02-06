@@ -67,14 +67,10 @@ class _InterceptRuleRowState extends State<InterceptRuleRow> {
 
   void _emit({bool? enabled, int? priority, String? action}) {
     widget.onChanged(
-      InterceptRule(
-        id: widget.rule.id,
+      widget.rule.copyWith(
         enabled: enabled ?? widget.rule.enabled,
         priority: priority ?? widget.rule.priority,
         action: action ?? widget.rule.action,
-        once: widget.rule.once,
-        stopProcessing: widget.rule.stopProcessing,
-        when: widget.rule.when,
       ),
     );
   }

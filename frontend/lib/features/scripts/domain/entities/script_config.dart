@@ -23,7 +23,7 @@ extension ScriptConfigX on ScriptConfig {
   /// Get default config values
   static ScriptConfig get defaults => const ScriptConfig(
     timeoutMs: 5000, // 5 seconds
-    memoryLimitMB: 128, // 128 MB
+    memoryLimitMB: 10, // 10 MB
   );
 
   /// Check if config has custom values
@@ -39,7 +39,7 @@ extension ScriptConfigX on ScriptConfig {
 
   /// Get human-readable memory limit description
   String get memoryDescription {
-    if (memoryLimitMB == null) return 'Default (128MB)';
+    if (memoryLimitMB == null) return 'Default (10MB)';
     if (memoryLimitMB! >= 1024) {
       return '${(memoryLimitMB! / 1024).toStringAsFixed(1)}GB';
     }

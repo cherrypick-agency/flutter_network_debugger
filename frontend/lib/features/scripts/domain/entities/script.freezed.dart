@@ -16,7 +16,7 @@ T _$identity<T>(T value) => value;
 mixin _$Script {
 
  String get id; String get name; String? get description; ScriptRuntime get runtime; String get code; String get language; TriggerType get triggerType; int get priority; bool get enabled; MatchRules? get matchRules; ScriptConfig? get config; DateTime? get createdAt; DateTime? get updatedAt;// Compilation fields
- String? get sourceCode; Map<String, String>? get dependencies; String? get compilationStatus; String? get compilationError; DateTime? get lastCompiledAt;
+ String? get sourceCode; Map<String, String>? get dependencies; String? get compilationStatus; String? get compilationError; DateTime? get lastCompiledAt; String? get validationStatus; String? get validationError;
 /// Create a copy of Script
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -29,16 +29,16 @@ $ScriptCopyWith<Script> get copyWith => _$ScriptCopyWithImpl<Script>(this as Scr
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Script&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.runtime, runtime) || other.runtime == runtime)&&(identical(other.code, code) || other.code == code)&&(identical(other.language, language) || other.language == language)&&(identical(other.triggerType, triggerType) || other.triggerType == triggerType)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.matchRules, matchRules) || other.matchRules == matchRules)&&(identical(other.config, config) || other.config == config)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.sourceCode, sourceCode) || other.sourceCode == sourceCode)&&const DeepCollectionEquality().equals(other.dependencies, dependencies)&&(identical(other.compilationStatus, compilationStatus) || other.compilationStatus == compilationStatus)&&(identical(other.compilationError, compilationError) || other.compilationError == compilationError)&&(identical(other.lastCompiledAt, lastCompiledAt) || other.lastCompiledAt == lastCompiledAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Script&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.runtime, runtime) || other.runtime == runtime)&&(identical(other.code, code) || other.code == code)&&(identical(other.language, language) || other.language == language)&&(identical(other.triggerType, triggerType) || other.triggerType == triggerType)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.matchRules, matchRules) || other.matchRules == matchRules)&&(identical(other.config, config) || other.config == config)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.sourceCode, sourceCode) || other.sourceCode == sourceCode)&&const DeepCollectionEquality().equals(other.dependencies, dependencies)&&(identical(other.compilationStatus, compilationStatus) || other.compilationStatus == compilationStatus)&&(identical(other.compilationError, compilationError) || other.compilationError == compilationError)&&(identical(other.lastCompiledAt, lastCompiledAt) || other.lastCompiledAt == lastCompiledAt)&&(identical(other.validationStatus, validationStatus) || other.validationStatus == validationStatus)&&(identical(other.validationError, validationError) || other.validationError == validationError));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,description,runtime,code,language,triggerType,priority,enabled,matchRules,config,createdAt,updatedAt,sourceCode,const DeepCollectionEquality().hash(dependencies),compilationStatus,compilationError,lastCompiledAt);
+int get hashCode => Object.hashAll([runtimeType,id,name,description,runtime,code,language,triggerType,priority,enabled,matchRules,config,createdAt,updatedAt,sourceCode,const DeepCollectionEquality().hash(dependencies),compilationStatus,compilationError,lastCompiledAt,validationStatus,validationError]);
 
 @override
 String toString() {
-  return 'Script(id: $id, name: $name, description: $description, runtime: $runtime, code: $code, language: $language, triggerType: $triggerType, priority: $priority, enabled: $enabled, matchRules: $matchRules, config: $config, createdAt: $createdAt, updatedAt: $updatedAt, sourceCode: $sourceCode, dependencies: $dependencies, compilationStatus: $compilationStatus, compilationError: $compilationError, lastCompiledAt: $lastCompiledAt)';
+  return 'Script(id: $id, name: $name, description: $description, runtime: $runtime, code: $code, language: $language, triggerType: $triggerType, priority: $priority, enabled: $enabled, matchRules: $matchRules, config: $config, createdAt: $createdAt, updatedAt: $updatedAt, sourceCode: $sourceCode, dependencies: $dependencies, compilationStatus: $compilationStatus, compilationError: $compilationError, lastCompiledAt: $lastCompiledAt, validationStatus: $validationStatus, validationError: $validationError)';
 }
 
 
@@ -49,7 +49,7 @@ abstract mixin class $ScriptCopyWith<$Res>  {
   factory $ScriptCopyWith(Script value, $Res Function(Script) _then) = _$ScriptCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, String? compilationStatus, String? compilationError, DateTime? lastCompiledAt
+ String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, String? compilationStatus, String? compilationError, DateTime? lastCompiledAt, String? validationStatus, String? validationError
 });
 
 
@@ -66,7 +66,7 @@ class _$ScriptCopyWithImpl<$Res>
 
 /// Create a copy of Script
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? runtime = null,Object? code = null,Object? language = null,Object? triggerType = null,Object? priority = null,Object? enabled = null,Object? matchRules = freezed,Object? config = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? sourceCode = freezed,Object? dependencies = freezed,Object? compilationStatus = freezed,Object? compilationError = freezed,Object? lastCompiledAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? runtime = null,Object? code = null,Object? language = null,Object? triggerType = null,Object? priority = null,Object? enabled = null,Object? matchRules = freezed,Object? config = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? sourceCode = freezed,Object? dependencies = freezed,Object? compilationStatus = freezed,Object? compilationError = freezed,Object? lastCompiledAt = freezed,Object? validationStatus = freezed,Object? validationError = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -86,7 +86,9 @@ as String?,dependencies: freezed == dependencies ? _self.dependencies : dependen
 as Map<String, String>?,compilationStatus: freezed == compilationStatus ? _self.compilationStatus : compilationStatus // ignore: cast_nullable_to_non_nullable
 as String?,compilationError: freezed == compilationError ? _self.compilationError : compilationError // ignore: cast_nullable_to_non_nullable
 as String?,lastCompiledAt: freezed == lastCompiledAt ? _self.lastCompiledAt : lastCompiledAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,validationStatus: freezed == validationStatus ? _self.validationStatus : validationStatus // ignore: cast_nullable_to_non_nullable
+as String?,validationError: freezed == validationError ? _self.validationError : validationError // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 /// Create a copy of Script
@@ -192,10 +194,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  String? validationStatus,  String? validationError)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Script() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt);case _:
+return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt,_that.validationStatus,_that.validationError);case _:
   return orElse();
 
 }
@@ -213,10 +215,10 @@ return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  String? validationStatus,  String? validationError)  $default,) {final _that = this;
 switch (_that) {
 case _Script():
-return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt);}
+return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt,_that.validationStatus,_that.validationError);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -230,10 +232,10 @@ return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  String? validationStatus,  String? validationError)?  $default,) {final _that = this;
 switch (_that) {
 case _Script() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt);case _:
+return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt,_that.validationStatus,_that.validationError);case _:
   return null;
 
 }
@@ -245,7 +247,7 @@ return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_
 @JsonSerializable()
 
 class _Script extends Script {
-  const _Script({required this.id, required this.name, this.description, required this.runtime, required this.code, required this.language, required this.triggerType, this.priority = 10, this.enabled = true, this.matchRules, this.config, this.createdAt, this.updatedAt, this.sourceCode, final  Map<String, String>? dependencies, this.compilationStatus, this.compilationError, this.lastCompiledAt}): _dependencies = dependencies,super._();
+  const _Script({required this.id, required this.name, this.description, required this.runtime, required this.code, required this.language, required this.triggerType, this.priority = 10, this.enabled = true, this.matchRules, this.config, this.createdAt, this.updatedAt, this.sourceCode, final  Map<String, String>? dependencies, this.compilationStatus, this.compilationError, this.lastCompiledAt, this.validationStatus, this.validationError}): _dependencies = dependencies,super._();
   factory _Script.fromJson(Map<String, dynamic> json) => _$ScriptFromJson(json);
 
 @override final  String id;
@@ -275,6 +277,8 @@ class _Script extends Script {
 @override final  String? compilationStatus;
 @override final  String? compilationError;
 @override final  DateTime? lastCompiledAt;
+@override final  String? validationStatus;
+@override final  String? validationError;
 
 /// Create a copy of Script
 /// with the given fields replaced by the non-null parameter values.
@@ -289,16 +293,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Script&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.runtime, runtime) || other.runtime == runtime)&&(identical(other.code, code) || other.code == code)&&(identical(other.language, language) || other.language == language)&&(identical(other.triggerType, triggerType) || other.triggerType == triggerType)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.matchRules, matchRules) || other.matchRules == matchRules)&&(identical(other.config, config) || other.config == config)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.sourceCode, sourceCode) || other.sourceCode == sourceCode)&&const DeepCollectionEquality().equals(other._dependencies, _dependencies)&&(identical(other.compilationStatus, compilationStatus) || other.compilationStatus == compilationStatus)&&(identical(other.compilationError, compilationError) || other.compilationError == compilationError)&&(identical(other.lastCompiledAt, lastCompiledAt) || other.lastCompiledAt == lastCompiledAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Script&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.runtime, runtime) || other.runtime == runtime)&&(identical(other.code, code) || other.code == code)&&(identical(other.language, language) || other.language == language)&&(identical(other.triggerType, triggerType) || other.triggerType == triggerType)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.matchRules, matchRules) || other.matchRules == matchRules)&&(identical(other.config, config) || other.config == config)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.sourceCode, sourceCode) || other.sourceCode == sourceCode)&&const DeepCollectionEquality().equals(other._dependencies, _dependencies)&&(identical(other.compilationStatus, compilationStatus) || other.compilationStatus == compilationStatus)&&(identical(other.compilationError, compilationError) || other.compilationError == compilationError)&&(identical(other.lastCompiledAt, lastCompiledAt) || other.lastCompiledAt == lastCompiledAt)&&(identical(other.validationStatus, validationStatus) || other.validationStatus == validationStatus)&&(identical(other.validationError, validationError) || other.validationError == validationError));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,description,runtime,code,language,triggerType,priority,enabled,matchRules,config,createdAt,updatedAt,sourceCode,const DeepCollectionEquality().hash(_dependencies),compilationStatus,compilationError,lastCompiledAt);
+int get hashCode => Object.hashAll([runtimeType,id,name,description,runtime,code,language,triggerType,priority,enabled,matchRules,config,createdAt,updatedAt,sourceCode,const DeepCollectionEquality().hash(_dependencies),compilationStatus,compilationError,lastCompiledAt,validationStatus,validationError]);
 
 @override
 String toString() {
-  return 'Script(id: $id, name: $name, description: $description, runtime: $runtime, code: $code, language: $language, triggerType: $triggerType, priority: $priority, enabled: $enabled, matchRules: $matchRules, config: $config, createdAt: $createdAt, updatedAt: $updatedAt, sourceCode: $sourceCode, dependencies: $dependencies, compilationStatus: $compilationStatus, compilationError: $compilationError, lastCompiledAt: $lastCompiledAt)';
+  return 'Script(id: $id, name: $name, description: $description, runtime: $runtime, code: $code, language: $language, triggerType: $triggerType, priority: $priority, enabled: $enabled, matchRules: $matchRules, config: $config, createdAt: $createdAt, updatedAt: $updatedAt, sourceCode: $sourceCode, dependencies: $dependencies, compilationStatus: $compilationStatus, compilationError: $compilationError, lastCompiledAt: $lastCompiledAt, validationStatus: $validationStatus, validationError: $validationError)';
 }
 
 
@@ -309,7 +313,7 @@ abstract mixin class _$ScriptCopyWith<$Res> implements $ScriptCopyWith<$Res> {
   factory _$ScriptCopyWith(_Script value, $Res Function(_Script) _then) = __$ScriptCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, String? compilationStatus, String? compilationError, DateTime? lastCompiledAt
+ String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, String? compilationStatus, String? compilationError, DateTime? lastCompiledAt, String? validationStatus, String? validationError
 });
 
 
@@ -326,7 +330,7 @@ class __$ScriptCopyWithImpl<$Res>
 
 /// Create a copy of Script
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? runtime = null,Object? code = null,Object? language = null,Object? triggerType = null,Object? priority = null,Object? enabled = null,Object? matchRules = freezed,Object? config = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? sourceCode = freezed,Object? dependencies = freezed,Object? compilationStatus = freezed,Object? compilationError = freezed,Object? lastCompiledAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? runtime = null,Object? code = null,Object? language = null,Object? triggerType = null,Object? priority = null,Object? enabled = null,Object? matchRules = freezed,Object? config = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? sourceCode = freezed,Object? dependencies = freezed,Object? compilationStatus = freezed,Object? compilationError = freezed,Object? lastCompiledAt = freezed,Object? validationStatus = freezed,Object? validationError = freezed,}) {
   return _then(_Script(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -346,7 +350,9 @@ as String?,dependencies: freezed == dependencies ? _self._dependencies : depende
 as Map<String, String>?,compilationStatus: freezed == compilationStatus ? _self.compilationStatus : compilationStatus // ignore: cast_nullable_to_non_nullable
 as String?,compilationError: freezed == compilationError ? _self.compilationError : compilationError // ignore: cast_nullable_to_non_nullable
 as String?,lastCompiledAt: freezed == lastCompiledAt ? _self.lastCompiledAt : lastCompiledAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,validationStatus: freezed == validationStatus ? _self.validationStatus : validationStatus // ignore: cast_nullable_to_non_nullable
+as String?,validationError: freezed == validationError ? _self.validationError : validationError // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

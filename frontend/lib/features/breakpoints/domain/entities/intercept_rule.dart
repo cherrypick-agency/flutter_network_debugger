@@ -1,86 +1,102 @@
-import 'package:flutter/foundation.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-@immutable
-class InterceptRule {
-  const InterceptRule({
-    required this.id,
-    required this.enabled,
-    required this.priority,
-    required this.action, // request|response|both
-    required this.once,
-    required this.stopProcessing,
-    required this.when,
-  });
-  final String id;
-  final bool enabled;
-  final int priority;
-  final String action;
-  final bool once;
-  final bool stopProcessing;
-  final InterceptWhen when;
+part 'intercept_rule.freezed.dart';
+part 'intercept_rule.g.dart';
+
+@freezed
+sealed class RuleStringMatch with _$RuleStringMatch {
+  const RuleStringMatch._();
+
+  const factory RuleStringMatch({
+    @Default('') String equals,
+    @Default('') String prefix,
+    @Default('') String suffix,
+    @Default('') String contains,
+    @Default([]) List<String> anyOf,
+    @Default('') String regex,
+  }) = _RuleStringMatch;
+
+  factory RuleStringMatch.fromJson(Map<String, dynamic> json) =>
+      _$RuleStringMatchFromJson(json);
+
+  bool get isEmpty =>
+      equals.isEmpty &&
+      prefix.isEmpty &&
+      suffix.isEmpty &&
+      contains.isEmpty &&
+      anyOf.isEmpty &&
+      regex.isEmpty;
 }
 
-@immutable
-class InterceptWhen {
-  const InterceptWhen({
-    this.method = const [],
-    this.scheme = const [],
-    this.host,
-    this.port,
-    this.path,
-    this.contentType,
-    this.responseStatus,
-    this.header,
-    this.bodyContains,
-  });
-  final List<String> method;
-  final List<String> scheme;
-  final RuleStringMatch? host;
-  final RuleStringMatch? port;
-  final RuleStringMatch? path;
-  final RuleStringMatch? contentType;
-  final RuleStatusMatch? responseStatus;
-  final RuleHeaderMatch? header;
-  final String? bodyContains;
+@freezed
+sealed class RuleHeaderMatch with _$RuleHeaderMatch {
+  const RuleHeaderMatch._();
+
+  const factory RuleHeaderMatch({
+    @Default(RuleStringMatch()) RuleStringMatch name,
+    @Default(RuleStringMatch()) RuleStringMatch value,
+  }) = _RuleHeaderMatch;
+
+  factory RuleHeaderMatch.fromJson(Map<String, dynamic> json) =>
+      _$RuleHeaderMatchFromJson(json);
+
+  bool get isEmpty => name.isEmpty && value.isEmpty;
 }
 
-@immutable
-class RuleStringMatch {
-  const RuleStringMatch({
-    this.equals,
-    this.prefix,
-    this.suffix,
-    this.contains,
-    this.anyOf = const [],
-    this.regex,
-  });
-  final String? equals;
-  final String? prefix;
-  final String? suffix;
-  final String? contains;
-  final List<String> anyOf;
-  final String? regex;
+@freezed
+sealed class RuleStatusMatch with _$RuleStatusMatch {
+  const RuleStatusMatch._();
+
+  const factory RuleStatusMatch({
+    @Default([]) @JsonKey(name: 'equals') List<int> statusEquals,
+    @Default(0) int from,
+    @Default(0) int to,
+    @Default(false) bool is4xx,
+    @Default(false) bool is5xx,
+  }) = _RuleStatusMatch;
+
+  factory RuleStatusMatch.fromJson(Map<String, dynamic> json) =>
+      _$RuleStatusMatchFromJson(json);
+
+  bool get isEmpty =>
+      statusEquals.isEmpty && from == 0 && to == 0 && !is4xx && !is5xx;
 }
 
-@immutable
-class RuleHeaderMatch {
-  const RuleHeaderMatch({required this.name, this.value});
-  final RuleStringMatch name;
-  final RuleStringMatch? value;
+@freezed
+sealed class InterceptWhen with _$InterceptWhen {
+  const InterceptWhen._();
+
+  const factory InterceptWhen({
+    @Default([]) List<String> method,
+    @Default([]) List<String> scheme,
+    @JsonKey(includeIfNull: false) RuleStringMatch? host,
+    @JsonKey(includeIfNull: false) RuleStringMatch? port,
+    @JsonKey(includeIfNull: false) RuleStringMatch? path,
+    @JsonKey(includeIfNull: false) RuleStringMatch? contentType,
+    @JsonKey(name: 'responseStatus', includeIfNull: false)
+    RuleStatusMatch? responseStatus,
+    @JsonKey(includeIfNull: false) RuleHeaderMatch? header,
+    @JsonKey(includeIfNull: false) String? bodyContains,
+  }) = _InterceptWhen;
+
+  factory InterceptWhen.fromJson(Map<String, dynamic> json) =>
+      _$InterceptWhenFromJson(json);
 }
 
-@immutable
-class RuleStatusMatch {
-  const RuleStatusMatch({
-    this.equals = const [],
-    this.from,
-    this.to,
-    this.is4xx = false,
-    this.is5xx = false,
-  });
-  final List<int> equals;
-  final int? from;
-  final int? to;
-  final bool is4xx;
-  final bool is5xx;
+@freezed
+sealed class InterceptRule with _$InterceptRule {
+  const InterceptRule._();
+
+  const factory InterceptRule({
+    @Default('') String id,
+    @Default(true) bool enabled,
+    @Default(10) int priority,
+    @Default('both') String action,
+    @Default(false) bool once,
+    @Default(false) bool stopProcessing,
+    @Default(InterceptWhen()) InterceptWhen when,
+  }) = _InterceptRule;
+
+  factory InterceptRule.fromJson(Map<String, dynamic> json) =>
+      _$InterceptRuleFromJson(json);
 }

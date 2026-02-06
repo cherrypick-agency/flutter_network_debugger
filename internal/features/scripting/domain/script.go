@@ -75,47 +75,48 @@ const (
 	ValidationInvalid      ValidationStatus = "invalid"       // WASM exports are invalid
 )
 
+// SetDefaults sets default values for unset fields
+func (s *Script) SetDefaults() {
+	if s.Config.TimeoutMs <= 0 {
+		s.Config.TimeoutMs = 5000
+	}
+	if s.Config.MemoryLimitMB <= 0 {
+		s.Config.MemoryLimitMB = 10
+	}
+	if s.Priority <= 0 {
+		s.Priority = 10
+	}
+	if s.CompilationStatus == "" {
+		s.CompilationStatus = CompilationNotCompiled
+	}
+	if s.ValidationStatus == "" {
+		s.ValidationStatus = ValidationNotValidated
+	}
+}
+
 // Validate performs domain-level validation
 func (s *Script) Validate() error {
 	if s.Name == "" {
 		return errors.New("script name is required")
 	}
-
-	// Either Code (compiled WASM), SourceCode (single file), or Dependencies (multi-file) must be present
 	if len(s.Code) == 0 && s.SourceCode == "" && len(s.Dependencies) == 0 {
 		return errors.New("script code, source code, or dependencies are required")
 	}
-
 	if s.Runtime == "" {
 		return errors.New("script runtime is required")
 	}
 	if s.TriggerType == "" {
 		return errors.New("trigger type is required")
 	}
-
-	// Set defaults
-	if s.Config.TimeoutMs <= 0 {
-		s.Config.TimeoutMs = 5000 // default 5s
+	if s.Language == "" {
+		return errors.New("script language is required")
 	}
-	if s.Config.MemoryLimitMB <= 0 {
-		s.Config.MemoryLimitMB = 10 // default 10MB
-	}
-
 	if s.Config.TimeoutMs > maxScriptTimeoutMs {
 		return fmt.Errorf("script timeout is too large: %dms (max %dms)", s.Config.TimeoutMs, maxScriptTimeoutMs)
 	}
-
-	// Memory limit is relevant only for WASM runtimes, but we keep it in the domain
-	// to maintain consistent expectations across layers.
 	if s.Runtime == RuntimeExtism && s.Config.MemoryLimitMB > maxWASMMemoryLimitMB {
 		return fmt.Errorf("script memory limit is too large: %dMB (max %dMB)", s.Config.MemoryLimitMB, maxWASMMemoryLimitMB)
 	}
-
-	// Set default compilation status
-	if s.CompilationStatus == "" {
-		s.CompilationStatus = CompilationNotCompiled
-	}
-
 	return nil
 }
 
@@ -167,7 +168,7 @@ func (s *Script) IsValidated() bool {
 
 // NeedsValidation returns true if WASM needs validation
 func (s *Script) NeedsValidation() bool {
-	return len(s.Code) > 0 && s.ValidationStatus != ValidationValid
+	return len(s.Code) > 0 && s.ValidationStatus == ValidationNotValidated
 }
 
 // TriggerType defines when a script should execute

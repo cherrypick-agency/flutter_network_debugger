@@ -30,17 +30,7 @@ class _InterceptRuleCardState extends State<InterceptRuleCard> {
   }
 
   void _emitWhen(InterceptWhen w) {
-    widget.onChanged(
-      InterceptRule(
-        id: widget.rule.id,
-        enabled: widget.rule.enabled,
-        priority: widget.rule.priority,
-        action: widget.rule.action,
-        once: widget.rule.once,
-        stopProcessing: widget.rule.stopProcessing,
-        when: w,
-      ),
-    );
+    widget.onChanged(widget.rule.copyWith(when: w));
   }
 
   @override

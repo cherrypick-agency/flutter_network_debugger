@@ -1,60 +1,57 @@
-import 'package:flutter/foundation.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-@immutable
-class InterceptItem {
-  const InterceptItem({
-    required this.id,
-    required this.createdAt,
-    required this.deadline,
-    required this.direction,
-    required this.sessionId,
-    required this.state,
-    this.ruleId,
-    this.req,
-    this.res,
-  });
+part 'intercept_item.freezed.dart';
+part 'intercept_item.g.dart';
 
-  final String id;
-  final DateTime createdAt;
-  final DateTime deadline;
-  final String direction; // 'request' | 'response'
-  final String sessionId;
-  final String state; // PENDING | APPLIED | CANCELED | TIMED_OUT
-  final String? ruleId;
-  final HTTPRequestSnapshot? req;
-  final HTTPResponseSnapshot? res;
+@freezed
+sealed class HTTPRequestSnapshot with _$HTTPRequestSnapshot {
+  const HTTPRequestSnapshot._();
+
+  const factory HTTPRequestSnapshot({
+    @Default('') String method,
+    @Default('') String url,
+    @Default({}) Map<String, List<String>> headers,
+    String? bodyBase64,
+    @Default(false) bool bodyTruncated,
+    String? contentType,
+  }) = _HTTPRequestSnapshot;
+
+  factory HTTPRequestSnapshot.fromJson(Map<String, dynamic> json) =>
+      _$HTTPRequestSnapshotFromJson(json);
 }
 
-@immutable
-class HTTPRequestSnapshot {
-  const HTTPRequestSnapshot({
-    required this.method,
-    required this.url,
-    required this.headers,
-    this.bodyBase64,
-    this.bodyTruncated = false,
-    this.contentType,
-  });
-  final String method;
-  final String url;
-  final Map<String, List<String>> headers;
-  final String? bodyBase64;
-  final bool bodyTruncated;
-  final String? contentType;
+@freezed
+sealed class HTTPResponseSnapshot with _$HTTPResponseSnapshot {
+  const HTTPResponseSnapshot._();
+
+  const factory HTTPResponseSnapshot({
+    @Default(0) int status,
+    @Default({}) Map<String, List<String>> headers,
+    String? bodyBase64,
+    @Default(false) bool bodyTruncated,
+    String? contentType,
+  }) = _HTTPResponseSnapshot;
+
+  factory HTTPResponseSnapshot.fromJson(Map<String, dynamic> json) =>
+      _$HTTPResponseSnapshotFromJson(json);
 }
 
-@immutable
-class HTTPResponseSnapshot {
-  const HTTPResponseSnapshot({
-    required this.status,
-    required this.headers,
-    this.bodyBase64,
-    this.bodyTruncated = false,
-    this.contentType,
-  });
-  final int status;
-  final Map<String, List<String>> headers;
-  final String? bodyBase64;
-  final bool bodyTruncated;
-  final String? contentType;
+@freezed
+sealed class InterceptItem with _$InterceptItem {
+  const InterceptItem._();
+
+  const factory InterceptItem({
+    required String id,
+    required DateTime createdAt,
+    required DateTime deadline,
+    required String direction,
+    required String sessionId,
+    @Default('PENDING') String state,
+    String? ruleId,
+    HTTPRequestSnapshot? req,
+    HTTPResponseSnapshot? res,
+  }) = _InterceptItem;
+
+  factory InterceptItem.fromJson(Map<String, dynamic> json) =>
+      _$InterceptItemFromJson(json);
 }

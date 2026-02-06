@@ -112,6 +112,13 @@ func toScriptDTO(s *domain.Script) scriptDTO {
 	}
 }
 
+// writeJSONError writes a JSON error response with the given status code
+func writeJSONError(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
 // ScriptHandlers handles HTTP requests for script management
 type ScriptHandlers struct {
 	service            *usecase.ScriptService
@@ -155,7 +162,7 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -166,13 +173,13 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 	if req.SourceCode != "" || len(req.Dependencies) > 0 {
 		// Compile source code or multi-file project to WASM
 		if req.Language == "" {
-			http.Error(w, "language required when using sourceCode or dependencies", http.StatusBadRequest)
+			writeJSONError(w, "language required when using sourceCode or dependencies", http.StatusBadRequest)
 			return
 		}
 
 		// Check if compilation service is available
 		if h.compilationService == nil {
-			http.Error(w, "compilation service not available - use 'code' field with base64 WASM instead", http.StatusBadRequest)
+			writeJSONError(w, "compilation service not available - use 'code' field with base64 WASM instead", http.StatusBadRequest)
 			return
 		}
 
@@ -184,23 +191,19 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 			Description:  req.Description,
 			Runtime:      domain.ScriptRuntime(req.Runtime),
 			SourceCode:   req.SourceCode,
-			Dependencies: req.Dependencies, // Multi-file project support
+			Dependencies: req.Dependencies,
 			Language:     req.Language,
 			TriggerType:  domain.TriggerType(req.TriggerType),
 			Priority:     req.Priority,
-			Code:         []byte{}, // Empty for now
-			Config: domain.ScriptConfig{
-				TimeoutMs:     5000,
-				MemoryLimitMB: 10,
-			},
-			Enabled:   false, // Start disabled until compilation succeeds
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			Code:         []byte{},
+			Enabled:      false, // Start disabled until compilation succeeds
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
 		}
 
 		// Save the script with source code first
 		if err := h.service.CreateScript(r.Context(), tempScript); err != nil {
-			http.Error(w, "failed to create script: "+err.Error(), http.StatusBadRequest)
+			writeJSONError(w, "failed to create script: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -215,7 +218,7 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 			if deleteErr := h.service.DeleteScript(r.Context(), scriptID); deleteErr != nil {
 				log.Printf("[ScriptHandlers] WARNING: Failed to cleanup script %s after compilation error: %v", scriptID, deleteErr)
 			}
-			http.Error(w, "compilation failed: "+err.Error(), http.StatusBadRequest)
+			writeJSONError(w, "compilation failed: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -226,22 +229,28 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Return the created script
+		// Return the created script (reload from DB to get compilation results)
+		createdScript, err := h.service.GetScript(r.Context(), scriptID)
+		if err != nil {
+			// Script was created and compiled but we can't fetch it - return minimal response
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]string{"id": scriptID})
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
-			"id": scriptID,
-		})
+		json.NewEncoder(w).Encode(toScriptDTO(createdScript))
 		return
 	} else if req.Code != "" {
 		// Decode base64-encoded code
 		codeBytes, err = base64.StdEncoding.DecodeString(req.Code)
 		if err != nil {
-			http.Error(w, "invalid base64 code: "+err.Error(), http.StatusBadRequest)
+			writeJSONError(w, "invalid base64 code: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 	} else {
-		http.Error(w, "either 'code', 'sourceCode', or 'dependencies' must be provided", http.StatusBadRequest)
+		writeJSONError(w, "either 'code', 'sourceCode', or 'dependencies' must be provided", http.StatusBadRequest)
 		return
 	}
 
@@ -254,13 +263,9 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 		Language:    req.Language,
 		TriggerType: domain.TriggerType(req.TriggerType),
 		Priority:    req.Priority,
-		Config: domain.ScriptConfig{
-			TimeoutMs:     5000,
-			MemoryLimitMB: 10,
-		},
-		Enabled:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Enabled:     true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	// Apply match rules if provided
@@ -276,13 +281,13 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 		if script.MatchRules.PatternType == domain.PatternRegex {
 			if script.MatchRules.HostPattern != "" {
 				if _, err := regexp.Compile(script.MatchRules.HostPattern); err != nil {
-					http.Error(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
+					writeJSONError(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
 					return
 				}
 			}
 			if script.MatchRules.PathPattern != "" {
 				if _, err := regexp.Compile(script.MatchRules.PathPattern); err != nil {
-					http.Error(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
+					writeJSONError(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
 					return
 				}
 			}
@@ -297,7 +302,7 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.CreateScript(r.Context(), script); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -310,7 +315,7 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) ListScripts(w http.ResponseWriter, r *http.Request) {
 	scripts, err := h.service.ListScripts(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -327,13 +332,13 @@ func (h *ScriptHandlers) ListScripts(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) GetScript(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	script, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeJSONError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -345,14 +350,14 @@ func (h *ScriptHandlers) GetScript(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	// Get existing script
 	script, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeJSONError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -381,7 +386,7 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -430,13 +435,13 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		if domain.PatternType(pt) == domain.PatternRegex {
 			if req.MatchRules.HostPattern != "" {
 				if _, err := regexp.Compile(req.MatchRules.HostPattern); err != nil {
-					http.Error(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
+					writeJSONError(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
 					return
 				}
 			}
 			if req.MatchRules.PathPattern != "" {
 				if _, err := regexp.Compile(req.MatchRules.PathPattern); err != nil {
-					http.Error(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
+					writeJSONError(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
 					return
 				}
 			}
@@ -461,7 +466,7 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	script.UpdatedAt = time.Now()
 
 	if err := h.service.UpdateScript(r.Context(), script); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -473,12 +478,12 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) DeleteScript(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.service.DeleteScript(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -489,7 +494,7 @@ func (h *ScriptHandlers) DeleteScript(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) ToggleScript(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
@@ -498,16 +503,42 @@ func (h *ScriptHandlers) ToggleScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Validate script can be enabled
+	if req.Enabled {
+		script, err := h.service.GetScript(r.Context(), id)
+		if err != nil {
+			writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
+			return
+		}
+		if len(script.Code) == 0 && script.SourceCode == "" {
+			writeJSONError(w, "cannot enable script without code or source code", http.StatusBadRequest)
+			return
+		}
+		if script.CompilationStatus == domain.CompilationStatusError {
+			writeJSONError(w, "cannot enable script with compilation error", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if err := h.service.ToggleScript(r.Context(), id, req.Enabled); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	// Return full script DTO after toggle
+	updatedScript, err := h.service.GetScript(r.Context(), id)
+	if err != nil {
+		// Fallback to simple response if we can't reload
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"enabled": req.Enabled})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(toScriptDTO(updatedScript))
 }
 
 // TestScript handles POST /_api/v1/scripts/test
@@ -543,14 +574,14 @@ func (h *ScriptHandlers) TestScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Decode base64-encoded code
 	codeBytes, err := base64.StdEncoding.DecodeString(req.Script.Code)
 	if err != nil {
-		http.Error(w, "invalid base64 code: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "invalid base64 code: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -564,13 +595,9 @@ func (h *ScriptHandlers) TestScript(w http.ResponseWriter, r *http.Request) {
 		Language:    req.Script.Language,
 		TriggerType: domain.TriggerType(req.Script.TriggerType),
 		Priority:    req.Script.Priority,
-		Config: domain.ScriptConfig{
-			TimeoutMs:     5000,
-			MemoryLimitMB: 10,
-		},
-		Enabled:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Enabled:     true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	// Apply match rules if provided
@@ -643,48 +670,48 @@ func (h *ScriptHandlers) TestScript(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	// Get existing script
 	script, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		http.Error(w, "script not found: "+err.Error(), http.StatusNotFound)
+		writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Parse multipart form (max 10MB)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "failed to parse form: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "failed to parse form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Get uploaded file
 	file, header, err := r.FormFile("project")
 	if err != nil {
-		http.Error(w, "project file required: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "project file required: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
 	// Verify it's a ZIP file
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".zip") {
-		http.Error(w, "file must be a ZIP archive", http.StatusBadRequest)
+		writeJSONError(w, "file must be a ZIP archive", http.StatusBadRequest)
 		return
 	}
 
 	// Read ZIP file into memory
 	zipData, err := io.ReadAll(file)
 	if err != nil {
-		http.Error(w, "failed to read zip: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "failed to read zip: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Parse ZIP archive
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
-		http.Error(w, "invalid zip file: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "invalid zip file: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -719,14 +746,14 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 
 		// Check file size
 		if zipFile.UncompressedSize64 > maxFileSize {
-			http.Error(w, fmt.Sprintf("file %s too large (max 500KB)", zipFile.Name), http.StatusBadRequest)
+			writeJSONError(w, fmt.Sprintf("file %s too large (max 500KB)", zipFile.Name), http.StatusBadRequest)
 			return
 		}
 
 		// Open file in ZIP
 		rc, err := zipFile.Open()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
 			return
 		}
 
@@ -734,14 +761,14 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 		content, err := io.ReadAll(rc)
 		rc.Close()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
 			return
 		}
 
 		// Update total size
 		totalSize += len(content)
 		if totalSize > maxTotalSize {
-			http.Error(w, "total project size exceeds 5MB", http.StatusBadRequest)
+			writeJSONError(w, "total project size exceeds 5MB", http.StatusBadRequest)
 			return
 		}
 
@@ -760,7 +787,7 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(dependencies) == 0 {
-		http.Error(w, "no valid source files found in ZIP", http.StatusBadRequest)
+		writeJSONError(w, "no valid source files found in ZIP", http.StatusBadRequest)
 		return
 	}
 
@@ -769,7 +796,7 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 	script.UpdatedAt = time.Now()
 
 	if err := h.service.UpdateScript(r.Context(), script); err != nil {
-		http.Error(w, "failed to update script: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "failed to update script: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -788,14 +815,14 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 func (h *ScriptHandlers) DownloadProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	// Get script
 	script, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		http.Error(w, "script not found: "+err.Error(), http.StatusNotFound)
+		writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -808,11 +835,11 @@ func (h *ScriptHandlers) DownloadProject(w http.ResponseWriter, r *http.Request)
 		mainFile := getMainFilename(script.Language)
 		fw, err := zipWriter.Create(mainFile)
 		if err != nil {
-			http.Error(w, "failed to create zip: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "failed to create zip: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if _, err := fw.Write([]byte(script.SourceCode)); err != nil {
-			http.Error(w, "failed to write source: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "failed to write source: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -821,17 +848,17 @@ func (h *ScriptHandlers) DownloadProject(w http.ResponseWriter, r *http.Request)
 	for filename, content := range script.Dependencies {
 		fw, err := zipWriter.Create(filename)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to create %s: %v", filename, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to create %s: %v", filename, err), http.StatusInternalServerError)
 			return
 		}
 		if _, err := fw.Write([]byte(content)); err != nil {
-			http.Error(w, fmt.Sprintf("failed to write %s: %v", filename, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to write %s: %v", filename, err), http.StatusInternalServerError)
 			return
 		}
 	}
 
 	if err := zipWriter.Close(); err != nil {
-		http.Error(w, "failed to finalize zip: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "failed to finalize zip: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -847,14 +874,14 @@ func (h *ScriptHandlers) DownloadProject(w http.ResponseWriter, r *http.Request)
 func (h *ScriptHandlers) ListProjectFiles(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	// Get script
 	script, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		http.Error(w, "script not found: "+err.Error(), http.StatusNotFound)
+		writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -943,14 +970,14 @@ func getFileList(deps map[string]string) []string {
 func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
 	// Get script
 	script, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		http.Error(w, "script not found: "+err.Error(), http.StatusNotFound)
+		writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -977,11 +1004,11 @@ func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Reques
 
 	metadataFile, err := zipWriter.Create("metadata.json")
 	if err != nil {
-		http.Error(w, "failed to create metadata: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "failed to create metadata: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := json.NewEncoder(metadataFile).Encode(metadata); err != nil {
-		http.Error(w, "failed to write metadata: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "failed to write metadata: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -990,11 +1017,11 @@ func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Reques
 		mainFile := getMainFilename(script.Language)
 		fw, err := zipWriter.Create(mainFile)
 		if err != nil {
-			http.Error(w, "failed to create main file: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "failed to create main file: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if _, err := fw.Write([]byte(script.SourceCode)); err != nil {
-			http.Error(w, "failed to write main file: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "failed to write main file: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -1003,11 +1030,11 @@ func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Reques
 	for filename, content := range script.Dependencies {
 		fw, err := zipWriter.Create(filename)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to create %s: %v", filename, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to create %s: %v", filename, err), http.StatusInternalServerError)
 			return
 		}
 		if _, err := fw.Write([]byte(content)); err != nil {
-			http.Error(w, fmt.Sprintf("failed to write %s: %v", filename, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to write %s: %v", filename, err), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -1016,19 +1043,19 @@ func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Reques
 	if len(script.Code) > 0 {
 		wasmFile, err := zipWriter.Create("output.wasm")
 		if err != nil {
-			http.Error(w, "failed to create wasm file: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "failed to create wasm file: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		// script.Code is already []byte, write directly
 		if _, err := wasmFile.Write(script.Code); err != nil {
-			http.Error(w, "failed to write wasm: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "failed to write wasm: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
 	if err := zipWriter.Close(); err != nil {
-		http.Error(w, "failed to finalize zip: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "failed to finalize zip: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -1046,14 +1073,14 @@ func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Reques
 func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Request) {
 	// Parse multipart form (max 10MB)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "failed to parse form: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "failed to parse form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Get uploaded file
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "no file provided", http.StatusBadRequest)
+		writeJSONError(w, "no file provided", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -1061,14 +1088,14 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 	// Read file to memory
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		http.Error(w, "failed to read file: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "failed to read file: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Open ZIP
 	zipReader, err := zip.NewReader(bytes.NewReader(fileBytes), int64(len(fileBytes)))
 	if err != nil {
-		http.Error(w, "invalid ZIP file: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "invalid ZIP file: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -1080,21 +1107,21 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 	for _, zipFile := range zipReader.File {
 		rc, err := zipFile.Open()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to open %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to open %s: %v", zipFile.Name, err), http.StatusInternalServerError)
 			return
 		}
 
 		content, err := io.ReadAll(rc)
 		rc.Close()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
 			return
 		}
 
 		switch zipFile.Name {
 		case "metadata.json":
 			if err := json.Unmarshal(content, &metadata); err != nil {
-				http.Error(w, "invalid metadata: "+err.Error(), http.StatusBadRequest)
+				writeJSONError(w, "invalid metadata: "+err.Error(), http.StatusBadRequest)
 				return
 			}
 
@@ -1109,7 +1136,7 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 
 	// Validate metadata
 	if metadata == nil {
-		http.Error(w, "metadata.json not found in ZIP", http.StatusBadRequest)
+		writeJSONError(w, "metadata.json not found in ZIP", http.StatusBadRequest)
 		return
 	}
 
@@ -1144,11 +1171,11 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 
 	// Validate required fields
 	if name == "" {
-		http.Error(w, "name is required in metadata", http.StatusBadRequest)
+		writeJSONError(w, "name is required in metadata", http.StatusBadRequest)
 		return
 	}
 	if language == "" {
-		http.Error(w, "language is required in metadata", http.StatusBadRequest)
+		writeJSONError(w, "language is required in metadata", http.StatusBadRequest)
 		return
 	}
 
@@ -1180,11 +1207,7 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 		Code:         wasmCodeBytes,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
-		Enabled:      true, // Default to enabled
-		Config: domain.ScriptConfig{
-			TimeoutMs:     5000,
-			MemoryLimitMB: 10,
-		},
+		Enabled:      true,
 	}
 
 	// Copy optional fields from metadata
@@ -1241,13 +1264,13 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 
 	// Validate script data
 	if err := validateScriptData(&newScript); err != nil {
-		http.Error(w, "validation failed: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "validation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Create script in DB
 	if err := h.service.CreateScript(r.Context(), &newScript); err != nil {
-		http.Error(w, "failed to create script: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "failed to create script: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

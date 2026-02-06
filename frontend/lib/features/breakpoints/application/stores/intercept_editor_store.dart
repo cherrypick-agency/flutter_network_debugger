@@ -1,19 +1,24 @@
-import 'package:flutter/foundation.dart';
+import 'package:mobx/mobx.dart';
+
 import '../../domain/entities/intercept_item.dart';
 import '../../domain/entities/decisions.dart';
 import '../../domain/repositories/breakpoints_repository.dart';
 
-class InterceptEditorStore extends ChangeNotifier {
-  InterceptEditorStore(this._repo);
+part 'intercept_editor_store.g.dart';
+
+class InterceptEditorStore = _InterceptEditorStore with _$InterceptEditorStore;
+
+abstract class _InterceptEditorStore with Store {
   final BreakpointsRepository _repo;
 
-  InterceptItem? _item;
+  _InterceptEditorStore(this._repo);
 
-  InterceptItem? get item => _item;
+  @observable
+  InterceptItem? item;
 
+  @action
   void setItem(InterceptItem? it) {
-    _item = it;
-    notifyListeners();
+    item = it;
   }
 
   Future<void> continueRequest({
@@ -23,9 +28,9 @@ class InterceptEditorStore extends ChangeNotifier {
     String? bodyBase64,
     bool drop = false,
   }) async {
-    if (_item == null) return;
+    if (item == null) return;
     await _repo.continueRequest(
-      _item!.id,
+      item!.id,
       RequestDecision(
         action: drop ? 'drop' : 'continue',
         method: method,
@@ -41,9 +46,9 @@ class InterceptEditorStore extends ChangeNotifier {
     Map<String, List<String>>? headers,
     String? bodyBase64,
   }) async {
-    if (_item == null) return;
+    if (item == null) return;
     await _repo.continueResponse(
-      _item!.id,
+      item!.id,
       ResponseDecision(
         action: 'continue',
         status: status,
@@ -54,7 +59,7 @@ class InterceptEditorStore extends ChangeNotifier {
   }
 
   Future<void> cancel() async {
-    if (_item == null) return;
-    await _repo.cancel(_item!.id);
+    if (item == null) return;
+    await _repo.cancel(item!.id);
   }
 }

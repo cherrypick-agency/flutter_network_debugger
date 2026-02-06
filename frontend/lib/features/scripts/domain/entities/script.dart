@@ -52,6 +52,8 @@ sealed class Script with _$Script {
     String? compilationStatus,
     String? compilationError,
     DateTime? lastCompiledAt,
+    String? validationStatus,
+    String? validationError,
   }) = _Script;
 
   factory Script.fromJson(Map<String, dynamic> json) => _$ScriptFromJson(json);
@@ -115,6 +117,12 @@ extension ScriptX on Script {
           return value.startsWith(prefix);
         }
         return value == pattern;
+      case PatternType.regex:
+        try {
+          return RegExp(pattern).hasMatch(value);
+        } catch (_) {
+          return false;
+        }
     }
   }
 

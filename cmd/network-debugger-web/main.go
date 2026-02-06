@@ -19,6 +19,7 @@ import (
 
 	"network-debugger/internal/adapters/storage/memory"
 	compp "network-debugger/internal/features/compose/infrastructure/persistence"
+	interceptp "network-debugger/internal/features/intercept/infrastructure/persistence"
 	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
 	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
 	setp "network-debugger/internal/features/settings/infrastructure/persistence"
@@ -69,6 +70,8 @@ func main() {
 				&tagsp.PredefinedTagModel{},
 				&tagsp.SessionTagModel{},
 				&tagsp.SessionAnnotationModel{},
+				&interceptp.InterceptRuleModel{},
+				&interceptp.InterceptConfigModel{},
 			); err != nil {
 				logger.Error().Err(err).Msg("db automigrate failed")
 			}

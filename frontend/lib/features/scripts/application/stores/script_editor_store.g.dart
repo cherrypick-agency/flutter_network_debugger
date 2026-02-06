@@ -387,6 +387,60 @@ mixin _$ScriptEditorStore on _ScriptEditorStore, Store {
     });
   }
 
+  late final _$compilationStatusAtom = Atom(
+    name: '_ScriptEditorStore.compilationStatus',
+    context: context,
+  );
+
+  @override
+  String? get compilationStatus {
+    _$compilationStatusAtom.reportRead();
+    return super.compilationStatus;
+  }
+
+  @override
+  set compilationStatus(String? value) {
+    _$compilationStatusAtom.reportWrite(value, super.compilationStatus, () {
+      super.compilationStatus = value;
+    });
+  }
+
+  late final _$compilationErrorAtom = Atom(
+    name: '_ScriptEditorStore.compilationError',
+    context: context,
+  );
+
+  @override
+  String? get compilationError {
+    _$compilationErrorAtom.reportRead();
+    return super.compilationError;
+  }
+
+  @override
+  set compilationError(String? value) {
+    _$compilationErrorAtom.reportWrite(value, super.compilationError, () {
+      super.compilationError = value;
+    });
+  }
+
+  late final _$lastCompiledAtAtom = Atom(
+    name: '_ScriptEditorStore.lastCompiledAt',
+    context: context,
+  );
+
+  @override
+  DateTime? get lastCompiledAt {
+    _$lastCompiledAtAtom.reportRead();
+    return super.lastCompiledAt;
+  }
+
+  @override
+  set lastCompiledAt(DateTime? value) {
+    _$lastCompiledAtAtom.reportWrite(value, super.lastCompiledAt, () {
+      super.lastCompiledAt = value;
+    });
+  }
+
   late final _$nameErrorAtom = Atom(
     name: '_ScriptEditorStore.nameError',
     context: context,
@@ -513,6 +567,82 @@ mixin _$ScriptEditorStore on _ScriptEditorStore, Store {
     });
   }
 
+  late final _$isValidatingAtom = Atom(
+    name: '_ScriptEditorStore.isValidating',
+    context: context,
+  );
+
+  @override
+  bool get isValidating {
+    _$isValidatingAtom.reportRead();
+    return super.isValidating;
+  }
+
+  @override
+  set isValidating(bool value) {
+    _$isValidatingAtom.reportWrite(value, super.isValidating, () {
+      super.isValidating = value;
+    });
+  }
+
+  late final _$isValidSyntaxAtom = Atom(
+    name: '_ScriptEditorStore.isValidSyntax',
+    context: context,
+  );
+
+  @override
+  bool get isValidSyntax {
+    _$isValidSyntaxAtom.reportRead();
+    return super.isValidSyntax;
+  }
+
+  @override
+  set isValidSyntax(bool value) {
+    _$isValidSyntaxAtom.reportWrite(value, super.isValidSyntax, () {
+      super.isValidSyntax = value;
+    });
+  }
+
+  late final _$syntaxValidationErrorAtom = Atom(
+    name: '_ScriptEditorStore.syntaxValidationError',
+    context: context,
+  );
+
+  @override
+  String? get syntaxValidationError {
+    _$syntaxValidationErrorAtom.reportRead();
+    return super.syntaxValidationError;
+  }
+
+  @override
+  set syntaxValidationError(String? value) {
+    _$syntaxValidationErrorAtom.reportWrite(
+      value,
+      super.syntaxValidationError,
+      () {
+        super.syntaxValidationError = value;
+      },
+    );
+  }
+
+  late final _$isUploadingProjectAtom = Atom(
+    name: '_ScriptEditorStore.isUploadingProject',
+    context: context,
+  );
+
+  @override
+  bool get isUploadingProject {
+    _$isUploadingProjectAtom.reportRead();
+    return super.isUploadingProject;
+  }
+
+  @override
+  set isUploadingProject(bool value) {
+    _$isUploadingProjectAtom.reportWrite(value, super.isUploadingProject, () {
+      super.isUploadingProject = value;
+    });
+  }
+
   late final _$currentTabAtom = Atom(
     name: '_ScriptEditorStore.currentTab',
     context: context,
@@ -539,6 +669,38 @@ mixin _$ScriptEditorStore on _ScriptEditorStore, Store {
   @override
   Future<void> testScript(TestRequest testRequest) {
     return _$testScriptAsyncAction.run(() => super.testScript(testRequest));
+  }
+
+  late final _$validateSyntaxAsyncAction = AsyncAction(
+    '_ScriptEditorStore.validateSyntax',
+    context: context,
+  );
+
+  @override
+  Future<void> validateSyntax() {
+    return _$validateSyntaxAsyncAction.run(() => super.validateSyntax());
+  }
+
+  late final _$uploadProjectZipAsyncAction = AsyncAction(
+    '_ScriptEditorStore.uploadProjectZip',
+    context: context,
+  );
+
+  @override
+  Future<Map<String, dynamic>?> uploadProjectZip(List<int> zipBytes) {
+    return _$uploadProjectZipAsyncAction.run(
+      () => super.uploadProjectZip(zipBytes),
+    );
+  }
+
+  late final _$loadProjectFilesAsyncAction = AsyncAction(
+    '_ScriptEditorStore.loadProjectFiles',
+    context: context,
+  );
+
+  @override
+  Future<List<Map<String, dynamic>>> loadProjectFiles() {
+    return _$loadProjectFilesAsyncAction.run(() => super.loadProjectFiles());
   }
 
   late final _$_ScriptEditorStoreActionController = ActionController(
@@ -907,6 +1069,18 @@ mixin _$ScriptEditorStore on _ScriptEditorStore, Store {
   }
 
   @override
+  void clearValidation() {
+    final _$actionInfo = _$_ScriptEditorStoreActionController.startAction(
+      name: '_ScriptEditorStore.clearValidation',
+    );
+    try {
+      return super.clearValidation();
+    } finally {
+      _$_ScriptEditorStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   String toString() {
     return '''
 editingScriptId: ${editingScriptId},
@@ -928,6 +1102,9 @@ hostPattern: ${hostPattern},
 patternType: ${patternType},
 timeoutMs: ${timeoutMs},
 memoryLimitMB: ${memoryLimitMB},
+compilationStatus: ${compilationStatus},
+compilationError: ${compilationError},
+lastCompiledAt: ${lastCompiledAt},
 nameError: ${nameError},
 codeError: ${codeError},
 sourceFilesError: ${sourceFilesError},
@@ -935,6 +1112,10 @@ errorMessage: ${errorMessage},
 isTesting: ${isTesting},
 testResult: ${testResult},
 testError: ${testError},
+isValidating: ${isValidating},
+isValidSyntax: ${isValidSyntax},
+syntaxValidationError: ${syntaxValidationError},
+isUploadingProject: ${isUploadingProject},
 currentTab: ${currentTab},
 isValid: ${isValid},
 isEditing: ${isEditing},

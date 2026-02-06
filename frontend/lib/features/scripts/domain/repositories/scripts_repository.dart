@@ -20,7 +20,7 @@ abstract class ScriptsRepository {
   Future<void> delete(String id);
 
   /// Toggle script enabled/disabled status
-  Future<void> toggle(String id, bool enabled);
+  Future<Map<String, dynamic>> toggle(String id, bool enabled);
 
   /// Test script with sample request
   /// Note: Backend may not have this endpoint yet, might need to add it
@@ -34,4 +34,20 @@ abstract class ScriptsRepository {
 
   /// Import script from ZIP file bytes
   Future<Script> importFromZip(List<int> zipBytes);
+
+  /// Upload ZIP with project files
+  Future<Map<String, dynamic>> uploadProject(String id, List<int> zipBytes);
+
+  /// Validate script syntax without compilation
+  Future<Map<String, dynamic>> validateSyntax({
+    required String sourceCode,
+    required String language,
+    Map<String, String>? dependencies,
+  });
+
+  /// List all files in script project
+  Future<Map<String, dynamic>> listProjectFiles(String id);
+
+  /// Returns download URL for project ZIP
+  String getDownloadProjectUrl(String id);
 }

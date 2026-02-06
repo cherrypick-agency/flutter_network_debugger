@@ -42,7 +42,7 @@ func (h *CompilationHandlers) CompileScript(w http.ResponseWriter, r *http.Reque
 	// Extract script ID from URL (Go 1.22+ routing)
 	scriptID := r.PathValue("id")
 	if scriptID == "" {
-		http.Error(w, "script id required", http.StatusBadRequest)
+		writeJSONError(w, "script id required", http.StatusBadRequest)
 		return
 	}
 
@@ -96,7 +96,7 @@ type ValidateSyntaxResponse struct {
 func (h *CompilationHandlers) ValidateSyntax(w http.ResponseWriter, r *http.Request) {
 	var req ValidateSyntaxRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

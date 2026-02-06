@@ -1,23 +1,23 @@
-import 'package:flutter/foundation.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-@immutable
-class InterceptConfig {
-  const InterceptConfig({
-    required this.enabled,
-    required this.requests,
-    required this.responses,
-    required this.timeoutMs,
-    required this.queueMax,
-    required this.bodyMaxBytes,
-    required this.reencode,
-    required this.overflow,
-  });
-  final bool enabled;
-  final bool requests;
-  final bool responses;
-  final int timeoutMs;
-  final int queueMax;
-  final int bodyMaxBytes;
-  final bool reencode;
-  final String overflow; // auto-continue-oldest | drop-new
+part 'intercept_config.freezed.dart';
+part 'intercept_config.g.dart';
+
+@freezed
+sealed class InterceptConfig with _$InterceptConfig {
+  const InterceptConfig._();
+
+  const factory InterceptConfig({
+    @Default(false) bool enabled,
+    @Default(true) bool requests,
+    @Default(true) bool responses,
+    @Default(60000) int timeoutMs,
+    @Default(200) int queueMax,
+    @Default(1048576) int bodyMaxBytes,
+    @Default(true) bool reencode,
+    @Default('auto-continue-oldest') String overflow,
+  }) = _InterceptConfig;
+
+  factory InterceptConfig.fromJson(Map<String, dynamic> json) =>
+      _$InterceptConfigFromJson(json);
 }
