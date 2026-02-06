@@ -3,7 +3,7 @@ import '../mapping_rule.dart';
 
 abstract class MappingRepository {
   Future<MappingConfig> getConfig();
-  Future<void> setConfig(MappingConfig cfg);
+  Future<MappingConfig> setConfig(MappingConfig cfg);
 
   Future<List<MappingRule>> listRules();
   Future<MappingRule> upsert(MappingRule rule);

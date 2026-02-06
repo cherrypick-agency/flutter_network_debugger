@@ -14,8 +14,9 @@ class MappingRepositoryImpl implements MappingRepository {
   }
 
   @override
-  Future<void> setConfig(MappingConfig cfg) async {
-    await _api.setConfig(cfg.toJson());
+  Future<MappingConfig> setConfig(MappingConfig cfg) async {
+    final m = await _api.setConfig(cfg.toJson());
+    return MappingConfig.fromJson(m);
   }
 
   @override

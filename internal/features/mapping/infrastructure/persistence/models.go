@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 
 	mdomain "network-debugger/internal/features/mapping/domain"
@@ -74,7 +75,9 @@ func toModel(d mdomain.MapRule) *MapRuleModel {
 func toDomain(m *MapRuleModel) mdomain.MapRule {
 	var methods []string
 	if m.MethodsJSON != "" {
-		_ = json.Unmarshal([]byte(m.MethodsJSON), &methods)
+		if err := json.Unmarshal([]byte(m.MethodsJSON), &methods); err != nil {
+			log.Printf("[MappingPersistence] toDomain: failed to unmarshal methods JSON for rule %s: %v", m.ID, err)
+		}
 	}
 	return mdomain.MapRule{
 		ID:                  m.ID,

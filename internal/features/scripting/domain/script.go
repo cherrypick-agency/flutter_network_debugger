@@ -105,8 +105,16 @@ func (s *Script) Validate() error {
 	if s.Runtime == "" {
 		return errors.New("script runtime is required")
 	}
+	validRuntimes := map[ScriptRuntime]bool{RuntimeExtism: true, RuntimeDart: true}
+	if !validRuntimes[s.Runtime] {
+		return fmt.Errorf("invalid runtime: %s (must be 'extism' or 'dart')", s.Runtime)
+	}
 	if s.TriggerType == "" {
 		return errors.New("trigger type is required")
+	}
+	validTriggerTypes := map[TriggerType]bool{TriggerRequest: true, TriggerResponse: true, TriggerBoth: true}
+	if !validTriggerTypes[s.TriggerType] {
+		return fmt.Errorf("invalid trigger type: %s (must be 'request', 'response', or 'both')", s.TriggerType)
 	}
 	if s.Language == "" {
 		return errors.New("script language is required")

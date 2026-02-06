@@ -276,6 +276,7 @@ abstract class _ScriptEditorStore with Store {
     isValidSyntax = false;
     syntaxValidationError = null;
     isUploadingProject = false;
+    errorMessage = null;
   }
 
   @action

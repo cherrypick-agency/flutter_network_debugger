@@ -6,7 +6,6 @@ import '../../../../../core/notifications/notifications_service.dart';
 import '../../../../../theme/context_ext.dart';
 import '../../../application/stores/mapping_config_store.dart';
 import '../../../application/stores/mapping_store.dart';
-import 'activity_panel.dart';
 import 'config_panel.dart';
 import 'rules_panel.dart';
 
@@ -24,7 +23,7 @@ class _MappingDialogState extends State<MappingDialog>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 2, vsync: this);
 
     Future.microtask(() async {
       try {
@@ -84,7 +83,6 @@ class _MappingDialogState extends State<MappingDialog>
                   tabs: const [
                     Tab(text: 'Rules'),
                     Tab(text: 'Config'),
-                    Tab(text: 'Activity'),
                   ],
                 ),
                 const Divider(height: 1),
@@ -94,7 +92,6 @@ class _MappingDialogState extends State<MappingDialog>
                     children: const [
                       MappingRulesPanel(),
                       MappingConfigPanel(),
-                      MappingActivityPanel(),
                     ],
                   ),
                 ),

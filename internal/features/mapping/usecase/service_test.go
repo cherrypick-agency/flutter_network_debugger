@@ -12,6 +12,7 @@ import (
 // Mock repository for testing
 type mockMapRulesRepository struct {
 	listFunc    func(ctx context.Context) ([]mdomain.MapRule, error)
+	getByIDFunc func(ctx context.Context, id string) (*mdomain.MapRule, error)
 	upsertFunc  func(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error)
 	deleteFunc  func(ctx context.Context, id string) error
 	reorderFunc func(ctx context.Context, ids []string) error
@@ -22,6 +23,13 @@ func (m *mockMapRulesRepository) List(ctx context.Context) ([]mdomain.MapRule, e
 		return m.listFunc(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockMapRulesRepository) GetByID(ctx context.Context, id string) (*mdomain.MapRule, error) {
+	if m.getByIDFunc != nil {
+		return m.getByIDFunc(ctx, id)
+	}
+	return nil, mdomain.RuleNotFoundError{ID: id}
 }
 
 func (m *mockMapRulesRepository) Upsert(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error) {
@@ -51,7 +59,7 @@ func TestNewService(t *testing.T) {
 	if svc == nil {
 		t.Fatal("NewService() returned nil")
 	}
-	if svc.repo != repo {
+	if svc.repo != mdomain.MapRulesRepository(repo) {
 		t.Error("NewService() did not set repository correctly")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -42,6 +43,7 @@ import (
 )
 
 type Deps struct {
+	CfgMu                   sync.Mutex
 	Cfg                     config.Config
 	Logger                  *zerolog.Logger
 	Metrics                 *obs.Metrics

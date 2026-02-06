@@ -555,6 +555,8 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   }
 
   Future<void> _save() async {
+    if (_isSaving) return;
+
     if (!_editorStore.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -565,10 +567,10 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
       return;
     }
 
+    setState(() => _isSaving = true);
+
     // Before saving, forcefully flush unsaved editor changes
     await _editorDI?.flushUnsavedChanges();
-
-    setState(() => _isSaving = true);
 
     try {
       final script = _editorStore.buildScript();
@@ -716,8 +718,11 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
         optimize: true,
       );
 
-      // Update editor with compiled script
-      _editorStore.initForEdit(compiledScript);
+      // Update only compilation-related fields to preserve unsaved edits
+      _editorStore.compilationStatus = compiledScript.compilationStatus;
+      _editorStore.compilationError = compiledScript.compilationError;
+      _editorStore.lastCompiledAt = compiledScript.lastCompiledAt;
+      _editorStore.code = compiledScript.code;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -782,8 +787,21 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   }
 
   Future<void> _confirmClose(BuildContext context) async {
-    // Check if there are unsaved changes
-    if (_editorStore.code.isNotEmpty || _editorStore.name.isNotEmpty) {
+    // Block close during active operations
+    if (_isSaving || widget.scriptsStore.isCompiling || _isDownloadingProject) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait for the current operation to complete'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Check if there are unsaved changes (including source files for writeSource mode)
+    if (_editorStore.code.isNotEmpty ||
+        _editorStore.name.isNotEmpty ||
+        _editorStore.sourceFiles.isNotEmpty) {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(

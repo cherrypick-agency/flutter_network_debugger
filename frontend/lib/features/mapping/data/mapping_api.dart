@@ -23,12 +23,13 @@ class MappingApi {
     return resp.data ?? <String, dynamic>{};
   }
 
-  Future<void> setConfig(Map<String, dynamic> body) async {
-    await _http.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>> setConfig(Map<String, dynamic> body) async {
+    final resp = await _http.post<Map<String, dynamic>>(
       path: '/_api/v1/mapping/config',
       body: body,
       headers: await _hdrs(),
     );
+    return resp.data ?? body;
   }
 
   Future<List<dynamic>> listRules() async {

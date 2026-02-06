@@ -237,10 +237,10 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// If enabled flag was provided, update it atomically (avoid race condition)
 		if req.Enabled != nil && *req.Enabled {
 			if err := h.service.ToggleScript(r.Context(), scriptID, true); err != nil {
-				log.Printf("[ScriptHandlers] WARNING: Failed to enable script %s: %v", scriptID, err)
+				writeJSONError(w, "script created but failed to enable: "+err.Error(), http.StatusInternalServerError)
+				return
 			}
 		}
 
@@ -394,6 +394,11 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if script.CompilationStatus == domain.CompilationCompiling {
+		writeJSONError(w, "cannot update script while compilation is in progress", http.StatusConflict)
+		return
+	}
+
 	// Apply updates
 	if req.Name != nil {
 		script.Name = *req.Name
@@ -402,12 +407,12 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		script.Description = *req.Description
 	}
 	if req.Code != nil {
-		// Accept base64, but just in case also support "as is"
-		if decoded, err := base64.StdEncoding.DecodeString(*req.Code); err == nil {
-			script.Code = decoded
-		} else {
-			script.Code = []byte(*req.Code)
+		decoded, err := base64.StdEncoding.DecodeString(*req.Code)
+		if err != nil {
+			writeJSONError(w, "invalid base64 code: "+err.Error(), http.StatusBadRequest)
+			return
 		}
+		script.Code = decoded
 	}
 	if req.Language != nil {
 		script.Language = *req.Language
@@ -532,8 +537,14 @@ func (h *ScriptHandlers) ToggleScript(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
 			return
 		}
-		if len(script.Code) == 0 {
-			writeJSONError(w, "cannot enable script without compiled WASM code", http.StatusBadRequest)
+		// For Extism runtime: require compiled WASM code
+		// For Dart runtime: require either compiled code or source code
+		hasExecutableCode := len(script.Code) > 0
+		if script.Runtime == domain.RuntimeDart {
+			hasExecutableCode = hasExecutableCode || script.SourceCode != ""
+		}
+		if !hasExecutableCode {
+			writeJSONError(w, "cannot enable script without executable code", http.StatusBadRequest)
 			return
 		}
 		if script.CompilationStatus == domain.CompilationStatusError {
@@ -704,9 +715,9 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get uploaded file
-	file, header, err := r.FormFile("project")
+	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeJSONError(w, "project file required: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, "file required: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -803,18 +814,12 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, fmt.Sprintf("file %s has suspicious compression ratio (max %d:1)", sanitizedName, maxCompressionRatio), http.StatusBadRequest)
 				return
 			}
-		}
-
-		// Open file in ZIP
-		rc, err := zipFile.Open()
-		if err != nil {
-			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", sanitizedName, err), http.StatusInternalServerError)
+		} else if zipFile.UncompressedSize64 > maxSingleFileSize {
+			writeJSONError(w, fmt.Sprintf("stored file %s too large (max %dKB)", sanitizedName, maxSingleFileSize/1024), http.StatusBadRequest)
 			return
 		}
 
-		// Read file content with LimitReader
-		content, err := io.ReadAll(io.LimitReader(rc, int64(maxSingleFileSize)+1))
-		rc.Close()
+		content, err := readZipFile(zipFile, int64(maxSingleFileSize))
 		if err != nil {
 			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", sanitizedName, err), http.StatusInternalServerError)
 			return
@@ -1063,6 +1068,19 @@ func mapsEqual(a, b map[string]string) bool {
 	return true
 }
 
+func readZipFile(zipFile *zip.File, maxSize int64) ([]byte, error) {
+	rc, err := zipFile.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open: %w", err)
+	}
+	defer rc.Close()
+	content, err := io.ReadAll(io.LimitReader(rc, maxSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read: %w", err)
+	}
+	return content, nil
+}
+
 // sanitizeZipFilename validates and sanitizes a filename from a ZIP archive
 // to prevent path traversal attacks
 func sanitizeZipFilename(name string) (string, error) {
@@ -1274,16 +1292,12 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 				writeJSONError(w, fmt.Sprintf("file %s has suspicious compression ratio (max %d:1)", sanitizedName, maxCompressionRatio), http.StatusBadRequest)
 				return
 			}
-		}
-
-		rc, err := zipFile.Open()
-		if err != nil {
-			writeJSONError(w, fmt.Sprintf("failed to open %s: %v", sanitizedName, err), http.StatusInternalServerError)
+		} else if zipFile.UncompressedSize64 > maxSingleFileSize {
+			writeJSONError(w, fmt.Sprintf("stored file %s too large (max %dKB)", sanitizedName, maxSingleFileSize/1024), http.StatusBadRequest)
 			return
 		}
 
-		content, err := io.ReadAll(io.LimitReader(rc, int64(maxSingleFileSize)+1))
-		rc.Close()
+		content, err := readZipFile(zipFile, int64(maxSingleFileSize))
 		if err != nil {
 			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", sanitizedName, err), http.StatusInternalServerError)
 			return

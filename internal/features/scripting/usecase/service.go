@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -15,8 +16,9 @@ import (
 // ScriptService orchestrates script execution across multiple runtimes
 // This is the main use case layer following Clean Architecture
 type ScriptService struct {
-	executors map[domain.ScriptRuntime]domain.ScriptExecutor
-	repo      domain.ScriptRepository
+	executors  map[domain.ScriptRuntime]domain.ScriptExecutor
+	repo       domain.ScriptRepository
+	regexCache sync.Map
 }
 
 const maxScriptBodyBytes = 64 * 1024
@@ -345,11 +347,17 @@ func (s *ScriptService) matchPattern(value string, pattern string, patternType d
 	case domain.PatternWildcard:
 		return matchWildcard(value, pattern)
 	case domain.PatternRegex:
-		// Compile and match regex pattern
-		compiled, err := regexp.Compile(pattern)
-		if err != nil {
-			log.Printf("[ScriptService] Invalid regex pattern '%s': %v", pattern, err)
-			return false
+		var compiled *regexp.Regexp
+		if cached, ok := s.regexCache.Load(pattern); ok {
+			compiled = cached.(*regexp.Regexp)
+		} else {
+			var err error
+			compiled, err = regexp.Compile(pattern)
+			if err != nil {
+				log.Printf("[ScriptService] Invalid regex pattern '%s': %v", pattern, err)
+				return false
+			}
+			s.regexCache.Store(pattern, compiled)
 		}
 		return compiled.MatchString(value)
 	default:

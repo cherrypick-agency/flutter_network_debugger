@@ -17,6 +17,10 @@ func (s *Service) List(ctx context.Context) ([]mdomain.MapRule, error) {
 	return s.repo.List(ctx)
 }
 
+func (s *Service) GetByID(ctx context.Context, id string) (*mdomain.MapRule, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 func (s *Service) Upsert(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error) {
 	// date normalization
 	now := time.Now().UTC()

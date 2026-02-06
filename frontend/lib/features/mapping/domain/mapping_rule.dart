@@ -1,80 +1,87 @@
+import 'package:freezed_annotation/freezed_annotation.dart';
+
 import '../../../core/utils/json_cast.dart';
 
-class MappingRule {
-  MappingRule({
-    required this.id,
-    required this.enabled,
-    required this.priority,
-    required this.kind,
-    required this.stopProcessing,
-    required this.methods,
-    required this.hostPattern,
-    required this.pathPattern,
-    required this.patternType,
-    this.filePath,
-    this.blobPath,
-    this.statusOverride,
-    this.contentTypeOverride,
-    this.targetURLTemplate,
-    this.preserveHost = false,
-  });
+part 'mapping_rule.freezed.dart';
 
-  final String id;
-  final bool enabled;
-  final int priority;
-  final String kind; // local|remote
-  final bool stopProcessing;
-  final List<String> methods;
-  final String hostPattern;
-  final String pathPattern;
-  final String patternType; // glob|regex
-  final String? filePath;
-  final String? blobPath;
-  final int? statusOverride;
-  final String? contentTypeOverride;
-  final String? targetURLTemplate;
-  final bool preserveHost;
+@Freezed(toJson: false, fromJson: false)
+sealed class MappingRule with _$MappingRule {
+  const MappingRule._();
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'enabled': enabled,
-    'priority': priority,
-    'kind': kind,
-    'stopProcessing': stopProcessing,
-    'methods': methods,
-    'hostPattern': hostPattern,
-    'pathPattern': pathPattern,
-    'patternType': patternType,
-    'filePath': filePath,
-    'blobPath': blobPath,
-    // Backend currently does not accept null for these fields, so we send safe
-    // default values.
-    'statusOverride': statusOverride ?? 200,
-    'contentTypeOverride': contentTypeOverride ?? '',
-    'targetURLTemplate': targetURLTemplate ?? '',
-    'preserveHost': preserveHost,
-  };
+  const factory MappingRule({
+    required String id,
+    @Default(true) bool enabled,
+    @Default(100) int priority,
+    @Default('local') String kind,
+    @Default(true) bool stopProcessing,
+    @Default([]) List<String> methods,
+    @Default('') String hostPattern,
+    @Default('') String pathPattern,
+    @Default('glob') String patternType,
+    String? filePath,
+    String? blobPath,
+    int? statusOverride,
+    String? contentTypeOverride,
+    String? targetURLTemplate,
+    @Default(false) bool preserveHost,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) = _MappingRule;
+
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{
+      'id': id,
+      'enabled': enabled,
+      'priority': priority,
+      'kind': kind,
+      'stopProcessing': stopProcessing,
+      'methods': methods,
+      'hostPattern': hostPattern,
+      'pathPattern': pathPattern,
+      'patternType': patternType,
+    };
+    if (kind == 'local') {
+      m['filePath'] = filePath;
+      m['blobPath'] = blobPath;
+      m['statusOverride'] = statusOverride ?? 200;
+      m['contentTypeOverride'] = contentTypeOverride ?? '';
+    }
+    if (kind == 'remote') {
+      m['targetURLTemplate'] = targetURLTemplate ?? '';
+      m['preserveHost'] = preserveHost;
+    }
+    if (updatedAt != null) {
+      m['updatedAt'] = updatedAt!.toIso8601String();
+    }
+    return m;
+  }
 
   static MappingRule fromJson(Map<String, dynamic> j) => MappingRule(
-    id: (j['id'] ?? '').toString(),
-    enabled: JsonCast.asBool(j['enabled'], fallback: true),
-    priority: JsonCast.asInt(j['priority'], fallback: 0),
-    kind: (j['kind'] ?? 'remote').toString(),
-    stopProcessing: JsonCast.asBool(j['stopProcessing'], fallback: true),
-    methods: ((j['methods'] as List<dynamic>?) ?? const <dynamic>[])
-        .map((e) => (e ?? '').toString())
-        .where((e) => e.isNotEmpty)
-        .toList(),
-    hostPattern: (j['hostPattern'] ?? '').toString(),
-    pathPattern: (j['pathPattern'] ?? '').toString(),
-    patternType: (j['patternType'] ?? 'glob').toString(),
-    filePath: (j['filePath'] as String?),
-    blobPath: (j['blobPath'] as String?),
-    statusOverride: j['statusOverride'] == null
-        ? null
-        : JsonCast.asInt(j['statusOverride'], fallback: 0),
-    contentTypeOverride: (j['contentTypeOverride'] as String?),
-    targetURLTemplate: (j['targetURLTemplate'] as String?),
-    preserveHost: JsonCast.asBool(j['preserveHost'], fallback: false),
-  );
+        id: (j['id'] ?? '').toString(),
+        enabled: JsonCast.asBool(j['enabled'], fallback: true),
+        priority: JsonCast.asInt(j['priority'], fallback: 100),
+        kind: (j['kind'] ?? 'local').toString(),
+        stopProcessing: JsonCast.asBool(j['stopProcessing'], fallback: true),
+        methods: ((j['methods'] as List<dynamic>?) ?? const <dynamic>[])
+            .map((e) => (e ?? '').toString())
+            .where((e) => e.isNotEmpty)
+            .toList(),
+        hostPattern: (j['hostPattern'] ?? '').toString(),
+        pathPattern: (j['pathPattern'] ?? '').toString(),
+        patternType: (j['patternType'] ?? 'glob').toString(),
+        filePath: (j['filePath'] as String?),
+        blobPath: (j['blobPath'] as String?),
+        statusOverride: j['statusOverride'] == null
+            ? null
+            : JsonCast.asInt(j['statusOverride'], fallback: 0),
+        contentTypeOverride: (j['contentTypeOverride'] as String?),
+        targetURLTemplate: (j['targetURLTemplate'] as String?),
+        preserveHost: JsonCast.asBool(j['preserveHost'], fallback: false),
+        createdAt: j['createdAt'] != null
+            ? DateTime.tryParse(j['createdAt'].toString())
+            : null,
+        updatedAt: j['updatedAt'] != null
+            ? DateTime.tryParse(j['updatedAt'].toString())
+            : null,
+      );
 }

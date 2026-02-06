@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -68,7 +69,8 @@ type mapRuleInputDTO struct {
 	ContentTypeOverride *string `json:"contentTypeOverride"`
 	TargetURLTemplate   *string `json:"targetURLTemplate"`
 
-	PreserveHost bool `json:"preserveHost"`
+	PreserveHost bool       `json:"preserveHost"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 }
 
 func toDTO(d mdomain.MapRule) mapRuleDTO {
@@ -78,7 +80,7 @@ func toDTO(d mdomain.MapRule) mapRuleDTO {
 		Priority:            d.Priority,
 		Kind:                string(d.Kind),
 		StopProcessing:      d.StopProcessing,
-		Methods:             append([]string(nil), d.Methods...),
+		Methods:             append([]string{}, d.Methods...),
 		HostPattern:         d.HostPattern,
 		PathPattern:         d.PathPattern,
 		PatternType:         string(d.PatternType),
@@ -295,7 +297,9 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 			cfg.UploadMaxMB = 20
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(cfg)
+		if err := json.NewEncoder(w).Encode(cfg); err != nil {
+			log.Printf("[MappingHandler] encode error: %v", err)
+		}
 	case http.MethodPost:
 		// Accept and save to runtime_settings (if available)
 		var in mappingConfigDTO
@@ -312,27 +316,23 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		d.CfgMu.Lock()
 		d.Cfg.MappingEnabled = in.Enabled
 		d.Cfg.MappingUploadMaxMB = in.UploadMaxMB
+		d.CfgMu.Unlock()
 
 		if d.Settings != nil {
 			cur, _ := d.Settings.Load(contextWithNoCancel())
-			cur.MappingEnabled = d.Cfg.MappingEnabled
-			cur.MappingUploadMaxMB = d.Cfg.MappingUploadMaxMB
-			// save other settings to avoid losing them on update
-			cur.ResponseDelayMs = d.Cfg.ResponseDelayMs
-			cur.ResponseDelayMinMs = d.Cfg.ResponseDelayMinMs
-			cur.ResponseDelayMaxMs = d.Cfg.ResponseDelayMaxMs
-			cur.ThrottleEnabled = d.Cfg.ThrottleEnabled
-			cur.ThrottleDownKbps = d.Cfg.ThrottleDownKbps
-			cur.ThrottleUpKbps = d.Cfg.ThrottleUpKbps
-			cur.ThrottlePacketLoss = d.Cfg.ThrottlePacketLoss
-			cur.ThrottleOffline = d.Cfg.ThrottleOffline
+			cur.MappingEnabled = in.Enabled
+			cur.MappingUploadMaxMB = in.UploadMaxMB
 			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), cur)
 		}
 
+		log.Printf("[MappingHandler] config updated: enabled=%v uploadMaxMB=%d", in.Enabled, in.UploadMaxMB)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(in)
+		if err := json.NewEncoder(w).Encode(in); err != nil {
+			log.Printf("[MappingHandler] encode error: %v", err)
+		}
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 	}
@@ -352,6 +352,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := d.Mapping.List(r.Context())
 		if err != nil {
+			log.Printf("[MappingHandler] list rules: %v", err)
 			writeError(w, http.StatusInternalServerError, "LIST_FAILED", err.Error(), nil)
 			return
 		}
@@ -360,7 +361,9 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 			out = append(out, toDTO(it))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
+		if err := json.NewEncoder(w).Encode(out); err != nil {
+			log.Printf("[MappingHandler] encode error: %v", err)
+		}
 	case http.MethodPost:
 		// either upsert single record, or reorder (if path ends with /reorder)
 		if strings.HasSuffix(r.URL.Path, "/reorder") {
@@ -382,18 +385,43 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 				}
 				seen[idv] = struct{}{}
 			}
+			// validate that submitted IDs contain ALL existing rule IDs
+			allRules, err := d.Mapping.List(r.Context())
+			if err != nil {
+				log.Printf("[MappingHandler] reorder: failed to list rules: %v", err)
+				writeError(w, http.StatusInternalServerError, "LIST_FAILED", err.Error(), nil)
+				return
+			}
+			if len(ids) != len(allRules) {
+				writeError(w, http.StatusBadRequest, "BAD_IDS", "submitted IDs must contain all existing rule IDs", map[string]any{
+					"field":    "ids",
+					"expected": len(allRules),
+					"got":      len(ids),
+				})
+				return
+			}
+			for _, rule := range allRules {
+				if _, ok := seen[rule.ID]; !ok {
+					writeError(w, http.StatusBadRequest, "BAD_IDS", "submitted IDs must contain all existing rule IDs", map[string]any{
+						"field":     "ids",
+						"missingId": rule.ID,
+					})
+					return
+				}
+			}
 			if err := d.Mapping.Reorder(r.Context(), ids); err != nil {
 				var nf mdomain.RuleNotFoundError
 				if errors.As(err, &nf) {
 					writeError(
 						w,
-						http.StatusBadRequest,
+						http.StatusConflict,
 						"BAD_IDS",
-						"unknown id in reorder list",
+						"rule was deleted by another user during reorder, please reload",
 						map[string]any{"field": "ids", "id": nf.ID},
 					)
 					return
 				}
+				log.Printf("[MappingHandler] reorder rules: %v", err)
 				writeError(w, http.StatusInternalServerError, "REORDER_FAILED", err.Error(), nil)
 				return
 			}
@@ -403,6 +431,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 					d.MapRt.Update(rules)
 				}
 			}
+			log.Printf("[MappingHandler] rules reordered: count=%d", len(ids))
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -412,14 +441,22 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// for orphan blob cleanup: find old blobPath if this is an update
+		// for orphan blob cleanup and optimistic locking: find existing rule if editing
 		oldBlob := ""
 		if strings.TrimSpace(in.ID) != "" {
-			if list, err := d.Mapping.List(r.Context()); err == nil {
-				for _, it := range list {
-					if it.ID == strings.TrimSpace(in.ID) && it.BlobPath != nil && strings.TrimSpace(*it.BlobPath) != "" {
-						oldBlob = *it.BlobPath
-						break
+			if old, err := d.Mapping.GetByID(r.Context(), strings.TrimSpace(in.ID)); err == nil && old != nil {
+				if old.BlobPath != nil && strings.TrimSpace(*old.BlobPath) != "" {
+					oldBlob = *old.BlobPath
+				}
+				// optimistic locking: compare updatedAt timestamps
+				if in.UpdatedAt != nil {
+					if !old.UpdatedAt.Truncate(time.Second).Equal(in.UpdatedAt.Truncate(time.Second)) {
+						writeError(w, http.StatusConflict, "CONFLICT", "rule was modified by another user, please reload", map[string]any{
+							"field":           "updatedAt",
+							"serverUpdatedAt": old.UpdatedAt,
+							"clientUpdatedAt": *in.UpdatedAt,
+						})
+						return
 					}
 				}
 			}
@@ -432,6 +469,7 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 		}
 		saved, err := d.Mapping.Upsert(r.Context(), rule)
 		if err != nil {
+			log.Printf("[MappingHandler] upsert rule: %v", err)
 			writeError(w, http.StatusInternalServerError, "UPSERT_FAILED", err.Error(), nil)
 			return
 		}
@@ -444,8 +482,11 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 		if oldBlob != "" && (saved.BlobPath == nil || strings.TrimSpace(*saved.BlobPath) == "" || strings.TrimSpace(*saved.BlobPath) != strings.TrimSpace(oldBlob)) {
 			d.tryRemoveOrphanMappingBlob(r.Context(), oldBlob)
 		}
+		log.Printf("[MappingHandler] rule upserted: id=%s kind=%s", saved.ID, saved.Kind)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(toDTO(saved))
+		if err := json.NewEncoder(w).Encode(toDTO(saved)); err != nil {
+			log.Printf("[MappingHandler] encode error: %v", err)
+		}
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 	}
@@ -472,15 +513,13 @@ func (d *Deps) handleMappingRuleByID(w http.ResponseWriter, r *http.Request) {
 	}
 	// remember blobPath before deletion (to remove orphan file)
 	oldBlob := ""
-	if list, err := d.Mapping.List(r.Context()); err == nil {
-		for _, it := range list {
-			if it.ID == id && it.BlobPath != nil && strings.TrimSpace(*it.BlobPath) != "" {
-				oldBlob = *it.BlobPath
-				break
-			}
+	if old, err := d.Mapping.GetByID(r.Context(), id); err == nil && old != nil {
+		if old.BlobPath != nil && strings.TrimSpace(*old.BlobPath) != "" {
+			oldBlob = *old.BlobPath
 		}
 	}
 	if err := d.Mapping.Delete(r.Context(), id); err != nil {
+		log.Printf("[MappingHandler] delete rule: %v", err)
 		writeError(w, http.StatusInternalServerError, "DELETE_FAILED", err.Error(), nil)
 		return
 	}
@@ -492,6 +531,7 @@ func (d *Deps) handleMappingRuleByID(w http.ResponseWriter, r *http.Request) {
 	if oldBlob != "" {
 		d.tryRemoveOrphanMappingBlob(r.Context(), oldBlob)
 	}
+	log.Printf("[MappingHandler] rule deleted: id=%s", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -569,6 +609,7 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 		maxMem = maxBytes
 	}
 	if err := r.ParseMultipartForm(maxMem); err != nil {
+		log.Printf("[MappingHandler] bad multipart: %v", err)
 		writeError(w, http.StatusBadRequest, "BAD_MULTIPART", err.Error(), nil)
 		return
 	}
@@ -591,10 +632,12 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+		log.Printf("[MappingHandler] spool file: %v", err)
 		writeError(w, http.StatusInternalServerError, "SPOOL_FAILED", "failed to store file", nil)
 		return
 	}
 	if path == "" {
+		log.Printf("[MappingHandler] spool file: empty path")
 		writeError(w, http.StatusInternalServerError, "SPOOL_FAILED", "failed to store file", nil)
 		return
 	}
@@ -605,12 +648,15 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 		ct = guessContentTypeByName(hdr.Filename)
 	}
 
+	log.Printf("[MappingHandler] file uploaded: path=%s name=%s", path, hdr.Filename)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"blobPath":    path,
 		"fileName":    hdr.Filename,
 		"contentType": ct,
-	})
+	}); err != nil {
+		log.Printf("[MappingHandler] encode error: %v", err)
+	}
 }
 
 func guessContentTypeByName(name string) string {

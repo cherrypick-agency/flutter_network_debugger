@@ -281,13 +281,26 @@ class DioHttpClientImpl implements AppHttpClient {
     required files,
     Map<String, String>? fields,
   }) {
+    final formData = FormData();
+    if (files is List) {
+      for (final file in files) {
+        if (file is MultipartFile) {
+          formData.files.add(MapEntry('file', file));
+        }
+      }
+    }
+    if (fields != null) {
+      for (final entry in fields.entries) {
+        formData.fields.add(MapEntry(entry.key, entry.value));
+      }
+    }
     return performRequest<T>(
       method: HttpMethod.filePost,
       host: host,
       path: path,
       headers: headers,
       query: query,
-      fields: fields,
+      body: formData,
     );
   }
 
@@ -300,13 +313,26 @@ class DioHttpClientImpl implements AppHttpClient {
     required files,
     Map<String, String>? fields,
   }) {
+    final formData = FormData();
+    if (files is List) {
+      for (final file in files) {
+        if (file is MultipartFile) {
+          formData.files.add(MapEntry('file', file));
+        }
+      }
+    }
+    if (fields != null) {
+      for (final entry in fields.entries) {
+        formData.fields.add(MapEntry(entry.key, entry.value));
+      }
+    }
     return performRequest<T>(
       method: HttpMethod.filePatch,
       host: host,
       path: path,
       headers: headers,
       query: query,
-      fields: fields,
+      body: formData,
     );
   }
 

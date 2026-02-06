@@ -320,8 +320,42 @@ class _MappingRuleEditorState extends State<MappingRuleEditor> {
     }
   }
 
+  String? _validateLocally() {
+    if (_patternType == 'regex') {
+      final host = _hostPattern.text.trim();
+      if (host.isNotEmpty) {
+        try {
+          RegExp(host);
+        } catch (e) {
+          return 'Invalid host regex: ${e.toString().replaceAll('FormatException: ', '')}';
+        }
+      }
+      final path = _pathPattern.text.trim();
+      if (path.isNotEmpty) {
+        try {
+          RegExp(path);
+        } catch (e) {
+          return 'Invalid path regex: ${e.toString().replaceAll('FormatException: ', '')}';
+        }
+      }
+    }
+    if (_kind == 'remote' && _targetURLTemplate.text.trim().isEmpty) {
+      return 'Target URL template is required for remote rules';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
     if (_saving) return;
+    final localError = _validateLocally();
+    if (localError != null) {
+      setState(() {
+        _serverErrorCode = 'VALIDATION';
+        _serverErrorMessage = localError;
+        _serverErrorField = null;
+      });
+      return;
+    }
     setState(() => _saving = true);
     try {
       final methods = _methods.text

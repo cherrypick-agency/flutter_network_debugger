@@ -1164,6 +1164,97 @@ func TestScriptHandlers_ToggleScript_ServiceError(t *testing.T) {
 	}
 }
 
+func TestScriptHandlers_ToggleScript_DartWithSourceCode(t *testing.T) {
+	scriptID := "test-dart"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:         id,
+				Runtime:    domain.RuntimeDart,
+				SourceCode: "void main() {}",
+				// Code is empty -- Dart scripts use SourceCode
+			}, nil
+		},
+		updateEnabledFunc: func(ctx context.Context, id string, enabled bool) error {
+			return nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"enabled": true,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/_api/v1/scripts/"+scriptID+"/toggle", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.ToggleScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d for Dart script with SourceCode, got %d", http.StatusOK, w.Code)
+	}
+}
+
+func TestScriptHandlers_ToggleScript_NoExecutableCode(t *testing.T) {
+	scriptID := "test-empty"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:      id,
+				Runtime: domain.RuntimeExtism,
+				// No Code, no SourceCode
+			}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"enabled": true,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/_api/v1/scripts/"+scriptID+"/toggle", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.ToggleScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for script without executable code, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ToggleScript_DartNoCode(t *testing.T) {
+	scriptID := "test-dart-empty"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:      id,
+				Runtime: domain.RuntimeDart,
+				// No Code, no SourceCode
+			}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"enabled": true,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/_api/v1/scripts/"+scriptID+"/toggle", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.ToggleScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for Dart script without any code, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
 func TestScriptHandlers_ToggleScript_EmptyID(t *testing.T) {
 	handlers := setupScriptHandlers(nil, nil)
 
@@ -1621,7 +1712,7 @@ func TestScriptHandlers_UploadProject_Success(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -1649,7 +1740,7 @@ func TestScriptHandlers_UploadProject_NotZIP(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.txt")
+	part, _ := writer.CreateFormFile("file", "project.txt")
 	part.Write([]byte("not a zip"))
 	writer.Close()
 
@@ -1681,7 +1772,7 @@ func TestScriptHandlers_UploadProject_NoFiles(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2369,7 +2460,7 @@ func TestScriptHandlers_UploadProject_UpdateScriptError(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2404,7 +2495,7 @@ func TestScriptHandlers_UploadProject_FileTooLarge(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2441,7 +2532,7 @@ func TestScriptHandlers_UploadProject_TotalSizeExceedsLimit(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2584,7 +2675,7 @@ func TestScriptHandlers_UploadProject_PathTraversal(t *testing.T) {
 	// Build multipart request
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2651,7 +2742,7 @@ func TestScriptHandlers_UploadProject_SkipsHiddenFiles(t *testing.T) {
 	// Build multipart request
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2893,7 +2984,7 @@ func TestScriptHandlers_UploadProject_TooManyFiles(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2931,7 +3022,7 @@ func TestScriptHandlers_UploadProject_DuplicateFiles(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -2961,7 +3052,7 @@ func TestScriptHandlers_UploadProject_InvalidMagicBytes(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write([]byte("this is not a zip file at all"))
 	writer.Close()
 
@@ -2997,7 +3088,7 @@ func TestScriptHandlers_UploadProject_NullByteFilename(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("project", "project.zip")
+	part, _ := writer.CreateFormFile("file", "project.zip")
 	part.Write(zipBuf.Bytes())
 	writer.Close()
 
@@ -3179,8 +3270,8 @@ func TestScriptHandlers_ToggleScript_NoWasmCode(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "compiled WASM") {
-		t.Errorf("Expected error about compiled WASM code, got: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "executable code") {
+		t.Errorf("Expected error about executable code, got: %s", w.Body.String())
 	}
 }
 

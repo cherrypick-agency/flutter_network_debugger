@@ -30,6 +30,15 @@ func (r *Repo) List(ctx context.Context) ([]mdomain.MapRule, error) {
 	return out, nil
 }
 
+func (r *Repo) GetByID(ctx context.Context, id string) (*mdomain.MapRule, error) {
+	var m MapRuleModel
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&m).Error; err != nil {
+		return nil, err
+	}
+	d := toDomain(&m)
+	return &d, nil
+}
+
 func (r *Repo) Upsert(ctx context.Context, d mdomain.MapRule) (mdomain.MapRule, error) {
 	m := toModel(d)
 	if m.ID == "" {
@@ -79,7 +88,7 @@ func (r *Repo) Delete(ctx context.Context, rid string) error {
 	return r.db.WithContext(ctx).Delete(&MapRuleModel{ID: rid}).Error
 }
 
-func (r *Repo) Reorder(ctx context.Context, ids []string) error {
+func (r *Repo) Reorder(ctx context.Context, ids []string) (err error) {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -89,7 +98,11 @@ func (r *Repo) Reorder(ctx context.Context, ids []string) error {
 	if tx.Error != nil {
 		return tx.Error
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
 
 	for i, idv := range ids {
 		prio := i + 1

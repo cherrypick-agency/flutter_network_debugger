@@ -21,6 +21,7 @@ import (
 // Mock mapping repository
 type mockMappingRepo struct {
 	listFunc    func(ctx context.Context) ([]mdomain.MapRule, error)
+	getByIDFunc func(ctx context.Context, id string) (*mdomain.MapRule, error)
 	upsertFunc  func(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error)
 	deleteFunc  func(ctx context.Context, id string) error
 	reorderFunc func(ctx context.Context, ids []string) error
@@ -31,6 +32,13 @@ func (m *mockMappingRepo) List(ctx context.Context) ([]mdomain.MapRule, error) {
 		return m.listFunc(ctx)
 	}
 	return []mdomain.MapRule{}, nil
+}
+
+func (m *mockMappingRepo) GetByID(ctx context.Context, id string) (*mdomain.MapRule, error) {
+	if m.getByIDFunc != nil {
+		return m.getByIDFunc(ctx, id)
+	}
+	return nil, mdomain.RuleNotFoundError{ID: id}
 }
 
 func (m *mockMappingRepo) Upsert(ctx context.Context, r mdomain.MapRule) (mdomain.MapRule, error) {
@@ -287,7 +295,11 @@ func TestHandleMappingRules_POST_Reorder(t *testing.T) {
 			return nil
 		},
 		listFunc: func(ctx context.Context) ([]mdomain.MapRule, error) {
-			return []mdomain.MapRule{}, nil
+			return []mdomain.MapRule{
+				{ID: "id1"},
+				{ID: "id2"},
+				{ID: "id3"},
+			}, nil
 		},
 	}
 	deps := setupMappingDepsWithRepo(repo)

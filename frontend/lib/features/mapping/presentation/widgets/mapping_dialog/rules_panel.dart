@@ -9,8 +9,15 @@ import '../../../application/stores/mapping_store.dart';
 import '../mapping_rule_editor.dart';
 import 'rule_tile.dart';
 
-class MappingRulesPanel extends StatelessWidget {
+class MappingRulesPanel extends StatefulWidget {
   const MappingRulesPanel({super.key});
+
+  @override
+  State<MappingRulesPanel> createState() => _MappingRulesPanelState();
+}
+
+class _MappingRulesPanelState extends State<MappingRulesPanel> {
+  bool _reordering = false;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +74,8 @@ class MappingRulesPanel extends StatelessWidget {
                 : ReorderableListView.builder(
                     itemCount: rows.length,
                     onReorder: (oldIndex, newIndex) async {
+                      if (_reordering) return;
+                      setState(() => _reordering = true);
                       try {
                         var ni = newIndex;
                         if (ni > oldIndex) ni -= 1;
@@ -80,6 +89,8 @@ class MappingRulesPanel extends StatelessWidget {
                           'Reorder failed',
                           e.toString(),
                         );
+                      } finally {
+                        if (mounted) setState(() => _reordering = false);
                       }
                     },
                     itemBuilder: (_, i) {
