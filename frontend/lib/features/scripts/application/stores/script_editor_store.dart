@@ -104,7 +104,7 @@ abstract class _ScriptEditorStore with Store {
 
   // Compilation state (preserved during edit)
   @observable
-  String? compilationStatus;
+  CompilationStatus? compilationStatus;
 
   @observable
   String? compilationError;
@@ -296,6 +296,10 @@ abstract class _ScriptEditorStore with Store {
     // Auto-adjust language
     if (value == ScriptRuntime.dart) {
       language = 'dart';
+      if (sourceFiles.isNotEmpty) {
+        sourceFiles.clear();
+        selectedFile = null;
+      }
     } else if (value == ScriptRuntime.extism && language == 'dart') {
       language = 'rust';
     }
@@ -633,10 +637,12 @@ abstract class _ScriptEditorStore with Store {
     }
   }
 
-  String? getDownloadProjectUrl() {
+  Future<List<int>> downloadProjectZip() async {
     final useCase = _downloadProjectUseCase;
     final scriptId = editingScriptId;
-    if (useCase == null || scriptId == null) return null;
+    if (useCase == null || scriptId == null) {
+      throw Exception('Cannot download: script not saved yet');
+    }
     return useCase(scriptId);
   }
 

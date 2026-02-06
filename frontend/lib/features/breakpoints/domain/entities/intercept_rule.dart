@@ -95,6 +95,8 @@ sealed class InterceptRule with _$InterceptRule {
     @Default(false) bool once,
     @Default(false) bool stopProcessing,
     @Default(InterceptWhen()) InterceptWhen when,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) = _InterceptRule;
 
   factory InterceptRule.fromJson(Map<String, dynamic> json) =>

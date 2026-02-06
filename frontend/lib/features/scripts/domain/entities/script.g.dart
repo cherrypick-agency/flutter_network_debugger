@@ -32,12 +32,18 @@ _Script _$ScriptFromJson(Map<String, dynamic> json) => _Script(
   dependencies: (json['dependencies'] as Map<String, dynamic>?)?.map(
     (k, e) => MapEntry(k, e as String),
   ),
-  compilationStatus: json['compilationStatus'] as String?,
+  compilationStatus: $enumDecodeNullable(
+    _$CompilationStatusEnumMap,
+    json['compilationStatus'],
+  ),
   compilationError: json['compilationError'] as String?,
   lastCompiledAt: json['lastCompiledAt'] == null
       ? null
       : DateTime.parse(json['lastCompiledAt'] as String),
-  validationStatus: json['validationStatus'] as String?,
+  validationStatus: $enumDecodeNullable(
+    _$ValidationStatusEnumMap,
+    json['validationStatus'],
+  ),
   validationError: json['validationError'] as String?,
 );
 
@@ -57,10 +63,10 @@ Map<String, dynamic> _$ScriptToJson(_Script instance) => <String, dynamic>{
   'updatedAt': instance.updatedAt?.toIso8601String(),
   'sourceCode': instance.sourceCode,
   'dependencies': instance.dependencies,
-  'compilationStatus': instance.compilationStatus,
+  'compilationStatus': _$CompilationStatusEnumMap[instance.compilationStatus],
   'compilationError': instance.compilationError,
   'lastCompiledAt': instance.lastCompiledAt?.toIso8601String(),
-  'validationStatus': instance.validationStatus,
+  'validationStatus': _$ValidationStatusEnumMap[instance.validationStatus],
   'validationError': instance.validationError,
 };
 
@@ -73,4 +79,18 @@ const _$TriggerTypeEnumMap = {
   TriggerType.request: 'request',
   TriggerType.response: 'response',
   TriggerType.both: 'both',
+};
+
+const _$CompilationStatusEnumMap = {
+  CompilationStatus.notCompiled: 'not_compiled',
+  CompilationStatus.pending: 'pending',
+  CompilationStatus.compiling: 'compiling',
+  CompilationStatus.success: 'success',
+  CompilationStatus.error: 'error',
+};
+
+const _$ValidationStatusEnumMap = {
+  ValidationStatus.notValidated: 'not_validated',
+  ValidationStatus.valid: 'valid',
+  ValidationStatus.invalid: 'invalid',
 };

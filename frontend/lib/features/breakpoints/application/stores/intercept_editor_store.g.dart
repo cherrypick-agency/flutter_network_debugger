@@ -27,6 +27,96 @@ mixin _$InterceptEditorStore on _InterceptEditorStore, Store {
     });
   }
 
+  late final _$submittingAtom = Atom(
+    name: '_InterceptEditorStore.submitting',
+    context: context,
+  );
+
+  @override
+  bool get submitting {
+    _$submittingAtom.reportRead();
+    return super.submitting;
+  }
+
+  @override
+  set submitting(bool value) {
+    _$submittingAtom.reportWrite(value, super.submitting, () {
+      super.submitting = value;
+    });
+  }
+
+  late final _$lastErrorAtom = Atom(
+    name: '_InterceptEditorStore.lastError',
+    context: context,
+  );
+
+  @override
+  String? get lastError {
+    _$lastErrorAtom.reportRead();
+    return super.lastError;
+  }
+
+  @override
+  set lastError(String? value) {
+    _$lastErrorAtom.reportWrite(value, super.lastError, () {
+      super.lastError = value;
+    });
+  }
+
+  late final _$continueRequestAsyncAction = AsyncAction(
+    '_InterceptEditorStore.continueRequest',
+    context: context,
+  );
+
+  @override
+  Future<void> continueRequest({
+    String? method,
+    String? url,
+    Map<String, List<String>>? headers,
+    String? bodyBase64,
+    bool drop = false,
+  }) {
+    return _$continueRequestAsyncAction.run(
+      () => super.continueRequest(
+        method: method,
+        url: url,
+        headers: headers,
+        bodyBase64: bodyBase64,
+        drop: drop,
+      ),
+    );
+  }
+
+  late final _$continueResponseAsyncAction = AsyncAction(
+    '_InterceptEditorStore.continueResponse',
+    context: context,
+  );
+
+  @override
+  Future<void> continueResponse({
+    int? status,
+    Map<String, List<String>>? headers,
+    String? bodyBase64,
+  }) {
+    return _$continueResponseAsyncAction.run(
+      () => super.continueResponse(
+        status: status,
+        headers: headers,
+        bodyBase64: bodyBase64,
+      ),
+    );
+  }
+
+  late final _$cancelAsyncAction = AsyncAction(
+    '_InterceptEditorStore.cancel',
+    context: context,
+  );
+
+  @override
+  Future<void> cancel() {
+    return _$cancelAsyncAction.run(() => super.cancel());
+  }
+
   late final _$_InterceptEditorStoreActionController = ActionController(
     name: '_InterceptEditorStore',
     context: context,
@@ -47,7 +137,9 @@ mixin _$InterceptEditorStore on _InterceptEditorStore, Store {
   @override
   String toString() {
     return '''
-item: ${item}
+item: ${item},
+submitting: ${submitting},
+lastError: ${lastError}
     ''';
   }
 }

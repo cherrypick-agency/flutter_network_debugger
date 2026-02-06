@@ -102,20 +102,6 @@ class ScriptsApiService {
     return {};
   }
 
-  /// GET /_api/v1/scripts/{id}/export-zip
-  /// Export script as ZIP file (metadata + source + dependencies + WASM)
-  /// Returns the download URL for the ZIP file
-  String getExportZipUrl(String id) {
-    return '$_basePath/$id/export-zip';
-  }
-
-  /// POST /_api/v1/scripts/import-zip
-  /// Import script from ZIP file
-  /// Note: This needs to be handled via FormData in the UI layer
-  /// fileBytes: ZIP file contents as bytes
-  /// Returns the created script
-  String get importZipUrl => '$_basePath/import-zip';
-
   /// POST /_api/v1/scripts/import-zip (with FormData)
   /// Import script from ZIP file using multipart upload
   Future<Map<String, dynamic>> importFromZip(List<int> zipBytes) async {
@@ -140,11 +126,13 @@ class ScriptsApiService {
     return response.data as Map<String, dynamic>;
   }
 
-  /// GET /_api/v1/scripts/{id}/download-project
-  /// Returns download URL for project ZIP
-  String getDownloadProjectUrl(String id) {
-    return '$_basePath/$id/download-project';
-  }
+  /// GET /_api/v1/scripts/{id}/export-zip (binary download)
+  Future<List<int>> downloadExportZip(String id) =>
+      _httpClient.getBytes(path: '$_basePath/$id/export-zip');
+
+  /// GET /_api/v1/scripts/{id}/download-project (binary download)
+  Future<List<int>> downloadProjectZip(String id) =>
+      _httpClient.getBytes(path: '$_basePath/$id/download-project');
 
   /// POST /_api/v1/scripts/validate
   /// Validate script syntax without compilation

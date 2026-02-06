@@ -90,6 +90,13 @@ abstract class AppHttpClient {
     Map<String, String>? fields,
   });
 
+  Future<List<int>> getBytes({
+    String? host,
+    String path = '',
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  });
+
   /// Token refresh endpoint path, e.g., "/refresh_token".
   String get refreshPath;
 }

@@ -2,6 +2,8 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -12,6 +14,8 @@ const (
 	DirRequest  InterceptDirection = "request"
 	DirResponse InterceptDirection = "response"
 )
+
+const maxRegexLength = 2048
 
 // RuleStringMatch -- simple string field matching model
 type RuleStringMatch struct {
@@ -78,6 +82,45 @@ func (r *InterceptRule) Validate() error {
 	}
 	if r.Action != "request" && r.Action != "response" && r.Action != "both" {
 		return errors.New("action must be one of: request, response, both")
+	}
+	if err := r.When.ValidateRegex(); err != nil {
+		return fmt.Errorf("when: %w", err)
+	}
+	return nil
+}
+
+// ValidateRegex checks that all regex patterns in the condition are valid
+func (w *InterceptWhen) ValidateRegex() error {
+	check := func(name string, m *RuleStringMatch) error {
+		if m != nil && m.Regex != "" {
+			if len(m.Regex) > maxRegexLength {
+				return fmt.Errorf("%s regex too long (max %d bytes)", name, maxRegexLength)
+			}
+			if _, err := regexp.Compile(m.Regex); err != nil {
+				return fmt.Errorf("%s regex invalid: %w", name, err)
+			}
+		}
+		return nil
+	}
+	if err := check("host", w.Host); err != nil {
+		return err
+	}
+	if err := check("port", w.Port); err != nil {
+		return err
+	}
+	if err := check("path", w.Path); err != nil {
+		return err
+	}
+	if err := check("contentType", w.ContentType); err != nil {
+		return err
+	}
+	if w.Header != nil {
+		if err := check("header.name", &w.Header.Name); err != nil {
+			return err
+		}
+		if err := check("header.value", &w.Header.Value); err != nil {
+			return err
+		}
 	}
 	return nil
 }

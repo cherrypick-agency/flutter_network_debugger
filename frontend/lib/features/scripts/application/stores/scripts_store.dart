@@ -70,6 +70,9 @@ abstract class _ScriptsStore with Store {
   String? downloadingProjectScriptId; // Track which script project is being downloaded
 
   @observable
+  bool isDownloadingProject = false;
+
+  @observable
   String? errorMessage;
 
   @observable
@@ -226,25 +229,15 @@ abstract class _ScriptsStore with Store {
   @action
   Future<void> toggleScript(String id, bool enabled) async {
     try {
-      final responseData = await _toggleUseCase(id, enabled);
-
-      // Try to parse full script from response, fallback to optimistic update
-      Script? updatedScript;
-      if (responseData.containsKey('name')) {
-        try {
-          updatedScript = Script.fromJson(responseData);
-        } catch (_) {
-          // Fallback to optimistic update
-        }
-      }
+      final updatedScript = await _toggleUseCase(id, enabled);
 
       final index = scripts.indexWhere((s) => s.id == id);
       if (index != -1) {
-        scripts[index] = updatedScript ?? scripts[index].copyWith(enabled: enabled);
+        scripts[index] = updatedScript;
       }
 
       if (selectedScript?.id == id) {
-        selectedScript = updatedScript ?? selectedScript!.copyWith(enabled: enabled);
+        selectedScript = updatedScript;
       }
     } catch (e) {
       errorMessage = 'Failed to toggle script: ${e.toString()}';
@@ -328,14 +321,32 @@ abstract class _ScriptsStore with Store {
     compilationError = null;
   }
 
-  /// Get export ZIP URL for downloading
   @action
-  String getExportZipUrl(String id) {
-    return _exportUseCase(id);
+  Future<List<int>> downloadExportZip(String id) async {
+    try {
+      isExporting = true;
+      exportingScriptId = id;
+      return await _exportUseCase(id);
+    } finally {
+      isExporting = false;
+      exportingScriptId = null;
+    }
   }
 
-  String? getDownloadProjectUrl(String id) {
-    return _downloadProjectUseCase?.call(id);
+  @action
+  Future<List<int>> downloadProjectZip(String id) async {
+    final useCase = _downloadProjectUseCase;
+    if (useCase == null) {
+      throw Exception('Download project use case not configured');
+    }
+    try {
+      isDownloadingProject = true;
+      downloadingProjectScriptId = id;
+      return await useCase(id);
+    } finally {
+      isDownloadingProject = false;
+      downloadingProjectScriptId = null;
+    }
   }
 
   /// Import script from ZIP file bytes

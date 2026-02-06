@@ -644,8 +644,8 @@ func TestHandleInterceptItem_POST_ContinueResponse_InvalidBase64(t *testing.T) {
 		}
 
 		w := doReq(t, h, http.MethodPost, "/_api/v1/intercept/items/"+id+"/continue", payload, "t")
-		if w.Code != http.StatusNoContent {
-			t.Errorf("Continue status = %d, want %d (invalid base64 should be ignored)", w.Code, http.StatusNoContent)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Continue status = %d, want %d (invalid base64 should be rejected)", w.Code, http.StatusBadRequest)
 		}
 	}
 }
@@ -685,5 +685,81 @@ func TestHandleInterceptItem_POST_Cancel_AlreadyFinalized(t *testing.T) {
 		if w.Code != http.StatusConflict {
 			t.Errorf("Status = %d, want %d", w.Code, http.StatusConflict)
 		}
+	}
+}
+
+func TestHandleInterceptPending_NegativeLimit(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = ""
+	h := NewRouterWithoutForwardProxy(d)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/intercept/pending?limit=-5", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleInterceptPending_InvalidLimit(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = ""
+	h := NewRouterWithoutForwardProxy(d)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/intercept/pending?limit=abc", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleInterceptConfig_OversizedValues(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	// timeoutMs exceeds 300000
+	payload := map[string]any{"enabled": true, "requests": true, "responses": true, "timeoutMs": 999999}
+	resp := doReq(t, h, http.MethodPost, "/_api/v1/intercept/config", payload, "t")
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("oversized timeoutMs: Status = %d, want %d", resp.Code, http.StatusBadRequest)
+	}
+
+	// queueMax exceeds 10000
+	payload = map[string]any{"enabled": true, "requests": true, "responses": true, "timeoutMs": 1000, "queueMax": 50000}
+	resp = doReq(t, h, http.MethodPost, "/_api/v1/intercept/config", payload, "t")
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("oversized queueMax: Status = %d, want %d", resp.Code, http.StatusBadRequest)
+	}
+
+	// bodyMaxBytes exceeds 100MB
+	payload = map[string]any{"enabled": true, "requests": true, "responses": true, "timeoutMs": 1000, "bodyMaxBytes": 200 << 20}
+	resp = doReq(t, h, http.MethodPost, "/_api/v1/intercept/config", payload, "t")
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("oversized bodyMaxBytes: Status = %d, want %d", resp.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleInterceptRules_InvalidRegex(t *testing.T) {
+	d := setupTestRouter(t)
+	d.Cfg.AdminToken = "t"
+	h := NewRouterWithoutForwardProxy(d)
+
+	rules := []interceptdomain.InterceptRule{{
+		Enabled:  true,
+		Priority: 1,
+		Action:   "request",
+		When: interceptdomain.InterceptWhen{
+			Host: &interceptdomain.RuleStringMatch{Regex: "[invalid("},
+		},
+	}}
+	resp := doReq(t, h, http.MethodPost, "/_api/v1/intercept/rules", rules, "t")
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("invalid regex: Status = %d, want %d", resp.Code, http.StatusBadRequest)
 	}
 }

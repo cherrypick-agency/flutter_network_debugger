@@ -2546,3 +2546,663 @@ func TestScriptHandlers_ImportScriptFromZip_MissingLanguage(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }
+
+func TestScriptHandlers_UploadProject_PathTraversal(t *testing.T) {
+	scripts := make(map[string]*domain.Script)
+	repo := &mockScriptRepository{
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			scripts[script.ID] = script
+			return nil
+		},
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			if script, ok := scripts[id]; ok {
+				return script, nil
+			}
+			return nil, errors.New("not found")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	// Pre-create a script with all required fields for validation
+	testScript := &domain.Script{
+		ID:          "test-id",
+		Name:        "Test Script",
+		Language:    "rust",
+		Runtime:     domain.RuntimeExtism,
+		TriggerType: domain.TriggerRequest,
+	}
+	scripts["test-id"] = testScript
+	_ = testScript
+
+	// Create ZIP with path traversal
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	fw, _ := zw.Create("../../etc/passwd")
+	fw.Write([]byte("malicious content"))
+	zw.Close()
+
+	// Build multipart request
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test-id/upload-project", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for path traversal, got %d", http.StatusBadRequest, w.Code)
+	}
+
+	// Verify error message mentions path traversal
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !strings.Contains(resp["error"], "path traversal") {
+		t.Errorf("Expected error about path traversal, got: %s", resp["error"])
+	}
+}
+
+func TestScriptHandlers_UploadProject_SkipsHiddenFiles(t *testing.T) {
+	scripts := make(map[string]*domain.Script)
+	repo := &mockScriptRepository{
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			scripts[script.ID] = script
+			return nil
+		},
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			if script, ok := scripts[id]; ok {
+				return script, nil
+			}
+			return nil, errors.New("not found")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	// Pre-create a script with all required fields for validation
+	testScript := &domain.Script{
+		ID:          "test-id",
+		Name:        "Test Script",
+		Language:    "rust",
+		Runtime:     domain.RuntimeExtism,
+		TriggerType: domain.TriggerRequest,
+	}
+	scripts["test-id"] = testScript
+	_ = testScript
+
+	// Create ZIP with hidden files and valid files
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	// Hidden file
+	fw, _ := zw.Create(".gitignore")
+	fw.Write([]byte("target/"))
+	// __MACOSX file
+	fw2, _ := zw.Create("__MACOSX/._main.rs")
+	fw2.Write([]byte("macosx metadata"))
+	// Valid source file
+	fw3, _ := zw.Create("project/main.rs")
+	fw3.Write([]byte("fn main() {}"))
+	zw.Close()
+
+	// Build multipart request
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/test-id/upload-project", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// Verify only valid file was imported
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	fileCount, _ := resp["fileCount"].(float64)
+	if fileCount != 1 {
+		t.Errorf("Expected 1 file (only main.rs), got %v", fileCount)
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_PathTraversal(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	// Create ZIP with metadata.json and a path traversal file
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+
+	// Valid metadata
+	metadata := map[string]interface{}{
+		"name":          "Malicious Script",
+		"language":      "rust",
+		"sourceCode":    "fn main() {}",
+		"exportVersion": "1.0",
+	}
+	metaBytes, _ := json.Marshal(metadata)
+	fw, _ := zw.Create("metadata.json")
+	fw.Write(metaBytes)
+
+	// Path traversal file
+	fw2, _ := zw.Create("../../../etc/shadow")
+	fw2.Write([]byte("malicious content"))
+
+	zw.Close()
+
+	// Build multipart request
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for path traversal, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestScriptHandlers_ListProjectFiles_ScriptNotFound(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return nil, errors.New("script not found")
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts/nonexistent/files", nil)
+	req.SetPathValue("id", "nonexistent")
+	w := httptest.NewRecorder()
+
+	handlers.ListProjectFiles(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestScriptHandlers_ListProjectFiles_NoDependencies(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:           id,
+				Name:         "Test Script",
+				Language:     "rust",
+				Dependencies: nil,
+			}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts/test-id/files", nil)
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.ListProjectFiles(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	fileCount, _ := resp["fileCount"].(float64)
+	if fileCount != 0 {
+		t.Errorf("Expected 0 files, got %v", fileCount)
+	}
+}
+
+func TestScriptHandlers_ListProjectFiles_SortOrder(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:       id,
+				Name:     "Test Script",
+				Language: "rust",
+				Dependencies: map[string]string{
+					"zebra.rs":    "// zebra",
+					"alpha.rs":    "// alpha",
+					"middle.toml": "[package]",
+				},
+			}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts/test-id/files", nil)
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.ListProjectFiles(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	files, ok := resp["files"].([]interface{})
+	if !ok {
+		t.Fatal("Expected files array in response")
+	}
+	if len(files) != 3 {
+		t.Fatalf("Expected 3 files, got %d", len(files))
+	}
+
+	// Verify sort order: alpha.rs, middle.toml, zebra.rs
+	expectedOrder := []string{"alpha.rs", "middle.toml", "zebra.rs"}
+	for i, expected := range expectedOrder {
+		fileMap, ok := files[i].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected file map at index %d", i)
+		}
+		filename, _ := fileMap["filename"].(string)
+		if filename != expected {
+			t.Errorf("Expected file[%d] = %s, got %s", i, expected, filename)
+		}
+	}
+}
+
+func TestScriptHandlers_ExportScriptAsZip_VerifyZipContents(t *testing.T) {
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:         id,
+				Name:       "Export Test",
+				Language:   "rust",
+				SourceCode: "fn main() {}",
+				Dependencies: map[string]string{
+					"Cargo.toml": "[package]\nname = \"test\"",
+				},
+				Code: []byte("wasm binary data"),
+			}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/scripts/test-id/export-zip", nil)
+	req.SetPathValue("id", "test-id")
+	w := httptest.NewRecorder()
+
+	handlers.ExportScriptAsZip(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// Verify Content-Type
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/zip" {
+		t.Errorf("Expected Content-Type application/zip, got %s", contentType)
+	}
+
+	// Parse the ZIP response
+	zipReader, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatalf("Failed to read ZIP response: %v", err)
+	}
+
+	// Collect file names
+	fileNames := make(map[string]bool)
+	for _, f := range zipReader.File {
+		fileNames[f.Name] = true
+	}
+
+	// Verify expected files exist
+	expectedFiles := []string{"metadata.json", "src/lib.rs", "Cargo.toml", "output.wasm"}
+	for _, expected := range expectedFiles {
+		if !fileNames[expected] {
+			t.Errorf("Expected file %s in ZIP, not found. Files: %v", expected, fileNames)
+		}
+	}
+}
+
+// === Security tests for new protections ===
+
+func TestScriptHandlers_UploadProject_TooManyFiles(t *testing.T) {
+	scriptID := "test-id"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{ID: scriptID}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	for i := 0; i < 1002; i++ {
+		fw, _ := zipWriter.Create(fmt.Sprintf("file%d.rs", i))
+		fw.Write([]byte("fn main() {}"))
+	}
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "too many files") {
+		t.Errorf("Expected error about too many files, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_UploadProject_DuplicateFiles(t *testing.T) {
+	scriptID := "test-id"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{ID: scriptID}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	fw1, _ := zipWriter.Create("main.rs")
+	fw1.Write([]byte("fn main() { // version 1 }"))
+	fw2, _ := zipWriter.Create("main.rs")
+	fw2.Write([]byte("fn main() { // version 2 }"))
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "duplicate file") {
+		t.Errorf("Expected error about duplicate file, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_UploadProject_InvalidMagicBytes(t *testing.T) {
+	scriptID := "test-id"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{ID: scriptID}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write([]byte("this is not a zip file at all"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "bad signature") {
+		t.Errorf("Expected error about bad signature, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_UploadProject_NullByteFilename(t *testing.T) {
+	scriptID := "test-id"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{ID: scriptID}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	fw, _ := zipWriter.Create("main\x00.rs")
+	fw.Write([]byte("fn main() {}"))
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("project", "project.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/"+scriptID+"/upload-project", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UploadProject(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "null byte") {
+		t.Errorf("Expected error about null byte, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_TooManyFiles(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	var zipBuf bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuf)
+	metadataFile, _ := zipWriter.Create("metadata.json")
+	metadata := map[string]interface{}{
+		"name":     "Test",
+		"language": "rust",
+	}
+	json.NewEncoder(metadataFile).Encode(metadata)
+	for i := 0; i < 1001; i++ {
+		fw, _ := zipWriter.Create(fmt.Sprintf("file%d.rs", i))
+		fw.Write([]byte("fn main() {}"))
+	}
+	zipWriter.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write(zipBuf.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "too many files") {
+		t.Errorf("Expected error about too many files, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_UpdateScript_DependencySizeLimit(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{
+		ID:       scriptID,
+		Name:     "Test Script",
+		Language: "rust",
+		Runtime:  domain.RuntimeExtism,
+		Code:     []byte("wasm"),
+	}
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	// Create a dependency that exceeds maxDependencyFileSize (500KB)
+	largeDep := strings.Repeat("x", 501*1024)
+	reqBody := map[string]interface{}{
+		"dependencies": map[string]string{
+			"large.rs": largeDep,
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/"+scriptID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "too large") {
+		t.Errorf("Expected error about dependency too large, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_UpdateScript_SourceCodeResetsStatus(t *testing.T) {
+	scriptID := "test-id"
+	existingScript := &domain.Script{
+		ID:                scriptID,
+		Name:              "Test Script",
+		Runtime:           domain.RuntimeExtism,
+		Code:              []byte("wasm"),
+		Language:          "rust",
+		TriggerType:       domain.TriggerRequest,
+		SourceCode:        "old code",
+		CompilationStatus: domain.CompilationSuccess,
+		CompilationError:  "",
+		ValidationStatus:  domain.ValidationValid,
+		ValidationError:   "",
+		Enabled:           true,
+	}
+
+	var savedScript *domain.Script
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return existingScript, nil
+		},
+		saveFunc: func(ctx context.Context, script *domain.Script) error {
+			savedScript = script
+			return nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"sourceCode": "new code",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPut, "/_api/v1/scripts/"+scriptID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.UpdateScript(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if savedScript == nil {
+		t.Fatal("Expected script to be saved")
+	}
+	if savedScript.CompilationStatus != domain.CompilationNotCompiled {
+		t.Errorf("Expected CompilationStatus to be reset to %s, got %s", domain.CompilationNotCompiled, savedScript.CompilationStatus)
+	}
+	if savedScript.ValidationStatus != domain.ValidationNotValidated {
+		t.Errorf("Expected ValidationStatus to be reset to %s, got %s", domain.ValidationNotValidated, savedScript.ValidationStatus)
+	}
+	if len(savedScript.Code) != 0 {
+		t.Error("Expected WASM code to be cleared")
+	}
+	if savedScript.Enabled {
+		t.Error("Expected script to be disabled")
+	}
+}
+
+func TestScriptHandlers_ToggleScript_NoWasmCode(t *testing.T) {
+	scriptID := "test-id"
+	repo := &mockScriptRepository{
+		getFunc: func(ctx context.Context, id string) (*domain.Script, error) {
+			return &domain.Script{
+				ID:         id,
+				Code:       []byte{},
+				SourceCode: "fn main() {}",
+			}, nil
+		},
+	}
+	handlers := setupScriptHandlers(repo, nil)
+
+	reqBody := map[string]interface{}{
+		"enabled": true,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/_api/v1/scripts/"+scriptID+"/toggle", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", scriptID)
+	w := httptest.NewRecorder()
+
+	handlers.ToggleScript(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "compiled WASM") {
+		t.Errorf("Expected error about compiled WASM code, got: %s", w.Body.String())
+	}
+}
+
+func TestScriptHandlers_ImportScriptFromZip_InvalidMagicBytes(t *testing.T) {
+	handlers := setupScriptHandlers(nil, nil)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "script.zip")
+	part.Write([]byte("not a zip file"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/scripts/import-zip", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	handlers.ImportScriptFromZip(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "bad signature") {
+		t.Errorf("Expected error about bad signature, got: %s", w.Body.String())
+	}
+}

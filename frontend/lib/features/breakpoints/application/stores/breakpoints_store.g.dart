@@ -63,6 +63,24 @@ mixin _$BreakpointsStore on _BreakpointsStore, Store {
     });
   }
 
+  late final _$lastErrorAtom = Atom(
+    name: '_BreakpointsStore.lastError',
+    context: context,
+  );
+
+  @override
+  String? get lastError {
+    _$lastErrorAtom.reportRead();
+    return super.lastError;
+  }
+
+  @override
+  set lastError(String? value) {
+    _$lastErrorAtom.reportWrite(value, super.lastError, () {
+      super.lastError = value;
+    });
+  }
+
   late final _$loadAsyncAction = AsyncAction(
     '_BreakpointsStore.load',
     context: context,
@@ -98,7 +116,8 @@ mixin _$BreakpointsStore on _BreakpointsStore, Store {
     return '''
 config: ${config},
 rules: ${rules},
-loading: ${loading}
+loading: ${loading},
+lastError: ${lastError}
     ''';
   }
 }

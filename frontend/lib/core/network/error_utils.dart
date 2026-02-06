@@ -138,6 +138,22 @@ String _titleForCode(ServerErrorCode c) {
       return 'Data error';
     case ServerErrorCode.streamUnsupported:
       return 'Streaming unsupported';
+    case ServerErrorCode.unauthorized:
+      return 'Unauthorized';
+    case ServerErrorCode.badJson:
+      return 'Invalid JSON';
+    case ServerErrorCode.validation:
+      return 'Validation error';
+    case ServerErrorCode.conflict:
+      return 'Conflict';
+    case ServerErrorCode.badParam:
+      return 'Bad parameter';
+    case ServerErrorCode.invalidUrl:
+      return 'Invalid URL';
+    case ServerErrorCode.badBase64:
+      return 'Invalid body encoding';
+    case ServerErrorCode.invalidStatus:
+      return 'Invalid status code';
     case ServerErrorCode.unknown:
       return 'Error';
   }
@@ -167,6 +183,22 @@ String _defaultMessageForCode(ServerErrorCode c) {
       return 'Failed to list HTTP requests.';
     case ServerErrorCode.streamUnsupported:
       return 'Stream is not supported for this resource.';
+    case ServerErrorCode.unauthorized:
+      return 'Authentication required or token invalid.';
+    case ServerErrorCode.badJson:
+      return 'Invalid JSON in request body.';
+    case ServerErrorCode.validation:
+      return 'Validation failed. Check the input values.';
+    case ServerErrorCode.conflict:
+      return 'Item already finalized or modified.';
+    case ServerErrorCode.badParam:
+      return 'Invalid query parameter value.';
+    case ServerErrorCode.invalidUrl:
+      return 'URL must be valid http or https.';
+    case ServerErrorCode.badBase64:
+      return 'Invalid base64-encoded body.';
+    case ServerErrorCode.invalidStatus:
+      return 'Status code must be between 100 and 599.';
     case ServerErrorCode.unknown:
       return 'Request failed.';
   }

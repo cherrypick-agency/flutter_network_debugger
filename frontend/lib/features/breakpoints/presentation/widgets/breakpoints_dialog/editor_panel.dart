@@ -187,7 +187,7 @@ class _EditorPanelState extends State<EditorPanel> {
                   urlController: _urlCtrl,
                   statusController: _statusCtrl,
                   responseContentType: it.res?.contentType,
-                  submitting: _submitting,
+                  submitting: _submitting || ed.submitting,
                   onAddAuth: () => _addOrUpdateHeader('Authorization', 'Bearer '),
                   onAddJson: _ensureContentTypeForMode,
                   onDrop: () => _dropRequest(ed),

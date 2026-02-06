@@ -393,13 +393,13 @@ mixin _$ScriptEditorStore on _ScriptEditorStore, Store {
   );
 
   @override
-  String? get compilationStatus {
+  CompilationStatus? get compilationStatus {
     _$compilationStatusAtom.reportRead();
     return super.compilationStatus;
   }
 
   @override
-  set compilationStatus(String? value) {
+  set compilationStatus(CompilationStatus? value) {
     _$compilationStatusAtom.reportWrite(value, super.compilationStatus, () {
       super.compilationStatus = value;
     });

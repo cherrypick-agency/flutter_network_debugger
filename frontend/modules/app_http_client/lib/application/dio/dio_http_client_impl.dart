@@ -311,6 +311,75 @@ class DioHttpClientImpl implements AppHttpClient {
   }
 
   @override
+  Future<List<int>> getBytes({
+    String? host,
+    String path = '',
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  }) async {
+    final requestHost = host ?? defaultHost;
+    final internalHeaders = <String, dynamic>{
+      if (token != null && token!.isNotEmpty)
+        HttpHeaders.authorizationHeader: 'Bearer $token',
+      ...(headers ?? {}),
+    };
+    try {
+      final response = await _dio.request<List<int>>(
+        requestHost + path,
+        queryParameters: query,
+        options: Options(
+          method: 'GET',
+          headers: internalHeaders,
+          responseType: ResponseType.bytes,
+        ),
+      );
+      if (response.data == null) throw Exception('Empty response body');
+      return response.data!;
+    } catch (e) {
+      if (e is DioException && e.response != null) {
+        var exception = AppHttpException(
+          requestOptions: e.requestOptions,
+          error: e.error,
+          response: e.response,
+          type: _exceptionAdapter.adapt(e.type),
+        );
+
+        // Check 401
+        if (e.error is AppHttp401Exception) {
+          throw e.error as AppHttp401Exception;
+        } else if (e.response!.statusCode == 401) {
+          exception = AppHttp401Exception(exception);
+          throw exception;
+        }
+
+        // Try to parse server error payload from bytes
+        try {
+          final data = e.response!.data;
+          if (data is List<int>) {
+            final bodyStr = utf8.decode(data);
+            final body = jsonDecode(bodyStr) as Map<String, dynamic>;
+            final err = (body['error'] as Map?)?.cast<String, dynamic>();
+            if (err != null) {
+              final payload = ServerErrorPayload(
+                code: (err['code'] ?? '').toString(),
+                message: (err['message'] ?? '').toString(),
+                details: (err['details'] as Map?)?.cast<String, dynamic>(),
+              );
+              throw AppHttpServerException(exception, payload);
+            }
+          }
+        } catch (parseErr) {
+          if (parseErr is AppHttpServerException) rethrow;
+          // ignore parse issues
+        }
+
+        throw exception;
+      }
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> clearTokens() => _tokensStorage.clear();
 
   /// Converts HttpMethod to HTTP method string

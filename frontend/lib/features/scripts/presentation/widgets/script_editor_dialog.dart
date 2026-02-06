@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:archive/archive.dart';
-import 'package:dio/dio.dart';
 import '../../application/stores/script_editor_store.dart';
 import '../../application/stores/scripts_store.dart';
 import '../../domain/entities/script.dart';
@@ -11,13 +10,13 @@ import 'package:file_picker/file_picker.dart';
 import 'script_settings_form.dart';
 import 'match_rules_form.dart';
 import 'script_test_tab.dart';
-import 'code_mode_selector.dart';
-import 'multi_file_editor_widget.dart';
-import 'wasm_upload_zone.dart';
+import 'code_tab_content.dart';
+import 'multi_file_editor_section.dart';
 import '../../infrastructure/editor_di.dart';
 import '../../data/services/scripts_api_service.dart';
 import '../../../../core/di/di.dart';
 import '../../../compiler_management/presentation/stores/compiler_list_store.dart';
+import '../../domain/utils/zip_validator.dart';
 
 // Intent classes for keyboard shortcuts
 class SaveScriptIntent extends Intent {
@@ -430,10 +429,20 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
                     return TabBarView(
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        _buildCodeTab(),
-                        _buildSettingsTab(),
-                        _buildMatchRulesTab(),
-                        _buildTestTab(),
+                        CodeTabContent(
+                          editorStore: _editorStore,
+                          scriptsStore: widget.scriptsStore,
+                          isDownloadingProject: _isDownloadingProject,
+                          onDownloadProject: _downloadProject,
+                          buildMultiFileEditor: () => MultiFileEditorSection(
+                            initEditorFuture: _initEditorFuture,
+                            editorDI: _editorDI,
+                          ),
+                          onImportZip: _importProjectFromZip,
+                        ),
+                        ScriptSettingsForm(store: _editorStore),
+                        MatchRulesForm(store: _editorStore),
+                        ScriptTestTab(store: _editorStore),
                       ],
                     );
                   },
@@ -444,455 +453,6 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
         ), // RawKeyboardListener
       ), // Actions
     ); // Shortcuts
-  }
-
-  Widget _buildCodeTab() {
-    return Observer(
-      builder: (_) {
-        return Column(
-          children: [
-            // Compilation status banner for Extism runtime
-            if (_editorStore.runtime == ScriptRuntime.extism &&
-                _editorStore.isEditing)
-              _buildCompilationStatusBanner(),
-            // Validation status banner
-            _buildValidationStatusBanner(),
-            // Mode selector for Extism runtime
-            if (_editorStore.runtime == ScriptRuntime.extism)
-              CodeModeSelector(
-                selectedMode: _editorStore.codeCreationMode,
-                onModeChanged: _editorStore.setCodeCreationMode,
-              ),
-            // Toolbar for Extism runtime (NOT in uploadWasm mode)
-            if (_editorStore.runtime == ScriptRuntime.extism &&
-                _editorStore.codeCreationMode != CodeCreationMode.uploadWasm)
-              _buildExtismToolbar(),
-            // Content based on mode
-            Expanded(child: _buildModeContent()),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildValidationStatusBanner() {
-    return Observer(
-      builder: (_) {
-        if (_editorStore.isValidSyntax) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              border: Border.all(color: Colors.green.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Colors.green.shade700),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Syntax is valid',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green.shade700,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: _editorStore.clearValidation,
-                  tooltip: 'Dismiss',
-                ),
-              ],
-            ),
-          );
-        }
-
-        if (_editorStore.syntaxValidationError != null) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              border: Border.all(color: Colors.red.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.red.shade700),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Validation Error',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      SelectableText(
-                        _editorStore.syntaxValidationError!,
-                        style: TextStyle(
-                          color: Colors.red.shade900,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: _editorStore.clearValidation,
-                  tooltip: 'Dismiss',
-                ),
-              ],
-            ),
-          );
-        }
-
-        return const SizedBox.shrink();
-      },
-    );
-  }
-
-  Widget _buildExtismToolbar() {
-    return Observer(
-      builder: (_) {
-        final hasSourceFiles = _editorStore.sourceFiles.isNotEmpty;
-        final isImportZipWithFiles =
-            _editorStore.codeCreationMode == CodeCreationMode.importZip &&
-            hasSourceFiles;
-        final isEditing = _editorStore.isEditing;
-        final isValidating = _editorStore.isValidating;
-
-        // Build list of toolbar buttons
-        final leftButtons = <Widget>[];
-
-        // Validate button (if source files exist)
-        if (hasSourceFiles) {
-          leftButtons.add(
-            OutlinedButton.icon(
-              onPressed: isValidating ? null : _editorStore.validateSyntax,
-              icon: isValidating
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.fact_check_outlined, size: 18),
-              label: Text(isValidating ? 'Validating...' : 'Validate'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-              ),
-            ),
-          );
-        }
-
-        // Re-import ZIP button
-        if (isImportZipWithFiles) {
-          if (leftButtons.isNotEmpty) leftButtons.add(const SizedBox(width: 8));
-          leftButtons.add(
-            OutlinedButton.icon(
-              onPressed: () {
-                _editorStore.clearSourceFiles();
-              },
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Re-import ZIP'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-              ),
-            ),
-          );
-        }
-
-        // Download Project button (right-aligned, only for saved scripts)
-        Widget? rightButton;
-        if (isEditing) {
-          rightButton = OutlinedButton.icon(
-            onPressed: _isDownloadingProject ? null : _downloadProject,
-            icon: _isDownloadingProject
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.download, size: 18),
-            label: Text(
-              _isDownloadingProject ? 'Downloading...' : 'Download Project',
-            ),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-            ),
-          );
-        }
-
-        // If no buttons at all — don't render the toolbar
-        if (leftButtons.isEmpty && rightButton == null) {
-          return const SizedBox.shrink();
-        }
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest.withOpacity(0.2),
-            border: Border(
-              bottom: BorderSide(
-                color: Theme.of(context).dividerColor,
-                width: 1,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              ...leftButtons,
-              const Spacer(),
-              if (rightButton != null) rightButton,
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildModeContent() {
-    // Upload WASM mode
-    if (_editorStore.runtime == ScriptRuntime.extism &&
-        _editorStore.codeCreationMode == CodeCreationMode.uploadWasm) {
-      return _buildUploadWasmMode();
-    }
-
-    // Import ZIP mode - empty files
-    if (_editorStore.codeCreationMode == CodeCreationMode.importZip &&
-        _editorStore.sourceFiles.isEmpty) {
-      return _buildImportZipMode();
-    }
-
-    // Default: Multi-file editor
-    return _buildMultiFileEditor();
-  }
-
-  Widget _buildMultiFileEditor() {
-    return FutureBuilder<void>(
-      // stable future is important to prevent spinner flicker on each rebuild
-      future: _initEditorFuture,
-      builder: (context, snapshot) {
-        // If editor is not created yet — show loader
-        if (_editorDI == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError && _editorDI == null) {
-          return Center(
-            child: Text('Failed to initialize editor: ${snapshot.error}'),
-          );
-        }
-
-        return MultiFileEditorWidget(editorDI: _editorDI!);
-      },
-    );
-  }
-
-  Widget _buildUploadWasmMode() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: WasmUploadZone(
-            onWasmUploaded: (base64) {
-              _editorStore.setCode(base64);
-            },
-            onClear: () {
-              _editorStore.setCode('');
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImportZipMode() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(48),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ZIP Icon
-                  const Icon(Icons.folder_zip, size: 80, color: Colors.blue),
-                  const SizedBox(height: 24),
-
-                  // Title
-                  Text(
-                    'Import Project from ZIP',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Description
-                  Text(
-                    'Upload a ZIP archive containing your source code files',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Main button
-                  ElevatedButton.icon(
-                    onPressed: _importProjectFromZip,
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Select ZIP File'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Divider with "or"
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'or',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                          ),
-                        ),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Drag-drop hint
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outline,
-                        width: 2,
-                        style: BorderStyle.solid,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.cloud_upload_outlined,
-                          size: 48,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.4),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Drag and drop ZIP file here',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Info section
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Supported formats:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '.rs .go .ts .js .c .cpp .h .toml .json .yaml .md .txt',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Max file size: 10 MB',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _importProjectFromZip() async {
@@ -911,18 +471,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
 
         final bytes = file.bytes!;
 
-        // Validate file size (max 10MB)
-        const maxSizeBytes = 10 * 1024 * 1024; // 10MB
-        if (bytes.length > maxSizeBytes) {
-          throw Exception('File is too large. Maximum size is 10MB.');
-        }
-
-        // Validate ZIP magic bytes (0x50 0x4B = "PK")
-        if (bytes.length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
-          throw Exception(
-            'Invalid ZIP file. Please select a valid ZIP archive.',
-          );
-        }
+        ZipValidator.validate(bytes);
 
         // Decode ZIP archive
         final archive = ZipDecoder().decodeBytes(bytes);
@@ -1005,18 +554,6 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     }
   }
 
-  Widget _buildSettingsTab() {
-    return ScriptSettingsForm(store: _editorStore);
-  }
-
-  Widget _buildMatchRulesTab() {
-    return MatchRulesForm(store: _editorStore);
-  }
-
-  Widget _buildTestTab() {
-    return ScriptTestTab(store: _editorStore);
-  }
-
   Future<void> _save() async {
     if (!_editorStore.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1077,155 +614,9 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
     }
   }
 
-  Widget _buildCompilationStatusBanner() {
-    return Observer(
-      builder: (_) {
-        // Get script from store to check compilation status
-        final script = widget.scriptsStore.scripts.cast<Script?>().firstWhere(
-          (s) => s?.id == _editorStore.editingScriptId,
-          orElse: () => null,
-        );
-
-        if (script == null) return const SizedBox.shrink();
-
-        // Show compilation error if any
-        if (script.compilationError != null &&
-            script.compilationError!.isNotEmpty) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              border: Border.all(color: Colors.red.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.red.shade700),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Compilation Failed',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        script.compilationError!,
-                        style: TextStyle(
-                          color: Colors.red.shade900,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // Show compilation success status
-        if (script.compilationStatus == 'success' &&
-            script.lastCompiledAt != null) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              border: Border.all(color: Colors.green.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Colors.green.shade700),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Compiled Successfully',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Last compiled: ${_formatTimestamp(script.lastCompiledAt!)}',
-                        style: TextStyle(
-                          color: Colors.green.shade900,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // Show pending status if sourceCode exists but not compiled yet
-        if (script.sourceCode != null && script.sourceCode!.isNotEmpty) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              border: Border.all(color: Colors.orange.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_outlined,
-                  color: Colors.orange.shade700,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '${_editorStore.codeCreationMode == CodeCreationMode.importZip ? "Project files" : "Source code"} detected - Click "Compile" to generate WASM',
-                    style: TextStyle(
-                      color: Colors.orange.shade900,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return const SizedBox.shrink();
-      },
-    );
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inMinutes < 1) {
-      return 'just now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'} ago';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours} hour${difference.inHours == 1 ? '' : 's'} ago';
-    } else {
-      return '${timestamp.day}/${timestamp.month}/${timestamp.year} ${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')}';
-    }
-  }
-
   Future<void> _compileScript() async {
     // Guard: prevent double-click and race conditions
-    if (_isSaving || widget.scriptsStore.isCompiling) {
+    if (_isSaving || widget.scriptsStore.isCompiling || _isDownloadingProject) {
       return;
     }
 
@@ -1352,31 +743,10 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
   Future<void> _downloadProject() async {
     if (_isDownloadingProject) return;
 
-    final url = _editorStore.getDownloadProjectUrl();
-    if (url == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot download: script not saved yet'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
     setState(() => _isDownloadingProject = true);
 
     try {
-      final dio = Dio();
-      final response = await dio.get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      if (response.data == null) {
-        throw Exception('Failed to download file');
-      }
+      final bytes = await _editorStore.downloadProjectZip();
 
       final fileName =
           '${_editorStore.name.replaceAll(RegExp(r'[^\w\s-]'), '_')}_project.zip';
@@ -1384,7 +754,7 @@ class _ScriptEditorDialogState extends State<ScriptEditorDialog> {
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'Save Project',
         fileName: fileName,
-        bytes: Uint8List.fromList(response.data!),
+        bytes: Uint8List.fromList(bytes),
       );
 
       if (result != null && mounted) {

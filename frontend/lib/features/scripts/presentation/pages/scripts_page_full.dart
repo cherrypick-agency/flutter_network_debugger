@@ -2,13 +2,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:dio/dio.dart';
 import '../../application/stores/scripts_store.dart';
 import '../../domain/entities/script.dart';
 import '../../domain/entities/match_rules.dart';
 import '../widgets/script_editor_dialog.dart';
 import '../widgets/scripts_filters_dialog.dart';
 import '../widgets/examples_library_dialog.dart';
+import '../../domain/utils/zip_validator.dart';
 
 /// Full Scripts Management Page with list and CRUD
 class ScriptsPageFull extends StatefulWidget {
@@ -373,33 +373,16 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
   }
 
   Future<void> _exportScript(Script script) async {
-    // Set exporting flag
-    widget.store.exportingScriptId = script.id;
-    widget.store.isExporting = true;
-
     try {
-      // Get export URL from store
-      final exportUrl = widget.store.getExportZipUrl(script.id);
+      final bytes = await widget.store.downloadExportZip(script.id);
 
-      // Download the file
-      final dio = Dio();
-      final response = await dio.get<List<int>>(
-        exportUrl,
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      if (response.data == null) {
-        throw Exception('Failed to download file');
-      }
-
-      // Save file using file_picker (works for both web and desktop)
       final fileName =
           '${script.name.replaceAll(RegExp(r'[^\w\s-]'), '_')}.zip';
 
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'Save Script Export',
         fileName: fileName,
-        bytes: Uint8List.fromList(response.data!),
+        bytes: Uint8List.fromList(bytes),
       );
 
       if (result != null && mounted) {
@@ -408,34 +391,6 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
             content: Text('Script exported successfully'),
             backgroundColor: Colors.green,
           ),
-        );
-      }
-    } on DioException catch (e) {
-      // Translate DioException to user-friendly error messages
-      String errorMessage;
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        errorMessage =
-            'Connection timeout. Please check your network connection.';
-      } else if (e.type == DioExceptionType.connectionError) {
-        errorMessage = 'Cannot connect to server. Is the backend running?';
-      } else if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        if (statusCode == 404) {
-          errorMessage = 'Script not found. It may have been deleted.';
-        } else if (statusCode == 500) {
-          errorMessage = 'Server error while exporting script.';
-        } else {
-          errorMessage = 'Export failed with status code $statusCode';
-        }
-      } else {
-        errorMessage = 'Network error: ${e.message ?? "Unknown error"}';
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
@@ -447,29 +402,12 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
           ),
         );
       }
-    } finally {
-      // Clear exporting flag
-      widget.store.exportingScriptId = null;
-      widget.store.isExporting = false;
     }
   }
 
   Future<void> _downloadProject(Script script) async {
-    final url = widget.store.getDownloadProjectUrl(script.id);
-    if (url == null) return;
-
-    widget.store.downloadingProjectScriptId = script.id;
-
     try {
-      final dio = Dio();
-      final response = await dio.get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      if (response.data == null) {
-        throw Exception('Failed to download file');
-      }
+      final bytes = await widget.store.downloadProjectZip(script.id);
 
       final fileName =
           '${script.name.replaceAll(RegExp(r'[^\w\s-]'), '_')}_project.zip';
@@ -477,7 +415,7 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'Save Project',
         fileName: fileName,
-        bytes: Uint8List.fromList(response.data!),
+        bytes: Uint8List.fromList(bytes),
       );
 
       if (result != null && mounted) {
@@ -497,8 +435,6 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
           ),
         );
       }
-    } finally {
-      widget.store.downloadingProjectScriptId = null;
     }
   }
 
@@ -574,18 +510,7 @@ class _ScriptsPageFullState extends State<ScriptsPageFull> {
 
         final bytes = file.bytes!;
 
-        // Validate file size (max 10MB)
-        const maxSizeBytes = 10 * 1024 * 1024; // 10MB
-        if (bytes.length > maxSizeBytes) {
-          throw Exception('File is too large. Maximum size is 10MB.');
-        }
-
-        // Validate ZIP magic bytes (0x50 0x4B = "PK")
-        if (bytes.length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
-          throw Exception(
-            'Invalid ZIP file. Please select a valid ZIP archive.',
-          );
-        }
+        ZipValidator.validate(bytes);
 
         await widget.store.importFromZip(bytes);
         if (mounted) {

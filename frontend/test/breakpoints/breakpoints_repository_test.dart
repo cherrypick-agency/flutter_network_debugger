@@ -243,4 +243,11 @@ class _FakeHttp implements AppHttpClient {
     Map<String, String>? headers,
     Object? body,
   }) async => throw UnimplementedError();
+  @override
+  Future<List<int>> getBytes({
+    String? host,
+    String path = '',
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  }) async => throw UnimplementedError();
 }

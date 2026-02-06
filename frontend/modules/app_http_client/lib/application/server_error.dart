@@ -24,6 +24,14 @@ enum ServerErrorCode {
   eventsListFailed,
   httpListFailed,
   streamUnsupported,
+  unauthorized,
+  badJson,
+  validation,
+  conflict,
+  badParam,
+  invalidUrl,
+  badBase64,
+  invalidStatus,
   unknown,
 }
 
@@ -51,6 +59,22 @@ ServerErrorCode parseServerErrorCode(String? code) {
       return ServerErrorCode.httpListFailed;
     case 'STREAM_UNSUPPORTED':
       return ServerErrorCode.streamUnsupported;
+    case 'UNAUTHORIZED':
+      return ServerErrorCode.unauthorized;
+    case 'BAD_JSON':
+      return ServerErrorCode.badJson;
+    case 'VALIDATION':
+      return ServerErrorCode.validation;
+    case 'CONFLICT':
+      return ServerErrorCode.conflict;
+    case 'BAD_PARAM':
+      return ServerErrorCode.badParam;
+    case 'INVALID_URL':
+      return ServerErrorCode.invalidUrl;
+    case 'BAD_BASE64':
+      return ServerErrorCode.badBase64;
+    case 'INVALID_STATUS':
+      return ServerErrorCode.invalidStatus;
     default:
       return ServerErrorCode.unknown;
   }

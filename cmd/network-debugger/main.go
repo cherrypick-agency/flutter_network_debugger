@@ -480,6 +480,11 @@ func main() {
 		}
 	}
 
+	// Close intercept manager (stop timers, unblock waiters)
+	if deps.InterceptSvc != nil {
+		deps.InterceptSvc.Manager().Close()
+	}
+
 	// Close script service and plugin pools
 	if deps.ScriptSvc != nil {
 		if err := deps.ScriptSvc.Close(); err != nil {

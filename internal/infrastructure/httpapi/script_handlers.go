@@ -11,8 +11,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +22,17 @@ import (
 
 	"network-debugger/internal/features/scripting/domain"
 	"network-debugger/internal/features/scripting/usecase"
+)
+
+const (
+	maxUploadFormSize     = 10 << 20        // 10MB for multipart form parsing
+	maxSingleFileSize     = 500 * 1024      // 500KB per file in ZIP
+	maxTotalProjectSize   = 5 * 1024 * 1024 // 5MB total project size
+	maxSourceCodeSize     = 500_000         // 500KB max source code
+	maxDependencyFileSize = 500_000         // 500KB max dependency file
+	maxImportProjectSize  = 5_000_000       // 5MB max total import size
+	maxFilesInZip         = 1000            // max files allowed in ZIP
+	maxCompressionRatio   = 100             // max compression ratio (detect ZIP bombs)
 )
 
 // DTOs for consistent JSON on frontend (camelCase)
@@ -116,7 +129,9 @@ func toScriptDTO(s *domain.Script) scriptDTO {
 func writeJSONError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+		log.Printf("[ScriptHandlers] Failed to encode error response: %v", err)
+	}
 }
 
 // ScriptHandlers handles HTTP requests for script management
@@ -277,20 +292,9 @@ func (h *ScriptHandlers) CreateScript(w http.ResponseWriter, r *http.Request) {
 			PatternType: domain.PatternType(req.MatchRules.PatternType),
 		}
 
-		// Validate regex patterns
-		if script.MatchRules.PatternType == domain.PatternRegex {
-			if script.MatchRules.HostPattern != "" {
-				if _, err := regexp.Compile(script.MatchRules.HostPattern); err != nil {
-					writeJSONError(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
-					return
-				}
-			}
-			if script.MatchRules.PathPattern != "" {
-				if _, err := regexp.Compile(script.MatchRules.PathPattern); err != nil {
-					writeJSONError(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
-					return
-				}
-			}
+		if err := validateMatchRulesRegex(script.MatchRules); err != nil {
+			writeJSONError(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 	}
 
@@ -423,34 +427,44 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		script.Config.AllowedHosts = req.Config.AllowedHosts
 	}
 	if req.Dependencies != nil {
-		// Completely replace the project files set
-		script.Dependencies = *req.Dependencies
+		totalSize := len(script.SourceCode)
+		for filename, content := range *req.Dependencies {
+			if len(content) > int(maxDependencyFileSize) {
+				writeJSONError(w, fmt.Sprintf("dependency %s too large (max %dKB)", filename, maxDependencyFileSize/1024), http.StatusBadRequest)
+				return
+			}
+			totalSize += len(content)
+		}
+		if totalSize > int(maxImportProjectSize) {
+			writeJSONError(w, fmt.Sprintf("total project size too large (max %dMB)", maxImportProjectSize/1024/1024), http.StatusBadRequest)
+			return
+		}
+		if !mapsEqual(script.Dependencies, *req.Dependencies) {
+			script.Dependencies = *req.Dependencies
+			script.Code = []byte{}
+			script.CompilationStatus = domain.CompilationNotCompiled
+			script.CompilationError = ""
+			script.ValidationStatus = domain.ValidationNotValidated
+			script.ValidationError = ""
+			script.Enabled = false
+		} else {
+			script.Dependencies = *req.Dependencies
+		}
 	}
 	if req.MatchRules != nil {
 		pt := req.MatchRules.PatternType
 		if pt == "" {
 			pt = "wildcard"
 		}
-		// Simple regexp validation like during creation
-		if domain.PatternType(pt) == domain.PatternRegex {
-			if req.MatchRules.HostPattern != "" {
-				if _, err := regexp.Compile(req.MatchRules.HostPattern); err != nil {
-					writeJSONError(w, "invalid regex pattern for hostPattern: "+err.Error(), http.StatusBadRequest)
-					return
-				}
-			}
-			if req.MatchRules.PathPattern != "" {
-				if _, err := regexp.Compile(req.MatchRules.PathPattern); err != nil {
-					writeJSONError(w, "invalid regex pattern for pathPattern: "+err.Error(), http.StatusBadRequest)
-					return
-				}
-			}
-		}
 		script.MatchRules = domain.MatchRules{
 			Methods:     append([]string(nil), req.MatchRules.Methods...),
 			HostPattern: req.MatchRules.HostPattern,
 			PathPattern: req.MatchRules.PathPattern,
 			PatternType: domain.PatternType(pt),
+		}
+		if err := validateMatchRulesRegex(script.MatchRules); err != nil {
+			writeJSONError(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 	}
 
@@ -459,6 +473,10 @@ func (h *ScriptHandlers) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[ScriptHandlers] SourceCode changed for script %s, clearing WASM (requires recompilation)", id)
 		script.SourceCode = *req.SourceCode
 		script.Code = []byte{} // Clear WASM - script must be recompiled via /compile endpoint
+		script.CompilationStatus = domain.CompilationNotCompiled
+		script.CompilationError = ""
+		script.ValidationStatus = domain.ValidationNotValidated
+		script.ValidationError = ""
 		script.Enabled = false // Auto-disable to prevent runtime errors with empty Code
 		log.Printf("[ScriptHandlers] Auto-disabled script %s (must be recompiled and re-enabled)", id)
 	}
@@ -514,8 +532,8 @@ func (h *ScriptHandlers) ToggleScript(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, "script not found: "+err.Error(), http.StatusNotFound)
 			return
 		}
-		if len(script.Code) == 0 && script.SourceCode == "" {
-			writeJSONError(w, "cannot enable script without code or source code", http.StatusBadRequest)
+		if len(script.Code) == 0 {
+			writeJSONError(w, "cannot enable script without compiled WASM code", http.StatusBadRequest)
 			return
 		}
 		if script.CompilationStatus == domain.CompilationStatusError {
@@ -532,9 +550,7 @@ func (h *ScriptHandlers) ToggleScript(w http.ResponseWriter, r *http.Request) {
 	// Return full script DTO after toggle
 	updatedScript, err := h.service.GetScript(r.Context(), id)
 	if err != nil {
-		// Fallback to simple response if we can't reload
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"enabled": req.Enabled})
+		writeJSONError(w, "toggle succeeded but failed to reload script: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -681,8 +697,8 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse multipart form (max 10MB)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	// Parse multipart form
+	if err := r.ParseMultipartForm(maxUploadFormSize); err != nil {
 		writeJSONError(w, "failed to parse form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -708,6 +724,12 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate ZIP magic bytes
+	if len(zipData) < 4 || zipData[0] != 'P' || zipData[1] != 'K' {
+		writeJSONError(w, "invalid ZIP file: bad signature", http.StatusBadRequest)
+		return
+	}
+
 	// Parse ZIP archive
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
@@ -718,22 +740,46 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 	// Extract files into Dependencies map
 	dependencies := make(map[string]string)
 	totalSize := 0
-	const maxFileSize = 500 * 1024       // 500KB per file
-	const maxTotalSize = 5 * 1024 * 1024 // 5MB total
+	fileCount := 0
+	seenFiles := make(map[string]bool)
 
 	for _, zipFile := range zipReader.File {
+		fileCount++
+		if fileCount > maxFilesInZip {
+			writeJSONError(w, fmt.Sprintf("too many files in ZIP (max %d)", maxFilesInZip), http.StatusBadRequest)
+			return
+		}
+		// Skip symlinks
+		if zipFile.FileInfo().Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		// Path traversal protection
+		sanitizedName, err := sanitizeZipFilename(zipFile.Name)
+		if err != nil {
+			writeJSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Check for duplicate files
+		if seenFiles[sanitizedName] {
+			writeJSONError(w, fmt.Sprintf("duplicate file in ZIP: %s", sanitizedName), http.StatusBadRequest)
+			return
+		}
+		seenFiles[sanitizedName] = true
+
 		// Skip directories
 		if zipFile.FileInfo().IsDir() {
 			continue
 		}
 
 		// Skip hidden files and __MACOSX
-		if strings.HasPrefix(filepath.Base(zipFile.Name), ".") || strings.Contains(zipFile.Name, "__MACOSX") {
+		if strings.HasPrefix(filepath.Base(sanitizedName), ".") || strings.Contains(sanitizedName, "__MACOSX") {
 			continue
 		}
 
 		// Validate file extension (security: only source files)
-		ext := strings.ToLower(filepath.Ext(zipFile.Name))
+		ext := strings.ToLower(filepath.Ext(sanitizedName))
 		allowedExts := map[string]bool{
 			".rs": true, ".go": true, ".ts": true, ".js": true,
 			".toml": true, ".json": true, ".mod": true, ".sum": true,
@@ -745,35 +791,49 @@ func (h *ScriptHandlers) UploadProject(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Check file size
-		if zipFile.UncompressedSize64 > maxFileSize {
-			writeJSONError(w, fmt.Sprintf("file %s too large (max 500KB)", zipFile.Name), http.StatusBadRequest)
+		if zipFile.UncompressedSize64 > maxSingleFileSize {
+			writeJSONError(w, fmt.Sprintf("file %s too large (max %dKB)", sanitizedName, maxSingleFileSize/1024), http.StatusBadRequest)
 			return
+		}
+
+		// Check compression ratio (detect ZIP bombs)
+		if zipFile.CompressedSize64 > 0 {
+			ratio := zipFile.UncompressedSize64 / zipFile.CompressedSize64
+			if ratio > maxCompressionRatio {
+				writeJSONError(w, fmt.Sprintf("file %s has suspicious compression ratio (max %d:1)", sanitizedName, maxCompressionRatio), http.StatusBadRequest)
+				return
+			}
 		}
 
 		// Open file in ZIP
 		rc, err := zipFile.Open()
 		if err != nil {
-			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", sanitizedName, err), http.StatusInternalServerError)
 			return
 		}
 
-		// Read file content
-		content, err := io.ReadAll(rc)
+		// Read file content with LimitReader
+		content, err := io.ReadAll(io.LimitReader(rc, int64(maxSingleFileSize)+1))
 		rc.Close()
 		if err != nil {
-			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", sanitizedName, err), http.StatusInternalServerError)
+			return
+		}
+
+		if len(content) > int(maxSingleFileSize) {
+			writeJSONError(w, fmt.Sprintf("file %s exceeds size limit after decompression", sanitizedName), http.StatusBadRequest)
 			return
 		}
 
 		// Update total size
 		totalSize += len(content)
-		if totalSize > maxTotalSize {
-			writeJSONError(w, "total project size exceeds 5MB", http.StatusBadRequest)
+		if totalSize > maxTotalProjectSize {
+			writeJSONError(w, fmt.Sprintf("total project size exceeds %dMB", maxTotalProjectSize/1024/1024), http.StatusBadRequest)
 			return
 		}
 
 		// Normalize path (remove leading directories if nested in single folder)
-		filename := zipFile.Name
+		filename := sanitizedName
 		if strings.Contains(filename, "/") {
 			// If all files are in a single root folder, strip it
 			parts := strings.Split(filename, "/")
@@ -898,8 +958,14 @@ func (h *ScriptHandlers) ListProjectFiles(w http.ResponseWriter, r *http.Request
 		})
 	}
 
-	// Add dependency files
-	for filename, content := range script.Dependencies {
+	// Add dependency files (sorted by name for deterministic output)
+	depNames := make([]string, 0, len(script.Dependencies))
+	for k := range script.Dependencies {
+		depNames = append(depNames, k)
+	}
+	sort.Strings(depNames)
+	for _, filename := range depNames {
+		content := script.Dependencies[filename]
 		files = append(files, map[string]interface{}{
 			"filename": filename,
 			"size":     len(content),
@@ -962,7 +1028,65 @@ func getFileList(deps map[string]string) []string {
 	for filename := range deps {
 		files = append(files, filename)
 	}
+	sort.Strings(files)
 	return files
+}
+
+// validateMatchRulesRegex validates regex patterns in match rules
+func validateMatchRulesRegex(rules domain.MatchRules) error {
+	if rules.PatternType != domain.PatternRegex {
+		return nil
+	}
+	if rules.HostPattern != "" {
+		if _, err := regexp.Compile(rules.HostPattern); err != nil {
+			return fmt.Errorf("invalid regex pattern for hostPattern: %w", err)
+		}
+	}
+	if rules.PathPattern != "" {
+		if _, err := regexp.Compile(rules.PathPattern); err != nil {
+			return fmt.Errorf("invalid regex pattern for pathPattern: %w", err)
+		}
+	}
+	return nil
+}
+
+// mapsEqual checks if two string maps are equal
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// sanitizeZipFilename validates and sanitizes a filename from a ZIP archive
+// to prevent path traversal attacks
+func sanitizeZipFilename(name string) (string, error) {
+	// Check for null bytes
+	if strings.ContainsRune(name, 0) {
+		return "", fmt.Errorf("null byte in filename not allowed")
+	}
+	// Normalize backslashes to forward slashes (cross-platform ZIP support)
+	normalized := strings.ReplaceAll(name, "\\", "/")
+	// Check for path traversal in original name before Clean
+	if strings.Contains(normalized, "..") {
+		return "", fmt.Errorf("path traversal not allowed: %s", name)
+	}
+	cleaned := filepath.Clean(normalized)
+	if filepath.IsAbs(cleaned) {
+		return "", fmt.Errorf("absolute path not allowed: %s", name)
+	}
+	// Double-check after Clean
+	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal not allowed: %s", name)
+		}
+	}
+	return cleaned, nil
 }
 
 // ExportScriptAsZip handles GET /_api/v1/scripts/{id}/export-zip
@@ -1071,8 +1195,8 @@ func (h *ScriptHandlers) ExportScriptAsZip(w http.ResponseWriter, r *http.Reques
 // ImportScriptFromZip handles POST /_api/v1/scripts/import-zip
 // Imports complete script from ZIP file
 func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Request) {
-	// Parse multipart form (max 10MB)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	// Parse multipart form
+	if err := r.ParseMultipartForm(maxUploadFormSize); err != nil {
 		writeJSONError(w, "failed to parse form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1092,6 +1216,12 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Validate ZIP magic bytes
+	if len(fileBytes) < 4 || fileBytes[0] != 'P' || fileBytes[1] != 'K' {
+		writeJSONError(w, "invalid ZIP file: bad signature", http.StatusBadRequest)
+		return
+	}
+
 	// Open ZIP
 	zipReader, err := zip.NewReader(bytes.NewReader(fileBytes), int64(len(fileBytes)))
 	if err != nil {
@@ -1103,22 +1233,68 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 	var metadata map[string]interface{}
 	sourceFiles := make(map[string]string)
 	var wasmCode string
+	fileCount := 0
+	seenFiles := make(map[string]bool)
 
 	for _, zipFile := range zipReader.File {
+		fileCount++
+		if fileCount > maxFilesInZip {
+			writeJSONError(w, fmt.Sprintf("too many files in ZIP (max %d)", maxFilesInZip), http.StatusBadRequest)
+			return
+		}
+		// Skip symlinks
+		if zipFile.FileInfo().Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		// Path traversal protection
+		sanitizedName, err := sanitizeZipFilename(zipFile.Name)
+		if err != nil {
+			writeJSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Check for duplicate files
+		if seenFiles[sanitizedName] {
+			writeJSONError(w, fmt.Sprintf("duplicate file in ZIP: %s", sanitizedName), http.StatusBadRequest)
+			return
+		}
+		seenFiles[sanitizedName] = true
+
+		// Check file size
+		if zipFile.UncompressedSize64 > maxSingleFileSize {
+			writeJSONError(w, fmt.Sprintf("file %s too large (max %dKB)", sanitizedName, maxSingleFileSize/1024), http.StatusBadRequest)
+			return
+		}
+
+		// Check compression ratio (detect ZIP bombs)
+		if zipFile.CompressedSize64 > 0 {
+			ratio := zipFile.UncompressedSize64 / zipFile.CompressedSize64
+			if ratio > maxCompressionRatio {
+				writeJSONError(w, fmt.Sprintf("file %s has suspicious compression ratio (max %d:1)", sanitizedName, maxCompressionRatio), http.StatusBadRequest)
+				return
+			}
+		}
+
 		rc, err := zipFile.Open()
 		if err != nil {
-			writeJSONError(w, fmt.Sprintf("failed to open %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to open %s: %v", sanitizedName, err), http.StatusInternalServerError)
 			return
 		}
 
-		content, err := io.ReadAll(rc)
+		content, err := io.ReadAll(io.LimitReader(rc, int64(maxSingleFileSize)+1))
 		rc.Close()
 		if err != nil {
-			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", zipFile.Name, err), http.StatusInternalServerError)
+			writeJSONError(w, fmt.Sprintf("failed to read %s: %v", sanitizedName, err), http.StatusInternalServerError)
 			return
 		}
 
-		switch zipFile.Name {
+		if len(content) > int(maxSingleFileSize) {
+			writeJSONError(w, fmt.Sprintf("file %s exceeds size limit after decompression", sanitizedName), http.StatusBadRequest)
+			return
+		}
+
+		switch sanitizedName {
 		case "metadata.json":
 			if err := json.Unmarshal(content, &metadata); err != nil {
 				writeJSONError(w, "invalid metadata: "+err.Error(), http.StatusBadRequest)
@@ -1130,7 +1306,7 @@ func (h *ScriptHandlers) ImportScriptFromZip(w http.ResponseWriter, r *http.Requ
 
 		default:
 			// All other files are source/dependency files
-			sourceFiles[zipFile.Name] = string(content)
+			sourceFiles[sanitizedName] = string(content)
 		}
 	}
 
@@ -1305,19 +1481,19 @@ func validateScriptData(script *domain.Script) error {
 	}
 
 	// Size limits
-	if len(script.SourceCode) > 500_000 {
-		return errors.New("source code too large (max 500KB)")
+	if len(script.SourceCode) > maxSourceCodeSize {
+		return fmt.Errorf("source code too large (max %dKB)", maxSourceCodeSize/1024)
 	}
 
 	totalSize := len(script.SourceCode)
 	for _, content := range script.Dependencies {
 		totalSize += len(content)
-		if len(content) > 500_000 {
-			return errors.New("dependency file too large (max 500KB per file)")
+		if len(content) > maxDependencyFileSize {
+			return fmt.Errorf("dependency file too large (max %dKB per file)", maxDependencyFileSize/1024)
 		}
 	}
-	if totalSize > 5_000_000 {
-		return errors.New("total project size too large (max 5MB)")
+	if totalSize > maxImportProjectSize {
+		return fmt.Errorf("total project size too large (max %dMB)", maxImportProjectSize/1024/1024)
 	}
 
 	return nil

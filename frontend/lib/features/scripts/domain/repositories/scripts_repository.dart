@@ -20,7 +20,7 @@ abstract class ScriptsRepository {
   Future<void> delete(String id);
 
   /// Toggle script enabled/disabled status
-  Future<Map<String, dynamic>> toggle(String id, bool enabled);
+  Future<Script> toggle(String id, bool enabled);
 
   /// Test script with sample request
   /// Note: Backend may not have this endpoint yet, might need to add it
@@ -28,9 +28,6 @@ abstract class ScriptsRepository {
 
   /// Compile script source code to WASM
   Future<Script> compile(String id, {bool optimize = true});
-
-  /// Export script as ZIP file (returns download URL)
-  String getExportZipUrl(String id);
 
   /// Import script from ZIP file bytes
   Future<Script> importFromZip(List<int> zipBytes);
@@ -48,6 +45,9 @@ abstract class ScriptsRepository {
   /// List all files in script project
   Future<Map<String, dynamic>> listProjectFiles(String id);
 
-  /// Returns download URL for project ZIP
-  String getDownloadProjectUrl(String id);
+  /// Download export ZIP as bytes
+  Future<List<int>> downloadExportZip(String id);
+
+  /// Download project ZIP as bytes
+  Future<List<int>> downloadProjectZip(String id);
 }

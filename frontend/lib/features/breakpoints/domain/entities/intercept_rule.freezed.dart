@@ -1301,7 +1301,7 @@ $RuleHeaderMatchCopyWith<$Res>? get header {
 /// @nodoc
 mixin _$InterceptRule {
 
- String get id; bool get enabled; int get priority; String get action; bool get once; bool get stopProcessing; InterceptWhen get when;
+ String get id; bool get enabled; int get priority; String get action; bool get once; bool get stopProcessing; InterceptWhen get when; DateTime? get createdAt; DateTime? get updatedAt;
 /// Create a copy of InterceptRule
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1314,16 +1314,16 @@ $InterceptRuleCopyWith<InterceptRule> get copyWith => _$InterceptRuleCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is InterceptRule&&(identical(other.id, id) || other.id == id)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.action, action) || other.action == action)&&(identical(other.once, once) || other.once == once)&&(identical(other.stopProcessing, stopProcessing) || other.stopProcessing == stopProcessing)&&(identical(other.when, when) || other.when == when));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is InterceptRule&&(identical(other.id, id) || other.id == id)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.action, action) || other.action == action)&&(identical(other.once, once) || other.once == once)&&(identical(other.stopProcessing, stopProcessing) || other.stopProcessing == stopProcessing)&&(identical(other.when, when) || other.when == when)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,enabled,priority,action,once,stopProcessing,when);
+int get hashCode => Object.hash(runtimeType,id,enabled,priority,action,once,stopProcessing,when,createdAt,updatedAt);
 
 @override
 String toString() {
-  return 'InterceptRule(id: $id, enabled: $enabled, priority: $priority, action: $action, once: $once, stopProcessing: $stopProcessing, when: $when)';
+  return 'InterceptRule(id: $id, enabled: $enabled, priority: $priority, action: $action, once: $once, stopProcessing: $stopProcessing, when: $when, createdAt: $createdAt, updatedAt: $updatedAt)';
 }
 
 
@@ -1334,7 +1334,7 @@ abstract mixin class $InterceptRuleCopyWith<$Res>  {
   factory $InterceptRuleCopyWith(InterceptRule value, $Res Function(InterceptRule) _then) = _$InterceptRuleCopyWithImpl;
 @useResult
 $Res call({
- String id, bool enabled, int priority, String action, bool once, bool stopProcessing, InterceptWhen when
+ String id, bool enabled, int priority, String action, bool once, bool stopProcessing, InterceptWhen when, DateTime? createdAt, DateTime? updatedAt
 });
 
 
@@ -1351,7 +1351,7 @@ class _$InterceptRuleCopyWithImpl<$Res>
 
 /// Create a copy of InterceptRule
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? enabled = null,Object? priority = null,Object? action = null,Object? once = null,Object? stopProcessing = null,Object? when = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? enabled = null,Object? priority = null,Object? action = null,Object? once = null,Object? stopProcessing = null,Object? when = null,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,enabled: null == enabled ? _self.enabled : enabled // ignore: cast_nullable_to_non_nullable
@@ -1360,7 +1360,9 @@ as int,action: null == action ? _self.action : action // ignore: cast_nullable_t
 as String,once: null == once ? _self.once : once // ignore: cast_nullable_to_non_nullable
 as bool,stopProcessing: null == stopProcessing ? _self.stopProcessing : stopProcessing // ignore: cast_nullable_to_non_nullable
 as bool,when: null == when ? _self.when : when // ignore: cast_nullable_to_non_nullable
-as InterceptWhen,
+as InterceptWhen,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 /// Create a copy of InterceptRule
@@ -1451,10 +1453,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  bool enabled,  int priority,  String action,  bool once,  bool stopProcessing,  InterceptWhen when)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  bool enabled,  int priority,  String action,  bool once,  bool stopProcessing,  InterceptWhen when,  DateTime? createdAt,  DateTime? updatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _InterceptRule() when $default != null:
-return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_that.stopProcessing,_that.when);case _:
+return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_that.stopProcessing,_that.when,_that.createdAt,_that.updatedAt);case _:
   return orElse();
 
 }
@@ -1472,10 +1474,10 @@ return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  bool enabled,  int priority,  String action,  bool once,  bool stopProcessing,  InterceptWhen when)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  bool enabled,  int priority,  String action,  bool once,  bool stopProcessing,  InterceptWhen when,  DateTime? createdAt,  DateTime? updatedAt)  $default,) {final _that = this;
 switch (_that) {
 case _InterceptRule():
-return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_that.stopProcessing,_that.when);}
+return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_that.stopProcessing,_that.when,_that.createdAt,_that.updatedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1489,10 +1491,10 @@ return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  bool enabled,  int priority,  String action,  bool once,  bool stopProcessing,  InterceptWhen when)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  bool enabled,  int priority,  String action,  bool once,  bool stopProcessing,  InterceptWhen when,  DateTime? createdAt,  DateTime? updatedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _InterceptRule() when $default != null:
-return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_that.stopProcessing,_that.when);case _:
+return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_that.stopProcessing,_that.when,_that.createdAt,_that.updatedAt);case _:
   return null;
 
 }
@@ -1504,7 +1506,7 @@ return $default(_that.id,_that.enabled,_that.priority,_that.action,_that.once,_t
 @JsonSerializable()
 
 class _InterceptRule extends InterceptRule {
-  const _InterceptRule({this.id = '', this.enabled = true, this.priority = 10, this.action = 'both', this.once = false, this.stopProcessing = false, this.when = const InterceptWhen()}): super._();
+  const _InterceptRule({this.id = '', this.enabled = true, this.priority = 10, this.action = 'both', this.once = false, this.stopProcessing = false, this.when = const InterceptWhen(), this.createdAt, this.updatedAt}): super._();
   factory _InterceptRule.fromJson(Map<String, dynamic> json) => _$InterceptRuleFromJson(json);
 
 @override@JsonKey() final  String id;
@@ -1514,6 +1516,8 @@ class _InterceptRule extends InterceptRule {
 @override@JsonKey() final  bool once;
 @override@JsonKey() final  bool stopProcessing;
 @override@JsonKey() final  InterceptWhen when;
+@override final  DateTime? createdAt;
+@override final  DateTime? updatedAt;
 
 /// Create a copy of InterceptRule
 /// with the given fields replaced by the non-null parameter values.
@@ -1528,16 +1532,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _InterceptRule&&(identical(other.id, id) || other.id == id)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.action, action) || other.action == action)&&(identical(other.once, once) || other.once == once)&&(identical(other.stopProcessing, stopProcessing) || other.stopProcessing == stopProcessing)&&(identical(other.when, when) || other.when == when));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _InterceptRule&&(identical(other.id, id) || other.id == id)&&(identical(other.enabled, enabled) || other.enabled == enabled)&&(identical(other.priority, priority) || other.priority == priority)&&(identical(other.action, action) || other.action == action)&&(identical(other.once, once) || other.once == once)&&(identical(other.stopProcessing, stopProcessing) || other.stopProcessing == stopProcessing)&&(identical(other.when, when) || other.when == when)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,enabled,priority,action,once,stopProcessing,when);
+int get hashCode => Object.hash(runtimeType,id,enabled,priority,action,once,stopProcessing,when,createdAt,updatedAt);
 
 @override
 String toString() {
-  return 'InterceptRule(id: $id, enabled: $enabled, priority: $priority, action: $action, once: $once, stopProcessing: $stopProcessing, when: $when)';
+  return 'InterceptRule(id: $id, enabled: $enabled, priority: $priority, action: $action, once: $once, stopProcessing: $stopProcessing, when: $when, createdAt: $createdAt, updatedAt: $updatedAt)';
 }
 
 
@@ -1548,7 +1552,7 @@ abstract mixin class _$InterceptRuleCopyWith<$Res> implements $InterceptRuleCopy
   factory _$InterceptRuleCopyWith(_InterceptRule value, $Res Function(_InterceptRule) _then) = __$InterceptRuleCopyWithImpl;
 @override @useResult
 $Res call({
- String id, bool enabled, int priority, String action, bool once, bool stopProcessing, InterceptWhen when
+ String id, bool enabled, int priority, String action, bool once, bool stopProcessing, InterceptWhen when, DateTime? createdAt, DateTime? updatedAt
 });
 
 
@@ -1565,7 +1569,7 @@ class __$InterceptRuleCopyWithImpl<$Res>
 
 /// Create a copy of InterceptRule
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? enabled = null,Object? priority = null,Object? action = null,Object? once = null,Object? stopProcessing = null,Object? when = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? enabled = null,Object? priority = null,Object? action = null,Object? once = null,Object? stopProcessing = null,Object? when = null,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
   return _then(_InterceptRule(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,enabled: null == enabled ? _self.enabled : enabled // ignore: cast_nullable_to_non_nullable
@@ -1574,7 +1578,9 @@ as int,action: null == action ? _self.action : action // ignore: cast_nullable_t
 as String,once: null == once ? _self.once : once // ignore: cast_nullable_to_non_nullable
 as bool,stopProcessing: null == stopProcessing ? _self.stopProcessing : stopProcessing // ignore: cast_nullable_to_non_nullable
 as bool,when: null == when ? _self.when : when // ignore: cast_nullable_to_non_nullable
-as InterceptWhen,
+as InterceptWhen,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 

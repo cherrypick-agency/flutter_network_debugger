@@ -26,6 +26,38 @@ enum TriggerType {
   both, // Both request and response
 }
 
+/// Compilation status of script
+/// Synced with backend: internal/features/scripting/domain/script.go
+enum CompilationStatus {
+  @JsonValue('not_compiled')
+  notCompiled,
+
+  @JsonValue('pending')
+  pending,
+
+  @JsonValue('compiling')
+  compiling,
+
+  @JsonValue('success')
+  success,
+
+  @JsonValue('error')
+  error,
+}
+
+/// Validation status of WASM exports
+/// Synced with backend: internal/features/scripting/domain/script.go
+enum ValidationStatus {
+  @JsonValue('not_validated')
+  notValidated,
+
+  @JsonValue('valid')
+  valid,
+
+  @JsonValue('invalid')
+  invalid,
+}
+
 /// Main Script entity
 /// Represents a script that can modify HTTP requests/responses
 @freezed
@@ -49,10 +81,10 @@ sealed class Script with _$Script {
     // Compilation fields
     String? sourceCode,
     Map<String, String>? dependencies,
-    String? compilationStatus,
+    CompilationStatus? compilationStatus,
     String? compilationError,
     DateTime? lastCompiledAt,
-    String? validationStatus,
+    ValidationStatus? validationStatus,
     String? validationError,
   }) = _Script;
 

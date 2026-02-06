@@ -3,7 +3,41 @@ package domain
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
+
+const regexCacheMaxSize = 256
+
+var (
+	regexCacheMu sync.Mutex
+	regexCacheM  = make(map[string]*regexp.Regexp, regexCacheMaxSize)
+)
+
+func cachedRegexp(pattern string) (*regexp.Regexp, error) {
+	regexCacheMu.Lock()
+	if rx, ok := regexCacheM[pattern]; ok {
+		regexCacheMu.Unlock()
+		return rx, nil
+	}
+	regexCacheMu.Unlock()
+
+	rx, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	regexCacheMu.Lock()
+	if len(regexCacheM) >= regexCacheMaxSize {
+		// evict one random entry (map iteration order is random in Go)
+		for k := range regexCacheM {
+			delete(regexCacheM, k)
+			break
+		}
+	}
+	regexCacheM[pattern] = rx
+	regexCacheMu.Unlock()
+	return rx, nil
+}
 
 // RequestMatchInput contains pure data for request matching (no net/http dependency)
 type RequestMatchInput struct {
@@ -122,7 +156,7 @@ func (m *RuleStringMatch) Matches(s string) bool {
 		}
 	}
 	if m.Regex != "" {
-		if rx, err := regexp.Compile(m.Regex); err == nil {
+		if rx, err := cachedRegexp(m.Regex); err == nil {
 			return rx.MatchString(s)
 		}
 	}

@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 
 	"network-debugger/internal/features/intercept/domain"
@@ -61,7 +62,9 @@ func toRuleModel(r domain.InterceptRule) InterceptRuleModel {
 func toRuleDomain(m InterceptRuleModel) domain.InterceptRule {
 	var when domain.InterceptWhen
 	if m.WhenJSON != "" {
-		_ = json.Unmarshal([]byte(m.WhenJSON), &when)
+		if err := json.Unmarshal([]byte(m.WhenJSON), &when); err != nil {
+			log.Printf("[InterceptPersistence] corrupt when_json for rule %s: %v", m.ID, err)
+		}
 	}
 	return domain.InterceptRule{
 		ID:             m.ID,

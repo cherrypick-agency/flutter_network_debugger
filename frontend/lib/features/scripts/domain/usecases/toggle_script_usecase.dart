@@ -1,3 +1,4 @@
+import '../entities/script.dart';
 import '../repositories/scripts_repository.dart';
 
 /// Use case for toggling script enabled status
@@ -6,7 +7,7 @@ class ToggleScriptUseCase {
 
   ToggleScriptUseCase(this._repository);
 
-  Future<Map<String, dynamic>> call(String id, bool enabled) async {
+  Future<Script> call(String id, bool enabled) async {
     if (id.trim().isEmpty) {
       throw ArgumentError('Script ID cannot be empty');
     }

@@ -119,6 +119,12 @@ _InterceptRule _$InterceptRuleFromJson(Map<String, dynamic> json) =>
       when: json['when'] == null
           ? const InterceptWhen()
           : InterceptWhen.fromJson(json['when'] as Map<String, dynamic>),
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.parse(json['createdAt'] as String),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : DateTime.parse(json['updatedAt'] as String),
     );
 
 Map<String, dynamic> _$InterceptRuleToJson(_InterceptRule instance) =>
@@ -130,4 +136,6 @@ Map<String, dynamic> _$InterceptRuleToJson(_InterceptRule instance) =>
       'once': instance.once,
       'stopProcessing': instance.stopProcessing,
       'when': instance.when,
+      'createdAt': instance.createdAt?.toIso8601String(),
+      'updatedAt': instance.updatedAt?.toIso8601String(),
     };

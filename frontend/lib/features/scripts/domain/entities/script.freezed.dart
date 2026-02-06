@@ -16,7 +16,7 @@ T _$identity<T>(T value) => value;
 mixin _$Script {
 
  String get id; String get name; String? get description; ScriptRuntime get runtime; String get code; String get language; TriggerType get triggerType; int get priority; bool get enabled; MatchRules? get matchRules; ScriptConfig? get config; DateTime? get createdAt; DateTime? get updatedAt;// Compilation fields
- String? get sourceCode; Map<String, String>? get dependencies; String? get compilationStatus; String? get compilationError; DateTime? get lastCompiledAt; String? get validationStatus; String? get validationError;
+ String? get sourceCode; Map<String, String>? get dependencies; CompilationStatus? get compilationStatus; String? get compilationError; DateTime? get lastCompiledAt; ValidationStatus? get validationStatus; String? get validationError;
 /// Create a copy of Script
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -49,7 +49,7 @@ abstract mixin class $ScriptCopyWith<$Res>  {
   factory $ScriptCopyWith(Script value, $Res Function(Script) _then) = _$ScriptCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, String? compilationStatus, String? compilationError, DateTime? lastCompiledAt, String? validationStatus, String? validationError
+ String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, CompilationStatus? compilationStatus, String? compilationError, DateTime? lastCompiledAt, ValidationStatus? validationStatus, String? validationError
 });
 
 
@@ -84,10 +84,10 @@ as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ig
 as DateTime?,sourceCode: freezed == sourceCode ? _self.sourceCode : sourceCode // ignore: cast_nullable_to_non_nullable
 as String?,dependencies: freezed == dependencies ? _self.dependencies : dependencies // ignore: cast_nullable_to_non_nullable
 as Map<String, String>?,compilationStatus: freezed == compilationStatus ? _self.compilationStatus : compilationStatus // ignore: cast_nullable_to_non_nullable
-as String?,compilationError: freezed == compilationError ? _self.compilationError : compilationError // ignore: cast_nullable_to_non_nullable
+as CompilationStatus?,compilationError: freezed == compilationError ? _self.compilationError : compilationError // ignore: cast_nullable_to_non_nullable
 as String?,lastCompiledAt: freezed == lastCompiledAt ? _self.lastCompiledAt : lastCompiledAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,validationStatus: freezed == validationStatus ? _self.validationStatus : validationStatus // ignore: cast_nullable_to_non_nullable
-as String?,validationError: freezed == validationError ? _self.validationError : validationError // ignore: cast_nullable_to_non_nullable
+as ValidationStatus?,validationError: freezed == validationError ? _self.validationError : validationError // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -194,7 +194,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  String? validationStatus,  String? validationError)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  CompilationStatus? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  ValidationStatus? validationStatus,  String? validationError)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Script() when $default != null:
 return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt,_that.validationStatus,_that.validationError);case _:
@@ -215,7 +215,7 @@ return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  String? validationStatus,  String? validationError)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  CompilationStatus? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  ValidationStatus? validationStatus,  String? validationError)  $default,) {final _that = this;
 switch (_that) {
 case _Script():
 return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt,_that.validationStatus,_that.validationError);}
@@ -232,7 +232,7 @@ return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  String? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  String? validationStatus,  String? validationError)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description,  ScriptRuntime runtime,  String code,  String language,  TriggerType triggerType,  int priority,  bool enabled,  MatchRules? matchRules,  ScriptConfig? config,  DateTime? createdAt,  DateTime? updatedAt,  String? sourceCode,  Map<String, String>? dependencies,  CompilationStatus? compilationStatus,  String? compilationError,  DateTime? lastCompiledAt,  ValidationStatus? validationStatus,  String? validationError)?  $default,) {final _that = this;
 switch (_that) {
 case _Script() when $default != null:
 return $default(_that.id,_that.name,_that.description,_that.runtime,_that.code,_that.language,_that.triggerType,_that.priority,_that.enabled,_that.matchRules,_that.config,_that.createdAt,_that.updatedAt,_that.sourceCode,_that.dependencies,_that.compilationStatus,_that.compilationError,_that.lastCompiledAt,_that.validationStatus,_that.validationError);case _:
@@ -274,10 +274,10 @@ class _Script extends Script {
   return EqualUnmodifiableMapView(value);
 }
 
-@override final  String? compilationStatus;
+@override final  CompilationStatus? compilationStatus;
 @override final  String? compilationError;
 @override final  DateTime? lastCompiledAt;
-@override final  String? validationStatus;
+@override final  ValidationStatus? validationStatus;
 @override final  String? validationError;
 
 /// Create a copy of Script
@@ -313,7 +313,7 @@ abstract mixin class _$ScriptCopyWith<$Res> implements $ScriptCopyWith<$Res> {
   factory _$ScriptCopyWith(_Script value, $Res Function(_Script) _then) = __$ScriptCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, String? compilationStatus, String? compilationError, DateTime? lastCompiledAt, String? validationStatus, String? validationError
+ String id, String name, String? description, ScriptRuntime runtime, String code, String language, TriggerType triggerType, int priority, bool enabled, MatchRules? matchRules, ScriptConfig? config, DateTime? createdAt, DateTime? updatedAt, String? sourceCode, Map<String, String>? dependencies, CompilationStatus? compilationStatus, String? compilationError, DateTime? lastCompiledAt, ValidationStatus? validationStatus, String? validationError
 });
 
 
@@ -348,10 +348,10 @@ as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ig
 as DateTime?,sourceCode: freezed == sourceCode ? _self.sourceCode : sourceCode // ignore: cast_nullable_to_non_nullable
 as String?,dependencies: freezed == dependencies ? _self._dependencies : dependencies // ignore: cast_nullable_to_non_nullable
 as Map<String, String>?,compilationStatus: freezed == compilationStatus ? _self.compilationStatus : compilationStatus // ignore: cast_nullable_to_non_nullable
-as String?,compilationError: freezed == compilationError ? _self.compilationError : compilationError // ignore: cast_nullable_to_non_nullable
+as CompilationStatus?,compilationError: freezed == compilationError ? _self.compilationError : compilationError // ignore: cast_nullable_to_non_nullable
 as String?,lastCompiledAt: freezed == lastCompiledAt ? _self.lastCompiledAt : lastCompiledAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,validationStatus: freezed == validationStatus ? _self.validationStatus : validationStatus // ignore: cast_nullable_to_non_nullable
-as String?,validationError: freezed == validationError ? _self.validationError : validationError // ignore: cast_nullable_to_non_nullable
+as ValidationStatus?,validationError: freezed == validationError ? _self.validationError : validationError // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

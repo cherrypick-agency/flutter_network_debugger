@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/base64"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -37,6 +38,7 @@ type InterceptorManager struct {
 	cfg     idomain.InterceptConfig
 	monitor EventBroadcaster
 	metrics MetricsCollector
+	closed  bool
 
 	rules []idomain.InterceptRule
 	items map[string]*pendingEntry
@@ -56,7 +58,10 @@ func NewInterceptorManager(cfg idomain.InterceptConfig, monitor EventBroadcaster
 }
 
 func (m *InterceptorManager) interceptTimeout() time.Duration {
-	timeout := time.Duration(m.cfg.TimeoutMs) * time.Millisecond
+	m.mu.RLock()
+	timeoutMs := m.cfg.TimeoutMs
+	m.mu.RUnlock()
+	timeout := time.Duration(timeoutMs) * time.Millisecond
 	if timeout <= 0 {
 		return 60 * time.Second
 	}
@@ -67,13 +72,8 @@ func (m *InterceptorManager) interceptTimeout() time.Duration {
 func (m *InterceptorManager) UpdateRules(rules []idomain.InterceptRule) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]idomain.InterceptRule, 0, len(rules))
-	for _, r := range rules {
-		if r.ID == "" {
-			r.ID = id.New()
-		}
-		out = append(out, r)
-	}
+	out := make([]idomain.InterceptRule, len(rules))
+	copy(out, rules)
 	sort.Slice(out, func(i, j int) bool { return out[i].Priority < out[j].Priority })
 	m.rules = out
 }
@@ -129,8 +129,52 @@ func (m *InterceptorManager) PeekItem(itemID string) (idomain.InterceptItem, boo
 
 // enqueue creates a pending element and starts the timer
 func (m *InterceptorManager) enqueue(it idomain.InterceptItem) *pendingEntry {
+	log.Printf("[InterceptManager] enqueue: direction=%s ruleID=%s sessionID=%s itemID=%s", it.Direction, it.RuleID, it.SessionID, it.ID)
 	pe := &pendingEntry{item: it, decisionR: make(chan any, 1)}
-	timeout := m.interceptTimeout()
+
+	m.mu.Lock()
+	// Check closed under lock
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
+
+	// Read timeout under lock
+	timeout := time.Duration(m.cfg.TimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+
+	// overflow strategy
+	if m.cfg.QueueMax > 0 && len(m.queue) >= m.cfg.QueueMax {
+		if strings.ToLower(m.cfg.Overflow) == "drop-new" {
+			log.Printf("[InterceptManager] enqueue: overflow drop-new, discarding itemID=%s", it.ID)
+			if m.metrics != nil {
+				m.metrics.IncInterceptsTotal("overflow_drop", string(it.Direction))
+				m.metrics.SetInterceptsQueue(float64(len(m.queue)))
+			}
+			m.mu.Unlock()
+			return nil
+		}
+		// auto-continue-oldest
+		oldest := m.queue[0]
+		log.Printf("[InterceptManager] enqueue: overflow auto-continue-oldest, evicting itemID=%s", oldest)
+		m.queue = m.queue[1:]
+		if old := m.items[oldest]; old != nil {
+			old.timer.Stop()
+			old.item.State = idomain.StateTimedOut
+			select {
+			case old.decisionR <- "overflow":
+			default:
+			}
+			delete(m.items, oldest)
+			if m.metrics != nil {
+				m.metrics.IncInterceptsTotal("overflow_autocontinue", string(old.item.Direction))
+			}
+		}
+	}
+
+	// Create timer UNDER lock (time.AfterFunc is non-blocking, just schedules)
 	pe.timer = time.AfterFunc(timeout, func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -149,36 +193,12 @@ func (m *InterceptorManager) enqueue(it idomain.InterceptItem) *pendingEntry {
 			m.metrics.IncInterceptsTotal("timeout", string(pe.item.Direction))
 		}
 	})
-	m.mu.Lock()
-	// overflow strategy
-	if m.cfg.QueueMax > 0 && len(m.queue) >= m.cfg.QueueMax {
-		if strings.ToLower(m.cfg.Overflow) == "drop-new" {
-			if m.metrics != nil {
-				m.metrics.IncInterceptsTotal("overflow_drop", string(it.Direction))
-				m.metrics.SetInterceptsQueue(float64(len(m.queue)))
-			}
-			m.mu.Unlock()
-			return nil
-		}
-		// auto-continue-oldest
-		oldest := m.queue[0]
-		m.queue = m.queue[1:]
-		if old := m.items[oldest]; old != nil {
-			old.item.State = idomain.StateTimedOut
-			select {
-			case old.decisionR <- "overflow":
-			default:
-			}
-			delete(m.items, oldest)
-			if m.metrics != nil {
-				m.metrics.IncInterceptsTotal("overflow_autocontinue", string(old.item.Direction))
-			}
-		}
-	}
+
 	m.items[it.ID] = pe
 	m.queue = append(m.queue, it.ID)
 	queueLen := len(m.queue)
 	m.mu.Unlock()
+
 	if m.monitor != nil {
 		m.monitor.Broadcast(domain.MonitorEvent{Type: "intercept_created", ID: it.SessionID, Ref: it.ID})
 	}
@@ -200,6 +220,7 @@ func (m *InterceptorManager) finalize(itemID string, newState idomain.InterceptI
 	if pe.item.State != idomain.StatePending {
 		return nil, false
 	}
+	log.Printf("[InterceptManager] finalize: itemID=%s newState=%s", itemID, newState)
 	pe.item.State = newState
 	for i, qid := range m.queue {
 		if qid == itemID {
@@ -219,12 +240,18 @@ func (m *InterceptorManager) finalize(itemID string, newState idomain.InterceptI
 
 // InterceptRequest -- main blocking request interception
 func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID string, input idomain.RequestMatchInput, capBody []byte, contentType string) (*idomain.HTTPRequestDecision, error) {
-	if m == nil || !m.cfg.Enabled || !m.cfg.Requests {
+	if m == nil {
 		return nil, nil
 	}
 
 	var matched *idomain.InterceptRule
+	var bodyMaxBytes int
 	m.mu.Lock()
+	if !m.cfg.Enabled || !m.cfg.Requests || m.closed {
+		m.mu.Unlock()
+		return nil, nil
+	}
+	bodyMaxBytes = m.cfg.BodyMaxBytes
 	for i := range m.rules {
 		ru := &m.rules[i]
 		if !ru.Enabled {
@@ -247,6 +274,7 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 	if matched == nil {
 		return nil, nil
 	}
+	log.Printf("[InterceptManager] InterceptRequest: matched ruleID=%s sessionID=%s", matched.ID, sessionID)
 
 	// Build URL from match input parts
 	reqURL := input.Scheme + "://" + input.Host
@@ -268,7 +296,7 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 			URL:           reqURL,
 			Headers:       cloneHeaders(input.Headers),
 			BodyBase64:    base64.StdEncoding.EncodeToString(capBody),
-			BodyTruncated: len(capBody) >= m.cfg.BodyMaxBytes,
+			BodyTruncated: len(capBody) >= bodyMaxBytes,
 			ContentType:   contentType,
 		},
 	}
@@ -298,12 +326,18 @@ func (m *InterceptorManager) InterceptRequest(ctx context.Context, sessionID str
 
 // InterceptResponse -- blocking response interception
 func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID string, input idomain.ResponseMatchInput, capBody []byte, contentType string) (*idomain.HTTPResponseDecision, error) {
-	if m == nil || !m.cfg.Enabled || !m.cfg.Responses {
+	if m == nil {
 		return nil, nil
 	}
 
 	var matched *idomain.InterceptRule
+	var bodyMaxBytes int
 	m.mu.Lock()
+	if !m.cfg.Enabled || !m.cfg.Responses || m.closed {
+		m.mu.Unlock()
+		return nil, nil
+	}
+	bodyMaxBytes = m.cfg.BodyMaxBytes
 	for i := range m.rules {
 		ru := &m.rules[i]
 		if !ru.Enabled {
@@ -326,6 +360,7 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 	if matched == nil {
 		return nil, nil
 	}
+	log.Printf("[InterceptManager] InterceptResponse: matched ruleID=%s sessionID=%s", matched.ID, sessionID)
 
 	it := idomain.InterceptItem{
 		ID:        id.New(),
@@ -339,7 +374,7 @@ func (m *InterceptorManager) InterceptResponse(ctx context.Context, sessionID st
 			Status:        input.StatusCode,
 			Headers:       cloneHeaders(input.Headers),
 			BodyBase64:    base64.StdEncoding.EncodeToString(capBody),
-			BodyTruncated: len(capBody) >= m.cfg.BodyMaxBytes,
+			BodyTruncated: len(capBody) >= bodyMaxBytes,
 			ContentType:   contentType,
 		},
 	}
@@ -418,13 +453,39 @@ func (m *InterceptorManager) Cancel(itemID string) bool {
 	return true
 }
 
+// Close gracefully shuts down the manager, stopping all timers and unblocking waiters
+func (m *InterceptorManager) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.closed = true
+	for _, pe := range m.items {
+		pe.timer.Stop()
+		select {
+		case pe.decisionR <- "shutdown":
+		default:
+		}
+	}
+	m.items = make(map[string]*pendingEntry)
+	m.queue = m.queue[:0]
+}
+
+const maxCloneHeadersSize = 256 * 1024 // 256KB total headers limit
+
 // cloneHeaders creates a deep copy of headers map
 func cloneHeaders(h map[string][]string) map[string][]string {
 	if h == nil {
 		return nil
 	}
 	cp := make(map[string][]string, len(h))
+	totalSize := 0
 	for k, v := range h {
+		totalSize += len(k)
+		for _, val := range v {
+			totalSize += len(val)
+		}
+		if totalSize > maxCloneHeadersSize {
+			break
+		}
 		cv := make([]string, len(v))
 		copy(cv, v)
 		cp[k] = cv

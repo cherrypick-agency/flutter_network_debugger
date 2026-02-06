@@ -35,11 +35,20 @@ func (c *InterceptConfig) Validate() error {
 	if c.TimeoutMs <= 0 {
 		return errors.New("timeoutMs must be positive")
 	}
+	if c.TimeoutMs > 300000 {
+		return errors.New("timeoutMs must not exceed 300000 (5 minutes)")
+	}
 	if c.QueueMax < 0 {
 		return errors.New("queueMax must be non-negative")
 	}
+	if c.QueueMax > 10000 {
+		return errors.New("queueMax must not exceed 10000")
+	}
 	if c.BodyMaxBytes < 0 {
 		return errors.New("bodyMaxBytes must be non-negative")
+	}
+	if c.BodyMaxBytes > 100<<20 {
+		return errors.New("bodyMaxBytes must not exceed 104857600 (100MB)")
 	}
 	if c.Overflow != "" && c.Overflow != "auto-continue-oldest" && c.Overflow != "drop-new" {
 		return errors.New("overflow must be one of: auto-continue-oldest, drop-new")

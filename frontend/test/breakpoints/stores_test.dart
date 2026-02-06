@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 
+import 'package:frontend/core/notifications/notifications_service.dart';
 import 'package:frontend/features/breakpoints/application/stores/breakpoints_store.dart';
 import 'package:frontend/features/breakpoints/application/stores/intercept_queue_store.dart';
 import 'package:frontend/features/breakpoints/application/stores/intercept_editor_store.dart';
@@ -10,6 +12,18 @@ import 'package:frontend/features/breakpoints/domain/entities/intercept_rule.dar
 import 'package:frontend/features/breakpoints/domain/repositories/breakpoints_repository.dart';
 
 void main() {
+  final sl = GetIt.instance;
+
+  setUp(() {
+    sl.registerLazySingleton<NotificationsService>(
+      () => NotificationsService(),
+    );
+  });
+
+  tearDown(() async {
+    await sl.reset();
+  });
+
   group('Stores', () {
     late _Repo repo;
 
@@ -22,6 +36,7 @@ void main() {
       await s.load();
       expect(s.config?.enabled, true);
       expect(s.rules.length, 1);
+      expect(s.lastError, isNull);
     });
 
     test('InterceptQueueStore refresh/select/quick actions', () async {
@@ -44,6 +59,85 @@ void main() {
       await e.cancel();
       expect(repo.requestMethod, 'POST');
       expect(repo.responseStatus, 201);
+      expect(e.submitting, false);
+      expect(e.lastError, isNull);
+    });
+  });
+
+  group('Error handling', () {
+    late _FailingRepo failRepo;
+
+    setUp(() {
+      failRepo = _FailingRepo();
+    });
+
+    test('BreakpointsStore.load sets lastError on failure', () async {
+      final s = BreakpointsStore(failRepo);
+      await s.load();
+      expect(s.loading, false);
+      expect(s.lastError, isNotNull);
+      expect(s.lastError, contains('getConfig failed'));
+      expect(s.config, isNull);
+    });
+
+    test('BreakpointsStore.saveConfig rethrows and notifies', () async {
+      final s = BreakpointsStore(failRepo);
+      const cfg = InterceptConfig(
+        enabled: true,
+        requests: true,
+        responses: true,
+        timeoutMs: 1000,
+        queueMax: 10,
+        bodyMaxBytes: 1024,
+        reencode: true,
+        overflow: 'auto-continue-oldest',
+      );
+      expect(() => s.saveConfig(cfg), throwsException);
+    });
+
+    test('BreakpointsStore.replaceRules rethrows and notifies', () async {
+      final s = BreakpointsStore(failRepo);
+      expect(() => s.replaceRules([]), throwsException);
+    });
+
+    test('InterceptEditorStore.continueRequest submitting lifecycle', () async {
+      final repo = _Repo();
+      final e = InterceptEditorStore(repo);
+      e.setItem(_item());
+      expect(e.submitting, false);
+      await e.continueRequest(method: 'POST');
+      expect(e.submitting, false);
+      expect(e.lastError, isNull);
+    });
+
+    test('InterceptEditorStore.continueRequest sets lastError on failure',
+        () async {
+      final e = InterceptEditorStore(failRepo);
+      e.setItem(_item());
+      expect(() => e.continueRequest(method: 'POST'), throwsException);
+      await Future.delayed(Duration.zero);
+      expect(e.submitting, false);
+      expect(e.lastError, isNotNull);
+      expect(e.lastError, contains('continueRequest failed'));
+    });
+
+    test('InterceptEditorStore.continueResponse sets lastError on failure',
+        () async {
+      final e = InterceptEditorStore(failRepo);
+      e.setItem(_item());
+      expect(() => e.continueResponse(status: 200), throwsException);
+      await Future.delayed(Duration.zero);
+      expect(e.submitting, false);
+      expect(e.lastError, isNotNull);
+    });
+
+    test('InterceptEditorStore.cancel sets lastError on failure', () async {
+      final e = InterceptEditorStore(failRepo);
+      e.setItem(_item());
+      expect(() => e.cancel(), throwsException);
+      await Future.delayed(Duration.zero);
+      expect(e.submitting, false);
+      expect(e.lastError, isNotNull);
     });
   });
 }
@@ -107,6 +201,53 @@ class _Repo implements BreakpointsRepository {
 
   @override
   Future<void> setConfig(InterceptConfig cfg) async {}
+}
+
+class _FailingRepo implements BreakpointsRepository {
+  @override
+  Future<void> cancel(String id) async {
+    throw Exception('cancel failed');
+  }
+
+  @override
+  Future<void> continueRequest(String id, RequestDecision decision) async {
+    throw Exception('continueRequest failed');
+  }
+
+  @override
+  Future<void> continueResponse(String id, ResponseDecision decision) async {
+    throw Exception('continueResponse failed');
+  }
+
+  @override
+  Future<InterceptConfig> getConfig() async {
+    throw Exception('getConfig failed');
+  }
+
+  @override
+  Future<InterceptItem> getItem(String id) async {
+    throw Exception('getItem failed');
+  }
+
+  @override
+  Future<List<InterceptItem>> listPending({int? limit}) async {
+    throw Exception('listPending failed');
+  }
+
+  @override
+  Future<List<InterceptRule>> listRules() async {
+    throw Exception('listRules failed');
+  }
+
+  @override
+  Future<void> replaceRules(List<InterceptRule> rules) async {
+    throw Exception('replaceRules failed');
+  }
+
+  @override
+  Future<void> setConfig(InterceptConfig cfg) async {
+    throw Exception('setConfig failed');
+  }
 }
 
 InterceptItem _item() => InterceptItem(

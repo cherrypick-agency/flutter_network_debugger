@@ -164,6 +164,28 @@ mixin _$ScriptsStore on _ScriptsStore, Store {
     );
   }
 
+  late final _$isDownloadingProjectAtom = Atom(
+    name: '_ScriptsStore.isDownloadingProject',
+    context: context,
+  );
+
+  @override
+  bool get isDownloadingProject {
+    _$isDownloadingProjectAtom.reportRead();
+    return super.isDownloadingProject;
+  }
+
+  @override
+  set isDownloadingProject(bool value) {
+    _$isDownloadingProjectAtom.reportWrite(
+      value,
+      super.isDownloadingProject,
+      () {
+        super.isDownloadingProject = value;
+      },
+    );
+  }
+
   late final _$errorMessageAtom = Atom(
     name: '_ScriptsStore.errorMessage',
     context: context,
@@ -352,6 +374,30 @@ mixin _$ScriptsStore on _ScriptsStore, Store {
     );
   }
 
+  late final _$downloadExportZipAsyncAction = AsyncAction(
+    '_ScriptsStore.downloadExportZip',
+    context: context,
+  );
+
+  @override
+  Future<List<int>> downloadExportZip(String id) {
+    return _$downloadExportZipAsyncAction.run(
+      () => super.downloadExportZip(id),
+    );
+  }
+
+  late final _$downloadProjectZipAsyncAction = AsyncAction(
+    '_ScriptsStore.downloadProjectZip',
+    context: context,
+  );
+
+  @override
+  Future<List<int>> downloadProjectZip(String id) {
+    return _$downloadProjectZipAsyncAction.run(
+      () => super.downloadProjectZip(id),
+    );
+  }
+
   late final _$importFromZipAsyncAction = AsyncAction(
     '_ScriptsStore.importFromZip',
     context: context,
@@ -476,18 +522,6 @@ mixin _$ScriptsStore on _ScriptsStore, Store {
   }
 
   @override
-  String getExportZipUrl(String id) {
-    final _$actionInfo = _$_ScriptsStoreActionController.startAction(
-      name: '_ScriptsStore.getExportZipUrl',
-    );
-    try {
-      return super.getExportZipUrl(id);
-    } finally {
-      _$_ScriptsStoreActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
   String toString() {
     return '''
 scripts: ${scripts},
@@ -497,6 +531,7 @@ isImporting: ${isImporting},
 isExporting: ${isExporting},
 exportingScriptId: ${exportingScriptId},
 downloadingProjectScriptId: ${downloadingProjectScriptId},
+isDownloadingProject: ${isDownloadingProject},
 errorMessage: ${errorMessage},
 searchQuery: ${searchQuery},
 runtimeFilter: ${runtimeFilter},

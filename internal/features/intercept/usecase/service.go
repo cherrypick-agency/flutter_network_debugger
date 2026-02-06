@@ -3,10 +3,13 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"network-debugger/internal/features/intercept/domain"
 	"network-debugger/pkg/shared/id"
 )
+
+const maxInterceptRules = 1000
 
 // InterceptService orchestrates intercept feature use cases
 type InterceptService struct {
@@ -31,12 +34,17 @@ func (s *InterceptService) Manager() *InterceptorManager {
 
 // UpdateRules validates, persists and applies rules
 func (s *InterceptService) UpdateRules(ctx context.Context, rules []domain.InterceptRule) error {
+	log.Printf("[InterceptService] UpdateRules: %d rules", len(rules))
+	if len(rules) > maxInterceptRules {
+		return fmt.Errorf("too many rules: %d (max %d)", len(rules), maxInterceptRules)
+	}
 	for i := range rules {
 		rules[i].SetDefaults()
 		if rules[i].ID == "" {
 			rules[i].ID = id.New()
 		}
 		if err := rules[i].Validate(); err != nil {
+			log.Printf("[InterceptService] UpdateRules: rule[%d] validation error: %v", i, err)
 			return fmt.Errorf("rule[%d]: %w", i, err)
 		}
 	}
@@ -64,6 +72,8 @@ func (s *InterceptService) LoadConfig(ctx context.Context) (domain.InterceptConf
 
 // UpdateConfig validates, persists and applies configuration
 func (s *InterceptService) UpdateConfig(ctx context.Context, cfg domain.InterceptConfig) error {
+	log.Printf("[InterceptService] UpdateConfig: enabled=%v requests=%v responses=%v timeoutMs=%d queueMax=%d overflow=%s",
+		cfg.Enabled, cfg.Requests, cfg.Responses, cfg.TimeoutMs, cfg.QueueMax, cfg.Overflow)
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("validation: %w", err)
 	}
@@ -85,12 +95,14 @@ func (s *InterceptService) LoadAndApplyFromDB(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	log.Printf("[InterceptService] LoadAndApplyFromDB: config loaded, enabled=%v", cfg.Enabled)
 	s.manager.UpdateConfig(cfg)
 
 	rules, err := s.ruleRepo.List(ctx)
 	if err != nil {
 		return fmt.Errorf("load rules: %w", err)
 	}
+	log.Printf("[InterceptService] LoadAndApplyFromDB: %d rules loaded", len(rules))
 	s.manager.UpdateRules(rules)
 	return nil
 }

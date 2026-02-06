@@ -65,8 +65,9 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> toggle(String id, bool enabled) async {
-    return await _apiService.toggle(id, enabled);
+  Future<Script> toggle(String id, bool enabled) async {
+    final json = await _apiService.toggle(id, enabled);
+    return Script.fromJson(json);
   }
 
   @override
@@ -87,11 +88,6 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
     // 2) Fetch updated script object after compilation
     final json = await _apiService.getById(id);
     return Script.fromJson(json);
-  }
-
-  @override
-  String getExportZipUrl(String id) {
-    return _apiService.getExportZipUrl(id);
   }
 
   @override
@@ -121,6 +117,10 @@ class ScriptsRepositoryImpl implements ScriptsRepository {
       _apiService.listProjectFiles(id);
 
   @override
-  String getDownloadProjectUrl(String id) =>
-      _apiService.getDownloadProjectUrl(id);
+  Future<List<int>> downloadExportZip(String id) =>
+      _apiService.downloadExportZip(id);
+
+  @override
+  Future<List<int>> downloadProjectZip(String id) =>
+      _apiService.downloadProjectZip(id);
 }
