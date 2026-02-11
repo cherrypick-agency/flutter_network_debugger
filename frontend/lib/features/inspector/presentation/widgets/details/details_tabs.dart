@@ -25,6 +25,7 @@ class DetailsTabs extends StatelessWidget {
     required this.onToggleHeartbeats,
     required this.wsClosed,
     required this.wsClosedAt,
+    this.wsError,
   });
 
   // Which tabs to show
@@ -47,6 +48,7 @@ class DetailsTabs extends StatelessWidget {
   final ValueChanged<bool> onToggleHeartbeats;
   final bool wsClosed;
   final DateTime? wsClosedAt;
+  final String? wsError;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +92,7 @@ class DetailsTabs extends StatelessWidget {
       onToggleHeartbeats: onToggleHeartbeats,
       isClosed: wsClosed,
       closedAt: wsClosedAt,
+      error: wsError,
     );
   }
 

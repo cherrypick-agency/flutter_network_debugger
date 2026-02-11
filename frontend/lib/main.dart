@@ -435,14 +435,18 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         // frames/events come via SSE, additional polling not needed
         if (t == 'session_error') {
-          // Display user-friendly error notification
+          // Display user-friendly error notification (skip WS — shown in details panel)
           final errorData = ev['error'] as Map<String, dynamic>?;
           if (errorData != null) {
+            final method = errorData['method']?.toString() ?? '';
+            if (method == 'WS') {
+              // WS errors are shown inline in WS details panel
+              return;
+            }
             final code = errorData['code']?.toString() ?? 'UNKNOWN_ERROR';
             final message =
                 errorData['message']?.toString() ?? 'Unknown error occurred';
             final target = errorData['target']?.toString() ?? '';
-            final method = errorData['method']?.toString() ?? '';
             final sessionId = (ev['id'] ?? '').toString();
 
             // Build user-friendly title based on error code
@@ -1031,6 +1035,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                     true; // fallback both
                                                 bool wsClosed = false;
                                                 DateTime? wsClosedAt;
+                                                String? wsError;
                                                 if (sl<HomeUiStore>()
                                                         .selectedSessionId
                                                         .value !=
@@ -1061,6 +1066,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                       wsClosed =
                                                           s.closedAt != null;
                                                       wsClosedAt = s.closedAt;
+                                                      wsError = s.error;
                                                       break;
                                                     }
                                                   }
@@ -1189,6 +1195,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                         },
                                                         wsClosed: wsClosed,
                                                         wsClosedAt: wsClosedAt,
+                                                        wsError: wsError,
                                                       );
                                                     },
                                                   ),

@@ -24,6 +24,10 @@ class HomeUiStore {
     includePaused = mobx.Observable<bool>(true);
     recentWindowEnabled = mobx.Observable<bool>(false);
     recentWindowMinutes = mobx.Observable<int>(5);
+    // WS frames view state
+    wsPretty = mobx.Observable<bool>(true);
+    wsTree = mobx.Observable<bool>(false);
+    wsShowTimeline = mobx.Observable<bool>(true);
     // Quick filters below the timeline
     quickTypes = mobx.ObservableSet.of(<String>{});
     quickStatusGroups = mobx.ObservableSet.of(<String>{});
@@ -52,6 +56,10 @@ class HomeUiStore {
   // timestamp when recording was paused (to filter out new sessions)
   late final mobx.Observable<DateTime?> pausedSince =
       mobx.Observable<DateTime?>(null);
+  // WS frames view state
+  late final mobx.Observable<bool> wsPretty;
+  late final mobx.Observable<bool> wsTree;
+  late final mobx.Observable<bool> wsShowTimeline;
   // Quick filters: content/protocol types and status groups
   late final mobx.ObservableSet<String>
   quickTypes; // http, https, ws, json, form, ...
@@ -108,6 +116,12 @@ class HomeUiStore {
       mobx.runInAction(() => recentWindowEnabled.value = v);
   void setRecentWindowMinutes(int v) =>
       mobx.runInAction(() => recentWindowMinutes.value = v);
+
+  // WS frames view
+  void setWsPretty(bool v) => mobx.runInAction(() => wsPretty.value = v);
+  void setWsTree(bool v) => mobx.runInAction(() => wsTree.value = v);
+  void setWsShowTimeline(bool v) =>
+      mobx.runInAction(() => wsShowTimeline.value = v);
 
   // Quick filters
   void toggleQuickType(String key) => mobx.runInAction(() {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../theme/context_ext.dart';
+import '../../../../core/di/di.dart';
+import '../../../inspector/application/stores/home_ui_store.dart';
 import 'frames_timeline/frames_timeline.dart';
 import 'frames_timeline/frames_timeline_legend.dart';
 import '../../../../widgets/json_viewer.dart';
@@ -58,6 +60,8 @@ class WsDetailsPanel extends StatefulWidget {
     required this.onToggleHeartbeats,
     required this.isClosed,
     this.closedAt,
+    this.error,
+    this.onCloseFullscreen,
   });
   final List<dynamic> frames;
   final List<dynamic> events;
@@ -70,15 +74,21 @@ class WsDetailsPanel extends StatefulWidget {
   final void Function(bool) onToggleHeartbeats;
   final bool isClosed;
   final DateTime? closedAt;
+  final String? error;
+  final VoidCallback? onCloseFullscreen;
 
   @override
   State<WsDetailsPanel> createState() => _WsDetailsPanelState();
 }
 
 class _WsDetailsPanelState extends State<WsDetailsPanel> {
-  bool _pretty = true;
-  bool _tree = false;
-  bool _showTimeline = true;
+  final _ui = sl<HomeUiStore>();
+  bool get _pretty => _ui.wsPretty.value;
+  set _pretty(bool v) => _ui.setWsPretty(v);
+  bool get _tree => _ui.wsTree.value;
+  set _tree(bool v) => _ui.setWsTree(v);
+  bool get _showTimeline => _ui.wsShowTimeline.value;
+  set _showTimeline(bool v) => _ui.setWsShowTimeline(v);
   final ScrollController _listCtrl = ScrollController();
   // TEMPORARILY DISABLED: Auto-scroll logic
   // bool _stickToBottom = true;
@@ -144,6 +154,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   final Map<String, int> _frameLocalFocusedIndex = <String, int>{};
   // Bug #12 fix: Atomic pending focus to prevent race conditions
   _PendingFocus? _pendingFocus;
+  // Track which frame was expanded by search navigation (to collapse on next nav)
+  String? _searchExpandedFid;
 
   // Keys for stable widget identity (not cached - created fresh each build)
   ValueKey<String> _tileKeyFor(String id) => ValueKey<String>('tile_$id');
@@ -615,22 +627,59 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   void _focusGlobal(int gIndex) {
     if (_globalTotalMatches <= 0) return;
-    // Clear focused index cache before resolving (handles null case)
     _frameLocalFocusedIndex.clear();
     final (fid, local) = _resolveGlobalIndexToFrame(gIndex);
     if (fid == null) return;
-    // Update local focused index cache for highlighting
     _frameLocalFocusedIndex[fid] = local;
-    // BUG 2 fix: Expand tile and wait for it to render before scrolling
-    _tileControllerFor(fid).expand();
-    // Wait for tile expansion to complete and widgets to build
+
+    final sameFrame = (_searchExpandedFid == fid);
+
+    if (sameFrame) {
+      // Same frame — tile is already expanded, no outer scroll needed.
+      // Use _pendingFocus so _onChildMatches scrolls after fresh keys arrive.
+      _pendingFocus = _PendingFocus(fid, local);
+      setState(() {});
+      return;
+    }
+
+    // Different frame — full flow: collapse old, expand new, outer scroll
+    if (_searchExpandedFid != null) {
+      _tileControllerFor(_searchExpandedFid!).collapse();
+    }
+    _searchExpandedFid = fid;
+    final controller = _tileControllerFor(fid);
+    controller.expand();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Scroll to tile after expansion
       _scrollToFrame(fid);
-      // Defer focus to internal match until keys are ready
       _pendingFocus = _PendingFocus(fid, local);
+      // Safety net: if the tile was off-screen when expand() was called,
+      // the controller listener wasn't attached and the tile stayed collapsed.
+      // After the scroll animation (~220ms), force re-expand via toggle.
+      Future.delayed(const Duration(milliseconds: 260), () {
+        if (!mounted) return;
+        if (_pendingFocus != null && _pendingFocus!.frameId == fid) {
+          controller.collapse();
+          controller.expand();
+          setState(() {});
+        }
+      });
     });
+  }
+
+  /// Scroll to a widget identified by a GlobalKey inside the inner
+  /// SingleChildScrollView. Does not affect the outer ListView.
+  void _ensureVisibleByKey(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    try {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        alignment: 0.3,
+      );
+    } catch (_) {}
   }
 
   void _gotoNext() {
@@ -674,40 +723,39 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     // if waiting for focus on this specific frame — try to navigate
     final pending = _pendingFocus;
     if (pending != null && pending.frameId == frameId) {
+      _pendingFocus = null;
       final local = pending.localIndex;
       if (local >= 0 && local < keys.length) {
-        final ctx = keys[local].currentContext;
-        if (ctx != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Tile already expanded (same-frame navigation) — scroll immediately.
+        // Tile just expanding (different-frame) — wait for animation.
+        final alreadyExpanded = (_searchExpandedFid == frameId);
+        if (alreadyExpanded) {
+          // Keys are fresh (just reported from build postFrameCallback),
+          // scroll the inner SingleChildScrollView directly.
+          _ensureVisibleByKey(keys[local]);
+        } else {
+          // Wait for the ExpansionTile animation to settle (~200ms) before
+          // scrolling — ensureVisible can't compute correct positions while
+          // the tile's height is still animating.
+          Future.delayed(const Duration(milliseconds: 200), () {
             if (!mounted) return;
+            final ctx = keys[local].currentContext;
+            if (ctx == null) return;
             try {
               final scrollable = Scrollable.maybeOf(ctx);
               if (scrollable == null) {
+                // Scrollable still not ready — retry after one more frame
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
-                  final ctx2 = keys[local].currentContext;
-                  if (ctx2 != null && Scrollable.maybeOf(ctx2) != null) {
-                    Scrollable.ensureVisible(
-                      ctx2,
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      alignment: 0.1,
-                    );
-                  }
+                  _ensureVisibleByKey(keys[local]);
                 });
               } else {
-                Scrollable.ensureVisible(
-                  ctx,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  alignment: 0.1,
-                );
+                _ensureVisibleByKey(keys[local]);
               }
             } catch (_) {}
           });
         }
       }
-      _pendingFocus = null;
     }
   }
 
@@ -757,30 +805,14 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
     return Column(
       children: [
+        // Closed / error banner
+        if (widget.isClosed)
+          _WsClosedBanner(closedAt: widget.closedAt, error: widget.error),
         // Timeline and search above header
         timelineSection,
         Expanded(
           child: _Card(
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Frames'),
-                if (widget.isClosed) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    (() {
-                      final dt = widget.closedAt;
-                      if (dt == null) return '(closed)';
-                      final formatted = _fmtTime(dt.toIso8601String());
-                      return '(closed $formatted)';
-                    })(),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            title: const Text('Frames'),
             actions: [
               FilterChip(
                 label: const Text('Pretty', style: TextStyle(fontSize: 12)),
@@ -866,6 +898,18 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                 icon: const Icon(Icons.filter_list, size: 18),
                 onPressed: () => widget._openFilters(context),
               ),
+              if (widget.onCloseFullscreen != null)
+                IconButton(
+                  tooltip: 'Exit fullscreen',
+                  icon: const Icon(Icons.close_fullscreen, size: 18),
+                  onPressed: widget.onCloseFullscreen,
+                )
+              else
+                IconButton(
+                  tooltip: 'Fullscreen',
+                  icon: const Icon(Icons.open_in_full, size: 18),
+                  onPressed: () => _openFullscreen(context),
+                ),
             ],
             child: Column(
               children: [
@@ -1249,6 +1293,23 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     );
   }
 
+  void _openFullscreen(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _WsFramesFullscreenDialog(
+        frames: widget.frames,
+        events: widget.events,
+        initialOpcodeFilter: widget.opcodeFilter,
+        initialDirectionFilter: widget.directionFilter,
+        initialNamespaceText: widget.namespaceCtrl.text,
+        initialHideHeartbeats: widget.hideHeartbeats,
+        isClosed: widget.isClosed,
+        closedAt: widget.closedAt,
+        error: widget.error,
+      ),
+    );
+  }
+
   Widget _buildGlobalSearchBar(BuildContext context) {
     final countText = _globalTotalMatches == 0
         ? '0/0'
@@ -1272,6 +1333,11 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         onNext: _gotoNext,
         onPrev: _gotoPrev,
         onClose: () {
+          // Collapse tile that was expanded by search
+          if (_searchExpandedFid != null) {
+            _tileControllerFor(_searchExpandedFid!).collapse();
+            _searchExpandedFid = null;
+          }
           setState(() {
             _showGlobalSearch = false;
             _searchCtrl.clear();
@@ -1509,6 +1575,142 @@ String? _extractJsonPayload(String preview) {
     if (_isJsonLocal(candidate)) return candidate;
   }
   return null;
+}
+
+class _WsFramesFullscreenDialog extends StatefulWidget {
+  const _WsFramesFullscreenDialog({
+    required this.frames,
+    required this.events,
+    required this.initialOpcodeFilter,
+    required this.initialDirectionFilter,
+    required this.initialNamespaceText,
+    required this.initialHideHeartbeats,
+    required this.isClosed,
+    this.closedAt,
+    this.error,
+  });
+  final List<dynamic> frames;
+  final List<dynamic> events;
+  final String initialOpcodeFilter;
+  final String initialDirectionFilter;
+  final String initialNamespaceText;
+  final bool initialHideHeartbeats;
+  final bool isClosed;
+  final DateTime? closedAt;
+  final String? error;
+
+  @override
+  State<_WsFramesFullscreenDialog> createState() =>
+      _WsFramesFullscreenDialogState();
+}
+
+class _WsFramesFullscreenDialogState extends State<_WsFramesFullscreenDialog> {
+  late String _opcodeFilter;
+  late String _directionFilter;
+  late bool _hideHeartbeats;
+  late TextEditingController _namespaceCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _opcodeFilter = widget.initialOpcodeFilter;
+    _directionFilter = widget.initialDirectionFilter;
+    _hideHeartbeats = widget.initialHideHeartbeats;
+    _namespaceCtrl = TextEditingController(text: widget.initialNamespaceText);
+  }
+
+  @override
+  void dispose() {
+    _namespaceCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Frames'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: WsDetailsPanel(
+          frames: widget.frames,
+          events: widget.events,
+          opcodeFilter: _opcodeFilter,
+          directionFilter: _directionFilter,
+          namespaceCtrl: _namespaceCtrl,
+          onChangeOpcode: (v) => setState(() => _opcodeFilter = v),
+          onChangeDirection: (v) => setState(() => _directionFilter = v),
+          hideHeartbeats: _hideHeartbeats,
+          onToggleHeartbeats: (v) => setState(() => _hideHeartbeats = v),
+          isClosed: widget.isClosed,
+          closedAt: widget.closedAt,
+          error: widget.error,
+          onCloseFullscreen: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+}
+
+class _WsClosedBanner extends StatelessWidget {
+  const _WsClosedBanner({required this.closedAt, this.error});
+  final DateTime? closedAt;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasError = error != null && error!.isNotEmpty;
+    final timeStr = closedAt != null
+        ? _fmtTime(closedAt!.toIso8601String())
+        : null;
+
+    final label = StringBuffer('Closed');
+    if (timeStr != null) {
+      label.write(' at $timeStr');
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      decoration: BoxDecoration(
+        color: (hasError ? cs.error : cs.outline).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(color: hasError ? cs.error : cs.outline, width: 2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            hasError ? Icons.error_outline : Icons.info_outline,
+            size: 14,
+            color: hasError ? cs.error : cs.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Tooltip(
+              message: hasError ? error! : '',
+              child: Text(
+                hasError ? '$label — $error' : '$label',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: hasError ? cs.error : cs.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _JsonToggleRow extends StatefulWidget {

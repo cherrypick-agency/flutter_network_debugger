@@ -23,12 +23,14 @@ class DetailsContainer extends StatelessWidget {
     String? kind;
     bool wsClosed = false;
     DateTime? wsClosedAt;
+    String? wsError;
     for (final s in items) {
       if (s.id == ui.selectedSessionId.value) {
         meta = s.httpMeta?.cast<String, dynamic>();
         kind = s.kind;
         wsClosed = s.closedAt != null;
         wsClosedAt = s.closedAt;
+        wsError = s.error;
         break;
       }
     }
@@ -86,6 +88,7 @@ class DetailsContainer extends StatelessWidget {
           },
           wsClosed: wsClosed,
           wsClosedAt: wsClosedAt,
+          wsError: wsError,
         );
       },
     );

@@ -85,6 +85,31 @@ class _SessionsColumnState extends State<SessionsColumn> {
 
   @override
   Widget build(BuildContext context) {
+    // Domain counters
+    final agg = context.watch<AggregateStore>().groups.toList();
+    final Map<String, int> domainCounts = <String, int>{};
+    if (agg.isNotEmpty) {
+      for (final m in agg) {
+        final key = (m['key'] ?? '').toString();
+        final cnt = int.tryParse((m['count'] ?? '0').toString()) ?? 0;
+        if (key.isEmpty) continue;
+        domainCounts[key] = cnt;
+      }
+    } else {
+      for (final s in widget.sessions) {
+        try {
+          final host = Uri.parse((s.target as String)).host;
+          if (host.isEmpty) continue;
+          domainCounts[host] = (domainCounts[host] ?? 0) + 1;
+        } catch (_) {}
+      }
+    }
+    for (final d in widget.selectedDomains) {
+      domainCounts.putIfAbsent(d, () => 0);
+    }
+    final domainKeys = domainCounts.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -103,6 +128,17 @@ class _SessionsColumnState extends State<SessionsColumn> {
                 tooltip: 'Close search',
                 icon: const Icon(Icons.close, size: 18),
                 onPressed: () => widget.onShowSearchChanged(false),
+              ),
+            if (domainKeys.isNotEmpty)
+              Badge(
+                isLabelVisible: widget.selectedDomains.isNotEmpty,
+                label: Text('${widget.selectedDomains.length}'),
+                child: IconButton(
+                  tooltip: 'Filter by domain',
+                  icon: const Icon(Icons.filter_list, size: 18),
+                  onPressed: () =>
+                      _showDomainFilter(context, domainCounts, domainKeys),
+                ),
               ),
             if (widget.showSearch)
               Expanded(
@@ -124,127 +160,135 @@ class _SessionsColumnState extends State<SessionsColumn> {
               ),
           ],
         ),
-        const SizedBox(height: 6),
-        // Domains inline (up to 3 rows), then scroll — only from filtered sessions
-        Builder(
-          builder: (_) {
-            // Domain counters source: first try realtime aggregate from server,
-            // if unavailable — fall back to local count based on visible list
-            final agg = context.watch<AggregateStore>().groups.toList();
-            final Map<String, int> counts = <String, int>{};
-            if (agg.isNotEmpty) {
-              for (final m in agg) {
-                final key = (m['key'] ?? '').toString();
-                final cnt = int.tryParse((m['count'] ?? '0').toString()) ?? 0;
-                if (key.isEmpty) continue;
-                counts[key] = cnt;
-              }
-            } else {
-              for (final s in widget.sessions) {
-                try {
-                  final host = Uri.parse((s.target as String)).host;
-                  if (host.isEmpty) continue;
-                  counts[host] = (counts[host] ?? 0) + 1;
-                } catch (_) {}
-              }
-            }
-            // Ensure selected domains are present even if they zeroed out by other filters
-            for (final d in widget.selectedDomains) {
-              counts.putIfAbsent(d, () => 0);
-            }
-            // Stable sort by domain name
-            final domains = counts.keys.toList()
-              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-            final labels = [for (final d in domains) '$d (${counts[d]})'];
-
-            const double spacing = 6.0;
-            const double runSpacing = 4.0;
-            const double horizPad = 6.0;
-            const double fontSize = 10.0;
-            const double chipHPaddingTotal = horizPad * 2;
-            const double rowHeight = 24.0;
-
-            return LayoutBuilder(
-              builder: (context, c) {
-                double maxW = c.maxWidth.isFinite ? c.maxWidth : 320.0;
-                final textStyle =
-                    Theme.of(
-                      context,
-                    ).textTheme.labelSmall?.copyWith(fontSize: fontSize) ??
-                    const TextStyle(fontSize: fontSize);
-
-                final chipWidths = <double>[];
-                for (final label in labels) {
-                  final tp = TextPainter(
-                    text: TextSpan(text: label, style: textStyle),
-                    textDirection: TextDirection.ltr,
-                  )..layout();
-                  chipWidths.add(tp.size.width + chipHPaddingTotal);
-                }
-
-                int rows = 1;
-                double lineW = 0;
-                for (final cw in chipWidths) {
-                  final add = lineW == 0 ? cw : cw + spacing;
-                  if (lineW + add <= maxW) {
-                    lineW += add;
-                  } else {
-                    rows++;
-                    lineW = cw;
-                  }
-                }
-                final int visibleRows = rows.clamp(0, 3);
-                final double maxHeight = visibleRows > 0
-                    ? (rowHeight * visibleRows + runSpacing * (visibleRows - 1))
-                    : 0;
-
-                Widget wrap = Wrap(
-                  spacing: spacing,
-                  runSpacing: runSpacing,
-                  children: [
-                    for (var i = 0; i < domains.length; i++)
-                      Builder(
-                        builder: (context) {
-                          final key = domains[i];
-                          final selected = widget.selectedDomains.contains(key);
-                          return ChoiceChip(
-                            label: Text(labels[i], style: textStyle),
-                            labelPadding: const EdgeInsets.symmetric(
-                              horizontal: horizPad,
+        if (widget.selectedDomains.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final d in widget.selectedDomains)
+                  Chip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(d, style: const TextStyle(fontSize: 10)),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${domainCounts[d] ?? 0}',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
-                            selected: selected,
-                            visualDensity: const VisualDensity(
-                              horizontal: -4,
-                              vertical: -4,
-                            ),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            onSelected: (_) =>
-                                widget.onToggleDomain(key, !selected),
-                          );
-                        },
-                      ),
-                  ],
-                );
-
-                if (rows <= 3) {
-                  return wrap;
-                }
-                return SizedBox(
-                  width: double.infinity,
-                  height: maxHeight,
-                  child: Scrollbar(
-                    thumbVisibility: false,
-                    child: SingleChildScrollView(child: wrap),
+                          ),
+                        ),
+                      ],
+                    ),
+                    deleteIcon: const Icon(Icons.close, size: 12),
+                    onDeleted: () => widget.onToggleDomain(d, false),
+                    visualDensity: const VisualDensity(
+                      horizontal: -4,
+                      vertical: -4,
+                    ),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.only(left: 4),
                   ),
-                );
-              },
-            );
-          },
-        ),
-        const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        const SizedBox(height: 4),
         Expanded(child: _buildSessionsList(context)),
       ],
+    );
+  }
+
+  void _showDomainFilter(
+    BuildContext context,
+    Map<String, int> counts,
+    List<String> domains,
+  ) {
+    final localSelected = Set<String>.from(widget.selectedDomains);
+    showDialog<void>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          titlePadding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          title: Row(
+            children: [
+              const Text('Domains'),
+              const Spacer(),
+              if (localSelected.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    for (final d in localSelected.toList()) {
+                      widget.onToggleDomain(d, false);
+                    }
+                    setDialogState(() => localSelected.clear());
+                  },
+                  child: const Text('Clear all'),
+                ),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final d in domains)
+                  CheckboxListTile(
+                    title: Text(d, style: const TextStyle(fontSize: 13)),
+                    secondary: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          ctx,
+                        ).colorScheme.onSurface.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${counts[d] ?? 0}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    value: localSelected.contains(d),
+                    dense: true,
+                    onChanged: (v) {
+                      final add = v ?? false;
+                      if (add) {
+                        localSelected.add(d);
+                      } else {
+                        localSelected.remove(d);
+                      }
+                      widget.onToggleDomain(d, add);
+                      setDialogState(() {});
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -453,6 +497,20 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                       foregroundColor: (s.closedAt == null)
                                           ? context.appColors.success
                                           : Theme.of(context).colorScheme.error,
+                                    ),
+                                  if (isWs && isClosed && hasError)
+                                    Tooltip(
+                                      message: s.error?.toString() ?? '',
+                                      child: _chip(
+                                        'ERR',
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .error
+                                            .withValues(alpha: 0.12),
+                                        foregroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                      ),
                                     ),
                                   if (isWs && s.isSocketIo == true)
                                     _chip('socket.io'),
