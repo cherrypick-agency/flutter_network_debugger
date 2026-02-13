@@ -1,8 +1,28 @@
 # network_debugger
 
-![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
+## Quick start (recommended)
 
-Free tool for debugging HTTP and WebSocket which is MUCH BETTER than the built-in Flutter Netwrok Devtools. 
+1) CLI (WEB UI in browser) — fastest way to start
+
+```bash
+dart pub global activate network_debugger
+network_debugger
+```
+
+This starts the proxy and opens the UI in your browser:
+- UI: `http://localhost:9092/`
+- Proxy base (HTTP/WebSocket forward): `http://localhost:9091`
+
+2) Desktop App (Native GUI)
+
+Download the desktop application from
+[GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases).
+It bundles the proxy server and UI.
+
+![Screen recording (2025-10-02)](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)
+
+Free tool for debugging HTTP and WebSocket traffic which is much better than
+the built-in Flutter Network DevTools.
 
 Suitable for local development and test environments. Has web interface (opens in browser), desktop and CLI.
 
@@ -26,8 +46,6 @@ What it can do
 - Crossplatform
 
 ## Quick Start (CLI)
-
-The easiest way to use the network debugger is via the CLI tool:
 
 ### Installation
 

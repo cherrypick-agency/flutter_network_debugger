@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-02-13
+
+### Added
+- **Release docs** — standardized process (`docs/RELEASING.md`) and clearer “how to download” sections
+- **Dedicated docs pages** — moved Settings and CLI sessions mode into `docs/` with links from the main README
+- **Download tables in GitHub Releases** — release notes now include a clear per-OS download table (desktop + web server binaries)
+
+### Changed
+- **Quick start** — CLI (web UI in browser) is now the first and fastest way to start; desktop app is the second option
+- **CI/CD artifacts** — GitHub Releases include both desktop installers and `network-debugger-web_*` web server binaries
+
 ## [0.2.0] - 2026-02-05
 
 ### Added

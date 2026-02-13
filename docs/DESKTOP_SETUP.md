@@ -163,7 +163,9 @@ Workflow `.github/workflows/build-desktop.yml` runs automatically:
 
 2. Open the DMG and drag the app into Applications
 
-3. On first launch: System Preferences → Security & Privacy → "Open Anyway"
+3. Note: the app is not signed/notarized yet, so macOS may show a security
+   prompt on first launch. If it gets blocked, go to System Settings →
+   Privacy & Security → **Open Anyway**
 
 ### Windows
 

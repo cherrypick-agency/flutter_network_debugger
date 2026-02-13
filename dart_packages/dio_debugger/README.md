@@ -8,6 +8,27 @@
   <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml"><img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml/badge.svg?branch=main" alt="CI" /></a>
 </p>
 
+## Getting started with Network Debugger
+
+1) CLI (WEB UI in browser) — fastest way to start
+
+```bash
+dart pub global activate network_debugger
+network_debugger
+```
+
+This starts the proxy and opens the UI in your browser:
+- UI: `http://localhost:9092/`
+- Proxy base (HTTP/WebSocket forward): `http://localhost:9091`
+
+2) Desktop App (Native GUI)
+
+Download the desktop application from
+[GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases).
+It bundles the proxy server and UI.
+
+> This package is for integrating Network Debugger with **Dio**.
+
 > Part of the [network_debugger](https://pub.dev/packages/network_debugger) ecosystem
 
 Lightweight utility that patches the provided `Dio` and attaches a reverse/forward proxy interceptor. Useful for local debugging, traffic interception, and bypassing CORS/certificates via your local proxy.

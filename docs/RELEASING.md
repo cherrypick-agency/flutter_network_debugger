@@ -1,10 +1,12 @@
-# Releasing (desktop)
+# Releasing
 
-This repository publishes **desktop apps only** to GitHub Releases:
-macOS (DMG), Windows (ZIP), Linux (DEB and/or tar.gz).
+This repository publishes to GitHub Releases:
 
-Web builds are intentionally excluded from CD. It keeps the pipeline fast and
-avoids confusion about which artifact users should download.
+- **Desktop apps**: macOS (DMG), Windows (ZIP), Linux (DEB and/or tar.gz)
+- **Web server binaries (embedded UI)**: `network-debugger-web_*` archives for
+  each platform/arch
+
+Both are built and attached automatically on version tags.
 
 ## What “version” means here
 
@@ -79,6 +81,10 @@ truth).
   - Windows: `NetworkDebugger-X.Y.Z-windows-amd64.zip`
   - Linux: `network-debugger_X.Y.Z_amd64.deb` and/or
     `NetworkDebugger-X.Y.Z-linux-amd64.tar.gz`
+  - Web server binaries (embedded UI):
+    - `network-debugger-web_darwin_{amd64,arm64}.tar.gz`
+    - `network-debugger-web_windows_{amd64,arm64}.zip`
+    - `network-debugger-web_linux_{amd64,arm64}.tar.gz`
 - The release description contains the “Download” table at the bottom.
 - Desktop app detects the update (on a machine with an older version).
 

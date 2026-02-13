@@ -5,6 +5,27 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
 </p>
 
+## Getting started with Network Debugger
+
+1) CLI (WEB UI in browser) — fastest way to start
+
+```bash
+dart pub global activate network_debugger
+network_debugger
+```
+
+This starts the proxy and opens the UI in your browser:
+- UI: `http://localhost:9092/`
+- Proxy base (HTTP/WebSocket forward): `http://localhost:9091`
+
+2) Desktop App (Native GUI)
+
+Download the desktop application from
+[GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases).
+It bundles the proxy server and UI.
+
+> This package is for integrating Network Debugger with **Socket.IO**.
+
 A helper package to attach network-debugger proxy to `socket_io_client` for local debugging and Socket.IO traffic interception.
 
 ## Version Compatibility

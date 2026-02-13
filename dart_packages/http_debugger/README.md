@@ -7,6 +7,28 @@
   <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/popularity/http_debugger" alt="popularity" /></a>
 </p>
 
+## Getting started with Network Debugger
+
+1) CLI (WEB UI in browser) — fastest way to start
+
+```bash
+dart pub global activate network_debugger
+network_debugger
+```
+
+This starts the proxy and opens the UI in your browser:
+- UI: `http://localhost:9092/`
+- Proxy base (HTTP/WebSocket forward): `http://localhost:9091`
+
+2) Desktop App (Native GUI)
+
+Download the desktop application from
+[GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases).
+It bundles the proxy server and UI.
+
+> This package is for integrating Network Debugger with `dart:io` HTTP and/or
+> `package:http`.
+
 > Part of the [network_debugger](https://pub.dev/packages/network_debugger) ecosystem
 
 Small utility that globally enables forward or reverse HTTP proxying via

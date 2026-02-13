@@ -37,9 +37,9 @@
 <img width="180"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
 
 
-<!--![Запись экрана 2025-10-02 в 13 06 06](https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042)-->
+<!-- Screen recording (2025-10-02) -->
 
-Free tool for debugging HTTP, WebSocket, SOCKS which is MUCH BETTER than the built-in Flutter Netwrok Devtools.
+Free tool for debugging HTTP, **WebSocket** (killer feature), SOCKS which is MUCH BETTER than the built-in Flutter Netwrok Devtools.
 
 Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 
@@ -51,7 +51,7 @@ Suitable for local development and test environments. Has crossplatform interfac
 - Convenient search with highlighting
 - HTTP details: headers (with sensitive data masking), body (pretty/JSON tree/HEX), TTFB/Total...
 - CORS/Cache hints, cookies and TLS summary
-- WebSocket details: events/frames, pings/pongs, payload preview, json highligh
+- WebSocket details: events/frames, pings/pongs, payload preview, json highligh, nice global/local search
 - import/export HAR
 - Artificial response delay (useful for simulating "slow networks")
 - Record/stop and records management
@@ -74,14 +74,62 @@ Suitable for local development and test environments. Has crossplatform interfac
 
 ...
 
+### Install the right Dart package (integration)
+
+If you want to capture traffic from your Flutter/Dart app, install the package
+that matches your networking stack:
+
+- **Dio**: use `dio_debugger`
+
+```bash
+dart pub add dio_debugger
+```
+
+- **package:http**: use `http_debugger`
+
+```bash
+dart pub add http_debugger
+```
+
+- **WebSocket (killer feature)**: pick the one you use in the app:
+  - `web_socket_debugger` (dart:io WebSocket)
+  - `web_socket_channel_debugger` (package:web_socket_channel)
+  - `socket_io_debugger` (Socket.IO client)
+
+```bash
+dart pub add web_socket_debugger
+# or
+dart pub add web_socket_channel_debugger
+# or
+dart pub add socket_io_debugger
+```
+
+See the full list in the [Dart Packages](#dart-packages) section below.
+
 ### Quick start
 
-#### Desktop App (Native GUI)
+1) CLI (WEB UI in browser) — fastest way to start
+
+Via CLI tool:
+
+```bash
+dart pub global activate network_debugger
+network_debugger
+```
+
+This starts the proxy and opens the UI in your browser:
+- UI: `http://localhost:9092/`
+- Proxy base (HTTP/WebSocket forward): `http://localhost:9091`
+
+2) Desktop App (Native GUI)
 
 **Download standalone desktop application** for macOS, Windows, or Linux from [GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases):
 
 - **macOS**: Download `.dmg` for your architecture (Intel or Apple Silicon)
   - Open DMG and drag app to Applications
+  - Note: the app is not signed/notarized yet, so macOS may show a security
+    prompt on first launch. If it gets blocked, go to System Settings →
+    Privacy & Security → **Open Anyway**
   - Auto-update support via GitHub Releases
 
 - **Windows**: Download `.zip` archive
@@ -102,19 +150,12 @@ Suitable for local development and test environments. Has crossplatform interfac
 Desktop app features:
 - Native UI with Flutter
 - Integrated Go proxy server (single process)
+- OS Forward Proxy mode (system-wide proxy)
 - Startup dialog for port configuration
 - Auto-update from GitHub Releases
 - Cross-platform support
 
 See [docs/DESKTOP_SETUP.md](docs/DESKTOP_SETUP.md) for detailed setup and development guide.
-
-#### CLI (automatically downloads binary)
-
-- Via CLI tool:
-  ```bash
-  dart pub global activate network_debugger
-  network_debugger
-  ```
 
 #### Docker
 
@@ -138,69 +179,7 @@ See [docs/DESKTOP_SETUP.md](docs/DESKTOP_SETUP.md) for detailed setup and develo
 
 ### CLI sessions mode (colored console output)
 
-Run server with CLI output enabled (no browser auto‑open):
-
-```bash
-./network-debugger --cli --cli-preset basic
-# or fine‑tune fields:
-./network-debugger --cli \
-  --cli-fields line,sizes,timings,req-headers,resp-headers \
-  --cli-color auto \
-  --cli-filter "/api/" \
-  --cli-body-bytes 50000
-```
-
-Presets: `minimal | basic | advanced | full` (fields listed below). `--cli-fields` overrides preset entirely.
-Color modes: `auto | always | never`. Body preview default uses `PREVIEW_MAX_BYTES`.
-
-Flags
-- `--cli`: enable CLI mode (disables auto‑open browser)
-- `--open-browser`: open browser on start (opt-in for `network-debugger`, enabled by default for `network-debugger-web`)
-- `--cli-preset`: one of `minimal|basic|advanced|full`
-- `--cli-fields`: comma‑separated list of sections to show (overrides preset)
-- `--cli-body-bytes`: body preview limit (bytes); 0 = use `PREVIEW_MAX_BYTES`
-- `--cli-color`: `auto|always|never`
-- `--cli-filter`: substring filter (matches URL/method/status)
-
-Fields (sections)
-- `line`: single‑line summary (time, METHOD, URL, STATUS, totalMs, sizes)
-- `sizes`: request/response byte sizes (also included in `line` summary)
-- `timings`: HTTP timings (DNS/Connect/TLS/TTFB/Total) when available
-- `req-headers`, `resp-headers`: selected headers with masking of sensitive values
-- `req-body`, `resp-body`: pretty JSON or raw preview, trimmed by `--cli-body-bytes`
-- `tls`: TLS peer info (version/cipher/ALPN/certs summary) when available
-- `cookies`: Set‑Cookie flags summary (counts of Secure/HttpOnly/SameSite)
-- `ids`: internal IDs (session/tx) for cross‑referencing
-
-Presets mapping
-- minimal: `line`
-- basic: `line,sizes`
-- advanced: `line,sizes,timings,req-headers,resp-headers`
-- full: `advanced + req-body,resp-body,tls,cookies,ids`
-
-Notes
-- HTTP request/response bodies shown are previews; they may be truncated and/or decompressed for readability.
-- Sensitive headers are masked by default; enable raw exposure via server config if needed.
-- Colors are enabled automatically for TTY; force with `--cli-color always`.
-
-Examples
-```bash
-# Show only single-line summaries, always with colors
-./network-debugger --cli --cli-preset minimal --cli-color always
-
-# Full details but limit body previews to 16KB
-./network-debugger --cli --cli-preset full --cli-body-bytes 16384
-
-# Custom selection with filtering for API routes
-./network-debugger --cli \
-  --cli-fields line,timings,req-headers,resp-headers \
-  --cli-filter "/v1/"
-```
-
-Where UI opens
-- By default server listens on :9092 (UI), proxy (forward) is on :9091:
-  - UI: http://localhost:9092/
-  - Proxy base (HTTP/WebSocket forward): http://localhost:9091
+See [docs/CLI_SESSIONS_MODE.md](docs/CLI_SESSIONS_MODE.md).
 
 
 ### Dart Packages
@@ -217,78 +196,7 @@ Where UI opens
 
 ### Settings
 
-Main settings (ENV)
-- `ADDR` — server address (default :9092)
-- `DEV_MODE` — development mode (1/true)
-- `NO_BROWSER` — disable automatic browser opening (1/true)
-- `OPEN_BROWSER` — open browser on start for `network-debugger` (1/true); `network-debugger-web` opens by default
-- `DEFAULT_TARGET` — default target upstream
-- `CAPTURE_BODIES` — save request/response bodies (1/true)
-- `RESPONSE_DELAY_MS` — fixed or range, e.g. `1000` or `1000-3000`
-- `INSECURE_TLS` — trust self-signed certificates (1/true)
-
-Network throttling (bandwidth/reliability/latency)
-- `THROTTLE_ENABLE` — enable throttling globally (1/true)
-- `THROTTLE_DOWN_KBPS` — downstream speed in kbit/s (server→client)
-- `THROTTLE_UP_KBPS` — upstream speed in kbit/s (client→server)
-- `THROTTLE_PACKET_LOSS` — packet loss percent (0..100), best‑effort
-- `THROTTLE_LATENCY_MS` — base latency in ms (RTT/ping simulation)
-- `THROTTLE_LATENCY_JITTER` — random jitter ± ms (e.g., 20 = varies ±20ms)
-- `THROTTLE_OFFLINE` — simulate offline (reject new requests)
-
-Runtime API
-- `GET /_api/v1/throttle` — current values and preset hints
-- `POST /_api/v1/throttle` — set values
-  ```json
-  {"enabled":true,"downKbps":3000,"upKbps":3000,"packetLossPct":0,"latencyMs":100,"latencyJitter":20,"offline":false}
-  ```
-
-SOCKS/HTTP Proxy Runtime (ports)
-- Управляется из UI: Settings → Proxy
-- API:
-  - `GET /_api/v1/proxy/config`
-  - `POST /_api/v1/proxy/config`
-    ```json
-    {
-      "forward": {"enabled": true, "port": 8888},
-      "socks": {"enabled": true, "port": 8889, "authMode": "none"}
-    }
-    ```
-  - Изменения применяются на лету без рестарта процесса (graceful shutdown/start).
-
-Cookies and stealth (reverse proxy /httpproxy)
-- `STEALTH_HEADERS` — hide proxy headers (Via, X-Forwarded-*) on /httpproxy (default 1)
-- `COOKIES_MODE` — `isolate` | `auto` | `off` (default `isolate`)
-- `COOKIES_DOMAIN_STRATEGY` — `hostOnly` | `proxyHost` (default `hostOnly`)
-- `COOKIES_PATH_STRATEGY` — `prefix` | `root` (default `prefix`)
-
-Per-request overrides (query params)
-- `_cookie_mode=isolate|auto|off`
-- `_stealth=1|0`
-
-Notes
-- For `SameSite=None` and `__Secure-`/`__Host-` cookies to be accepted by the browser, client→proxy must be HTTPS.
-- In `isolate` mode cookie names are namespaced in the browser storage and unwrapped towards upstream, so different `_target` do not collide.
-
-WebSocket preview settings
-Database migrations
-- Local/dev: AutoMigrate is enabled only when `DEV_MODE=1`.
-- Prod/Test: apply SQL migrations from `./migrations` using goose or golang-migrate in CI/CD.
-  Example (goose):
-  ```bash
-  # install once: go install github.com/pressly/goose/v3/cmd/goose@latest
-  goose -dir ./migrations sqlite3 ./data/network_debugger.db up
-  ```
-  Example (golang-migrate):
-  ```bash
-  # install once: brew install golang-migrate
-  migrate -path ./migrations -database sqlite3://./data/network_debugger.db up
-  ```
-- `PREVIEW_MAX_BYTES` — preview limit for text payloads (default 50000)
-- `WS_PREVIEW_MAX_BYTES` — WS preview limit (fallback to PREVIEW_MAX_BYTES)
-- `WS_DEFLATE_PREVIEW` — try to decompress permessage-deflate for preview (default 1)
-- `WS_CAPTURE_BODIES` — save WS message bodies to spool (default 0)
-- `WS_BODY_MAX_BYTES` — spool size limit for WS message body (default 1 MiB)
+See [docs/SETTINGS.md](docs/SETTINGS.md).
 
 ### Local development (without GitHub)
 - Ready binary/archive in `./dist`:

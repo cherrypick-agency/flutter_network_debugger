@@ -12,6 +12,7 @@ on:
     paths:
       - 'frontend/**'
       - 'cmd/network-debugger/**'
+      - 'cmd/network-debugger-web/**'
       - 'internal/**'
       - 'scripts/package-*.sh'
       - 'scripts/package-*.ps1'
@@ -201,13 +202,126 @@ jobs:
           path: dist/*.deb
           retention-days: 7
 
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            frontend/.dart_tool
+          key: ${{ runner.os }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Set version
+        id: version
+        env:
+          GIT_REF: ${{ github.ref }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$GIT_REF" == refs/tags/v* ]]; then
+            echo "VERSION=${GIT_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "VERSION=dev-${GIT_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Flutter web
+        working-directory: frontend
+        run: flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
+
+      - name: Copy web files to embed directory
+        run: |
+          rm -rf cmd/network-debugger-web/_web
+          mkdir -p cmd/network-debugger-web/_web
+          cp -R frontend/build/web/* cmd/network-debugger-web/_web/
+
+      - name: Build Go binaries with embedded web
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          mkdir -p dist
+
+          echo "Building for darwin/amd64..."
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_darwin_amd64 ./cmd/network-debugger-web
+
+          echo "Building for darwin/arm64..."
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_darwin_arm64 ./cmd/network-debugger-web
+
+          echo "Building for linux/amd64..."
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_linux_amd64 ./cmd/network-debugger-web
+
+          echo "Building for linux/arm64..."
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_linux_arm64 ./cmd/network-debugger-web
+
+          echo "Building for windows/amd64..."
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_windows_amd64.exe ./cmd/network-debugger-web
+
+          echo "Building for windows/arm64..."
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/network-debugger-web_windows_arm64.exe ./cmd/network-debugger-web
+
+      - name: Create archives
+        working-directory: dist
+        run: |
+          tar -czf network-debugger-web_darwin_amd64.tar.gz network-debugger-web_darwin_amd64
+          tar -czf network-debugger-web_darwin_arm64.tar.gz network-debugger-web_darwin_arm64
+          tar -czf network-debugger-web_linux_amd64.tar.gz network-debugger-web_linux_amd64
+          tar -czf network-debugger-web_linux_arm64.tar.gz network-debugger-web_linux_arm64
+
+          zip network-debugger-web_windows_amd64.zip network-debugger-web_windows_amd64.exe
+          zip network-debugger-web_windows_arm64.zip network-debugger-web_windows_arm64.exe
+
+          ls -lah *.tar.gz *.zip
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-binaries
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          retention-days: 7
+
   # Windows desktop build - calls separate workflow
   build-windows:
     uses: ./.github/workflows/build-windows.yml
 
   # Release job - only runs on version tags
   release:
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-web, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -259,21 +373,40 @@ jobs:
           
           base_url = f"https://github.com/{repo}/releases/download/{tag}"
           
-          rows = [
+          desktop_rows = [
             ("macOS (Apple Silicon)", f"NetworkDebugger-{version}-macos-arm64.dmg"),
             ("macOS (Intel)", f"NetworkDebugger-{version}-macos-x86_64.dmg"),
             ("Windows (x64)", f"NetworkDebugger-{version}-windows-amd64.zip"),
             ("Linux (deb, x64)", f"network-debugger_{version}_amd64.deb"),
             ("Linux (tar.gz, x64)", f"NetworkDebugger-{version}-linux-amd64.tar.gz"),
           ]
+
+          web_rows = [
+            ("Web server — macOS (Apple Silicon)", "network-debugger-web_darwin_arm64.tar.gz"),
+            ("Web server — macOS (Intel)", "network-debugger-web_darwin_amd64.tar.gz"),
+            ("Web server — Windows (x64)", "network-debugger-web_windows_amd64.zip"),
+            ("Web server — Windows (arm64)", "network-debugger-web_windows_arm64.zip"),
+            ("Web server — Linux (x64)", "network-debugger-web_linux_amd64.tar.gz"),
+            ("Web server — Linux (arm64)", "network-debugger-web_linux_arm64.tar.gz"),
+          ]
           
-          table = [
+          desktop_table = [
             "| OS | Asset | Download |",
             "|---|---|---|",
           ]
           
-          for os_name, filename in rows:
-            table.append(
+          for os_name, filename in desktop_rows:
+            desktop_table.append(
+              f"| {os_name} | `{filename}` | [Download]({base_url}/{filename}) |"
+            )
+
+          web_table = [
+            "| OS | Asset | Download |",
+            "|---|---|---|",
+          ]
+
+          for os_name, filename in web_rows:
+            web_table.append(
               f"| {os_name} | `{filename}` | [Download]({base_url}/{filename}) |"
             )
           
@@ -285,7 +418,13 @@ jobs:
               "",
               "## Download",
               "",
-              *table,
+              "### Desktop app",
+              "",
+              *desktop_table,
+              "",
+              "### Web server (embedded UI)",
+              "",
+              *web_table,
               "",
             ]
           )
@@ -309,7 +448,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-web, build-windows]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -322,3 +461,4 @@ jobs:
           echo "| macOS Desktop | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux Desktop | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Windows Desktop | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web server binaries | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY
