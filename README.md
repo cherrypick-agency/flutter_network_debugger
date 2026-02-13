@@ -30,7 +30,7 @@
   </a>
 </p>
 
-<img width="1312" height="815" alt="image" src="https://github.com/user-attachments/assets/d9c95c20-f79b-45da-94a7-c341cd33a388" />
+<img width="1312" height="815" alt="image" src="https://i.imgur.com/MwyvOXv.png" />
 <img width="180" alt="image" src="https://github.com/user-attachments/assets/3eb43e0d-e0ce-4c6d-a0c2-0fb5985ad8f9" />
 <img width="180" alt="image" src="https://github.com/user-attachments/assets/029cecea-cde6-466b-9e5c-06f5a78bba50" />
 <img width="180" height="815" alt="image" src="https://github.com/user-attachments/assets/c9b753a8-874a-414d-a628-4b794e1e3319" />
@@ -73,6 +73,7 @@ Privacy-first. Works fully offline.
 - Performance Insights dashboard: real-time latency, throughput, error rates, and endpoint hotspots (beta)
 - Privacy-first. Works fully offline.
 - Scriping (language agnostic! Go, Rust, JS/TS, C/C++, even Swift, Kotlin, Dart and more) Currently in beta. Plugins system is planned.
+- Breakpoints
 
 ...
 
