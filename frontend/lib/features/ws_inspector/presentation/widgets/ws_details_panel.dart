@@ -156,6 +156,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   final Map<String, int> _frameLocalFocusedIndex = <String, int>{};
   // Bug #12 fix: Atomic pending focus to prevent race conditions
   _PendingFocus? _pendingFocus;
+  final Map<String, _PendingFocus> _pendingLocalFocus =
+      <String, _PendingFocus>{};
   // Track which frame was expanded by search navigation (to collapse on next nav)
   String? _searchExpandedFid;
 
@@ -213,6 +215,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     _frameMatchCounts.removeWhere((k, _) => !current.contains(k));
     _frameMatchKeys.removeWhere((k, _) => !current.contains(k));
     _frameLocalFocusedIndex.removeWhere((k, _) => !current.contains(k));
+    _pendingLocalFocus.removeWhere((k, _) => !current.contains(k));
     if (_pendingFocus != null && !current.contains(_pendingFocus!.frameId)) {
       _pendingFocus = null;
     }
@@ -221,27 +224,23 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   void _localGotoNext(String id) {
     final s = _localSearch[id];
     if (s == null || s.keys.isEmpty) return;
+    final navSeq = ++_searchNavSeq;
     setState(() {
       s.focusedIndex = (s.focusedIndex + 1) % s.keys.length;
+      _pendingLocalFocus[id] = _PendingFocus(id, s.focusedIndex, navSeq);
     });
-    final navSeq = ++_searchNavSeq;
-    unawaited(
-      _scrollToMatchInFrame(id, s.keys[s.focusedIndex], navSeq: navSeq),
-    );
   }
 
   void _localGotoPrev(String id) {
     final s = _localSearch[id];
     if (s == null || s.keys.isEmpty) return;
+    final navSeq = ++_searchNavSeq;
     setState(() {
       s.focusedIndex = (s.focusedIndex - 1) < 0
           ? s.keys.length - 1
           : s.focusedIndex - 1;
+      _pendingLocalFocus[id] = _PendingFocus(id, s.focusedIndex, navSeq);
     });
-    final navSeq = ++_searchNavSeq;
-    unawaited(
-      _scrollToMatchInFrame(id, s.keys[s.focusedIndex], navSeq: navSeq),
-    );
   }
 
   bool _frameMatches(Map<String, dynamic> f) {
@@ -1171,13 +1170,44 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                     anchorScope: 'ws:$frameKey',
                                     onRebuilt: (count, keys) {
                                       if (local.show) {
-                                        setState(() {
+                                        final pending =
+                                            _pendingLocalFocus[frameKey];
+                                        final clampedIndex = keys.isEmpty
+                                            ? 0
+                                            : local.focusedIndex.clamp(
+                                                0,
+                                                keys.length - 1,
+                                              );
+
+                                        final shouldUpdateUi =
+                                            local.keys.length != keys.length ||
+                                            local.focusedIndex != clampedIndex;
+                                        if (shouldUpdateUi) {
+                                          setState(() {
+                                            local.keys = keys;
+                                            local.focusedIndex = clampedIndex;
+                                          });
+                                        } else {
                                           local.keys = keys;
-                                          if (local.focusedIndex >=
-                                              keys.length) {
-                                            local.focusedIndex = 0;
+                                        }
+
+                                        if (pending != null &&
+                                            pending.navSeq == _searchNavSeq) {
+                                          _pendingLocalFocus.remove(frameKey);
+                                          final idx = pending.localIndex.clamp(
+                                            0,
+                                            keys.length - 1,
+                                          );
+                                          if (keys.isNotEmpty) {
+                                            unawaited(
+                                              _scrollToMatchInFrame(
+                                                frameKey,
+                                                keys[idx],
+                                                navSeq: pending.navSeq,
+                                              ),
+                                            );
                                           }
-                                        });
+                                        }
                                       } else if (_showGlobalSearch) {
                                         _onChildMatches(frameKey, count, keys);
                                         // Bug #7 fix: Don't call _reindexGlobalMatches() here
