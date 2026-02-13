@@ -360,16 +360,19 @@ jobs:
           changelog_path = pathlib.Path("CHANGELOG.md")
           text = changelog_path.read_text(encoding="utf-8")
           
-          header_re = re.compile(rf"^## \\[{re.escape(version)}\\].*$", re.M)
+          header_re = re.compile(rf"^## \[{re.escape(version)}\].*$", re.M)
           header_match = header_re.search(text)
           
           if header_match:
             section_start = header_match.start()
-            next_header = re.search(r"^## \\[", text[header_match.end():], re.M)
+            next_header = re.search(r"^## \[", text[header_match.end():], re.M)
             section_end = header_match.end() + (next_header.start() if next_header else 0)
             changelog_section = text[section_start:section_end].strip()
           else:
-            changelog_section = f"## [{version}]\\n\\n- No matching section found in CHANGELOG.md."
+            changelog_section = (
+              f"## [{version}]\n\n"
+              "- No matching section found in CHANGELOG.md."
+            )
           
           base_url = f"https://github.com/{repo}/releases/download/{tag}"
           
@@ -423,6 +426,13 @@ jobs:
               *desktop_table,
               "",
               "### Web server (embedded UI)",
+              "",
+              "Quick start (fastest):",
+              "",
+              "```bash",
+              "dart pub global activate network_debugger",
+              "network_debugger",
+              "```",
               "",
               *web_table,
               "",
