@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:network_debugger/network_debugger.dart';
 
-const String version = '0.2.1';
+const String version = '0.2.2';
 
 void main(List<String> arguments) async {
   final parser = ArgParser()
@@ -26,6 +26,11 @@ void main(List<String> arguments) async {
       defaultsTo: 'info',
       allowed: ['debug', 'info', 'warning', 'error', 'none'],
       help: 'Log level: debug, info, warning, error, none',
+    )
+    ..addOption(
+      'github-token',
+      help:
+          'GitHub token for API requests (optional). Also supports GITHUB_TOKEN env var.',
     )
     ..addFlag(
       'no-browser',
@@ -126,6 +131,7 @@ void main(List<String> arguments) async {
 
   final binaryVersion = args['binary-version'] as String?;
   final noBrowser = args['no-browser'] as bool;
+  final githubToken = (args['github-token'] as String?)?.trim();
 
   final showDebuggerLogs = args.wasParsed('debugger-logs')
       ? debuggerLogsFlag
@@ -167,6 +173,8 @@ void main(List<String> arguments) async {
       version: binaryVersion,
       autoOpenBrowser: !noBrowser,
       showDebuggerProcessLogs: showDebuggerLogs,
+      githubToken:
+          (githubToken != null && githubToken.isNotEmpty) ? githubToken : null,
       onProgress: (received, total) {
         final percent = ((received / total) * 100).toStringAsFixed(1);
         stdout.write('\rDownload progress: $percent%');
@@ -214,6 +222,9 @@ void _printUsage(ArgParser parser) {
   print('  network_debugger --log-level=debug        # Set custom log level');
   print(
     '  network_debugger --binary-version v1.0.0  # Specific binary version',
+  );
+  print(
+    '  network_debugger --github-token <token>  # GitHub API token (rate limit mitigation)',
   );
   print(
     '  network_debugger --version                # Show version information',

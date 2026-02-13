@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Added `--github-token` CLI option (alternative to `GITHUB_TOKEN`) to mitigate GitHub API rate limits
+- Updated package/CLI version to 0.2.2
+
 ## 0.2.1
 
 - Fixed CLI version mismatch and improved CLI UX
