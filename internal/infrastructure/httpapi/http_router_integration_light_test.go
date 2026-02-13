@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http/httptest"
 	"time"
@@ -127,5 +128,65 @@ func TestRouter_SessionsEndpointsAndMetrics(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if rr.Code != 200 {
 		t.Fatalf("metrics")
+	}
+}
+
+func TestRouter_ScriptsList_ReturnsEmptyWhenServiceNil(t *testing.T) {
+	// deps with stubs
+	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
+	logger := zerolog.New(io.Discard)
+	d := &Deps{
+		Logger:  &logger,
+		Cfg:     cfgpkg.Config{CORSAllowOrigin: "*"},
+		Metrics: obs.NewMetrics(),
+		Monitor: NewMonitorHub(),
+		Live:    NewLiveSessions(),
+		Svc:     s,
+		// ScriptSvc intentionally nil
+	}
+	h := NewRouterWithoutForwardProxy(d)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/_api/v1/scripts", nil)
+	h.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("expected status 200, got %d. body=%s", rr.Code, rr.Body.String())
+	}
+
+	var got []any
+	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode response: %v. body=%s", err, rr.Body.String())
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty list, got %d", len(got))
+	}
+}
+
+func TestRouter_CompilersEndpoints_ReturnEmptyWhenDisabled(t *testing.T) {
+	s := uc.NewSessionService(stubRepo{}, stubRepo{}, stubRepo{})
+	logger := zerolog.New(io.Discard)
+	d := &Deps{
+		Logger:  &logger,
+		Cfg:     cfgpkg.Config{CORSAllowOrigin: "*"},
+		Metrics: obs.NewMetrics(),
+		Monitor: NewMonitorHub(),
+		Live:    NewLiveSessions(),
+		Svc:     s,
+		// CompilationSvc and CompilerInstallationSvc intentionally nil
+	}
+	h := NewRouterWithoutForwardProxy(d)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/_api/v1/scripts/compilers", nil)
+	h.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("expected status 200, got %d. body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/_api/v1/compilers/status", nil)
+	h.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("expected status 200, got %d. body=%s", rr.Code, rr.Body.String())
 	}
 }

@@ -43,6 +43,8 @@ Free tool for debugging HTTP, **WebSocket** (killer feature), SOCKS which is MUC
 
 Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 
+Privacy-first. Works fully offline.
+
 ### Features
 - Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
 - Waterfall timeline of requests
@@ -69,7 +71,7 @@ Suitable for local development and test environments. Has crossplatform interfac
 - Throttling with profiles
 - Tags & Annotations: Tag and annotate sessions for better organization
 - Performance Insights dashboard: real-time latency, throughput, error rates, and endpoint hotspots (beta)
-- Privacy first. Works offline.
+- Privacy-first. Works fully offline.
 - Scriping (language agnostic! Go, Rust, JS/TS, C/C++, even Swift, Kotlin, Dart and more) Currently in beta. Plugins system is planned.
 
 ...

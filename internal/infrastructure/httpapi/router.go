@@ -524,14 +524,154 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	mux.HandleFunc("/_api/v1/performance/overview", d.handlePerformanceOverview)
 
 	// Scripting API
+	var scriptHandlers *ScriptHandlers
+	mux.HandleFunc("GET /_api/v1/scripts", func(w http.ResponseWriter, r *http.Request) {
+		// Даже если scripting не инициализирован, фронту удобнее получить пустой список.
+		if scriptHandlers == nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]any{})
+			return
+		}
+		scriptHandlers.ListScripts(w, r)
+	})
+
+	// Compilation API: регистрируем всегда, чтобы UI не падал, если компиляция выключена.
+	var compilationHandlers *CompilationHandlers
+	var compilationOnce sync.Once
+	getCompilationHandlers := func() *CompilationHandlers {
+		if d.CompilationSvc == nil {
+			return nil
+		}
+		compilationOnce.Do(func() {
+			compilationHandlers = NewCompilationHandlers(d.CompilationSvc)
+		})
+		return compilationHandlers
+	}
+
+	mux.HandleFunc("GET /_api/v1/scripts/compilers", func(w http.ResponseWriter, r *http.Request) {
+		h := getCompilationHandlers()
+		if h == nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(CompilersResponse{
+				Compilers: []string{},
+				All:       map[string]bool{},
+			})
+			return
+		}
+		h.ListCompilers(w, r)
+	})
+	mux.HandleFunc("POST /_api/v1/scripts/validate", func(w http.ResponseWriter, r *http.Request) {
+		h := getCompilationHandlers()
+		if h == nil {
+			writeError(w, http.StatusNotImplemented, "COMPILATION_DISABLED", "compilation service is disabled", nil)
+			return
+		}
+		h.ValidateSyntax(w, r)
+	})
+	mux.HandleFunc("POST /_api/v1/scripts/{id}/compile", func(w http.ResponseWriter, r *http.Request) {
+		h := getCompilationHandlers()
+		if h == nil {
+			writeError(w, http.StatusNotImplemented, "COMPILATION_DISABLED", "compilation service is disabled", nil)
+			return
+		}
+		h.CompileScript(w, r)
+	})
+
+	// Compiler Installation API: регистрируем всегда, чтобы UI мог показать пустое состояние.
+	var installHandlers *CompilerInstallationHandlers
+	var installOnce sync.Once
+	getInstallHandlers := func() *CompilerInstallationHandlers {
+		if d.CompilerInstallationSvc == nil || d.Logger == nil {
+			return nil
+		}
+		installOnce.Do(func() {
+			installHandlers = NewCompilerInstallationHandlers(d.CompilerInstallationSvc, *d.Logger)
+		})
+		return installHandlers
+	}
+
+	mux.HandleFunc("GET /_api/v1/compilers/status", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(CompilersListResponse{
+				Compilers: []CompilerStatusResponse{},
+				CacheSize: 0,
+			})
+			return
+		}
+		h.GetCompilersStatus(w, r)
+	})
+	mux.HandleFunc("GET /_api/v1/compilers/supported", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string][]string{"languages": []string{}})
+			return
+		}
+		h.GetSupportedLanguages(w, r)
+	})
+	mux.HandleFunc("GET /_api/v1/compilers/cache/size", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int64{"size": 0})
+			return
+		}
+		h.GetCacheSize(w, r)
+	})
+	mux.HandleFunc("DELETE /_api/v1/compilers/cache", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(InstallCompilerResponse{
+				Status:  "success",
+				Message: "Compiler cache cleared successfully",
+			})
+			return
+		}
+		h.ClearCache(w, r)
+	})
+	mux.HandleFunc("GET /_api/v1/compilers/{language}/status", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			writeError(w, http.StatusNotFound, "INSTALLER_DISABLED", "compiler installer is disabled", nil)
+			return
+		}
+		h.GetCompilerStatus(w, r)
+	})
+	mux.HandleFunc("POST /_api/v1/compilers/{language}/install", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			writeError(w, http.StatusNotImplemented, "INSTALLER_DISABLED", "compiler installer is disabled", nil)
+			return
+		}
+		h.InstallCompiler(w, r)
+	})
+	mux.HandleFunc("DELETE /_api/v1/compilers/{language}", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			writeError(w, http.StatusNotImplemented, "INSTALLER_DISABLED", "compiler installer is disabled", nil)
+			return
+		}
+		h.UninstallCompiler(w, r)
+	})
+	mux.HandleFunc("GET /_api/v1/compilers/{language}/progress", func(w http.ResponseWriter, r *http.Request) {
+		h := getInstallHandlers()
+		if h == nil {
+			writeError(w, http.StatusNotFound, "INSTALLER_DISABLED", "compiler installer is disabled", nil)
+			return
+		}
+		h.GetInstallationProgress(w, r)
+	})
+
 	if d.ScriptSvc != nil {
-		scriptHandlers := NewScriptHandlers(d.ScriptSvc)
+		scriptHandlers = NewScriptHandlers(d.ScriptSvc)
 		// Set compilation service if available (for sourceCode compilation support)
 		if d.CompilationSvc != nil {
 			scriptHandlers.SetCompilationService(d.CompilationSvc)
 		}
 		mux.HandleFunc("POST /_api/v1/scripts", scriptHandlers.CreateScript)
-		mux.HandleFunc("GET /_api/v1/scripts", scriptHandlers.ListScripts)
 		mux.HandleFunc("GET /_api/v1/scripts/{id}", scriptHandlers.GetScript)
 		mux.HandleFunc("PUT /_api/v1/scripts/{id}", scriptHandlers.UpdateScript)
 		mux.HandleFunc("DELETE /_api/v1/scripts/{id}", scriptHandlers.DeleteScript)
@@ -547,27 +687,6 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 		// Import/Export complete scripts as ZIP (with metadata + WASM)
 		mux.HandleFunc("GET /_api/v1/scripts/{id}/export-zip", scriptHandlers.ExportScriptAsZip)
 		mux.HandleFunc("POST /_api/v1/scripts/import-zip", scriptHandlers.ImportScriptFromZip)
-
-		// Compilation API
-		if d.CompilationSvc != nil {
-			compilationHandlers := NewCompilationHandlers(d.CompilationSvc)
-			mux.HandleFunc("POST /_api/v1/scripts/{id}/compile", compilationHandlers.CompileScript)
-			mux.HandleFunc("POST /_api/v1/scripts/validate", compilationHandlers.ValidateSyntax)
-			mux.HandleFunc("GET /_api/v1/scripts/compilers", compilationHandlers.ListCompilers)
-		}
-
-		// Compiler Installation API (download-on-demand for Zig, Kotlin, Swift)
-		if d.CompilerInstallationSvc != nil {
-			installHandlers := NewCompilerInstallationHandlers(d.CompilerInstallationSvc, *d.Logger)
-			mux.HandleFunc("GET /_api/v1/compilers/status", installHandlers.GetCompilersStatus)
-			mux.HandleFunc("GET /_api/v1/compilers/supported", installHandlers.GetSupportedLanguages)
-			mux.HandleFunc("GET /_api/v1/compilers/{language}/status", installHandlers.GetCompilerStatus)
-			mux.HandleFunc("POST /_api/v1/compilers/{language}/install", installHandlers.InstallCompiler)
-			mux.HandleFunc("DELETE /_api/v1/compilers/{language}", installHandlers.UninstallCompiler)
-			mux.HandleFunc("GET /_api/v1/compilers/{language}/progress", installHandlers.GetInstallationProgress)
-			mux.HandleFunc("GET /_api/v1/compilers/cache/size", installHandlers.GetCacheSize)
-			mux.HandleFunc("DELETE /_api/v1/compilers/cache", installHandlers.ClearCache)
-		}
 	}
 
 	return mux

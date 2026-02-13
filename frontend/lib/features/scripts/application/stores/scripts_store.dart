@@ -1,4 +1,5 @@
 import 'package:mobx/mobx.dart';
+import 'package:app_http_client/application/app_http_exception.dart';
 import '../../domain/entities/script.dart';
 import '../../domain/usecases/get_scripts_usecase.dart';
 import '../../domain/usecases/create_script_usecase.dart';
@@ -154,6 +155,13 @@ abstract class _ScriptsStore with Store {
       scripts.clear();
       scripts.addAll(loadedScripts);
     } catch (e) {
+      if (e is AppHttpException &&
+          e.type == AppHttpErrorType.badResponse &&
+          e.response?.statusCode == 404) {
+        scripts.clear();
+        errorMessage = null;
+        return;
+      }
       errorMessage = 'Failed to load scripts: ${e.toString()}';
     } finally {
       isLoading = false;

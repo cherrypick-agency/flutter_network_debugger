@@ -72,6 +72,52 @@ lib/
    go run ./cmd/network-debugger-web
    ```
 
+### Capturing traffic from your Flutter app (important)
+
+The Web UI only shows what reaches the proxy. If you don't route your app's
+requests through the proxy, you'll see an empty sessions list.
+
+You have two options:
+
+1) **Flutter integration packages (recommended)** — route requests through the
+proxy from inside the app:
+
+- **Dio**: use `dio_debugger` (`DioDebugger.attach(dio)`)
+- **package:http**: use `http_debugger`
+- **WebSocket**:
+  - `web_socket_debugger` (dart:io WebSocket)
+  - `web_socket_channel_debugger` (package:web_socket_channel)
+  - `socket_io_debugger` (Socket.IO client)
+
+Example with `dio_debugger`:
+
+```dart
+import 'package:dio/dio.dart';
+import 'package:dio_debugger/dio_debugger.dart';
+import 'package:flutter/foundation.dart';
+
+final dio = Dio(
+  BaseOptions(baseUrl: 'https://api.example.com'),
+);
+
+if (kDebugMode) {
+  DioDebugger.attach(
+    dio,
+    proxyBaseUrl: 'http://localhost:9091',
+  );
+}
+```
+
+Notes:
+- On Android emulator use `http://10.0.2.2:9091` instead of `localhost`.
+- On a real device use your machine's LAN IP (e.g. `http://192.168.1.10:9091`).
+
+2) **OS Forward Proxy mode** — enable forward proxy in the app settings and set
+it as a system-wide proxy. Useful when you want to capture traffic from any
+application (not only Flutter).
+
+Ports and runtime proxy settings are described in `../docs/SETTINGS.md`.
+
 ### Building for Production
 
 **Web build**:

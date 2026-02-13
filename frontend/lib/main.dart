@@ -1252,9 +1252,36 @@ class _SessionPlaceholder extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Pick a session on the left to see its details here.',
+              'Pick a session on the left to see its details here.\n\n'
+              'If the list is empty, your traffic is not reaching the proxy yet:\n'
+              '• Start the proxy/backend (UI API: http://localhost:9092, proxy: http://localhost:9091)\n'
+              '• Route app requests through the proxy (recommended: attach a Flutter integration like dio_debugger)\n'
+              '  or enable Forward Proxy in Settings → Proxy for system-wide capture\n'
+              '• Make a request, then select the new session on the left',
               style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed('/integrations');
+                  },
+                  icon: const Icon(Icons.extension_outlined, size: 18),
+                  label: const Text('Integrations'),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed('/settings');
+                  },
+                  icon: const Icon(Icons.settings_outlined, size: 18),
+                  label: const Text('Settings → Proxy'),
+                ),
+              ],
             ),
           ],
         ),
