@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../core/di/di.dart';
@@ -24,7 +25,8 @@ String _fmtTime(String ts) {
 class _PendingFocus {
   final String frameId;
   final int localIndex;
-  _PendingFocus(this.frameId, this.localIndex);
+  final int navSeq;
+  _PendingFocus(this.frameId, this.localIndex, this.navSeq);
 }
 
 // Local search state for a single frame
@@ -157,8 +159,17 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   // Track which frame was expanded by search navigation (to collapse on next nav)
   String? _searchExpandedFid;
 
-  // Keys for stable widget identity (not cached - created fresh each build)
-  ValueKey<String> _tileKeyFor(String id) => ValueKey<String>('tile_$id');
+  int _searchNavSeq = 0;
+  bool _suspendNestedScrollSync = false;
+
+  final Map<String, GlobalKey> _frameTileKeys = <String, GlobalKey>{};
+  GlobalKey _tileKeyFor(String id) =>
+      _frameTileKeys.putIfAbsent(id, () => GlobalKey());
+
+  final Map<String, ScrollController> _frameInnerScrollControllers =
+      <String, ScrollController>{};
+  ScrollController _innerScrollControllerFor(String id) =>
+      _frameInnerScrollControllers.putIfAbsent(id, () => ScrollController());
 
   // Controllers for programmatic expand/collapse of tiles
   // BUG 2 fix: Use ExpansibleController for programmatic expansion
@@ -191,6 +202,14 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
       }
       return false;
     });
+    _frameInnerScrollControllers.removeWhere((k, controller) {
+      if (!current.contains(k)) {
+        controller.dispose();
+        return true;
+      }
+      return false;
+    });
+    _frameTileKeys.removeWhere((k, _) => !current.contains(k));
     _frameMatchCounts.removeWhere((k, _) => !current.contains(k));
     _frameMatchKeys.removeWhere((k, _) => !current.contains(k));
     _frameLocalFocusedIndex.removeWhere((k, _) => !current.contains(k));
@@ -205,15 +224,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     setState(() {
       s.focusedIndex = (s.focusedIndex + 1) % s.keys.length;
     });
-    final ctx = s.keys[s.focusedIndex].currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: 0.1,
-      );
-    }
+    final navSeq = ++_searchNavSeq;
+    unawaited(
+      _scrollToMatchInFrame(id, s.keys[s.focusedIndex], navSeq: navSeq),
+    );
   }
 
   void _localGotoPrev(String id) {
@@ -224,15 +238,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
           ? s.keys.length - 1
           : s.focusedIndex - 1;
     });
-    final ctx = s.keys[s.focusedIndex].currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: 0.1,
-      );
-    }
+    final navSeq = ++_searchNavSeq;
+    unawaited(
+      _scrollToMatchInFrame(id, s.keys[s.focusedIndex], navSeq: navSeq),
+    );
   }
 
   bool _frameMatches(Map<String, dynamic> f) {
@@ -324,23 +333,82 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   }
 
   void _scrollToFrame(String frameId) {
-    // Use cached visible frames for consistency with displayed list
+    final navSeq = ++_searchNavSeq;
+    unawaited(_scrollToFrameForSearch(frameId, navSeq: navSeq));
+  }
+
+  Future<void> _scrollToFrameForSearch(
+    String frameId, {
+    required int navSeq,
+  }) async {
     final visibleFrames = _cachedVisibleFrames;
 
-    final idx = visibleFrames.indexWhere((f) {
+    int idx = -1;
+    String? resolvedFrameKey;
+    for (int i = 0; i < visibleFrames.length; i++) {
+      final f = visibleFrames[i];
       final compositeKey = _frameKeyOf(f);
-      return compositeKey == frameId || (f['id'] ?? '').toString() == frameId;
-    });
+      if (compositeKey == frameId || (f['id'] ?? '').toString() == frameId) {
+        idx = i;
+        resolvedFrameKey = compositeKey;
+        break;
+      }
+    }
 
     if (idx < 0 || !_listCtrl.hasClients) return;
 
-    final estimatedItemExtent = 80.0; // Average height including heartbeats
-    final target = (idx * estimatedItemExtent).toDouble();
-    _listCtrl.animateTo(
-      target.clamp(0, _listCtrl.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+    final frameKey = resolvedFrameKey ?? frameId;
+    final tileKey = _tileKeyFor(frameKey);
+
+    final pos = _listCtrl.position;
+    final max = pos.maxScrollExtent;
+
+    const estimatedItemExtent = 64.0;
+    final estimatedTarget = (idx * estimatedItemExtent).toDouble().clamp(
+      0.0,
+      max,
     );
+
+    Future<void> animateTo(double offset, Duration duration) async {
+      if (!_listCtrl.hasClients) return;
+      try {
+        await _listCtrl.animateTo(
+          offset,
+          duration: duration,
+          curve: Curves.easeOutCubic,
+        );
+      } catch (_) {}
+    }
+
+    await animateTo(estimatedTarget, const Duration(milliseconds: 220));
+    if (!mounted || navSeq != _searchNavSeq) return;
+
+    for (int attempt = 0; attempt < 10; attempt++) {
+      if (!mounted || navSeq != _searchNavSeq) return;
+
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || navSeq != _searchNavSeq) return;
+
+      final ctx = tileKey.currentContext;
+      if (ctx != null) {
+        try {
+          await Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            alignment: 0.08,
+          );
+        } catch (_) {}
+        return;
+      }
+
+      final step = pos.viewportDimension * 0.85;
+      final cur = pos.pixels;
+      final dir = cur < estimatedTarget ? 1.0 : -1.0;
+      final next = (cur + dir * step).clamp(0.0, max);
+      if ((next - cur).abs() < 1) return;
+      await animateTo(next, const Duration(milliseconds: 160));
+    }
   }
 
   // (header is rendered via _buildTitleRich)
@@ -627,77 +695,161 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
 
   void _focusGlobal(int gIndex) {
     if (_globalTotalMatches <= 0) return;
+
+    final navSeq = ++_searchNavSeq;
     _frameLocalFocusedIndex.clear();
+
     final (fid, local) = _resolveGlobalIndexToFrame(gIndex);
     if (fid == null) return;
+
+    _globalFocusedIndex = gIndex;
     _frameLocalFocusedIndex[fid] = local;
 
-    final sameFrame = (_searchExpandedFid == fid);
+    final keys = _frameMatchKeys[fid];
+    final hasLiveAnchor =
+        keys != null &&
+        local >= 0 &&
+        local < keys.length &&
+        keys[local].currentContext != null;
 
-    if (sameFrame) {
-      // Same frame — tile is already expanded, no outer scroll needed.
-      // Use _pendingFocus so _onChildMatches scrolls after fresh keys arrive.
-      _pendingFocus = _PendingFocus(fid, local);
-      setState(() {});
-      return;
-    }
-
-    // Different frame — full flow: collapse old, expand new, outer scroll
-    if (_searchExpandedFid != null) {
+    if (_searchExpandedFid != null && _searchExpandedFid != fid) {
       _tileControllerFor(_searchExpandedFid!).collapse();
     }
     _searchExpandedFid = fid;
-    final controller = _tileControllerFor(fid);
-    controller.expand();
+
+    _pendingFocus = _PendingFocus(fid, local, navSeq);
+    setState(() {});
+
+    if (hasLiveAnchor) {
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _scrollToFrame(fid);
-      _pendingFocus = _PendingFocus(fid, local);
-      // Safety net: if the tile was off-screen when expand() was called,
-      // the controller listener wasn't attached and the tile stayed collapsed.
-      // After the scroll animation (~220ms), force re-expand via toggle.
-      Future.delayed(const Duration(milliseconds: 260), () {
-        if (!mounted) return;
-        if (_pendingFocus != null && _pendingFocus!.frameId == fid) {
-          controller.collapse();
-          controller.expand();
-          setState(() {});
-        }
-      });
+      if (!mounted || navSeq != _searchNavSeq) return;
+      unawaited(() async {
+        await _scrollToFrameForSearch(fid, navSeq: navSeq);
+        if (!mounted || navSeq != _searchNavSeq) return;
+
+        final controller = _tileControllerFor(fid);
+        controller.expand();
+
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || navSeq != _searchNavSeq) return;
+
+        controller.expand();
+      }());
     });
   }
 
-  /// Scroll to a widget identified by a GlobalKey inside the inner
-  /// SingleChildScrollView. Does not affect the outer ListView.
-  void _ensureVisibleByKey(GlobalKey key) {
-    final ctx = key.currentContext;
-    if (ctx == null) return;
+  Future<void> _scrollToMatchInFrame(
+    String frameId,
+    GlobalKey key, {
+    required int navSeq,
+  }) async {
+    if (!mounted || navSeq != _searchNavSeq) return;
+
+    Future<void> ensureFrameVisible(Duration duration) async {
+      final tileKey = _tileKeyFor(frameId);
+      var ctx = tileKey.currentContext;
+      if (ctx == null) {
+        await _scrollToFrameForSearch(frameId, navSeq: navSeq);
+        if (!mounted || navSeq != _searchNavSeq) return;
+        ctx = tileKey.currentContext;
+      }
+      if (ctx == null) return;
+
+      final ro = ctx.findRenderObject();
+      if (ro == null) return;
+
+      if (_listCtrl.hasClients) {
+        try {
+          await _listCtrl.position.ensureVisible(
+            ro,
+            duration: duration,
+            curve: Curves.easeOutCubic,
+            alignment: 0.08,
+          );
+        } catch (_) {}
+      } else {
+        try {
+          await Scrollable.ensureVisible(
+            ctx,
+            duration: duration,
+            curve: Curves.easeOutCubic,
+            alignment: 0.08,
+          );
+        } catch (_) {}
+      }
+    }
+
+    Future<void> ensureMatchVisible(Duration duration) async {
+      final ctx = key.currentContext;
+      if (ctx == null) return;
+      final ro = ctx.findRenderObject();
+      if (ro == null) return;
+
+      final innerCtrl = _innerScrollControllerFor(frameId);
+      if (!innerCtrl.hasClients) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || navSeq != _searchNavSeq) return;
+      }
+      if (!innerCtrl.hasClients) return;
+      try {
+        await innerCtrl.position.ensureVisible(
+          ro,
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          alignment: 0.28,
+        );
+      } catch (_) {}
+    }
+
+    void correct(Duration duration) {
+      if (!mounted || navSeq != _searchNavSeq) return;
+      unawaited(ensureFrameVisible(duration));
+      unawaited(ensureMatchVisible(duration));
+    }
+
+    _suspendNestedScrollSync = true;
     try {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        alignment: 0.3,
-      );
-    } catch (_) {}
+      // Сначала делаем видимым сам фрейм, потом — конкретное совпадение внутри него.
+      await ensureFrameVisible(const Duration(milliseconds: 220));
+      if (!mounted || navSeq != _searchNavSeq) return;
+
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || navSeq != _searchNavSeq) return;
+
+      await ensureMatchVisible(const Duration(milliseconds: 180));
+      if (!mounted || navSeq != _searchNavSeq) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        correct(const Duration(milliseconds: 120));
+      });
+
+      Future<void>.delayed(const Duration(milliseconds: 260), () {
+        correct(const Duration(milliseconds: 120));
+      });
+    } finally {
+      Future<void>.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        if (navSeq != _searchNavSeq) return;
+        _suspendNestedScrollSync = false;
+      });
+    }
   }
 
   void _gotoNext() {
     if (_globalTotalMatches <= 0) return;
-    setState(() {
-      _globalFocusedIndex = (_globalFocusedIndex + 1) % _globalTotalMatches;
-    });
-    _focusGlobal(_globalFocusedIndex);
+    final next = (_globalFocusedIndex + 1) % _globalTotalMatches;
+    _focusGlobal(next);
   }
 
   void _gotoPrev() {
     if (_globalTotalMatches <= 0) return;
-    setState(() {
-      _globalFocusedIndex = (_globalFocusedIndex - 1) < 0
-          ? _globalTotalMatches - 1
-          : _globalFocusedIndex - 1;
-    });
-    _focusGlobal(_globalFocusedIndex);
+    final prev = (_globalFocusedIndex - 1) < 0
+        ? _globalTotalMatches - 1
+        : _globalFocusedIndex - 1;
+    _focusGlobal(prev);
   }
 
   @override
@@ -707,6 +859,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     _listCtrl.dispose();
     for (final s in _localSearch.values) {
       s.dispose();
+    }
+    for (final controller in _frameInnerScrollControllers.values) {
+      controller.dispose();
     }
     // Dispose all ExpansibleControllers to prevent memory leaks
     for (final controller in _frameTileControllers.values) {
@@ -722,39 +877,15 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     _frameMatchKeys[frameId] = keys;
     // if waiting for focus on this specific frame — try to navigate
     final pending = _pendingFocus;
-    if (pending != null && pending.frameId == frameId) {
+    if (pending != null &&
+        pending.frameId == frameId &&
+        pending.navSeq == _searchNavSeq) {
       _pendingFocus = null;
       final local = pending.localIndex;
       if (local >= 0 && local < keys.length) {
-        // Tile already expanded (same-frame navigation) — scroll immediately.
-        // Tile just expanding (different-frame) — wait for animation.
-        final alreadyExpanded = (_searchExpandedFid == frameId);
-        if (alreadyExpanded) {
-          // Keys are fresh (just reported from build postFrameCallback),
-          // scroll the inner SingleChildScrollView directly.
-          _ensureVisibleByKey(keys[local]);
-        } else {
-          // Wait for the ExpansionTile animation to settle (~200ms) before
-          // scrolling — ensureVisible can't compute correct positions while
-          // the tile's height is still animating.
-          Future.delayed(const Duration(milliseconds: 200), () {
-            if (!mounted) return;
-            final ctx = keys[local].currentContext;
-            if (ctx == null) return;
-            try {
-              final scrollable = Scrollable.maybeOf(ctx);
-              if (scrollable == null) {
-                // Scrollable still not ready — retry after one more frame
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  _ensureVisibleByKey(keys[local]);
-                });
-              } else {
-                _ensureVisibleByKey(keys[local]);
-              }
-            } catch (_) {}
-          });
-        }
+        unawaited(
+          _scrollToMatchInFrame(frameId, keys[local], navSeq: pending.navSeq),
+        );
       }
     }
   }
@@ -1098,6 +1229,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                   children: [
                                     NotificationListener<ScrollNotification>(
                                       onNotification: (notification) {
+                                        if (_suspendNestedScrollSync) {
+                                          return false;
+                                        }
                                         final metrics = notification.metrics;
                                         if (notification
                                                 is ScrollUpdateNotification &&
@@ -1146,6 +1280,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                         return false;
                                       },
                                       child: SingleChildScrollView(
+                                        controller: _innerScrollControllerFor(
+                                          frameKey,
+                                        ),
+                                        primary: false,
                                         child: Container(
                                           alignment: Alignment.centerLeft,
                                           // small internal padding, without extra empty space at top

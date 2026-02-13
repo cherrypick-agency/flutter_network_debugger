@@ -1,15 +1,16 @@
 # Network Debugger - Desktop Application Setup
 
-## Обзор
+## Overview
 
-Network Debugger поддерживает native desktop приложения для:
-- **macOS** (Intel x86_64 и Apple Silicon arm64) - DMG installer
-- **Windows** (64-bit) - ZIP archive с install.bat
-- **Linux** (64-bit) - tar.gz и deb packages
+Network Debugger provides native desktop apps for:
+- **macOS** (Intel x86_64 and Apple Silicon arm64) — DMG installer
+- **Windows** (64-bit) — ZIP archive with `install.bat`
+- **Linux** (64-bit) — tar.gz and deb packages
 
-Desktop приложение запускает как Flutter UI, так и Go proxy server в одном процессе.
+The desktop app runs both the Flutter UI and the Go proxy server as a single
+application.
 
-## Архитектура
+## Architecture
 
 ```
 ┌─────────────────────────────────────┐
@@ -42,25 +43,25 @@ Desktop приложение запускает как Flutter UI, так и Go 
 └─────────────────────────────────────┘
 ```
 
-## Требования для разработки
+## Development requirements
 
-### Общие
-- Flutter SDK 3.x или выше
-- Go 1.22.x или выше
+### General
+- Flutter SDK 3.x or newer
+- Go 1.22.x or newer
 - Git
 
 ### macOS
-- macOS 11 (Big Sur) или новее
+- macOS 11 (Big Sur) or newer
 - Xcode Command Line Tools
-- `brew install create-dmg` (опционально, для красивых DMG)
+- `brew install create-dmg` (optional, for nicer DMG)
 
 ### Windows
-- Windows 10 или новее
-- Visual Studio 2022 или Visual Studio Build Tools
-- PowerShell 5.1 или выше
+- Windows 10 or newer
+- Visual Studio 2022 or Visual Studio Build Tools
+- PowerShell 5.1 or newer
 
 ### Linux
-- Ubuntu 20.04+ или аналогичный дистрибутив
+- Ubuntu 20.04+ or a similar distro
 - GTK 3.0 development headers
 - Required packages:
   ```bash
@@ -69,50 +70,50 @@ Desktop приложение запускает как Flutter UI, так и Go 
     libgtk-3-dev liblzma-dev libstdc++-12-dev
   ```
 
-## Локальная сборка
+## Local builds
 
 ### macOS
 
 ```bash
-# Включить desktop support (первый раз)
+# Enable desktop support (first time only)
 cd frontend
 flutter create --platforms=macos .
 
-# Собрать DMG
+# Build DMG
 cd ..
 chmod +x scripts/package-macos.sh
 VERSION=1.0.0 ./scripts/package-macos.sh
 
-# Результат: dist/NetworkDebugger-1.0.0-macos-{arch}.dmg
+# Output: dist/NetworkDebugger-1.0.0-macos-{arch}.dmg
 ```
 
 ### Windows
 
 ```powershell
-# Включить desktop support (первый раз)
+# Enable desktop support (first time only)
 cd frontend
 flutter create --platforms=windows .
 
-# Собрать ZIP
+# Build ZIP
 cd ..
 .\scripts\package-windows.ps1 -Version "1.0.0"
 
-# Результат: dist\NetworkDebugger-1.0.0-windows-amd64.zip
+# Output: dist\NetworkDebugger-1.0.0-windows-amd64.zip
 ```
 
 ### Linux
 
 ```bash
-# Включить desktop support (первый раз)
+# Enable desktop support (first time only)
 cd frontend
 flutter create --platforms=linux .
 
-# Собрать tar.gz и deb
+# Build tar.gz and deb
 cd ..
 chmod +x scripts/package-linux.sh
 VERSION=1.0.0 ARCH=amd64 ./scripts/package-linux.sh
 
-# Результат:
+# Output:
 # - dist/NetworkDebugger-1.0.0-linux-amd64.tar.gz
 # - dist/network-debugger_1.0.0_amd64.deb
 ```
@@ -121,98 +122,85 @@ VERSION=1.0.0 ARCH=amd64 ./scripts/package-linux.sh
 
 ### GitHub Actions Workflow
 
-Workflow `.github/workflows/build-desktop.yml` автоматически:
+Workflow `.github/workflows/build-desktop.yml` runs automatically:
 
-1. **Триггеры:**
-   - Push в main
+1. **Triggers:**
+   - Push to `main`
    - Pull requests
-   - Version tags (v*.*.*)
+   - Version tags (`v*.*.*`)
    - Manual dispatch
 
 2. **Jobs:**
-   - `build-macos`: Собирает DMG для macOS (x86_64 и arm64)
-   - `build-windows`: Собирает ZIP для Windows (amd64)
-   - `build-linux`: Собирает tar.gz и deb для Linux (amd64)
-   - `release`: При push тега создает GitHub Release с artifacts
-   - `summary`: Показывает статус всех builds
+   - `build-macos`: builds DMG for macOS (x86_64 and arm64)
+   - `build-windows`: builds ZIP for Windows (amd64)
+   - `build-linux`: builds tar.gz and deb for Linux (amd64)
+   - `release`: on tag push, creates a GitHub Release with artifacts
+   - `summary`: shows build status
 
-3. **Артефакты:**
-   - Хранятся 7 дней для dev builds
-   - Прикрепляются к GitHub Release для version tags
+3. **Artifacts:**
+   - retained for 7 days for non-release builds
+   - attached to GitHub Releases for version tags
 
-### Создание релиза
+### Creating a release
 
 ```bash
-# 1. Обновите версию в pubspec.yaml
-cd frontend
-# version: 1.0.1+2
-
-# 2. Обновите currentVersion в main.dart
-# currentVersion: '1.0.1',
-
-# 3. Закоммитьте изменения
-git add frontend/pubspec.yaml frontend/lib/main.dart
-git commit -m "chore: bump version to 1.0.1"
-
-# 4. Создайте и push tag
-git tag v1.0.1
-git push origin main
-git push origin v1.0.1
-
-# 5. GitHub Actions автоматически:
-# - Соберет для всех платформ
-# - Создаст GitHub Release
-# - Загрузит все installers
+# Full release process: docs/RELEASING.md
+#
+# TL;DR:
+# 1) Update CHANGELOG.md and frontend/pubspec.yaml
+# 2) make fmt && make test
+# 3) make release VERSION=X.Y.Z
+# 4) GitHub Actions will build desktop and create a GitHub Release
 ```
 
-## Установка
+## Installation
 
 ### macOS
 
-1. Скачайте DMG для вашей архитектуры:
+1. Download the DMG for your architecture:
    - Intel: `NetworkDebugger-*-macos-x86_64.dmg`
    - Apple Silicon: `NetworkDebugger-*-macos-arm64.dmg`
 
-2. Откройте DMG и перетащите приложение в Applications
+2. Open the DMG and drag the app into Applications
 
-3. При первом запуске: System Preferences → Security & Privacy → "Open Anyway"
+3. On first launch: System Preferences → Security & Privacy → "Open Anyway"
 
 ### Windows
 
-1. Скачайте `NetworkDebugger-*-windows-amd64.zip`
+1. Download `NetworkDebugger-*-windows-amd64.zip`
 
-2. Распакуйте ZIP в любую папку
+2. Extract the ZIP anywhere
 
-3. Запустите `install.bat` (создаст ярлыки на Desktop и Start Menu)
+3. Run `install.bat` (creates shortcuts on Desktop and Start Menu)
 
-4. Приложение установится в `%LOCALAPPDATA%\NetworkDebugger`
+4. The app will be installed to `%LOCALAPPDATA%\NetworkDebugger`
 
 ### Linux
 
-#### Через .deb (Ubuntu/Debian):
+#### Using .deb (Ubuntu/Debian):
 ```bash
 sudo dpkg -i network-debugger_*_amd64.deb
 network-debugger
 ```
 
-#### Через tar.gz (любой дистрибутив):
+#### Using tar.gz (any distro):
 ```bash
-# Извлечь архив
+# Extract the archive
 tar -xzf NetworkDebugger-*-linux-amd64.tar.gz
 cd NetworkDebugger-*
 
-# Установить
+# Install
 ./install.sh
 
-# Запустить
+# Run
 network-debugger
 ```
 
-## Использование
+## Usage
 
-### Первый запуск
+### First run
 
-При запуске приложения появится **Startup Dialog** с настройками:
+On launch you will see a **Startup Dialog** to configure ports:
 
 ```
 ┌─────────────────────────────────────┐
@@ -230,46 +218,46 @@ network-debugger
 └─────────────────────────────────────┘
 ```
 
-**Настройки:**
-- **API Server Port**: Порт для UI и REST API (по умолчанию: 9092)
-- **Forward Proxy Port**: Порт для forward proxy (по умолчанию: 9093)
+**Settings:**
+- **API Server Port**: port for UI and REST API (default: 9092)
+- **Forward Proxy Port**: port for forward proxy (default: 9093)
 
-**Валидация:**
-- Порты должны быть в диапазоне 1024-65535
-- Порты должны быть разными
-- Порты должны быть свободны
+**Validation:**
+- ports must be in range 1024-65535
+- ports must be different
+- ports must be available
 
-После нажатия **Start**:
-1. Go server запускается с указанными портами
-2. Проверяется health endpoint (`/_health`)
-3. Flutter UI подключается к серверу
-4. Приложение готово к использованию
+After clicking **Start**:
+1. The Go server starts with the configured ports
+2. The health endpoint (`/_health`) is checked
+3. Flutter UI connects to the server
+4. The app is ready to use
 
-### Настройки сохраняются
+### Settings persistence
 
-Выбранные порты сохраняются в SharedPreferences:
+Selected ports are stored in SharedPreferences:
 - macOS: `~/Library/Preferences/com.belieflab.networkDebugger`
 - Windows: Registry `HKCU\Software\belieflab\network-debugger`
 - Linux: `~/.local/share/network-debugger/shared_preferences.json`
 
-При следующем запуске используются сохраненные значения.
+Saved values are used on the next launch.
 
-### Изменение портов
+### Changing ports
 
-Чтобы изменить порты после установки:
+To change ports after installation:
 1. Settings → Server Settings → Restart with different ports
-2. Или удалить saved preferences и перезапустить
+2. Or delete saved preferences and restart
 
-## Автообновления
+## Auto-updates
 
-Desktop приложение автоматически проверяет обновления через GitHub Releases API.
+The desktop app automatically checks for updates via the GitHub Releases API.
 
-### Как это работает
+### How it works
 
-1. **При старте** приложения (не чаще раза в час)
-2. Проверяется latest release через API
-3. Сравнивается версия с текущей (semantic versioning)
-4. Если есть новая версия → показывается диалог
+1. **On startup** (no more than once per hour)
+2. Fetch latest release via API
+3. Compare against current version (semantic versioning)
+4. If a newer version exists → show a dialog
 
 ### Update Dialog
 
@@ -290,12 +278,12 @@ Desktop приложение автоматически проверяет об�
 └─────────────────────────────────────┘
 ```
 
-**Действия:**
-- **Download Update**: Открывает страницу GitHub Release в браузере
-- **Skip This Version**: Больше не показывать этот релиз
-- **Remind Me Later**: Показать при следующем запуске
+**Actions:**
+- **Download Update**: Opens the GitHub Release page in the browser
+- **Skip This Version**: Don't show this release again
+- **Remind Me Later**: Show again on the next launch
 
-См. [AUTO_UPDATE.md](AUTO_UPDATE.md) для деталей.
+See [AUTO_UPDATE.md](AUTO_UPDATE.md) for details.
 
 ## Troubleshooting
 
@@ -310,51 +298,52 @@ xattr -cr "/Applications/Network Debugger.app"
 1. Click "More info"
 2. Click "Run anyway"
 
-Или запустите установщик из-под Administrator.
+Or run the installer as Administrator.
 
 ### Linux: Port permission denied (< 1024)
 
 ```bash
-# Используйте порты >= 1024 (например, 9092/9093)
-# Или дайте capability:
+# Use ports >= 1024 (e.g. 9092/9093)
+# Or grant capability:
 sudo setcap 'cap_net_bind_service=+ep' ~/.local/share/network-debugger/resources/server_linux_amd64
 ```
 
-### Go server не запускается
+### Go server does not start
 
-**Проверьте:**
-1. Порты не заняты: `lsof -i :9092` (macOS/Linux) или `netstat -ano | findstr 9092` (Windows)
-2. Binary существует в Resources:
+**Check:**
+1. Ports are not taken: `lsof -i :9092` (macOS/Linux) or
+   `netstat -ano | findstr 9092` (Windows)
+2. Server binary exists in Resources:
    - macOS: `Network Debugger.app/Contents/Resources/server_darwin_*`
    - Windows: `resources\server_windows_amd64.exe`
    - Linux: `resources/server_linux_amd64`
 3. Binary executable: `chmod +x <binary>`
 
-**Логи:**
+**Logs:**
 - macOS: Console.app → Filter: "network-debugger"
 - Windows: Event Viewer → Application logs
 - Linux: `journalctl -f | grep network-debugger`
 
-### Flutter web assets не загружаются
+### Flutter assets are missing / not loading
 
-Go server должен иметь доступ к embedded Flutter web assets.
+The app bundle must include Flutter assets.
 
-**Проверка:**
+**Check:**
 ```bash
-# После build должна быть папка:
+# After build you should have:
 frontend/build/macos/Build/Products/Release/Network Debugger.app/Contents/Frameworks/App.framework/Resources/flutter_assets/
 
-# Она должна содержать:
+# It should contain:
 - assets/
 - fonts/
 - packages/
 ```
 
-## Разработка
+## Development
 
-### Локальный запуск для разработки
+### Local development run
 
-#### Вариант 1: Отдельные процессы (рекомендуется для dev)
+#### Option 1: Separate processes (recommended for dev)
 
 Terminal 1 - Go server:
 ```bash
@@ -365,29 +354,29 @@ go run . --api-port 9092 --proxy-port 9093
 Terminal 2 - Flutter desktop:
 ```bash
 cd frontend
-flutter run -d macos  # или -d windows / -d linux
+flutter run -d macos  # or -d windows / -d linux
 ```
 
-#### Вариант 2: Полная desktop интеграция
+#### Option 2: Full desktop integration
 
 ```bash
-# 1. Соберите Go binary
+# 1. Build Go binary
 cd cmd/network-debugger
 go build -o ../../frontend/macos/Runner/Resources/server_darwin_arm64 .
 
-# 2. Запустите Flutter desktop
+# 2. Run Flutter desktop
 cd ../../frontend
 flutter run -d macos
 ```
 
-### Отладка
+### Debugging
 
 #### Flutter DevTools
 
 ```bash
 cd frontend
 flutter run -d macos --observatory-port=9090
-# Затем откройте DevTools в браузере
+# Then open DevTools in the browser
 ```
 
 #### Go delve debugger
@@ -397,7 +386,7 @@ cd cmd/network-debugger
 dlv debug . -- --api-port 9092 --proxy-port 9093
 ```
 
-### Тестирование packaging scripts
+### Testing packaging scripts
 
 ```bash
 # macOS
@@ -413,7 +402,7 @@ VERSION=dev ./scripts/package-linux.sh
 tar -xzf dist/*.tar.gz -C dist/
 ```
 
-## Структура проекта
+## Project structure
 
 ```
 go-proxy/
@@ -451,80 +440,79 @@ go-proxy/
 
 ## Best Practices
 
-### Версионирование
+### Versioning
 
-Всегда синхронизируйте версии:
+Always keep versions consistent:
 1. `frontend/pubspec.yaml`: `version: 1.0.1+2`
-2. `frontend/lib/main.dart`: `currentVersion: '1.0.1'`
-3. Git tag: `v1.0.1`
+2. Git tag: `v1.0.1`
 
 ### Changelog
 
-Используйте conventional commits:
-- `feat:` - новые фичи
-- `fix:` - исправления багов
-- `chore:` - технические изменения
-- `docs:` - документация
+Use conventional commits:
+- `feat:` - new features
+- `fix:` - bug fixes
+- `chore:` - maintenance work
+- `docs:` - documentation
 
-### Тестирование перед релизом
+### Testing before release
 
 ```bash
-# 1. Соберите локально для всех платформ
-make desktop-all  # (или используйте packaging scripts)
-
-# 2. Протестируйте установку
-# - macOS: откройте DMG, установите, запустите
-# - Windows: распакуйте ZIP, install.bat, запустите
-# - Linux: установите deb/tar.gz, запустите
-
-# 3. Проверьте автообновление
-# - Установите старую версию
-# - Создайте draft release с новой версией
-# - Запустите приложение - должен показаться update dialog
-
-# 4. Создайте настоящий release
+# 1. Build installers (prefer CI for true multi-platform)
+# 2. Test installation:
+# - macOS: open DMG, install, run
+# - Windows: extract ZIP, run install.bat, run
+# - Linux: install deb/tar.gz, run
+#
+# 3. Verify update detection:
+# - install an older version
+# - create a draft release with a newer version
+# - start the app and confirm the update dialog
+#
+# 4. Create the real release:
 git tag v1.0.1 && git push origin v1.0.1
 ```
 
 ## FAQ
 
-**Q: Можно ли cross-compile для всех платформ с одной машины?**
+**Q: Can we cross-compile everything from one machine?**
 
-A: Частично. Go поддерживает cross-compilation, но Flutter desktop требует native toolchain для каждой платформы. Используйте GitHub Actions для multi-platform builds.
+A: Partially. Go supports cross-compilation, but Flutter desktop requires a
+native toolchain per platform. Use GitHub Actions for multi-platform builds.
 
-**Q: Как добавить code signing?**
+**Q: How to add code signing?**
 
 A:
 - macOS: `codesign --deep --force --verify --verbose --sign "Developer ID" "Network Debugger.app"`
-- Windows: Используйте `signtool.exe` с certificate
-- Linux: Code signing обычно не требуется
+- Windows: use `signtool.exe` with a certificate
+- Linux: code signing is usually not required
 
-**Q: Можно ли создать .app/.exe installer вместо DMG/ZIP?**
+**Q: Can we build a .pkg/.exe installer instead of DMG/ZIP?**
 
-A: Да:
-- macOS: Используйте `pkgbuild` для .pkg installer
-- Windows: Используйте Inno Setup или NSIS для .exe installer
-- Linux: Snap, Flatpak, или AppImage
+A: Yes:
+- macOS: use `pkgbuild` for a `.pkg` installer
+- Windows: use Inno Setup or NSIS for an `.exe` installer
+- Linux: Snap, Flatpak, or AppImage
 
-**Q: Как обновить Go dependencies в desktop app?**
+**Q: How to update Go dependencies in the desktop app?**
 
 A:
 ```bash
-# Пересоберите Go binary
+# Rebuild Go binary
 cd cmd/network-debugger
 go mod tidy
 go build -o <destination> .
 
-# Запустите packaging script
+# Run the packaging script
 cd ../..
 ./scripts/package-<platform>.sh
 ```
 
-**Q: Можно ли запустить несколько инстансов приложения?**
+**Q: Can I run multiple app instances?**
 
-A: Да, но убедитесь что они используют разные порты. Startup dialog предотвращает конфликты.
+A: Yes, but make sure they use different ports. The startup dialog helps to
+avoid conflicts.
 
-## Ссылки
+## Links
 
 - [Flutter Desktop](https://docs.flutter.dev/desktop)
 - [Go Cross-compilation](https://go.dev/doc/install/source#environment)

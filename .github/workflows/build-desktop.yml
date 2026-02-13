@@ -12,7 +12,6 @@ on:
     paths:
       - 'frontend/**'
       - 'cmd/network-debugger/**'
-      - 'cmd/network-debugger-web/**'
       - 'internal/**'
       - 'scripts/package-*.sh'
       - 'scripts/package-*.ps1'
@@ -84,11 +83,14 @@ jobs:
 
       - name: Set version
         id: version
+        env:
+          GIT_REF: ${{ github.ref }}
+          GIT_SHA: ${{ github.sha }}
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          if [[ "$GIT_REF" == refs/tags/v* ]]; then
+            echo "VERSION=${GIT_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+            echo "VERSION=dev-${GIT_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build macOS DMG
@@ -105,8 +107,7 @@ jobs:
           path: dist/*.dmg
           retention-days: 7
 
-  # Временно отключили windows-сборку
-  # Windows builds moved to separate workflow: build-windows.yml
+  # Windows builds are moved to a separate workflow: build-windows.yml
   # This allows independent execution and better CI/CD organization
 
   build-linux:
@@ -167,11 +168,14 @@ jobs:
 
       - name: Set version
         id: version
+        env:
+          GIT_REF: ${{ github.ref }}
+          GIT_SHA: ${{ github.sha }}
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          if [[ "$GIT_REF" == refs/tags/v* ]]; then
+            echo "VERSION=${GIT_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+            echo "VERSION=dev-${GIT_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build Linux packages
@@ -197,127 +201,13 @@ jobs:
           path: dist/*.deb
           retention-days: 7
 
-  build-web:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          channel: 'stable'
-
-      - name: Cache Flutter dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.pub-cache
-            frontend/.dart_tool
-          key: ${{ runner.os }}-flutter-${{ hashFiles('frontend/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Flutter pub get
-        working-directory: frontend
-        run: flutter pub get
-
-      - name: Set version
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build Flutter web
-        working-directory: frontend
-        run: flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
-
-      - name: Copy web files to embed directory
-        run: |
-          rm -rf cmd/network-debugger-web/_web
-          mkdir -p cmd/network-debugger-web/_web
-          cp -R frontend/build/web/* cmd/network-debugger-web/_web/
-
-      - name: Build Go binaries with embedded web
-        env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
-        run: |
-          mkdir -p dist
-
-          # Build for all platforms
-          echo "Building for darwin/amd64..."
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_darwin_amd64 ./cmd/network-debugger-web
-
-          echo "Building for darwin/arm64..."
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_darwin_arm64 ./cmd/network-debugger-web
-
-          echo "Building for linux/amd64..."
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_linux_amd64 ./cmd/network-debugger-web
-
-          echo "Building for linux/arm64..."
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_linux_arm64 ./cmd/network-debugger-web
-
-          echo "Building for windows/amd64..."
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_windows_amd64.exe ./cmd/network-debugger-web
-
-          echo "Building for windows/arm64..."
-          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/network-debugger-web_windows_arm64.exe ./cmd/network-debugger-web
-
-      - name: Create archives
-        working-directory: dist
-        run: |
-          # Create tar.gz for unix platforms
-          tar -czf network-debugger-web_darwin_amd64.tar.gz network-debugger-web_darwin_amd64
-          tar -czf network-debugger-web_darwin_arm64.tar.gz network-debugger-web_darwin_arm64
-          tar -czf network-debugger-web_linux_amd64.tar.gz network-debugger-web_linux_amd64
-          tar -czf network-debugger-web_linux_arm64.tar.gz network-debugger-web_linux_arm64
-
-          # Create zip for Windows
-          zip network-debugger-web_windows_amd64.zip network-debugger-web_windows_amd64.exe
-          zip network-debugger-web_windows_arm64.zip network-debugger-web_windows_arm64.exe
-
-          # List all archives
-          ls -lah *.tar.gz *.zip
-
-      - name: Upload web artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-binaries
-          path: |
-            dist/*.tar.gz
-            dist/*.zip
-          retention-days: 7
-
   # Windows desktop build - calls separate workflow
   build-windows:
     uses: ./.github/workflows/build-windows.yml
 
   # Release job - only runs on version tags
   release:
-    needs: [build-macos, build-linux, build-web, build-windows]
+    needs: [build-macos, build-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -339,22 +229,79 @@ jobs:
           find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.tar.gz" -o -name "*.deb" \) -exec cp {} release/ \;
           ls -lah release/
 
-      - name: Extract version
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Generate changelog
-        id: changelog
+      - name: Generate release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
-          echo "## What's Changed" > CHANGELOG.md
-          echo "" >> CHANGELOG.md
-          git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s (%h)" >> CHANGELOG.md || echo "- Initial release" >> CHANGELOG.md
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+          
+          tag = os.environ["TAG"]
+          repo = os.environ["REPO"]
+          version = tag[1:] if tag.startswith("v") else tag
+          
+          changelog_path = pathlib.Path("CHANGELOG.md")
+          text = changelog_path.read_text(encoding="utf-8")
+          
+          header_re = re.compile(rf"^## \\[{re.escape(version)}\\].*$", re.M)
+          header_match = header_re.search(text)
+          
+          if header_match:
+            section_start = header_match.start()
+            next_header = re.search(r"^## \\[", text[header_match.end():], re.M)
+            section_end = header_match.end() + (next_header.start() if next_header else 0)
+            changelog_section = text[section_start:section_end].strip()
+          else:
+            changelog_section = f"## [{version}]\\n\\n- No matching section found in CHANGELOG.md."
+          
+          base_url = f"https://github.com/{repo}/releases/download/{tag}"
+          
+          rows = [
+            ("macOS (Apple Silicon)", f"NetworkDebugger-{version}-macos-arm64.dmg"),
+            ("macOS (Intel)", f"NetworkDebugger-{version}-macos-x86_64.dmg"),
+            ("Windows (x64)", f"NetworkDebugger-{version}-windows-amd64.zip"),
+            ("Linux (deb, x64)", f"network-debugger_{version}_amd64.deb"),
+            ("Linux (tar.gz, x64)", f"NetworkDebugger-{version}-linux-amd64.tar.gz"),
+          ]
+          
+          table = [
+            "| OS | Asset | Download |",
+            "|---|---|---|",
+          ]
+          
+          for os_name, filename in rows:
+            table.append(
+              f"| {os_name} | `{filename}` | [Download]({base_url}/{filename}) |"
+            )
+          
+          release_notes = "\n".join(
+            [
+              changelog_section,
+              "",
+              "---",
+              "",
+              "## Download",
+              "",
+              *table,
+              "",
+            ]
+          )
+          
+          pathlib.Path("release-notes.md").write_text(
+            release_notes,
+            encoding="utf-8",
+          )
+          print("Generated release-notes.md")
+          PY
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          body_path: CHANGELOG.md
+          body_path: release-notes.md
           draft: false
           prerelease: false
         env:
@@ -362,7 +309,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [build-macos, build-linux, build-web, build-windows]
+    needs: [build-macos, build-linux, build-windows]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -375,4 +322,3 @@ jobs:
           echo "| macOS Desktop | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux Desktop | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Windows Desktop | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Web Binaries  | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY

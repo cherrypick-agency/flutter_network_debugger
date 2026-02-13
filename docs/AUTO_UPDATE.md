@@ -1,17 +1,18 @@
-# Система автообновлений Network Debugger
+# Network Debugger auto-update system
 
-## Обзор
+## Overview
 
-Network Debugger использует **custom легковесное решение** для автообновлений через GitHub Releases API.
+Network Debugger uses a **lightweight custom implementation** for checking
+updates via the GitHub Releases API.
 
-**Преимущества нашего подхода:**
-- ✅ Поддержка всех платформ: macOS, Windows, Linux
-- ✅ Нет конфликтов зависимостей
-- ✅ Простая интеграция с GitHub Releases
-- ✅ Полный контроль над процессом
-- ✅ Минимальные требования (только http + url_launcher)
+**Why this approach:**
+- ✅ Works on all platforms: macOS, Windows, Linux
+- ✅ No dependency conflicts
+- ✅ Simple GitHub Releases integration
+- ✅ Full control over the process
+- ✅ Minimal requirements (just HTTP + `url_launcher`)
 
-## Архитектура
+## Architecture
 
 ```
 ┌─────────────────┐
@@ -19,112 +20,102 @@ Network Debugger использует **custom легковесное решен
 │   (main.dart)   │
 └────────┬────────┘
          │
-         │ 1. При старте проверяет обновления
+         │ 1. Checks for updates on startup
          ▼
 ┌─────────────────┐
 │  UpdateService  │──────► GitHub Releases API
 └────────┬────────┘
          │
-         │ 2. Если есть новая версия
+         │ 2. If a new version is available
          ▼
 ┌─────────────────┐
 │  UpdateDialog   │
-│   показывает    │
-│  информацию о   │
-│   обновлении    │
+│  shows update   │
+│  information    │
 └────────┬────────┘
          │
-         │ 3. Пользователь выбирает действие
+         │ 3. User chooses an action
          ▼
     ┌────┴────────────────┐
     │                     │
 Download             Skip/Later
     │                     │
     ▼                     ▼
-Открывает         Сохраняет в
+Opens             Stores in
 GitHub Release    SharedPreferences
 ```
 
-## Настройка
+## Configuration
 
-### 1. Обновите GitHub repo в main.dart
+### 1. Configure the GitHub repo in `main.dart`
 
-Откройте `frontend/lib/main.dart` и замените:
+Open `frontend/lib/main.dart` and verify the parameters:
 
 ```dart
-_updateService = UpdateService(
-  githubOwner: 'cherrypick-agency',     // ← GitHub organization
-  githubRepo: 'flutter_network_debugger', // ← Название репозитория
-  currentVersion: '1.0.0',               // ← Из pubspec.yaml
-);
-```
-
-**Текущая конфигурация:**
-```dart
-_updateService = UpdateService(
+await setupDI(
+  baseUrl: 'http://localhost:9092',
   githubOwner: 'cherrypick-agency',
   githubRepo: 'flutter_network_debugger',
-  currentVersion: '1.0.0',
+  currentVersion: packageInfo.version,
 );
 ```
 
-### 2. Обновите версию в pubspec.yaml
+`currentVersion` comes from `PackageInfo.fromPlatform()`, so you don't need to
+hardcode the version in code.
 
-При каждом релизе обновляйте версию в `frontend/pubspec.yaml`:
+### 2. Bump the version in pubspec.yaml
+
+For every release, update the version in `frontend/pubspec.yaml`:
 
 ```yaml
 version: 1.0.1+2  # major.minor.patch+build
 ```
+This value becomes `PackageInfo.version` and is used to compare against
+`tag_name` from GitHub Releases.
 
-И в `main.dart`:
+## How update checks work
 
-```dart
-currentVersion: '1.0.1',
-```
+### 1. Automatic checks
 
-## Как работает проверка обновлений
-
-### 1. Автоматическая проверка
-
-Приложение автоматически проверяет обновления:
-- **При старте приложения**
-- **Не чаще раза в час** (кэширование)
+The app checks for updates:
+- **On app startup**
+- **No more than once per hour** (cached)
 
 ### 2. GitHub Releases API
 
-UpdateService делает HTTP запрос:
+The app sends an HTTP request:
 
 ```
 GET https://api.github.com/repos/OWNER/REPO/releases/latest
 ```
 
-Ответ содержит:
-- `tag_name`: версия релиза (например, "v1.0.1")
-- `body`: changelog
-- `assets`: список файлов для скачивания
+The response contains:
+- `tag_name`: release version (e.g. `"v1.0.1"`)
+- `body`: release notes / changelog
+- `assets`: downloadable files
 
-### 3. Определение платформы
+### 3. Platform asset selection
 
-UpdateService автоматически определяет нужный файл:
+The app selects the right asset automatically:
 
-| Платформа | Приоритет файлов                |
+| Platform  | Asset priority                  |
 |-----------|---------------------------------|
 | macOS     | `*.dmg`                         |
 | Windows   | `*.msi`                         |
-| Linux     | `*.AppImage` → `*.deb` → `*.tar.gz` |
+| Linux     | `*.AppImage` (if available) → `*.deb` → `*.tar.gz` |
 
-### 4. Сравнение версий
+### 4. Version comparison
 
-Версии сравниваются по семантическому версионированию:
+Versions are compared using semantic versioning:
 - `1.0.1` > `1.0.0` ✅
 - `1.1.0` > `1.0.9` ✅
 - `2.0.0` > `1.9.9` ✅
 
-## Пользовательский опыт
+## User experience
 
-### Диалог обновления
+### Update dialog
 
-Когда доступна новая версия, показывается красивый диалог:
+When a new version is available, the app shows a dialog:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -145,61 +136,62 @@ UpdateService автоматически определяет нужный фа�
 └─────────────────────────────────────────┘
 ```
 
-### Действия пользователя
+### User actions
 
-1. **Download Update** → Открывает страницу GitHub Release в браузере
-2. **Skip This Version** → Больше не показывать этот релиз
-3. **Remind Me Later** → Показать при следующем запуске
+1. **Download Update** → Opens the GitHub Release page in the browser
+2. **Skip This Version** → Don't show this release again
+3. **Remind Me Later** → Show again on the next start
 
-## Настройка Skip Version
+## Skip version
 
-Пропущенные версии сохраняются в SharedPreferences:
+Skipped versions are stored in SharedPreferences:
 
 ```dart
-// Пользователь нажал "Skip This Version"
+// User clicked "Skip This Version"
 await _updateService.skipVersion('1.0.1');
 
-// Сброс (для тестирования)
+// Reset (for testing)
 await _updateService.clearSkippedVersion();
 ```
 
-## Кэширование
+## Caching
 
-Результаты проверки кэшируются на 1 час:
+Update check results are cached for 1 hour:
 
 ```dart
-// Принудительная проверка (игнорирует кэш)
+// Force check (ignores cache)
 await _updateService.checkForUpdates(forceCheck: true);
 ```
 
-## Требования к GitHub Releases
+## GitHub Releases requirements
 
-### Именование файлов
+### File naming
 
-Файлы в Release должны иметь правильные расширения:
+Release assets must have the expected names/extensions:
 
 ```
 NetworkDebugger-1.0.1-macos-arm64.dmg       ✅
-NetworkDebugger-1.0.1-macos-amd64.dmg       ✅
-NetworkDebugger-1.0.1-windows-amd64.msi     ✅
-NetworkDebugger-1.0.1-linux-amd64.AppImage  ✅
+NetworkDebugger-1.0.1-macos-x86_64.dmg      ✅
+NetworkDebugger-1.0.1-windows-amd64.zip     ✅
+network-debugger_1.0.1_amd64.deb            ✅
+NetworkDebugger-1.0.1-linux-amd64.tar.gz    ✅
 NetworkDebugger-1.0.1-linux-amd64.deb       ✅
 ```
 
-### Версии (Tags)
+### Tags
 
-GitHub Release tag должен соответствовать формату:
+Release tag should match:
 
 ```
 v1.0.0   ✅
 v1.0.1   ✅
-1.0.0    ✅ (тоже работает)
+1.0.0    ✅ (also works)
 release-1.0.0  ❌
 ```
 
-### Changelog
+### Release notes
 
-Тело Release (description) будет показано в диалоге как changelog:
+Release body is displayed in the dialog as “What’s new”:
 
 ```markdown
 ## What's New
@@ -216,30 +208,30 @@ release-1.0.0  ❌
 - Optimized websocket handling
 ```
 
-## Тестирование
+## Testing
 
-### Локальное тестирование
+### Local testing
 
-1. Создайте тестовый Release в GitHub
-2. Установите более старую версию в `main.dart`:
+1. Create a test release in GitHub
+2. Set an older version in code to simulate an update being available:
    ```dart
    currentVersion: '0.9.0',
    ```
-3. Запустите приложение - должен появиться диалог обновления
+3. Run the app — the update dialog should appear
 
-### Проверка API вручную
+### Verify the API manually
 
 ```bash
 curl -H "Accept: application/vnd.github.v3+json" \
   https://api.github.com/repos/OWNER/REPO/releases/latest
 ```
 
-## Отключение автообновлений
+## Disabling auto-updates
 
-Для разработки можно временно отключить:
+For development you can temporarily disable checks:
 
 ```dart
-// В _checkForUpdates() добавьте в начало:
+// Add this at the beginning of _checkForUpdates():
 if (kDebugMode) {
   return; // Skip update check in debug mode
 }
@@ -247,11 +239,11 @@ if (kDebugMode) {
 
 ## Troubleshooting
 
-### Обновления не проверяются
+### Updates are not being checked
 
-**Проблема:** Нет интернета или GitHub API недоступен
+**Problem:** No internet connectivity or GitHub API is unavailable
 
-**Решение:** Приложение тихо игнорирует ошибки. Проверьте логи:
+**Fix:** The app fails gracefully. Check logs:
 
 ```dart
 Logger.root.level = Level.FINE;
@@ -260,52 +252,52 @@ Logger.root.onRecord.listen((record) {
 });
 ```
 
-### Неправильная версия определяется
+### Wrong version is detected
 
-**Проблема:** currentVersion не совпадает с pubspec.yaml
+**Problem:** `currentVersion` does not match the build version from pubspec
 
-**Решение:** Обновите оба места при каждом релизе
+**Fix:** Make sure `frontend/pubspec.yaml` is bumped and the app is built with
+the correct version (the app reads `PackageInfo` at runtime)
 
-### Asset не находится
+### Asset is not found
 
-**Проблема:** Файл не имеет правильного расширения
+**Problem:** Asset name/extension does not match what the app expects
 
-**Решение:** Убедитесь что в Release есть файлы с `.dmg`, `.msi`, `.AppImage` расширениями
+**Fix:** Ensure the release contains `.dmg`, `.zip`, `.deb` / `.tar.gz` assets
 
 ## Best Practices
 
-1. **Всегда синхронизируйте версии:**
-   - `pubspec.yaml` version
-   - `main.dart` currentVersion
-   - GitHub Release tag
+1. **Always keep versions consistent:**
+   - `frontend/pubspec.yaml` → `version: X.Y.Z+N`
+   - GitHub Release tag → `vX.Y.Z`
 
-2. **Пишите подробные changelogs:**
-   - Группируйте изменения (Features, Bug Fixes, etc.)
-   - Будьте конкретны
-   - Упоминайте breaking changes
+2. **Write good release notes:**
+   - Group changes (Features, Bug Fixes, etc.)
+   - Be specific
+   - Call out breaking changes
 
-3. **Тестируйте перед релизом:**
-   - Создайте draft release
-   - Проверьте автообновление
-   - Только потом публикуйте
+3. **Test before publishing:**
+   - Create a draft release
+   - Verify update detection
+   - Publish only after validation
 
-4. **Правильная нумерация:**
+4. **Versioning rules:**
    - Patch (0.0.x): Bug fixes
    - Minor (0.x.0): New features
    - Major (x.0.0): Breaking changes
 
-## Будущие улучшения
+## Future improvements
 
-Потенциальные улучшения системы:
+Potential improvements:
 
-- [ ] **Автоматическая установка** (сейчас только открывает браузер)
-- [ ] **Delta updates** (загружать только изменения)
-- [ ] **In-app download** с progress bar
-- [ ] **Background updates** (скачивать в фоне)
-- [ ] **Automatic restart** после установки
-- [ ] **Rollback mechanism** (откат на предыдущую версию)
+- [ ] **Automatic installation** (currently only opens the browser)
+- [ ] **Delta updates** (download only changes)
+- [ ] **In-app download** with progress UI
+- [ ] **Background updates**
+- [ ] **Automatic restart** after install
+- [ ] **Rollback mechanism**
 
-## См. также
+## See also
 
 - [GitHub Releases API Documentation](https://docs.github.com/en/rest/releases/releases)
 - [Semantic Versioning](https://semver.org/)

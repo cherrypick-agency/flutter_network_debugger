@@ -61,10 +61,10 @@ jobs:
         id: version
         shell: bash
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+            echo "VERSION=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build Windows ZIP
