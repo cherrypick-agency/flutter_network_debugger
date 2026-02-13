@@ -48,6 +48,7 @@ class NetworkDebugger {
     String? version,
     int port = 9092,
     bool autoOpenBrowser = true,
+    bool showDebuggerProcessLogs = false,
     ProgressCallback? onProgress,
     RetryCallback? onRetry,
     ChecksumCallback? onChecksum,
@@ -151,7 +152,10 @@ class NetworkDebugger {
         environment: environment,
       );
 
-      await process.start();
+      await process.start(
+        onStdoutLine: showDebuggerProcessLogs ? stdout.writeln : null,
+        onStderrLine: showDebuggerProcessLogs ? stderr.writeln : null,
+      );
 
       final instance = DebuggerInstance(process);
 

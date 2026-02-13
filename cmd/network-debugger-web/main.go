@@ -41,6 +41,11 @@ func main() {
 	logger := obs.NewLogger(cfg.LogLevel)
 	logger.Info().Str("addr", cfg.Addr).Msg("starting wsapp (api + embedded web)")
 
+	// В dev-режиме легко забыть пересобрать фронтенд и смотреть на старую UI.
+	// Поэтому при локальном запуске показываем "дату билда" (mtime index.html) и
+	// предупреждаем, если артефакты старше суток.
+	logFrontendArtifactsAge(logger, cfg)
+
 	metrics := obs.NewMetrics()
 
 	store := memory.NewStore(500, 10000, 2*time.Hour)

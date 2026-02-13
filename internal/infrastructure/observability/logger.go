@@ -20,11 +20,12 @@ func NewLogger(level string) *zerolog.Logger {
 
 	var logger zerolog.Logger
 
-	// Determine log format: check LOG_FORMAT env var, fallback to DEV_MODE behavior
+	// Determine log format: check LOG_FORMAT env var, fallback to terminal/DEV_MODE.
 	logFormat := strings.ToLower(os.Getenv("LOG_FORMAT"))
 	if logFormat == "" {
-		// Default: console in DEV_MODE, json otherwise
-		if os.Getenv("DEV_MODE") == "1" || os.Getenv("DEV_MODE") == "true" {
+		// Default: pretty console for local runs (TTY) and DEV_MODE, json otherwise.
+		// This keeps structured JSON logs for non-interactive environments (files, aggregators, CI).
+		if isEnvTrue("DEV_MODE") || isTerminalStdout() {
 			logFormat = "console"
 		} else {
 			logFormat = "json"
@@ -45,4 +46,21 @@ func NewLogger(level string) *zerolog.Logger {
 	}
 
 	return &logger
+}
+
+func isEnvTrue(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "y":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTerminalStdout() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }

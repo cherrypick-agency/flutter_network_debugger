@@ -53,6 +53,12 @@ void main(List<String> arguments) async {
       help: 'Quiet mode - only show errors (same as --log-level=error)',
     )
     ..addFlag(
+      'debugger-logs',
+      defaultsTo: true,
+      help:
+          'Show logs from the debugger process (use --no-debugger-logs to disable)',
+    )
+    ..addFlag(
       'help',
       abbr: 'h',
       negatable: false,
@@ -101,6 +107,7 @@ void main(List<String> arguments) async {
   final verbose = args['verbose'] as bool;
   final quiet = args['quiet'] as bool;
   final logLevelArg = args['log-level'] as String;
+  final debuggerLogsFlag = args['debugger-logs'] as bool;
 
   if (verbose) {
     Logger.enableVerboseMode();
@@ -119,6 +126,10 @@ void main(List<String> arguments) async {
 
   final binaryVersion = args['binary-version'] as String?;
   final noBrowser = args['no-browser'] as bool;
+
+  final showDebuggerLogs = args.wasParsed('debugger-logs')
+      ? debuggerLogsFlag
+      : !(quiet || logLevelArg == 'none');
 
   print('Network Debugger Launcher v$version\n');
   print('Platform: ${NetworkDebugger.getPlatformInfo()}');
@@ -155,6 +166,7 @@ void main(List<String> arguments) async {
       port: port,
       version: binaryVersion,
       autoOpenBrowser: !noBrowser,
+      showDebuggerProcessLogs: showDebuggerLogs,
       onProgress: (received, total) {
         final percent = ((received / total) * 100).toStringAsFixed(1);
         stdout.write('\rDownload progress: $percent%');
@@ -171,18 +183,6 @@ void main(List<String> arguments) async {
     print('');
     print('Press Ctrl+C to stop');
     print('');
-
-    // Subscribe to output
-    debugger.stdout.listen((line) {
-      // Only show important logs
-      if (line.contains('"level":"error"') || line.contains('"level":"warn"')) {
-        print('[LOG] $line');
-      }
-    });
-
-    debugger.stderr.listen((line) {
-      print('[ERROR] $line');
-    });
 
     // Keep running until signal
     while (debugger.isRunning) {

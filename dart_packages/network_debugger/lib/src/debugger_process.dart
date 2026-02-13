@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 /// Manages the network debugger process.
@@ -9,6 +10,9 @@ class DebuggerProcess {
   final Map<String, String> environment;
 
   Process? _process;
+  var _hasExited = false;
+  StreamSubscription<String>? _stdoutSub;
+  StreamSubscription<String>? _stderrSub;
   final _outputController = StreamController<String>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
@@ -26,13 +30,16 @@ class DebuggerProcess {
   Stream<String> get stderr => _errorController.stream;
 
   /// Whether the process is currently running.
-  bool get isRunning => _process != null;
+  bool get isRunning => _process != null && !_hasExited;
 
   /// The URL where the debugger web UI is accessible.
   String get url => 'http://localhost:$port';
 
   /// Starts the debugger process.
-  Future<void> start() async {
+  Future<void> start({
+    void Function(String line)? onStdoutLine,
+    void Function(String line)? onStderrLine,
+  }) async {
     if (_process != null) {
       throw ProcessException(
         'Process is already running',
@@ -65,19 +72,34 @@ class DebuggerProcess {
         mode: ProcessStartMode.normal,
       );
 
+      _hasExited = false;
+      unawaited(
+        _process!.exitCode.then((_) {
+          _hasExited = true;
+        }),
+      );
+
       // Pipe output streams
-      _process!.stdout.transform(const SystemEncoding().decoder).listen(
+      _stdoutSub = _process!.stdout
+          .transform(const SystemEncoding().decoder)
+          .transform(const LineSplitter())
+          .listen(
         (line) {
           _outputController.add(line);
+          onStdoutLine?.call(line);
         },
         onError: (error) {
           _errorController.addError(error);
         },
       );
 
-      _process!.stderr.transform(const SystemEncoding().decoder).listen(
+      _stderrSub = _process!.stderr
+          .transform(const SystemEncoding().decoder)
+          .transform(const LineSplitter())
+          .listen(
         (line) {
           _errorController.add(line);
+          onStderrLine?.call(line);
         },
         onError: (error) {
           _errorController.addError(error);
@@ -88,13 +110,24 @@ class DebuggerProcess {
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Check if process is still running
-      if (!isRunning) {
+      var exitedImmediately = !isRunning;
+      if (!exitedImmediately) {
+        try {
+          await _process!.exitCode.timeout(Duration.zero);
+          exitedImmediately = true;
+        } on TimeoutException {
+          // ok, still running
+        }
+      }
+
+      if (exitedImmediately) {
         throw ProcessException(
           'Process exited immediately after start',
         );
       }
     } catch (e) {
       _process = null;
+      _hasExited = false;
       throw ProcessException(
         'Failed to start process: $e',
       );
@@ -129,8 +162,11 @@ class DebuggerProcess {
 
     await completer.future;
     _process = null;
+    _hasExited = true;
 
     // Close streams
+    await _stdoutSub?.cancel();
+    await _stderrSub?.cancel();
     await _outputController.close();
     await _errorController.close();
   }
