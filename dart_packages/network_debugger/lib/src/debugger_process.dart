@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' as io;
 
 /// Manages the network debugger process.
 class DebuggerProcess {
@@ -9,7 +9,7 @@ class DebuggerProcess {
   final bool autoOpenBrowser;
   final Map<String, String> environment;
 
-  Process? _process;
+  io.Process? _process;
   var _hasExited = false;
   StreamSubscription<String>? _stdoutSub;
   StreamSubscription<String>? _stderrSub;
@@ -46,7 +46,7 @@ class DebuggerProcess {
       );
     }
 
-    final binary = File(binaryPath);
+    final binary = io.File(binaryPath);
     if (!await binary.exists()) {
       throw ProcessException(
         'Binary not found at: $binaryPath',
@@ -55,21 +55,34 @@ class DebuggerProcess {
 
     // Prepare environment
     final env = <String, String>{
-      ...Platform.environment,
+      ...io.Platform.environment,
       'ADDR': ':$port',
       // DEV_MODE=1 prevents the binary from automatically opening the browser
       // This allows us to control browser opening from the Dart launcher instead
       if (!autoOpenBrowser) 'DEV_MODE': '1',
       if (!autoOpenBrowser) 'NO_BROWSER': '1',
-      ...environment,
     };
 
+    // По умолчанию делаем логи Go-бинарника читаемыми в интерактивном терминале.
+    // У процесса stdout/stderr будет пайп, поэтому переключатель прокидываем через ENV.
+    if (!env.containsKey('NETWORK_DEBUGGER_LOG_FORMAT') &&
+        !env.containsKey('LOG_FORMAT')) {
+      final hasTerminal = io.stdout.hasTerminal || io.stderr.hasTerminal;
+      if (hasTerminal) {
+        env['NETWORK_DEBUGGER_LOG_FORMAT'] = 'console';
+        // Для совместимости со старыми бинарниками (они знают только LOG_FORMAT).
+        env['LOG_FORMAT'] = 'console';
+      }
+    }
+
+    env.addAll(environment);
+
     try {
-      _process = await Process.start(
+      _process = await io.Process.start(
         binaryPath,
         [],
         environment: env,
-        mode: ProcessStartMode.normal,
+        mode: io.ProcessStartMode.normal,
       );
 
       _hasExited = false;
@@ -81,7 +94,7 @@ class DebuggerProcess {
 
       // Pipe output streams
       _stdoutSub = _process!.stdout
-          .transform(const SystemEncoding().decoder)
+          .transform(const io.SystemEncoding().decoder)
           .transform(const LineSplitter())
           .listen(
         (line) {
@@ -94,7 +107,7 @@ class DebuggerProcess {
       );
 
       _stderrSub = _process!.stderr
-          .transform(const SystemEncoding().decoder)
+          .transform(const io.SystemEncoding().decoder)
           .transform(const LineSplitter())
           .listen(
         (line) {
@@ -141,7 +154,7 @@ class DebuggerProcess {
     }
 
     // Try graceful shutdown first
-    _process!.kill(ProcessSignal.sigterm);
+    _process!.kill(io.ProcessSignal.sigterm);
 
     // Wait for process to exit
     final completer = Completer<void>();
@@ -155,7 +168,7 @@ class DebuggerProcess {
     timeoutTimer = Timer(timeout, () {
       if (!completer.isCompleted) {
         // Force kill if timeout
-        _process?.kill(ProcessSignal.sigkill);
+        _process?.kill(io.ProcessSignal.sigkill);
         completer.complete();
       }
     });
@@ -185,7 +198,7 @@ class DebuggerProcess {
 
       // Try to connect to the port
       try {
-        final socket = await Socket.connect(
+        final socket = await io.Socket.connect(
           'localhost',
           port,
           timeout: const Duration(milliseconds: 500),

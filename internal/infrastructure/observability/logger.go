@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"io"
 	"os"
 	"strings"
 
@@ -18,34 +19,44 @@ func NewLogger(level string) *zerolog.Logger {
 		lvl = zerolog.ErrorLevel
 	}
 
-	var logger zerolog.Logger
-
-	// Determine log format: check LOG_FORMAT env var, fallback to terminal/DEV_MODE.
-	logFormat := strings.ToLower(os.Getenv("LOG_FORMAT"))
-	if logFormat == "" {
-		// Default: pretty console for local runs (TTY) and DEV_MODE, json otherwise.
-		// This keeps structured JSON logs for non-interactive environments (files, aggregators, CI).
-		if isEnvTrue("DEV_MODE") || isTerminalStdout() {
-			logFormat = "console"
-		} else {
-			logFormat = "json"
-		}
-	}
-
-	if logFormat == "console" || logFormat == "pretty" {
-		// Pretty console output with colors
-		output := zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: "15:04:05", // 24-hour format: HH:MM:SS
-			NoColor:    false,      // Enable colors (respects NO_COLOR env var)
-		}
-		logger = zerolog.New(output).Level(lvl).With().Timestamp().Logger()
-	} else {
-		// JSON output (default for production)
-		logger = zerolog.New(os.Stdout).Level(lvl).With().Timestamp().Logger()
-	}
-
+	logFormat := resolveLogFormat()
+	out := resolveLogOutput(logFormat)
+	logger := zerolog.New(out).Level(lvl).With().Timestamp().Logger()
 	return &logger
+}
+
+func resolveLogFormat() string {
+	// Приоритет: специфичная переменная для проекта → общая.
+	logFormat := strings.ToLower(strings.TrimSpace(os.Getenv("NETWORK_DEBUGGER_LOG_FORMAT")))
+	if logFormat == "" {
+		logFormat = strings.ToLower(strings.TrimSpace(os.Getenv("LOG_FORMAT")))
+	}
+	if logFormat != "" {
+		return logFormat
+	}
+
+	// По умолчанию: локальный запуск (DEV_MODE или TTY) — читаемый вывод, иначе JSON.
+	if isEnvTrue("DEV_MODE") || isTerminalStdout() {
+		return "console"
+	}
+	return "json"
+}
+
+func resolveLogOutput(logFormat string) io.Writer {
+	switch logFormat {
+	case "console", "pretty":
+		// Важно: в случае запуска через Dart stdout у Go — пайп,
+		// поэтому цвет лучше не отключать только из-за отсутствия TTY.
+		// Если нужно без цвета — можно выставить NO_COLOR.
+		noColor := isNoColor()
+		return zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: "15:04:05",
+			NoColor:    noColor,
+		}
+	default:
+		return os.Stdout
+	}
 }
 
 func isEnvTrue(key string) bool {
@@ -55,6 +66,17 @@ func isEnvTrue(key string) bool {
 	default:
 		return false
 	}
+}
+
+func isNoColor() bool {
+	// https://no-color.org/ — если переменная есть (даже пустая), цвета быть не должно.
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("TERM")), "dumb") {
+		return true
+	}
+	return false
 }
 
 func isTerminalStdout() bool {
