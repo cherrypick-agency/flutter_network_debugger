@@ -4,9 +4,6 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import '../../../../theme/context_ext.dart';
 import '../../../../core/di/di.dart';
 import '../../application/stores/home_ui_store.dart';
-import 'package:provider/provider.dart';
-import '../../../filters/application/stores/sessions_filters_store.dart';
-import '../../application/stores/sessions_store.dart';
 
 // Compact quick filters panel below the timeline
 class QuickFiltersBar extends StatelessWidget {
@@ -33,15 +30,6 @@ class QuickFiltersBar extends StatelessWidget {
           final ui = sl<HomeUiStore>();
           final allSelected =
               ui.quickTypes.isEmpty && ui.quickStatusGroups.isEmpty;
-
-          Future<void> _reload(BuildContext context) async {
-            final ui = sl<HomeUiStore>();
-            final filters = context.read<SessionsFiltersStore>();
-            await context.read<SessionsStore>().load(
-              q: ui.sessionSearchQuery.value.trim(),
-              target: filters.target.trim(),
-            );
-          }
 
           Widget chip({
             required String label,
@@ -86,7 +74,6 @@ class QuickFiltersBar extends StatelessWidget {
                   selected: allSelected,
                   onTap: () async {
                     ui.clearQuickFilters();
-                    await _reload(context);
                   },
                 ),
                 const SizedBox(width: 6),
@@ -100,7 +87,6 @@ class QuickFiltersBar extends StatelessWidget {
                       selected: ui.quickTypes.contains(e.key),
                       onTap: () async {
                         ui.toggleQuickType(e.key);
-                        await _reload(context);
                       },
                     ),
                     const SizedBox(width: 6),
@@ -116,7 +102,6 @@ class QuickFiltersBar extends StatelessWidget {
                       selected: ui.quickStatusGroups.contains(g),
                       onTap: () async {
                         ui.toggleQuickStatusGroup(g);
-                        await _reload(context);
                       },
                     ),
                     const SizedBox(width: 6),

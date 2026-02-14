@@ -10,11 +10,13 @@ type MonitorEvent struct {
 
 // ErrorDetails contains error information for monitor events.
 type ErrorDetails struct {
-	Code    string `json:"code"`             // Error code: CONNECTION_CLOSED, SERVER_UNAVAILABLE, etc.
-	Message string `json:"message"`          // Human-readable error message
-	Raw     string `json:"raw,omitempty"`    // Original technical error (for debugging)
-	Target  string `json:"target,omitempty"` // Target URL
-	Method  string `json:"method,omitempty"` // HTTP method
+	Category    string `json:"category,omitempty"`    // error category: cancel|timeout|dns|tls|connect|...
+	Code        string `json:"code"`                  // Error code: CONNECTION_CLOSED, SERVER_UNAVAILABLE, etc.
+	UserMessage string `json:"userMessage,omitempty"` // message for UI (stable and short)
+	Message     string `json:"message"`               // Human-readable error message (legacy alias of UserMessage)
+	Raw         string `json:"raw,omitempty"`         // Original technical error (for debugging)
+	Target      string `json:"target,omitempty"`      // Target URL
+	Method      string `json:"method,omitempty"`      // HTTP method
 }
 
 // Broadcaster defines the interface for broadcasting monitor events.

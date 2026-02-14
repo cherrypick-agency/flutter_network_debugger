@@ -97,8 +97,12 @@ func TestEnrichWithHTTPMeta_WithError(t *testing.T) {
 	if meta.ErrorCode == "" {
 		t.Error("Expected ErrorCode to be set")
 	}
-	if meta.ErrorMessage != errMsg {
-		t.Errorf("ErrorMessage = %q, want %q", meta.ErrorMessage, errMsg)
+	if meta.ErrorCategory == "" {
+		t.Error("Expected ErrorCategory to be set")
+	}
+	// В httpMeta отдаём короткое сообщение для UI, а raw остаётся в session.error.
+	if meta.ErrorUserMessage == "" || meta.ErrorMessage == "" {
+		t.Errorf("Expected user-friendly error message, got user=%q msg=%q", meta.ErrorUserMessage, meta.ErrorMessage)
 	}
 	if sz != nil {
 		t.Error("Expected nil sizeInfo when error")

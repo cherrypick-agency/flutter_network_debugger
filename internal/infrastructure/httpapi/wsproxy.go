@@ -98,7 +98,9 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	clientConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		errorCode, errorMessage := humanizeProxyError(err)
+		info := classifyProxyError(err)
+		errorCode := info.Code
+		errorMessage := info.UserMessage
 		d.Logger.Error().Err(err).Str("errorCode", errorCode).Msg(errorMessage)
 
 		// Broadcast error to frontend (only if monitoring)
@@ -107,11 +109,13 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 				Type: "session_error",
 				ID:   sessionID,
 				Error: &domain.ErrorDetails{
-					Code:    errorCode,
-					Message: "WebSocket upgrade failed: " + errorMessage,
-					Raw:     err.Error(),
-					Target:  tgt,
-					Method:  "WS",
+					Category:    info.Category,
+					Code:        errorCode,
+					UserMessage: info.UserMessage,
+					Message:     "WebSocket upgrade failed: " + errorMessage,
+					Raw:         err.Error(),
+					Target:      tgt,
+					Method:      "WS",
 				},
 			})
 			_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))
@@ -150,7 +154,9 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 	upstreamConn, resp, err := d.dialWithFallback(&dialer, u, hdr)
 	if err != nil {
 		// Get human-readable error message
-		errorCode, errorMessage := humanizeProxyError(err)
+		info := classifyProxyError(err)
+		errorCode := info.Code
+		errorMessage := info.UserMessage
 
 		// Log handshake debug details when available
 		if resp != nil {
@@ -169,11 +175,13 @@ func (d *Deps) handleWSProxy(w http.ResponseWriter, r *http.Request) {
 				Type: "session_error",
 				ID:   sessionID,
 				Error: &domain.ErrorDetails{
-					Code:    errorCode,
-					Message: errorMessage,
-					Raw:     err.Error(),
-					Target:  u.String(),
-					Method:  "WS",
+					Category:    info.Category,
+					Code:        errorCode,
+					UserMessage: info.UserMessage,
+					Message:     errorMessage,
+					Raw:         err.Error(),
+					Target:      u.String(),
+					Method:      "WS",
 				},
 			})
 			_ = d.Svc.SetClosed(r.Context(), sessionID, time.Now().UTC(), strPtr(err.Error()))

@@ -448,8 +448,19 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 		view := sessionV1{Session: sess}
 		meta, sz := d.computeHTTPMeta(r.Context(), id)
 		if meta == nil && sess.Error != nil {
-			code := classifyNetError(*sess.Error)
-			meta = &httpMetaV1{Method: "", Status: 0, Mime: "", DurationMs: 0, Streaming: false, Headers: map[string]string{}, ErrorCode: code, ErrorMessage: *sess.Error}
+			info := classifyProxyErrorString(*sess.Error)
+			meta = &httpMetaV1{
+				Method:           "",
+				Status:           0,
+				Mime:             "",
+				DurationMs:       0,
+				Streaming:        false,
+				Headers:          map[string]string{},
+				ErrorCategory:    info.Category,
+				ErrorCode:        info.Code,
+				ErrorUserMessage: info.UserMessage,
+				ErrorMessage:     info.UserMessage,
+			}
 		}
 		if meta != nil {
 			view.HttpMeta = meta
@@ -933,17 +944,19 @@ type sessionV1 struct {
 
 // augmentations
 type httpMetaV1 struct {
-	Method       string            `json:"method"`
-	Status       int               `json:"status"`
-	Mime         string            `json:"mime"`
-	DurationMs   int64             `json:"durationMs"`
-	Streaming    bool              `json:"streaming"`
-	Headers      map[string]string `json:"headers"`
-	Cache        *cacheMetaV1      `json:"cache,omitempty"`
-	CORS         *corsMetaV1       `json:"cors,omitempty"`
-	Preflight    *preflightLinkV1  `json:"preflight,omitempty"`
-	ErrorCode    string            `json:"errorCode,omitempty"`
-	ErrorMessage string            `json:"errorMessage,omitempty"`
+	Method           string            `json:"method"`
+	Status           int               `json:"status"`
+	Mime             string            `json:"mime"`
+	DurationMs       int64             `json:"durationMs"`
+	Streaming        bool              `json:"streaming"`
+	Headers          map[string]string `json:"headers"`
+	Cache            *cacheMetaV1      `json:"cache,omitempty"`
+	CORS             *corsMetaV1       `json:"cors,omitempty"`
+	Preflight        *preflightLinkV1  `json:"preflight,omitempty"`
+	ErrorCategory    string            `json:"errorCategory,omitempty"`
+	ErrorCode        string            `json:"errorCode,omitempty"`
+	ErrorUserMessage string            `json:"errorUserMessage,omitempty"`
+	ErrorMessage     string            `json:"errorMessage,omitempty"`
 }
 
 type sizeInfoV1 struct {
@@ -1136,25 +1149,7 @@ func computeCORSMeta(method string, req, resp map[string]string, isPreflight boo
 
 // Rough classification of network errors for UI
 func classifyNetError(msg string) string {
-	m := strings.ToLower(msg)
-	switch {
-	case strings.Contains(m, "context deadline exceeded") || strings.Contains(m, "timeout"):
-		return "TIMEOUT"
-	case strings.Contains(m, "no such host") || strings.Contains(m, "server misbehaving"):
-		return "DNS"
-	case strings.Contains(m, "x509") || strings.Contains(m, "certificate") || strings.Contains(m, "tls"):
-		return "TLS"
-	case strings.Contains(m, "connection refused") || strings.Contains(m, "cannot assign"):
-		return "CONNECT"
-	case strings.Contains(m, "connection reset") || strings.Contains(m, "reset by peer"):
-		return "RST"
-	case strings.Contains(m, "before full header") || strings.Contains(m, "unexpected eof") || strings.Contains(m, "early eof") || strings.Contains(m, "eof"):
-		return "EOF"
-	case strings.Contains(m, "request canceled") || strings.Contains(m, "client canceled"):
-		return "CANCEL"
-	default:
-		return "ERROR"
-	}
+	return classifyProxyErrorString(msg).Code
 }
 
 func allAllowedFold(allowed []string, requested []string) bool {
@@ -1323,16 +1318,18 @@ func (d *Deps) enrichWithHTTPMeta(ctx context.Context, sess domain.Session) (*ht
 
 	// 2. If failed and there's an error — return error meta
 	if meta == nil && sess.Error != nil {
-		code := classifyNetError(*sess.Error)
+		info := classifyProxyErrorString(*sess.Error)
 		meta = &httpMetaV1{
-			Method:       "",
-			Status:       0,
-			Mime:         "",
-			DurationMs:   0,
-			Streaming:    false,
-			Headers:      map[string]string{},
-			ErrorCode:    code,
-			ErrorMessage: *sess.Error,
+			Method:           "",
+			Status:           0,
+			Mime:             "",
+			DurationMs:       0,
+			Streaming:        false,
+			Headers:          map[string]string{},
+			ErrorCategory:    info.Category,
+			ErrorCode:        info.Code,
+			ErrorUserMessage: info.UserMessage,
+			ErrorMessage:     info.UserMessage,
 		}
 		return meta, sz
 	}

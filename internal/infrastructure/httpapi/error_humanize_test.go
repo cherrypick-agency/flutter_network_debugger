@@ -85,6 +85,16 @@ func TestHumanizeProxyError_DeadlineExceeded(t *testing.T) {
 	}
 }
 
+func TestHumanizeProxyError_ContextCanceled(t *testing.T) {
+	code, msg := humanizeProxyError(context.Canceled)
+	if code != "CANCELED" {
+		t.Errorf("code = %s, want CANCELED", code)
+	}
+	if msg == "" {
+		t.Error("message should not be empty")
+	}
+}
+
 func TestHumanizeProxyError_TimeoutString(t *testing.T) {
 	err := errors.New("i/o timeout")
 	code, _ := humanizeProxyError(err)

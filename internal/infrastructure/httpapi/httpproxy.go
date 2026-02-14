@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/http/httputil"
@@ -523,7 +520,23 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
 
 			// Get human-readable error message and code
-			errorCode, errorMessage := humanizeProxyError(err)
+			info := classifyProxyError(err)
+			errorCode := info.Code
+			errorMessage := info.UserMessage
+
+			// "context canceled" is almost always a client abort. Keep it in the session,
+			// but don't spam error notifications.
+			if errorCode == "CANCELED" {
+				d.Logger.Info().
+					Str("sessionID", sessionID).
+					Str("target", upstream.String()).
+					Str("method", r.Method).
+					Str("clientAddr", clientHost(r.RemoteAddr)).
+					Msg(errorMessage)
+				// Best-effort response for the cases when client is still connected.
+				writeError(rw, 499, errorCode, errorMessage, map[string]any{"target": upstream.String(), "raw": err.Error()})
+				return
+			}
 
 			// Enhanced logging with context
 			d.Logger.Error().
@@ -540,11 +553,13 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 				Type: "session_error",
 				ID:   sessionID,
 				Error: &domain.ErrorDetails{
-					Code:    errorCode,
-					Message: errorMessage,
-					Raw:     err.Error(),
-					Target:  upstream.String(),
-					Method:  r.Method,
+					Category:    info.Category,
+					Code:        errorCode,
+					UserMessage: info.UserMessage,
+					Message:     errorMessage,
+					Raw:         err.Error(),
+					Target:      upstream.String(),
+					Method:      r.Method,
 				},
 			})
 			writeError(rw, http.StatusBadGateway, errorCode, errorMessage, map[string]any{"target": upstream.String(), "raw": err.Error()})
@@ -1206,63 +1221,6 @@ func timeFromUnixNanoOrZero(ns int64) time.Time {
 
 // humanizeProxyError converts technical proxy errors into user-friendly messages with error codes
 func humanizeProxyError(err error) (code string, message string) {
-	if err == nil {
-		return "UNKNOWN_ERROR", "An unknown error occurred"
-	}
-
-	errStr := err.Error()
-	errStrLower := strings.ToLower(errStr)
-
-	// EOF - connection closed unexpectedly
-	if errors.Is(err, io.EOF) || errStr == "EOF" {
-		return "CONNECTION_CLOSED", "Server closed connection unexpectedly"
-	}
-
-	// Connection refused
-	if strings.Contains(errStrLower, "connection refused") {
-		return "SERVER_UNAVAILABLE", "Server unavailable (connection refused)"
-	}
-
-	// No such host / DNS resolution failure
-	if strings.Contains(errStrLower, "no such host") {
-		var dnsErr *net.DNSError
-		if errors.As(err, &dnsErr) {
-			return "DNS_ERROR", "Domain not found: " + dnsErr.Name
-		}
-		return "DNS_ERROR", "Domain not found"
-	}
-
-	// Timeout errors
-	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(errStrLower, "context deadline exceeded") {
-		return "TIMEOUT", "Request timeout"
-	}
-	if strings.Contains(errStrLower, "timeout") || strings.Contains(errStrLower, "i/o timeout") {
-		return "TIMEOUT", "Connection timeout"
-	}
-
-	// TLS/SSL errors
-	if strings.Contains(errStrLower, "first record does not look like a tls handshake") {
-		return "TLS_HANDSHAKE_FAILED", "TLS handshake failed - target server may not support TLS (consider using ws:// instead of wss://)"
-	}
-	if strings.Contains(errStrLower, "tls") || strings.Contains(errStrLower, "certificate") {
-		return "TLS_ERROR", "SSL/TLS certificate error"
-	}
-
-	// Network unreachable
-	if strings.Contains(errStrLower, "network is unreachable") {
-		return "NETWORK_UNREACHABLE", "Network unreachable"
-	}
-
-	// Connection reset
-	if strings.Contains(errStrLower, "connection reset") {
-		return "CONNECTION_RESET", "Connection reset by server"
-	}
-
-	// Too many redirects
-	if strings.Contains(errStrLower, "stopped after") && strings.Contains(errStrLower, "redirect") {
-		return "TOO_MANY_REDIRECTS", "Too many redirects"
-	}
-
-	// Default: return original error with generic code
-	return "UPSTREAM_ERROR", errStr
+	info := classifyProxyError(err)
+	return info.Code, info.UserMessage
 }

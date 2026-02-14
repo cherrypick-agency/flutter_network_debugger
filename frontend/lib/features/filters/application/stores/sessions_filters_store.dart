@@ -31,6 +31,12 @@ abstract class _SessionsFiltersStore with Store {
   String headerVal = '';
 
   @observable
+  bool onlyErrors = false;
+
+  @observable
+  bool showCancelled = true;
+
+  @observable
   ObservableList<String> selectedTags = ObservableList<String>();
 
   // Simple indicator of active filters for this feature (without domains/ranges)
@@ -44,6 +50,8 @@ abstract class _SessionsFiltersStore with Store {
       groupBy != 'none' ||
       headerKey.trim().isNotEmpty ||
       headerVal.trim().isNotEmpty ||
+      onlyErrors ||
+      !showCancelled ||
       selectedTags.isNotEmpty;
 
   @computed
@@ -72,6 +80,12 @@ abstract class _SessionsFiltersStore with Store {
 
   @action
   void setHeaderVal(String v) => headerVal = v;
+
+  @action
+  void setOnlyErrors(bool v) => onlyErrors = v;
+
+  @action
+  void setShowCancelled(bool v) => showCancelled = v;
 
   @action
   void setSelectedTags(List<String> tags) {

@@ -315,8 +315,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
       for (final s in widget.sessions) {
         try {
           final h = Uri.parse((s.target as String)).host;
-          if (h.isEmpty)
+          if (h.isEmpty) {
             return null; // empty/broken URL encountered — don't hide
+          }
           host ??= h;
           if (host != h) return null; // different domains — show as is
         } catch (_) {
@@ -407,7 +408,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
                       color: widget.selectedSessionId == s.id
                           ? Theme.of(
                               context,
-                            ).colorScheme.primary.withOpacity(0.06)
+                            ).colorScheme.primary.withValues(alpha: 0.06)
                           : null,
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -426,10 +427,19 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                 builder: (context) {
                                   final errCode = (meta['errorCode'] ?? '')
                                       .toString();
+                                  final errCategory =
+                                      (meta['errorCategory'] ?? '').toString();
                                   final warn =
+                                      errCategory == 'timeout' ||
+                                      errCategory == 'dns' ||
+                                      errCategory == 'tls' ||
+                                      errCategory == 'connect' ||
                                       errCode == 'TIMEOUT' ||
                                       errCode == 'DNS' ||
-                                      errCode == 'TLS';
+                                      errCode == 'TLS' ||
+                                      errCode == 'DNS_ERROR' ||
+                                      errCode == 'TLS_ERROR' ||
+                                      errCode == 'SERVER_UNAVAILABLE';
                                   final mark = Theme.of(
                                     context,
                                   ).colorScheme.tertiary;
@@ -447,7 +457,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: mark.withOpacity(0.06),
+                                      color: mark.withValues(alpha: 0.06),
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border(
                                         left: BorderSide(color: mark, width: 2),
@@ -491,9 +501,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                           ? Theme.of(context)
                                                 .colorScheme
                                                 .secondaryContainer
-                                                .withOpacity(0.18)
+                                                .withValues(alpha: 0.18)
                                           : Theme.of(context).colorScheme.error
-                                                .withOpacity(0.12),
+                                                .withValues(alpha: 0.12),
                                       foregroundColor: (s.closedAt == null)
                                           ? context.appColors.success
                                           : Theme.of(context).colorScheme.error,
@@ -543,22 +553,56 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                       isClosed &&
                                       hasError)
                                     Tooltip(
-                                      message: s.error?.toString() ?? '',
-                                      child: _chip(
-                                        (() {
+                                      message: (() {
+                                        final m =
+                                            (widget.httpMeta[s.id] ?? const {});
+                                        final userMsg =
+                                            (m['errorUserMessage'] ??
+                                                    m['errorMessage'] ??
+                                                    '')
+                                                .toString()
+                                                .trim();
+                                        final raw = (s.error?.toString() ?? '')
+                                            .trim();
+                                        if (userMsg.isNotEmpty &&
+                                            raw.isNotEmpty) {
+                                          return '$userMsg\n$raw';
+                                        }
+                                        return userMsg.isNotEmpty
+                                            ? userMsg
+                                            : raw;
+                                      })(),
+                                      child: Builder(
+                                        builder: (context) {
                                           final m =
                                               (widget.httpMeta[s.id] ??
                                               const {});
                                           final code = (m['errorCode'] ?? '')
                                               .toString();
-                                          return code.isNotEmpty ? code : 'ERR';
-                                        })(),
-                                        backgroundColor: Theme.of(
-                                          context,
-                                        ).colorScheme.error.withOpacity(0.12),
-                                        foregroundColor: Theme.of(
-                                          context,
-                                        ).colorScheme.error,
+                                          final label = code.isNotEmpty
+                                              ? code
+                                              : 'ERR';
+                                          final isCancel =
+                                              label == 'CANCEL' ||
+                                              label == 'CANCELED' ||
+                                              (m['errorCategory'] ?? '')
+                                                      .toString() ==
+                                                  'cancel';
+                                          final cs = Theme.of(
+                                            context,
+                                          ).colorScheme;
+                                          return _chip(
+                                            label,
+                                            backgroundColor: isCancel
+                                                ? cs.surfaceContainerHighest
+                                                : cs.error.withValues(
+                                                    alpha: 0.12,
+                                                  ),
+                                            foregroundColor: isCancel
+                                                ? cs.onSurfaceVariant
+                                                : cs.error,
+                                          );
+                                        },
                                       ),
                                     ),
                                   if (!isWs && !hasResponse && !isClosed)
@@ -571,7 +615,7 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                     ),
                                   if (!isWs && durationMs >= 0)
                                     _chip(
-                                      '${durationMs} ms',
+                                      '$durationMs ms',
                                       backgroundColor: _durationBg(
                                         context,
                                         durationMs,
@@ -585,9 +629,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                     (cacheStatus.toUpperCase() == 'MISS')
                                         ? _chipStrike(
                                             'cache',
-                                            backgroundColor: Theme.of(
-                                              context,
-                                            ).colorScheme.surfaceVariant,
+                                            backgroundColor: Theme.of(context)
+                                                .colorScheme
+                                                .surfaceContainerHighest,
                                             foregroundColor: Theme.of(
                                               context,
                                             ).colorScheme.onSurfaceVariant,
@@ -598,9 +642,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                   if (!isWs && !corsOk)
                                     _chip(
                                       'CORS',
-                                      backgroundColor: Theme.of(
-                                        context,
-                                      ).colorScheme.error.withOpacity(0.12),
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .error
+                                          .withValues(alpha: 0.12),
                                       foregroundColor: Theme.of(
                                         context,
                                       ).colorScheme.error,
@@ -621,17 +666,21 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                   (() {
                                     final code = (meta['errorCode'] ?? '')
                                         .toString();
-                                    if (code.isEmpty)
+                                    if (code.isEmpty) {
                                       return const SizedBox.shrink();
+                                    }
+                                    final isCancel =
+                                        code == 'CANCEL' || code == 'CANCELED';
+                                    final cs = Theme.of(context).colorScheme;
                                     return Text(
                                       'Closed ($code)',
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall
                                           ?.copyWith(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.error,
+                                            color: isCancel
+                                                ? cs.onSurfaceVariant
+                                                : cs.error,
                                           ),
                                     );
                                   })(),
@@ -654,7 +703,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
 
   // ===== helpers (UI formatting) =====
   Widget _chip(String text, {Color? backgroundColor, Color? foregroundColor}) {
-    final bg = backgroundColor ?? Theme.of(context).colorScheme.surfaceVariant;
+    final bg =
+        backgroundColor ??
+        Theme.of(context).colorScheme.surfaceContainerHighest;
     final fg =
         foregroundColor ?? Theme.of(context).colorScheme.onSurfaceVariant;
     return Container(
@@ -695,10 +746,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
 
   Color _statusBg(BuildContext context, int st) {
     final cs = Theme.of(context).colorScheme;
-    if (st >= 500) return cs.error.withOpacity(0.12);
-    if (st >= 400) return cs.tertiary.withOpacity(0.12);
-    if (st >= 300) return cs.primary.withOpacity(0.12);
-    return Colors.green.withOpacity(0.12);
+    if (st >= 500) return cs.error.withValues(alpha: 0.12);
+    if (st >= 400) return cs.tertiary.withValues(alpha: 0.12);
+    if (st >= 300) return cs.primary.withValues(alpha: 0.12);
+    return context.appColors.success.withValues(alpha: 0.12);
   }
 
   Color _statusFg(BuildContext context, int st) {
@@ -706,19 +757,19 @@ class _SessionsColumnState extends State<SessionsColumn> {
     if (st >= 500) return cs.error;
     if (st >= 400) return cs.tertiary;
     if (st >= 300) return cs.primary;
-    return Colors.green;
+    return context.appColors.success;
   }
 
   Color _durationBg(BuildContext context, int ms) {
     final cs = Theme.of(context).colorScheme;
-    if (ms < 300) return Colors.green.withOpacity(0.12);
-    if (ms < 1000) return cs.tertiary.withOpacity(0.12);
-    return cs.error.withOpacity(0.12);
+    if (ms < 300) return context.appColors.success.withValues(alpha: 0.12);
+    if (ms < 1000) return cs.tertiary.withValues(alpha: 0.12);
+    return cs.error.withValues(alpha: 0.12);
   }
 
   Color _durationFg(BuildContext context, int ms) {
     final cs = Theme.of(context).colorScheme;
-    if (ms < 300) return Colors.green;
+    if (ms < 300) return context.appColors.success;
     if (ms < 1000) return cs.tertiary;
     return cs.error;
   }
@@ -736,8 +787,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
     try {
       final uri = Uri.parse(s.target as String);
       if (widget.groupBy == 'domain') return uri.host;
-      if (widget.groupBy == 'route')
+      if (widget.groupBy == 'route') {
         return '${uri.host}${uri.path.split('/').take(3).join('/')}';
+      }
     } catch (_) {}
     return '';
   }

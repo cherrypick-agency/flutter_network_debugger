@@ -20,6 +20,7 @@ func TestHumanizeProxyError_Mappings(t *testing.T) {
 		{errors.New("connection reset by peer"), "CONNECTION_RESET"},
 		{errors.New("stopped after 10 redirects"), "TOO_MANY_REDIRECTS"},
 		{context.DeadlineExceeded, "TIMEOUT"},
+		{context.Canceled, "CANCELED"},
 		{errors.New("i/o timeout"), "TIMEOUT"},
 	}
 	for _, tc := range cases {

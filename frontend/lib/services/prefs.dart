@@ -28,6 +28,8 @@ class PrefsService {
   static const _keyFontScale = 'font_scale';
   static const _keyHighlightTheme = 'highlight_theme';
   static const _keySelectedTags = 'selected_tags';
+  static const _keyOnlyErrors = 'sessions_only_errors';
+  static const _keyShowCancelled = 'sessions_show_cancelled';
 
   Future<void> save({
     required String baseUrl,
@@ -47,6 +49,8 @@ class PrefsService {
     bool? respDelayEnabled,
     String? respDelayValue,
     String? selectedTags,
+    bool? onlyErrors,
+    bool? showCancelled,
   }) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyBaseUrl, baseUrl);
@@ -59,16 +63,23 @@ class PrefsService {
     if (httpMethod != null) await p.setString(_keyHttpMethod, httpMethod);
     if (httpStatus != null) await p.setString(_keyHttpStatus, httpStatus);
     if (httpMime != null) await p.setString(_keyHttpMime, httpMime);
-    if (httpMinDurationMs != null)
+    if (httpMinDurationMs != null) {
       await p.setInt(_keyHttpMinDur, httpMinDurationMs);
+    }
     if (groupBy != null) await p.setString(_keyGroupBy, groupBy);
     if (headerKey != null) await p.setString(_keyHeaderKey, headerKey);
     if (headerVal != null) await p.setString(_keyHeaderVal, headerVal);
-    if (respDelayEnabled != null)
+    if (respDelayEnabled != null) {
       await p.setBool(_keyRespDelayEnabled, respDelayEnabled);
-    if (respDelayValue != null)
+    }
+    if (respDelayValue != null) {
       await p.setString(_keyRespDelayValue, respDelayValue);
+    }
     if (selectedTags != null) await p.setString(_keySelectedTags, selectedTags);
+    if (onlyErrors != null) await p.setBool(_keyOnlyErrors, onlyErrors);
+    if (showCancelled != null) {
+      await p.setBool(_keyShowCancelled, showCancelled);
+    }
   }
 
   Future<Map<String, String>> load() async {
@@ -98,6 +109,8 @@ class PrefsService {
       'adminToken': p.getString(_keyAdminToken) ?? '',
       'fontScale': (p.getDouble(_keyFontScale) ?? 1.0).toString(),
       'selectedTags': p.getString(_keySelectedTags) ?? '',
+      'onlyErrors': (p.getBool(_keyOnlyErrors) ?? false).toString(),
+      'showCancelled': (p.getBool(_keyShowCancelled) ?? true).toString(),
     };
   }
 

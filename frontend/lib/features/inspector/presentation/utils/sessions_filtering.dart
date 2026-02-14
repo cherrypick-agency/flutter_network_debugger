@@ -17,50 +17,89 @@ List<dynamic> filterVisibleSessions({
   final src = store.items.toList();
   final filtered = src
       .where((s) {
-        if (ignoredIds.contains(s.id)) return false;
+        if (ignoredIds.contains(s.id)) {
+          return false;
+        }
         if (since != null) {
           final end = s.closedAt ?? DateTime.now();
           // Show only sessions where end (close time or now) >= since
-          if (end.isBefore(since)) return false;
+          if (end.isBefore(since)) {
+            return false;
+          }
         }
         if (selectedRange != null) {
           final start = s.startedAt;
           final end = s.closedAt ?? s.startedAt;
-          if (start == null) return false;
+          if (start == null) {
+            return false;
+          }
           final inRange =
               !((end != null && end.isBefore(selectedRange.start)) ||
                   start.isAfter(selectedRange.end));
-          if (!inRange) return false;
+          if (!inRange) {
+            return false;
+          }
         }
         if (selectedDomains.isNotEmpty) {
           try {
             final host = Uri.parse(s.target).host;
-            if (!selectedDomains.contains(host)) return false;
+            if (!selectedDomains.contains(host)) {
+              return false;
+            }
           } catch (_) {}
         }
         final id = s.id;
         final m = (s.httpMeta ?? httpMeta[id]) ?? const {};
+        final errorCategory = (m['errorCategory'] ?? '').toString();
+        final errorCode = (m['errorCode'] ?? '').toString();
+        final status = int.tryParse((m['status'] ?? '0').toString()) ?? 0;
+        final hasSessionError = (s.error ?? '').toString().trim().isNotEmpty;
+        final hasMetaError = errorCode.trim().isNotEmpty;
+        final hasHttpErrorStatus = status >= 400;
+        final isError = hasSessionError || hasMetaError || hasHttpErrorStatus;
+        final isCancelled =
+            errorCategory == 'cancel' ||
+            errorCode == 'CANCELED' ||
+            errorCode == 'CANCELLED' ||
+            errorCode == 'CANCEL';
+
+        if (!filters.showCancelled && isCancelled) {
+          return false;
+        }
+        if (filters.onlyErrors && !isError) {
+          return false;
+        }
+
         if (filters.httpMethod != 'any') {
-          if ((m['method'] ?? '') != filters.httpMethod) return false;
+          if ((m['method'] ?? '') != filters.httpMethod) {
+            return false;
+          }
         }
         if (filters.httpStatus != 'any') {
-          final st = int.tryParse((m['status'] ?? '0').toString()) ?? 0;
-          if (filters.httpStatus == '2xx' && (st < 200 || st > 299))
+          if (filters.httpStatus == '2xx' && (status < 200 || status > 299)) {
             return false;
-          if (filters.httpStatus == '3xx' && (st < 300 || st > 399))
+          }
+          if (filters.httpStatus == '3xx' && (status < 300 || status > 399)) {
             return false;
-          if (filters.httpStatus == '4xx' && (st < 400 || st > 499))
+          }
+          if (filters.httpStatus == '4xx' && (status < 400 || status > 499)) {
             return false;
-          if (filters.httpStatus == '5xx' && (st < 500 || st > 599))
+          }
+          if (filters.httpStatus == '5xx' && (status < 500 || status > 599)) {
             return false;
+          }
         }
         if (filters.httpMinDurationMs > 0) {
           final d = int.tryParse((m['durationMs'] ?? '0').toString()) ?? 0;
-          if (d < filters.httpMinDurationMs) return false;
+          if (d < filters.httpMinDurationMs) {
+            return false;
+          }
         }
         if (filters.httpMime.isNotEmpty) {
           final mime = (m['mime'] ?? '').toString().toLowerCase();
-          if (!mime.contains(filters.httpMime.toLowerCase())) return false;
+          if (!mime.contains(filters.httpMime.toLowerCase())) {
+            return false;
+          }
         }
         if (filters.headerKey.isNotEmpty) {
           final headers =
@@ -72,27 +111,42 @@ List<dynamic> filterVisibleSessions({
           if (filters.headerVal.isNotEmpty && !hv.contains(filters.headerVal)) {
             return false;
           }
-          if (filters.headerVal.isEmpty && hv.isEmpty) return false;
+          if (filters.headerVal.isEmpty && hv.isEmpty) {
+            return false;
+          }
         }
         // Quick status groups: if set — keep only those matching any selected group
         if (quickStatusGroups.isNotEmpty) {
-          final st = int.tryParse((m['status'] ?? '0').toString()) ?? 0;
           bool statusOk = false;
           for (final g in quickStatusGroups) {
-            if (g == '1xx' && st >= 100 && st <= 199) statusOk = true;
-            if (g == '2xx' && st >= 200 && st <= 299) statusOk = true;
-            if (g == '3xx' && st >= 300 && st <= 399) statusOk = true;
-            if (g == '4xx' && st >= 400 && st <= 499) statusOk = true;
-            if (g == '5xx' && st >= 500 && st <= 599) statusOk = true;
+            if (g == '1xx' && status >= 100 && status <= 199) {
+              statusOk = true;
+            }
+            if (g == '2xx' && status >= 200 && status <= 299) {
+              statusOk = true;
+            }
+            if (g == '3xx' && status >= 300 && status <= 399) {
+              statusOk = true;
+            }
+            if (g == '4xx' && status >= 400 && status <= 499) {
+              statusOk = true;
+            }
+            if (g == '5xx' && status >= 500 && status <= 599) {
+              statusOk = true;
+            }
           }
           // For WebSocket there may be no status — in this case status filter is not passed
-          if (!statusOk) return false;
+          if (!statusOk) {
+            return false;
+          }
         }
 
         // Quick content/protocol types: if set — match any tag
         if (quickTypes.isNotEmpty) {
           final tags = _tagsForSession(s, m);
-          if (!quickTypes.any(tags.contains)) return false;
+          if (!quickTypes.any(tags.contains)) {
+            return false;
+          }
         }
 
         return true;
@@ -122,24 +176,43 @@ Set<String> _tagsForSession(dynamic s, Map<String, dynamic> meta) {
   try {
     final uri = Uri.parse((s.target as String));
     final scheme = uri.scheme.toLowerCase();
-    if (scheme == 'https') tags.add('https');
-    if (scheme == 'http') tags.add('http');
-    if (scheme == 'ws' || scheme == 'wss') tags.add('ws');
+    if (scheme == 'https') {
+      tags.add('https');
+    }
+    if (scheme == 'http') {
+      tags.add('http');
+    }
+    if (scheme == 'ws' || scheme == 'wss') {
+      tags.add('ws');
+    }
     // Explicit kind label for reliability
     final kind = (s.kind as String?);
-    if (kind == 'ws') tags.add('ws');
+    if (kind == 'ws') {
+      tags.add('ws');
+    }
   } catch (_) {}
 
   final mime = (meta['mime'] ?? '').toString().toLowerCase();
   if (mime.isNotEmpty) {
-    if (mime.contains('json')) tags.add('json');
+    if (mime.contains('json')) {
+      tags.add('json');
+    }
     if (mime.contains('x-www-form-urlencoded') ||
-        mime.contains('multipart/form-data'))
+        mime.contains('multipart/form-data')) {
       tags.add('form');
-    if (mime.contains('xml')) tags.add('xml');
-    if (mime.contains('javascript') || mime.endsWith('/js')) tags.add('js');
-    if (mime.contains('css')) tags.add('css');
-    if (mime.contains('graphql')) tags.add('graphql');
+    }
+    if (mime.contains('xml')) {
+      tags.add('xml');
+    }
+    if (mime.contains('javascript') || mime.endsWith('/js')) {
+      tags.add('js');
+    }
+    if (mime.contains('css')) {
+      tags.add('css');
+    }
+    if (mime.contains('graphql')) {
+      tags.add('graphql');
+    }
     if (mime.contains('html') || mime.contains('pdf') || mime.contains('rtf')) {
       tags.add('document');
     }
@@ -155,7 +228,9 @@ Set<String> _tagsForSession(dynamic s, Map<String, dynamic> meta) {
   try {
     final uri = Uri.parse((s.target as String));
     final path = uri.path.toLowerCase();
-    if (path.contains('graphql')) tags.add('graphql');
+    if (path.contains('graphql')) {
+      tags.add('graphql');
+    }
   } catch (_) {}
 
   // If nothing recognized and not websocket — consider "other"

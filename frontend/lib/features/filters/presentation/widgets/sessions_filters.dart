@@ -291,6 +291,22 @@ class SessionsFilters extends StatelessWidget {
                 },
               ),
             ),
+            _InlineCheckboxFilter(
+              value: store.onlyErrors,
+              label: 'Only errors',
+              onChanged: (v) {
+                store.setOnlyErrors(v);
+                onApply();
+              },
+            ),
+            _InlineCheckboxFilter(
+              value: store.showCancelled,
+              label: 'Show cancelled',
+              onChanged: (v) {
+                store.setShowCancelled(v);
+                onApply();
+              },
+            ),
             SizedBox(
               width: 200,
               child: TextField(
@@ -374,6 +390,8 @@ class SessionsFilters extends StatelessWidget {
                       ..setGroupBy('none')
                       ..setHeaderKey('')
                       ..setHeaderVal('')
+                      ..setOnlyErrors(false)
+                      ..setShowCancelled(true)
                       ..clearTags();
                     onApply();
                   },
@@ -398,6 +416,54 @@ class SessionsFilters extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _InlineCheckboxFilter extends StatelessWidget {
+  const _InlineCheckboxFilter({
+    required this.value,
+    required this.label,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final String label;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return IntrinsicWidth(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Checkbox(
+                value: value,
+                onChanged: (v) => onChanged(v ?? false),
+                visualDensity: const VisualDensity(
+                  horizontal: -4,
+                  vertical: -4,
+                ),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: value ? cs.primary : cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

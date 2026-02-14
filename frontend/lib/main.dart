@@ -445,9 +445,16 @@ class _MyHomePageState extends State<MyHomePage> {
             }
             final code = errorData['code']?.toString() ?? 'UNKNOWN_ERROR';
             final message =
-                errorData['message']?.toString() ?? 'Unknown error occurred';
+                errorData['userMessage']?.toString() ??
+                errorData['message']?.toString() ??
+                'Unknown error occurred';
             final target = errorData['target']?.toString() ?? '';
             final sessionId = (ev['id'] ?? '').toString();
+
+            // Отмена запроса (обычно клиент закрыл вкладку/прервал запрос) — это не "ошибка" для пользователя.
+            if (code == 'CANCELED' || code == 'CANCELLED' || code == 'CANCEL') {
+              return;
+            }
 
             // Build user-friendly title based on error code
             String title = 'Proxy Error';
@@ -597,6 +604,14 @@ class _MyHomePageState extends State<MyHomePage> {
     f.setGroupBy(data['groupBy'] ?? 'none');
     f.setHeaderKey(data['headerKey'] ?? '');
     f.setHeaderVal(data['headerVal'] ?? '');
+    // Фильтры ошибок
+    try {
+      final onlyErrors = (data['onlyErrors'] ?? 'false').toString() == 'true';
+      final showCancelled =
+          (data['showCancelled'] ?? 'true').toString() != 'false';
+      f.setOnlyErrors(onlyErrors);
+      f.setShowCancelled(showCancelled);
+    } catch (_) {}
     // restore selected tags
     try {
       final tagsJson = data['selectedTags'];
@@ -632,6 +647,8 @@ class _MyHomePageState extends State<MyHomePage> {
       groupBy: f.groupBy,
       headerKey: f.headerKey,
       headerVal: f.headerVal,
+      onlyErrors: f.onlyErrors,
+      showCancelled: f.showCancelled,
       selectedTags: jsonEncode(f.selectedTags.toList()),
     );
   }

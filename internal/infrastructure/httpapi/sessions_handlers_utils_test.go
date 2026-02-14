@@ -296,8 +296,8 @@ func TestClassifyNetError_DNS(t *testing.T) {
 
 	for _, msg := range tests {
 		result := classifyNetError(msg)
-		if result != "DNS" {
-			t.Errorf("classifyNetError(%q) = %s, want DNS", msg, result)
+		if result != "DNS_ERROR" {
+			t.Errorf("classifyNetError(%q) = %s, want DNS_ERROR", msg, result)
 		}
 	}
 }
@@ -312,8 +312,8 @@ func TestClassifyNetError_TLS(t *testing.T) {
 
 	for _, msg := range tests {
 		result := classifyNetError(msg)
-		if result != "TLS" {
-			t.Errorf("classifyNetError(%q) = %s, want TLS", msg, result)
+		if result != "TLS_ERROR" {
+			t.Errorf("classifyNetError(%q) = %s, want TLS_ERROR", msg, result)
 		}
 	}
 }
@@ -326,8 +326,8 @@ func TestClassifyNetError_Connect(t *testing.T) {
 
 	for _, msg := range tests {
 		result := classifyNetError(msg)
-		if result != "CONNECT" {
-			t.Errorf("classifyNetError(%q) = %s, want CONNECT", msg, result)
+		if result != "SERVER_UNAVAILABLE" {
+			t.Errorf("classifyNetError(%q) = %s, want SERVER_UNAVAILABLE", msg, result)
 		}
 	}
 }
@@ -340,8 +340,8 @@ func TestClassifyNetError_Reset(t *testing.T) {
 
 	for _, msg := range tests {
 		result := classifyNetError(msg)
-		if result != "RST" {
-			t.Errorf("classifyNetError(%q) = %s, want RST", msg, result)
+		if result != "CONNECTION_RESET" {
+			t.Errorf("classifyNetError(%q) = %s, want CONNECTION_RESET", msg, result)
 		}
 	}
 }
@@ -356,8 +356,8 @@ func TestClassifyNetError_EOF(t *testing.T) {
 
 	for _, msg := range tests {
 		result := classifyNetError(msg)
-		if result != "EOF" {
-			t.Errorf("classifyNetError(%q) = %s, want EOF", msg, result)
+		if result != "CONNECTION_CLOSED" {
+			t.Errorf("classifyNetError(%q) = %s, want CONNECTION_CLOSED", msg, result)
 		}
 	}
 }
@@ -370,8 +370,8 @@ func TestClassifyNetError_Cancel(t *testing.T) {
 
 	for _, msg := range tests {
 		result := classifyNetError(msg)
-		if result != "CANCEL" {
-			t.Errorf("classifyNetError(%q) = %s, want CANCEL", msg, result)
+		if result != "CANCELED" {
+			t.Errorf("classifyNetError(%q) = %s, want CANCELED", msg, result)
 		}
 	}
 }
@@ -379,8 +379,8 @@ func TestClassifyNetError_Cancel(t *testing.T) {
 func TestClassifyNetError_Generic(t *testing.T) {
 	result := classifyNetError("some unknown error")
 
-	if result != "ERROR" {
-		t.Errorf("classifyNetError for unknown error = %s, want ERROR", result)
+	if result != "UPSTREAM_ERROR" {
+		t.Errorf("classifyNetError for unknown error = %s, want UPSTREAM_ERROR", result)
 	}
 }
 
@@ -390,8 +390,8 @@ func TestClassifyNetError_CaseInsensitive(t *testing.T) {
 		want string
 	}{
 		{"CONTEXT DEADLINE EXCEEDED", "TIMEOUT"},
-		{"NO SUCH HOST", "DNS"},
-		{"X509: CERTIFICATE ERROR", "TLS"},
+		{"NO SUCH HOST", "DNS_ERROR"},
+		{"X509: CERTIFICATE ERROR", "TLS_ERROR"},
 	}
 
 	for _, tt := range tests {

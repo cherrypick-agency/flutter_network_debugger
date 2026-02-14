@@ -168,6 +168,42 @@ mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
     });
   }
 
+  late final _$onlyErrorsAtom = Atom(
+    name: '_SessionsFiltersStore.onlyErrors',
+    context: context,
+  );
+
+  @override
+  bool get onlyErrors {
+    _$onlyErrorsAtom.reportRead();
+    return super.onlyErrors;
+  }
+
+  @override
+  set onlyErrors(bool value) {
+    _$onlyErrorsAtom.reportWrite(value, super.onlyErrors, () {
+      super.onlyErrors = value;
+    });
+  }
+
+  late final _$showCancelledAtom = Atom(
+    name: '_SessionsFiltersStore.showCancelled',
+    context: context,
+  );
+
+  @override
+  bool get showCancelled {
+    _$showCancelledAtom.reportRead();
+    return super.showCancelled;
+  }
+
+  @override
+  set showCancelled(bool value) {
+    _$showCancelledAtom.reportWrite(value, super.showCancelled, () {
+      super.showCancelled = value;
+    });
+  }
+
   late final _$selectedTagsAtom = Atom(
     name: '_SessionsFiltersStore.selectedTags',
     context: context,
@@ -288,6 +324,30 @@ mixin _$SessionsFiltersStore on _SessionsFiltersStore, Store {
   }
 
   @override
+  void setOnlyErrors(bool v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setOnlyErrors',
+    );
+    try {
+      return super.setOnlyErrors(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setShowCancelled(bool v) {
+    final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
+      name: '_SessionsFiltersStore.setShowCancelled',
+    );
+    try {
+      return super.setShowCancelled(v);
+    } finally {
+      _$_SessionsFiltersStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   void setSelectedTags(List<String> tags) {
     final _$actionInfo = _$_SessionsFiltersStoreActionController.startAction(
       name: '_SessionsFiltersStore.setSelectedTags',
@@ -334,6 +394,8 @@ httpMinDurationMs: ${httpMinDurationMs},
 groupBy: ${groupBy},
 headerKey: ${headerKey},
 headerVal: ${headerVal},
+onlyErrors: ${onlyErrors},
+showCancelled: ${showCancelled},
 selectedTags: ${selectedTags},
 hasActive: ${hasActive},
 hasTagFilters: ${hasTagFilters}
