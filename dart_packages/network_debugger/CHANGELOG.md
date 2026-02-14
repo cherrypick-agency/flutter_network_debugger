@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Improved debugger process logging defaults for terminal usage (better readability when stdout/stderr are piped)
+- Internal: refactored `DebuggerProcess` to use `dart:io` namespace imports
+
 ## 0.2.2
 
 - Added `--github-token` CLI option (alternative to `GITHUB_TOKEN`) to mitigate GitHub API rate limits

@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:network_debugger/network_debugger.dart';
 
-const String version = '0.2.2';
+const String version = '0.2.3';
 
 void main(List<String> arguments) async {
   final parser = ArgParser()

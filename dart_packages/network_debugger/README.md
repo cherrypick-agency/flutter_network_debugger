@@ -109,7 +109,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  network_debugger: ^0.2.2
+  network_debugger: ^0.2.3
 ```
 
 ### Usage
