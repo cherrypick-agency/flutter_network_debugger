@@ -31,7 +31,7 @@
 </p>
 
 <img width="1312" height="815" alt="image" src="https://i.imgur.com/MwyvOXv.png" />
-<img width="180" alt="image" src="https://i.imgur.com/AwUZ1Dv.png" />
+<img width="170" alt="image" src="https://i.imgur.com/AwUZ1Dv.png" />
 <img width="180" alt="image" src="https://github.com/user-attachments/assets/029cecea-cde6-466b-9e5c-06f5a78bba50" />
 <img width="180" height="815" alt="image" src="https://github.com/user-attachments/assets/c9b753a8-874a-414d-a628-4b794e1e3319" />
 <img width="180"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
@@ -44,6 +44,19 @@ Free tool for debugging HTTP, **WebSocket** (first-class support), and SOCKS. Of
 Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 
 Privacy-first. Works fully offline.
+
+### Table of contents
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Run app (Web/Desktop)](#1-run-app-webdesktop)
+- [Install the right Dart package (integration)](#2-install-the-right-dart-package-integration)
+- [CLI sessions mode (colored console output)](#cli-sessions-mode-colored-console-output)
+- [Dart Packages](#dart-packages)
+- [Settings](#settings)
+- [Local development (without GitHub)](#local-development-without-github)
+- [TODO](#todo)
+- [Useful to know](#useful-to-know)
 
 ### Features
 - Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
@@ -77,43 +90,11 @@ Privacy-first. Works fully offline.
 
 ...
 
-### Install the right Dart package (integration)
-
-If you want to capture traffic from your Flutter/Dart app, install the package
-that matches your networking stack:
-
-- **Dio**: use `dio_debugger`
-
-```bash
-dart pub add dio_debugger
-```
-
-- **package:http**: use `http_debugger`
-
-```bash
-dart pub add http_debugger
-```
-
-- **WebSocket (killer feature)**: pick the one you use in the app:
-  - `web_socket_debugger` (dart:io WebSocket)
-  - `web_socket_channel_debugger` (package:web_socket_channel)
-  - `socket_io_debugger` (Socket.IO client)
-
-```bash
-dart pub add web_socket_debugger
-# or
-dart pub add web_socket_channel_debugger
-# or
-dart pub add socket_io_debugger
-```
-
-See the full list in the [Dart Packages](#dart-packages) section below.
-
 ### Quick start
 
-1) CLI (WEB UI in browser) — fastest way to start
+#### 1. Run app (Web/Desktop)
 
-Via CLI tool:
+**Web (via CLI, fastest way to start):**
 
 ```bash
 dart pub global activate network_debugger
@@ -124,41 +105,42 @@ This starts the proxy and opens the UI in your browser:
 - UI: `http://localhost:9092/`
 - Proxy base (HTTP/WebSocket forward): `http://localhost:9091`
 
-2) Desktop App (Native GUI)
+**Desktop app (native GUI):**
 
-**Download standalone desktop application** for macOS, Windows, or Linux from [GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases):
+See [docs/DESKTOP_SETUP.md](docs/DESKTOP_SETUP.md) for install instructions
+and detailed desktop setup.
 
-- **macOS**: Download `.dmg` for your architecture (Intel or Apple Silicon)
-  - Open DMG and drag app to Applications
-  - Note: the app is not signed/notarized yet, so macOS may show a security
-    prompt on first launch. If it gets blocked, go to System Settings →
-    Privacy & Security → **Open Anyway**
-  - Auto-update support via GitHub Releases
+#### 2. Install the right Dart package (integration)
 
-- **Windows**: Download `.zip` archive
-  - Extract and run `install.bat`
-  - Creates shortcuts on Desktop and Start Menu
+If you want to capture traffic from your Flutter/Dart app, install the package
+that matches your networking stack:
 
-- **Linux**: Download `.deb` or `.tar.gz`
-  ```bash
-  # Debian/Ubuntu
-  sudo dpkg -i network-debugger_*_amd64.deb
+- **Dio**: use [`dio_debugger`](https://pub.dev/packages/dio_debugger)
 
-  # Other distros
-  tar -xzf NetworkDebugger-*-linux-amd64.tar.gz
-  cd NetworkDebugger-*
-  ./install.sh
-  ```
+```bash
+dart pub add dio_debugger
+```
 
-Desktop app features:
-- Native UI with Flutter
-- Integrated Go proxy server (single process)
-- OS Forward Proxy mode (system-wide proxy)
-- Startup dialog for port configuration
-- Auto-update from GitHub Releases
-- Cross-platform support
+- **package:http**: use [`http_debugger`](https://pub.dev/packages/http_debugger)
 
-See [docs/DESKTOP_SETUP.md](docs/DESKTOP_SETUP.md) for detailed setup and development guide.
+```bash
+dart pub add http_debugger
+```
+
+- **WebSocket (killer feature)**: pick the one you use in the app:
+  - [`web_socket_debugger`](https://pub.dev/packages/web_socket_debugger) (dart:io WebSocket)
+  - [`web_socket_channel_debugger`](https://pub.dev/packages/web_socket_channel_debugger) (package:web_socket_channel)
+  - [`socket_io_debugger`](https://pub.dev/packages/socket_io_debugger) (Socket.IO client)
+
+```bash
+dart pub add web_socket_debugger
+# or
+dart pub add web_socket_channel_debugger
+# or
+dart pub add socket_io_debugger
+```
+
+See the full list in the [Dart Packages](#dart-packages) section below.
 
 #### Docker
 

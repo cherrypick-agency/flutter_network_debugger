@@ -1,5 +1,22 @@
 # Network Debugger - Desktop Application Setup
 
+## Table of contents
+
+- [Overview](#overview)
+- [Development requirements](#development-requirements)
+- [Local builds](#local-builds)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Auto-updates](#auto-updates)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Project structure](#project-structure)
+- [Best Practices](#best-practices)
+- [FAQ](#faq)
+- [Links](#links)
+- [Architecture](#architecture)
+
 ## Overview
 
 Network Debugger provides native desktop apps for:
@@ -10,38 +27,13 @@ Network Debugger provides native desktop apps for:
 The desktop app runs both the Flutter UI and the Go proxy server as a single
 application.
 
-## Architecture
-
-```
-┌─────────────────────────────────────┐
-│   Flutter Desktop App (UI)          │
-│                                      │
-│  ┌────────────────────────────────┐ │
-│  │  BootstrapApp                  │ │
-│  │  - Startup Dialog              │ │
-│  │  - Port Configuration          │ │
-│  │  - Auto-Update Check           │ │
-│  └────────┬───────────────────────┘ │
-│           │                          │
-│           ▼                          │
-│  ┌────────────────────────────────┐ │
-│  │  GoServerManager               │ │
-│  │  - Launch subprocess           │ │
-│  │  - Health monitoring           │ │
-│  │  - Graceful shutdown           │ │
-│  └────────┬───────────────────────┘ │
-│           │                          │
-└───────────┼──────────────────────────┘
-            │ Process.start()
-            ▼
-┌─────────────────────────────────────┐
-│   Go Server (subprocess)             │
-│   - Forward Proxy                    │
-│   - HTTP API                         │
-│   - WebSocket connections            │
-│   - Session storage                  │
-└─────────────────────────────────────┘
-```
+Desktop app highlights:
+- Native UI with Flutter
+- Integrated Go proxy server (single process)
+- OS Forward Proxy mode (system-wide proxy)
+- Startup dialog for port configuration
+- Auto-update support via GitHub Releases
+- Cross-platform support
 
 ## Development requirements
 
@@ -67,7 +59,7 @@ application.
   ```bash
   sudo apt-get install \
     clang cmake ninja-build pkg-config \
-    libgtk-3-dev liblzma-dev libstdc++-12-dev
+    libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev
   ```
 
 ## Local builds
@@ -132,8 +124,10 @@ Workflow `.github/workflows/build-desktop.yml` runs automatically:
 
 2. **Jobs:**
    - `build-macos`: builds DMG for macOS (x86_64 and arm64)
-   - `build-windows`: builds ZIP for Windows (amd64)
    - `build-linux`: builds tar.gz and deb for Linux (amd64)
+   - `build-web`: builds `network-debugger-web` binaries with embedded UI
+   - `build-windows`: calls reusable workflow `.github/workflows/build-windows.yml`
+     that builds ZIP for Windows (amd64)
    - `release`: on tag push, creates a GitHub Release with artifacts
    - `summary`: shows build status
 
@@ -154,6 +148,9 @@ Workflow `.github/workflows/build-desktop.yml` runs automatically:
 ```
 
 ## Installation
+
+Download desktop artifacts from
+[GitHub Releases](https://github.com/cherrypick-agency/flutter_network_debugger/releases).
 
 ### macOS
 
@@ -210,7 +207,7 @@ On launch you will see a **Startup Dialog** to configure ports:
 ├─────────────────────────────────────┤
 │                                     │
 │  API Server Port:    [9092]         │
-│  Forward Proxy Port: [9093]         │
+│  Forward Proxy Port: [9091]         │
 │                                     │
 │  ℹ️ These ports must be available   │
 │  and different from each other      │
@@ -222,7 +219,7 @@ On launch you will see a **Startup Dialog** to configure ports:
 
 **Settings:**
 - **API Server Port**: port for UI and REST API (default: 9092)
-- **Forward Proxy Port**: port for forward proxy (default: 9093)
+- **Forward Proxy Port**: port for forward proxy (default: 9091)
 
 **Validation:**
 - ports must be in range 1024-65535
@@ -305,7 +302,7 @@ Or run the installer as Administrator.
 ### Linux: Port permission denied (< 1024)
 
 ```bash
-# Use ports >= 1024 (e.g. 9092/9093)
+# Use ports >= 1024 (e.g. 9092/9091)
 # Or grant capability:
 sudo setcap 'cap_net_bind_service=+ep' ~/.local/share/network-debugger/resources/server_linux_amd64
 ```
@@ -350,7 +347,7 @@ frontend/build/macos/Build/Products/Release/Network Debugger.app/Contents/Framew
 Terminal 1 - Go server:
 ```bash
 cd cmd/network-debugger
-go run . --api-port 9092 --proxy-port 9093
+go run . --api-port 9092 --proxy-port 9091
 ```
 
 Terminal 2 - Flutter desktop:
@@ -385,7 +382,7 @@ flutter run -d macos --observatory-port=9090
 
 ```bash
 cd cmd/network-debugger
-dlv debug . -- --api-port 9092 --proxy-port 9093
+dlv debug . -- --api-port 9092 --proxy-port 9091
 ```
 
 ### Testing packaging scripts
@@ -407,37 +404,33 @@ tar -xzf dist/*.tar.gz -C dist/
 ## Project structure
 
 ```
-go-proxy/
-├── cmd/network-debugger/         # Go server entry point
-│   └── main.go                    # CLI flags: --api-port, --proxy-port, --data-dir
+network_debugger/
+├── cmd/
+│   ├── network-debugger/             # Go desktop server entry point
+│   └── network-debugger-web/         # Go web binary entry point
 ├── frontend/
 │   ├── lib/
 │   │   ├── core/
-│   │   │   ├── desktop/
-│   │   │   │   └── desktop_bootstrap.dart  # Desktop initialization
-│   │   │   ├── go_server/
-│   │   │   │   ├── go_server_manager.dart  # Process management
-│   │   │   │   ├── go_server_path_io.dart  # Binary path resolution
-│   │   │   │   └── go_server_path_stub.dart
-│   │   │   └── update/
-│   │   │       ├── update_service.dart      # GitHub Releases API
-│   │   │       ├── update_dialog.dart       # Update UI
-│   │   │       └── update_info.dart         # Version comparison
-│   │   ├── features/startup/
-│   │   │   └── startup_dialog.dart          # Port configuration dialog
-│   │   └── main.dart                         # Entry point with BootstrapApp
-│   ├── macos/                     # macOS specific
-│   ├── windows/                   # Windows specific
-│   └── linux/                     # Linux specific
+│   │   │   ├── desktop/              # Desktop initialization
+│   │   │   └── go_server/            # Process management / binary paths
+│   │   ├── features/startup/         # Startup dialog and server config
+│   │   ├── features/updates/         # GitHub Releases update logic/UI
+│   │   └── main.dart                 # Flutter entry point
+│   ├── macos/
+│   ├── windows/
+│   └── linux/
 ├── scripts/
-│   ├── package-macos.sh           # macOS DMG builder
-│   ├── package-windows.ps1        # Windows ZIP builder
-│   └── package-linux.sh           # Linux tar.gz/deb builder
+│   ├── package-macos.sh
+│   ├── package-windows.ps1
+│   ├── package-windows-msi.ps1
+│   └── package-linux.sh
 ├── .github/workflows/
-│   └── build-desktop.yml          # CI/CD for desktop builds
+│   ├── build-desktop.yml
+│   └── build-windows.yml
 └── docs/
-    ├── DESKTOP_SETUP.md           # This file
-    └── AUTO_UPDATE.md             # Auto-update documentation
+    ├── DESKTOP_SETUP.md
+    ├── AUTO_UPDATE.md
+    └── RELEASING.md
 ```
 
 ## Best Practices
@@ -522,3 +515,36 @@ avoid conflicts.
 - [Semantic Versioning](https://semver.org/)
 - [macOS App Distribution](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases)
 - [Windows App Packaging](https://docs.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-packaging-dot-net)
+
+## Architecture
+
+```
+┌─────────────────────────────────────┐
+│   Flutter Desktop App (UI)          │
+│                                      │
+│  ┌────────────────────────────────┐ │
+│  │  BootstrapApp                  │ │
+│  │  - Startup Dialog              │ │
+│  │  - Port Configuration          │ │
+│  │  - Auto-Update Check           │ │
+│  └────────┬───────────────────────┘ │
+│           │                          │
+│           ▼                          │
+│  ┌────────────────────────────────┐ │
+│  │  GoServerManager               │ │
+│  │  - Launch subprocess           │ │
+│  │  - Health monitoring           │ │
+│  │  - Graceful shutdown           │ │
+│  └────────┬───────────────────────┘ │
+│           │                          │
+└───────────┼──────────────────────────┘
+            │ Process.start()
+            ▼
+┌─────────────────────────────────────┐
+│   Go Server (subprocess)             │
+│   - Forward Proxy                    │
+│   - HTTP API                         │
+│   - WebSocket connections            │
+│   - Session storage                  │
+└─────────────────────────────────────┘
+```
