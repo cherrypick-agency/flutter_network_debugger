@@ -31,7 +31,7 @@
 </p>
 
 <img width="1312" height="815" alt="image" src="https://i.imgur.com/MwyvOXv.png" />
-<img width="180" alt="image" src="https://github.com/user-attachments/assets/3eb43e0d-e0ce-4c6d-a0c2-0fb5985ad8f9" />
+<img width="180" alt="image" src="https://i.imgur.com/AwUZ1Dv.png" />
 <img width="180" alt="image" src="https://github.com/user-attachments/assets/029cecea-cde6-466b-9e5c-06f5a78bba50" />
 <img width="180" height="815" alt="image" src="https://github.com/user-attachments/assets/c9b753a8-874a-414d-a628-4b794e1e3319" />
 <img width="180"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
@@ -39,7 +39,7 @@
 
 <!-- Screen recording (2025-10-02) -->
 
-Free tool for debugging HTTP, **WebSocket** (killer feature), SOCKS which is MUCH BETTER than the built-in Flutter Netwrok Devtools.
+Free tool for debugging HTTP, **WebSocket** (first-class support), and SOCKS. Often more practical than Flutter DevTools Network for deep WebSocket inspection and traffic exploration.
 
 Suitable for local development and test environments. Has crossplatform interface: WEB, desktop (MacOS/Windows/Linux) and CLI (with code highlight, many options).
 
