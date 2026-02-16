@@ -203,7 +203,7 @@ services:
   uses: codecov/codecov-action@v3
 
 - name: Build
-  run: go build -o ./network-debugger ./cmd/network-debugger
+  run: go build -o ./bin/network-debugger ./cmd/network-debugger
 ```
 
 **Pipeline Features:**

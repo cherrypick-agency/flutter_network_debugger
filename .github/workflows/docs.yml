@@ -1,0 +1,95 @@
+name: Docs (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dart_packages/**"
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dart_packages/**"
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dartdoc_vitepress
+        run: dart pub global activate dartdoc_vitepress
+
+      - name: Generate docs-site
+        working-directory: dart_packages
+        run: >
+          dart pub global run dartdoc_vitepress
+          --format vitepress
+          --workspace-docs
+          --exclude-packages 'nd_e2e_tests,nd_test_support'
+          --output ../docs-site
+
+      - name: Apply docs-site overrides
+        run: |
+          mkdir -p docs-site/.vitepress docs-site/guide
+          cp docs/docs-site-overrides/index.md docs-site/index.md
+          cp docs/docs-site-overrides/guide/index.md docs-site/guide/index.md
+          cp docs/docs-site-overrides/.vitepress/config.ts docs-site/.vitepress/config.ts
+
+      - name: Install docs-site dependencies
+        working-directory: docs-site
+        run: npm install
+
+      - name: Build docs-site
+        working-directory: docs-site
+        env:
+          DOCS_BASE: /flutter_network_debugger/
+        run: npm run build
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/.vitepress/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -2,6 +2,19 @@
 /build/
 /web/downloads/
 /dist/
+# docs-site: генерируемые файлы (собираются в CI через dartdoc_vitepress)
+/docs-site/api/
+/docs-site/.vitepress/generated/
+/docs-site/.vitepress/dist/
+/docs-site/.vitepress/cache/
+/docs-site/guide/_generated/
+/docs-site/node_modules/
+/docs-site/package-lock.json
+/docs-site/AGENTS.md
+/docs-site/CLAUDE.md
+
+# docs-site-generated: полный артефакт генерации/сборки доки
+/docs-site-generated/
 */.dart_tool/*
 /dart_packages/**/.dart_tool/
 /dart_packages/**/pubspec.lock
@@ -46,6 +59,7 @@ Thumbs.db
 /coverage.out
 /coverage.json
 coverage*.out
+/httpapi_cov.out
 *.test
 *.pprof
 *.prof
@@ -54,6 +68,8 @@ coverage*.out
 /network-debugger
 /network-debugger.exe
 /network-debugger-*
+/wsproxy
+/wsproxy.exe
 
 # ===============
 # Flutter / Dart (frontend)
@@ -120,3 +136,5 @@ internal/e2e/cache/
 service_coverage.out
 
 network_debugger.db
+
+GoogleService-Info-network-debugger-test.plist

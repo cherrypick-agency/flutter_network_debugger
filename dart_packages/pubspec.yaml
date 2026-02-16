@@ -1,0 +1,17 @@
+name: network_debugger_workspace
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+workspace:
+  - dio_debugger
+  - firebase_database_debugger
+  - hex_viewer
+  - http_debugger
+  - nd_e2e_tests
+  - nd_test_support
+  - network_debugger
+  - socket_io_debugger
+  - web_socket_channel_debugger
+  - web_socket_debugger
