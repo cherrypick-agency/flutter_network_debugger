@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-16
+
+### Added
+- **Firebase Realtime Database debugger** — new `firebase_database_debugger` package for intercepting and inspecting Firebase RTDB operations
+- **Error filtering in sessions** — filter requests by error status in the session list
+- **`--github-token` option** — pass GitHub token to `network_debugger` CLI for private release downloads
+
+### Changed
+- Updated Dart workspace configuration and SDK constraints across all packages
+- Improved documentation: README, desktop setup guide, and breakpoints feature description
+
+### Fixed
+- Debugger process imports and logging configuration cleanup
+
 ## [0.2.2] - 2026-02-13
 
 ### Fixed
