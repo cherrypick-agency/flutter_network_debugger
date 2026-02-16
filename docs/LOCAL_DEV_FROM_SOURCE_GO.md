@@ -31,12 +31,12 @@ Notes:
 
 ```bash
 # server/desktop binary
-go build -o ./network-debugger ./cmd/network-debugger
-./network-debugger
+make build
+./bin/network-debugger
 
 # web version that opens browser automatically
-go build -o ./network-debugger-web ./cmd/network-debugger-web
-./network-debugger-web
+make build-app
+./bin/network-debugger-web
 ```
 
 ## Important: embedded Web UI artifacts

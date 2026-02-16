@@ -1668,12 +1668,12 @@ cargo build --target wasm32-wasi --release
 
 ```bash
 # Build with Extism support (pure Go, no CGO)
-go build -o network-debugger ./cmd/network-debugger
+go build -o ./bin/network-debugger ./cmd/network-debugger
 
 # For Dart support, ensure Dart SDK is in PATH
 export PATH="$PATH:/path/to/dart-sdk/bin"
 
-./network-debugger
+./bin/network-debugger
 ```
 
 ### Docker

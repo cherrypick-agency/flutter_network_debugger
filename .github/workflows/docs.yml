@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - "dart_packages/**"
-      - "docs/**"
+      - "docs-site/**"
       - ".github/workflows/docs.yml"
   pull_request:
     branches: [main]
     paths:
       - "dart_packages/**"
-      - "docs/**"
+      - "docs-site/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -52,23 +52,26 @@ jobs:
           --format vitepress
           --workspace-docs
           --exclude-packages 'nd_e2e_tests,nd_test_support'
-          --output ../docs-site
+          --output ../docs-site-generated
 
-      - name: Apply docs-site overrides
+      - name: Apply docs-site template
         run: |
-          mkdir -p docs-site/.vitepress docs-site/guide
-          cp docs/docs-site-overrides/index.md docs-site/index.md
-          cp docs/docs-site-overrides/guide/index.md docs-site/guide/index.md
-          cp docs/docs-site-overrides/.vitepress/config.ts docs-site/.vitepress/config.ts
+          mkdir -p docs-site-generated/.vitepress docs-site-generated/guide
+          cp docs-site/index.md docs-site-generated/index.md
+          cp docs-site/guide/index.md docs-site-generated/guide/index.md
+          cp docs-site/package.json docs-site-generated/package.json
+          cp docs-site/.vitepress/config.ts docs-site-generated/.vitepress/config.ts
+          rm -rf docs-site-generated/.vitepress/theme
+          cp -R docs-site/.vitepress/theme docs-site-generated/.vitepress/theme
 
       - name: Install docs-site dependencies
-        working-directory: docs-site
+        working-directory: docs-site-generated
         run: npm install
 
       - name: Build docs-site
-        working-directory: docs-site
+        working-directory: docs-site-generated
         env:
-          DOCS_BASE: /flutter_network_debugger/
+          DOCS_BASE: /${{ github.event.repository.name }}/
         run: npm run build
 
       - name: Setup GitHub Pages
@@ -77,7 +80,7 @@ jobs:
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs-site/.vitepress/dist
+          path: docs-site-generated/.vitepress/dist
 
   deploy:
     if: github.event_name != 'pull_request'
