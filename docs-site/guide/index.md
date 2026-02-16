@@ -10,6 +10,10 @@ This section helps you get started quickly with integrating packages from `dart_
 3. Run `network_debugger` and verify that sessions appear in the UI.
 4. Head over to `API Reference` for detailed class and method docs.
 
+## Integration guides
+
+- [Firebase Realtime Database](./firebase-database.md) — `firebase_database_debugger`
+
 ## What's in the API Reference
 
 - Public libraries and types for every package.
