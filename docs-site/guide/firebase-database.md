@@ -47,7 +47,9 @@ await ref.update({'age': 31});                  // logged as UPDATE
 await ref.remove();                             // logged as REMOVE
 ```
 
-That's it — open `http://localhost:9092` and you'll see every operation with payload, timing and status.
+That's it — open the Network Debugger app (web UI or desktop app) and you'll
+see every operation with payload, timing and status. For setup instructions,
+see the [Quick Start Guide](https://cherrypick-agency.github.io/flutter_network_debugger/guide/_generated/network_debugger_workspace/quick-start.html).
 
 ![RTDB sessions in the Network Debugger UI](/images/firebase-rtdb-sessions.png)
 

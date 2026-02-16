@@ -10,6 +10,10 @@ import llmstxt, {
 const docsBase = process.env.DOCS_BASE ?? '/'
 
 const manualGuideItems = [
+  {
+    text: 'Quick Start Guide',
+    link: '/guide/_generated/network_debugger_workspace/quick-start',
+  },
   { text: 'Overview', link: '/guide/' },
   { text: 'Firebase Realtime Database', link: '/guide/firebase-database' },
 ]
