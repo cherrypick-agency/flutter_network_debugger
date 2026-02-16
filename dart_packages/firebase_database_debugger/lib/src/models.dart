@@ -1,6 +1,6 @@
-/// Запрос на отправку фреймов в ingest API дебаггера.
+/// Request to send frames to the debugger ingest API.
 ///
-/// Содержит информацию о сессии, список фреймов и флаг закрытия.
+/// Contains session info, frame list, and close flag.
 class FirebaseIngestRequest {
   FirebaseIngestRequest({
     required this.session,
@@ -9,19 +9,19 @@ class FirebaseIngestRequest {
     this.error,
   });
 
-  /// Сессия, к которой относятся фреймы.
+  /// Session the frames belong to.
   final FirebaseIngestSession session;
 
-  /// Список фреймов (операций), накопленных за текущий батч.
+  /// List of frames (operations) accumulated in the current batch.
   final List<FirebaseIngestFrame> frames;
 
-  /// Если `true`, сессия будет закрыта на стороне дебаггера.
+  /// If `true`, the session will be closed on the debugger side.
   final bool close;
 
-  /// Текст ошибки при закрытии сессии (если есть).
+  /// Error message when closing the session (if any).
   final String? error;
 
-  /// Сериализация в JSON для отправки по HTTP.
+  /// Serializes to JSON for HTTP transport.
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'session': session.toJson(),
@@ -32,9 +32,9 @@ class FirebaseIngestRequest {
   }
 }
 
-/// Метаданные сессии отладки Firebase Realtime Database.
+/// Metadata for a Firebase Realtime Database debug session.
 ///
-/// Сессия группирует фреймы по целевому пути (target) в базе данных.
+/// A session groups frames by their target path in the database.
 class FirebaseIngestSession {
   FirebaseIngestSession({
     required this.id,
@@ -43,19 +43,19 @@ class FirebaseIngestSession {
     this.captureId,
   });
 
-  /// Уникальный идентификатор сессии, генерируется на основе target + run-id.
+  /// Unique session identifier, generated from target + run-id.
   final String id;
 
-  /// Полный URL пути в Firebase, например `https://my-db.firebaseio.com/users`.
+  /// Full Firebase path URL, e.g. `https://my-db.firebaseio.com/users`.
   final String target;
 
-  /// Время начала сессии (UTC). Может быть `null`, если не задано явно.
+  /// Session start time (UTC). May be `null` if not set explicitly.
   final DateTime? startedAt;
 
-  /// Идентификатор захвата (capture) в дебаггере.
+  /// Capture ID in the debugger.
   final String? captureId;
 
-  /// Сериализация в JSON для отправки по HTTP.
+  /// Serializes to JSON for HTTP transport.
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
@@ -66,9 +66,9 @@ class FirebaseIngestSession {
   }
 }
 
-/// Один фрейм (запись об операции) в сессии отладки.
+/// A single frame (operation record) in a debug session.
 ///
-/// Содержит направление, тип операции, превью данных и опциональное тело.
+/// Contains direction, operation type, data preview, and optional body.
 class FirebaseIngestFrame {
   FirebaseIngestFrame({
     required this.id,
@@ -81,31 +81,31 @@ class FirebaseIngestFrame {
     this.bodyEncoding,
   });
 
-  /// Уникальный идентификатор фрейма, например `fr-set-1700000000-1`.
+  /// Unique frame identifier, e.g. `fr-set-1700000000-1`.
   final String id;
 
-  /// Временная метка операции (UTC).
+  /// Operation timestamp (UTC).
   final DateTime ts;
 
-  /// Направление: `client->upstream` или `upstream->client`.
+  /// Direction: `client->upstream` or `upstream->client`.
   final String direction;
 
-  /// Тип фрейма, обычно `text`.
+  /// Frame type, usually `text`.
   final String opcode;
 
-  /// MIME-тип содержимого, по умолчанию `application/json`.
+  /// Content MIME type, defaults to `application/json`.
   final String contentType;
 
-  /// Краткое превью данных операции в формате JSON.
+  /// Short JSON preview of the operation data.
   final String preview;
 
-  /// Полное тело фрейма (base64), если превью превысило лимит.
+  /// Full frame body (base64) when preview exceeds the limit.
   final String? body;
 
-  /// Кодировка [body], например `base64`. `null` если тело не задано.
+  /// Encoding for [body], e.g. `base64`. `null` if body is not set.
   final String? bodyEncoding;
 
-  /// Сериализация в JSON для отправки по HTTP.
+  /// Serializes to JSON for HTTP transport.
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,

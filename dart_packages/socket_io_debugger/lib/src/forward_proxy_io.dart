@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:socket_io_debugger/socket_io_debugger.dart';
 
+/// Configures forward proxy for Socket.IO connection.
+///
+/// All connections will go through the specified proxy server.
 SocketIoConfig forwardProxyAttach({
   required String baseUrl,
   required String path,

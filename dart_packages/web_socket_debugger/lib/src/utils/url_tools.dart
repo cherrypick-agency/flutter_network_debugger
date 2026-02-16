@@ -1,3 +1,11 @@
+/// Ensures the string has an HTTP or HTTPS scheme.
+///
+/// If scheme is missing, adds http:// or https:// based on port (443 -> https,
+/// otherwise -> http). If scheme exists, returns the string unchanged.
+///
+/// [value] - URL or address to normalize.
+///
+/// Returns string with guaranteed HTTP/HTTPS scheme.
 String ensureHttpScheme(String value) {
   var v = value.trim();
   if (v.isEmpty) return v;

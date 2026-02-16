@@ -1,3 +1,6 @@
+/// Library for debugging Socket.IO connections through a proxy server.
+///
+/// Allows intercepting and analyzing Socket.IO traffic in forward or reverse proxy mode.
 library socket_io_debugger;
 
 import 'dart:developer' as developer;
@@ -38,6 +41,7 @@ void _debugLog(String message) {
   }());
 }
 
+/// Proxy configuration for Socket.IO connection.
 class SocketIoConfig {
   const SocketIoConfig({
     required this.effectiveBaseUrl,
@@ -47,16 +51,30 @@ class SocketIoConfig {
     this.httpClientFactory,
   });
 
+  /// Base URL for connecting to Socket.IO server or proxy.
   final String effectiveBaseUrl;
+
+  /// Path for Socket.IO connection (usually /socket.io/).
   final String effectivePath;
+
+  /// Additional query parameters for the URL.
   final Map<String, dynamic> query;
+
+  /// Whether to use HTTP overrides for forward proxy.
   final bool useForwardOverrides;
+
+  /// Factory for creating HTTP client (used in forward mode).
   final HttpClient Function()? httpClientFactory;
 }
 
+/// Main class for configuring Socket.IO connection debugging.
 class SocketIoDebugger {
   SocketIoDebugger._();
 
+  /// Configures proxy for Socket.IO connection.
+  ///
+  /// Returns the configuration to use for connection.
+  /// Supports forward and reverse proxy modes.
   static SocketIoConfig attach({
     required String baseUrl,
     String path = '/socket.io/',

@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'repo_root.dart';
 
+/// Test Socket.IO upstream server process for use in tests.
+///
+/// Manages the process lifecycle and provides access to its HTTP API.
 class GoSocketIoUpstreamProcess {
   GoSocketIoUpstreamProcess._({
     required this.process,
@@ -11,10 +14,16 @@ class GoSocketIoUpstreamProcess {
     required this.stdoutLines,
   });
 
+  /// The upstream server process.
   final Process process;
+
+  /// Port the server listens on.
   final int port;
+
+  /// Lines from process stdout.
   final List<String> stdoutLines;
 
+  /// Base URI for server HTTP API.
   Uri get httpBase => Uri.parse('http://127.0.0.1:$port');
 
   static Future<String>? _binaryPathFuture;
@@ -51,6 +60,9 @@ class GoSocketIoUpstreamProcess {
     return _binaryPathFuture!;
   }
 
+  /// Starts the upstream server process.
+  ///
+  /// Compiles the binary if needed and waits for server readiness.
   static Future<GoSocketIoUpstreamProcess> start({
     required int port,
     String path = '/socket.io/',
@@ -88,6 +100,9 @@ class GoSocketIoUpstreamProcess {
     );
   }
 
+  /// Stops the upstream server process.
+  ///
+  /// Sends SIGTERM first, then SIGKILL if the process does not exit.
   Future<void> stop() async {
     process.kill(ProcessSignal.sigterm);
     try {

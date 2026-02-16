@@ -1,3 +1,6 @@
+/// Ensures the string starts with http:// or https://.
+///
+/// If scheme is missing, adds http:// (or https:// for port 443).
 String ensureHttpScheme(String value) {
   var v = value.trim();
   if (v.isEmpty) return v;
@@ -8,6 +11,9 @@ String ensureHttpScheme(String value) {
   return 'http://$v';
 }
 
+/// Extracts host:port from URL.
+///
+/// If port is not specified, uses default 80 for http and 443 for https.
 String hostPort(String url) {
   var u = url.trim();
   if (!u.startsWith('http://') && !u.startsWith('https://')) u = 'http://$u';
@@ -17,6 +23,9 @@ String hostPort(String url) {
   return '${parsed.host}:$port';
 }
 
+/// Normalizes proxy address to host:port format.
+///
+/// Removes http:// or https:// scheme and trailing characters.
 String normalizeProxyHostPort(String proxy) {
   var p = proxy.trim();
   if (p.isEmpty) return p;
@@ -26,6 +35,9 @@ String normalizeProxyHostPort(String proxy) {
   return p; // host:port
 }
 
+/// Builds target URL for Engine.IO proxy.
+///
+/// Converts ws(s) to http(s) and adds EIO=4&transport=websocket params.
 String buildEngineIoTarget(String baseUrl, String socketPath) {
   // ws(s) -> http(s), plus EIO=4&transport=websocket as the minimum set for WS proxy.
   var base = baseUrl.trim();
@@ -40,6 +52,9 @@ String buildEngineIoTarget(String baseUrl, String socketPath) {
   return '$scheme://$authority$p';
 }
 
+/// Converts HTTP URL to WebSocket URL.
+///
+/// Replaces http:// with ws:// and https:// with wss://.
 String buildWsTarget(String baseUrl) {
   var base = baseUrl.trim();
   if (base.isEmpty) return base;
@@ -49,6 +64,9 @@ String buildWsTarget(String baseUrl) {
   return base; // assume ws:// or wss:// is already passed
 }
 
+/// Ensures the string starts with ws:// or wss://.
+///
+/// If scheme is missing, adds ws:// (or wss:// for port 443).
 String ensureWsScheme(String value) {
   var v = value.trim();
   if (v.isEmpty) return v;

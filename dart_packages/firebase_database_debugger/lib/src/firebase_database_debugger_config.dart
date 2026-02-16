@@ -1,6 +1,6 @@
-/// Конфигурация [FirebaseDatabaseDebugger].
+/// Configuration for [FirebaseDatabaseDebugger].
 ///
-/// Управляет подключением к дебаггеру, группировкой сессий и батчингом фреймов.
+/// Controls connection to the debugger, session grouping, and frame batching.
 class FirebaseDatabaseDebuggerConfig {
   FirebaseDatabaseDebuggerConfig({
     required this.debuggerBaseUrl,
@@ -22,7 +22,7 @@ class FirebaseDatabaseDebuggerConfig {
           256 * 1024,
         );
 
-  /// Конфигурация с дефолтными значениями для локальной разработки.
+  /// Configuration with default values for local development.
   factory FirebaseDatabaseDebuggerConfig.defaults() {
     return FirebaseDatabaseDebuggerConfig(
       debuggerBaseUrl: 'http://localhost:9092',
@@ -30,52 +30,52 @@ class FirebaseDatabaseDebuggerConfig {
     );
   }
 
-  /// Базовый URL дебаггера, куда отправляются фреймы.
+  /// Base URL of the debugger where frames are sent.
   ///
-  /// Например, `http://localhost:9092`.
+  /// E.g. `http://localhost:9092`.
   final String debuggerBaseUrl;
 
-  /// URL Firebase Realtime Database, используется для формирования target сессии.
+  /// Firebase Realtime Database URL, used to form the session target.
   ///
-  /// По умолчанию `https://firebase.local`.
+  /// Defaults to `https://firebase.local`.
   final String databaseUrl;
 
-  /// Включён ли сбор и отправка отладочных данных.
+  /// Whether debug data collection and sending is enabled.
   ///
-  /// Если `false`, все вызовы `logOperation` игнорируются.
+  /// If `false`, all `logOperation` calls are ignored.
   final bool enabled;
 
-  /// Токен авторизации для ingest API. Передаётся в заголовке `X-Admin-Token`.
+  /// Authorization token for the ingest API. Sent in the `X-Admin-Token` header.
   final String? adminToken;
 
-  /// Идентификатор захвата (capture) в дебаггере.
+  /// Capture ID in the debugger.
   ///
-  /// По умолчанию `current`.
+  /// Defaults to `current`.
   final String captureId;
 
-  /// Группировка сессий по глубине пути:
-  /// - `-1` (по умолчанию): отдельная сессия на полный путь (`/a/b/c`)
-  /// - `0`: одна сессия на всю базу (в UI будет путь `/`)
-  /// - `N>=1`: сессия на префикс пути глубины N (например, N=2: `/a/b/...` → `/a/b`)
+  /// Session grouping by path depth:
+  /// - `-1` (default): one session per full path (`/a/b/c`)
+  /// - `0`: single session for the entire database (UI shows path `/`)
+  /// - `N>=1`: session for path prefix of depth N (e.g. N=2: `/a/b/...` → `/a/b`)
   final int sessionPathDepth;
 
-  /// Если `true`, добавляем короткий run-id в `session.id`, чтобы не конфликтовать
-  /// с закрытыми сессиями при следующем запуске приложения.
+  /// If `true`, a short run-id is added to `session.id` to avoid conflicts
+  /// with closed sessions on the next app launch.
   final bool includeRunIdInSessionId;
 
-  /// Интервал автоматического flush буферизованных фреймов.
+  /// Interval for automatic flush of buffered frames.
   ///
-  /// По умолчанию 200 мс.
+  /// Defaults to 200 ms.
   final Duration flushInterval;
 
-  /// Максимальное количество фреймов в одном батче перед принудительным flush.
+  /// Maximum number of frames in one batch before forcing a flush.
   ///
-  /// Допустимый диапазон: 1–200.
+  /// Valid range: 1–200.
   final int maxBatchFrames;
 
-  /// Порог размера превью (в байтах), после которого тело выносится в отдельное
-  /// поле `body` с base64-кодировкой.
+  /// Preview size threshold (in bytes) above which the body is moved to a
+  /// separate `body` field with base64 encoding.
   ///
-  /// Допустимый диапазон: 1 КБ – 256 КБ.
+  /// Valid range: 1 KB – 256 KB.
   final int previewBodyThresholdBytes;
 }

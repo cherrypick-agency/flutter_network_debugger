@@ -24,16 +24,47 @@ class ReverseProxyInterceptor extends Interceptor {
   final String _proxyBaseUrl; // proxy address (may be without scheme in ENV)
   final String _proxyHttpPath; // path on proxy, usually /httpproxy
 
-  // Filters: if allow* are set, we proxy only matching ones, otherwise -
-  // if skip* are set, we skip matching ones.
+  /// List of paths to bypass when proxying.
+  ///
+  /// If set, requests to paths matching any of the patterns will be sent
+  /// directly without proxying.
   final List<Pattern>? skipPaths;
-  final List<Pattern>? skipHosts;
-  final List<String>? skipMethods; // in upper case
-  final List<Pattern>? allowPaths;
-  final List<Pattern>? allowHosts;
-  final List<String>? allowMethods; // in upper case
 
-  // Reset capture: if true, adds _resetCapture=true to the first request
+  /// List of hosts to bypass when proxying.
+  ///
+  /// If set, requests to hosts matching any of the patterns will be sent
+  /// directly without proxying.
+  final List<Pattern>? skipHosts;
+
+  /// List of HTTP methods to bypass when proxying.
+  ///
+  /// Methods must be in uppercase (e.g. 'GET', 'POST').
+  /// If set, requests with the specified methods will be sent directly.
+  final List<String>? skipMethods;
+
+  /// List of paths to proxy.
+  ///
+  /// If set, only requests to paths matching at least one pattern are proxied.
+  /// Ignored if [skipPaths] is set.
+  final List<Pattern>? allowPaths;
+
+  /// List of hosts to proxy.
+  ///
+  /// If set, only requests to hosts matching at least one pattern are proxied.
+  /// Ignored if [skipHosts] is set.
+  final List<Pattern>? allowHosts;
+
+  /// List of HTTP methods to proxy.
+  ///
+  /// Methods must be in uppercase (e.g. 'GET', 'POST').
+  /// If set, only requests with the specified methods are proxied.
+  /// Ignored if [skipMethods] is set.
+  final List<String>? allowMethods;
+
+  /// If `true`, adds `_resetCapture=true` parameter to the first request.
+  ///
+  /// Used to reset previous capture sessions on the proxy server, useful for
+  /// hot restart during development.
   final bool resetCaptureOnFirstRequest;
   bool _isFirstRequest = true;
 

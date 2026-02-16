@@ -1,9 +1,9 @@
-/// Библиотека для перехвата и отправки операций Firebase Realtime Database
-/// в network-debugger для визуальной отладки.
+/// Library for intercepting and sending Firebase Realtime Database operations
+/// to network-debugger for visual debugging.
 ///
-/// Оборачивает стандартные [DatabaseReference] и [Query] в отладочные обёртки,
-/// которые логируют каждую операцию (get, set, update, remove, listen)
-/// и батчами отправляют фреймы в ingest API дебаггера.
+/// Wraps standard [DatabaseReference] and [Query] in debug wrappers that log
+/// every operation (get, set, update, remove, listen) and send frames to the
+/// debugger ingest API in batches.
 library firebase_database_debugger;
 
 import 'dart:async';
@@ -19,12 +19,12 @@ import 'src/models.dart';
 
 export 'src/firebase_database_debugger_config.dart';
 
-/// Основной класс дебаггера Firebase Realtime Database.
+/// Main class for Firebase Realtime Database debugger.
 ///
-/// Создаёт отладочные обёртки над [DatabaseReference] и [Query],
-/// буферизует фреймы и периодически отправляет их в ingest API.
+/// Creates debug wrappers over [DatabaseReference] and [Query], buffers frames,
+/// and periodically sends them to the ingest API.
 ///
-/// Пример использования:
+/// Example usage:
 /// ```dart
 /// final debugger = FirebaseDatabaseDebugger(
 ///   config: FirebaseDatabaseDebuggerConfig(
@@ -35,10 +35,10 @@ export 'src/firebase_database_debugger_config.dart';
 /// await ref.set({'name': 'John'});
 /// ```
 class FirebaseDatabaseDebugger {
-  /// Создаёт экземпляр дебаггера.
+  /// Creates a debugger instance.
   ///
-  /// [config] — конфигурация подключения и батчинга.
-  /// [httpClient] — опциональный HTTP-клиент (удобно для тестов).
+  /// [config] — connection and batching configuration.
+  /// [httpClient] — optional HTTP client (useful for tests).
   FirebaseDatabaseDebugger({
     required FirebaseDatabaseDebuggerConfig config,
     http.Client? httpClient,
@@ -53,21 +53,21 @@ class FirebaseDatabaseDebugger {
   Timer? _flushTimer;
   int _seq = 0;
 
-  /// Оборачивает [reference] в отладочную обёртку [DebugDatabaseReference].
+  /// Wraps [reference] in a [DebugDatabaseReference] debug wrapper.
   ///
-  /// Все операции через обёртку будут логироваться и отправляться в дебаггер.
+  /// All operations through the wrapper will be logged and sent to the debugger.
   DebugDatabaseReference ref(DatabaseReference reference) {
     return DebugDatabaseReference._(owner: this, inner: reference);
   }
 
-  /// Оборачивает [value] (Firebase Query) в отладочную обёртку [DebugQuery].
+  /// Wraps [value] (Firebase Query) in a [DebugQuery] debug wrapper.
   ///
-  /// Все операции через обёртку будут логироваться и отправляться в дебаггер.
+  /// All operations through the wrapper will be logged and sent to the debugger.
   DebugQuery query(Query value) {
     return DebugQuery._(owner: this, inner: value);
   }
 
-  /// Принудительно отправляет все накопленные фреймы в дебаггер.
+  /// Flushes all buffered frames to the debugger.
   Future<void> flush() async {
     final sessions = _buffers.values.toList(growable: false);
     _buffers.clear();
@@ -76,9 +76,9 @@ class FirebaseDatabaseDebugger {
     }
   }
 
-  /// Останавливает таймер, отправляет оставшиеся фреймы и закрывает HTTP-клиент.
+  /// Stops the timer, flushes remaining frames, and closes the HTTP client.
   ///
-  /// Вызывайте при завершении работы приложения или когда дебаггер больше не нужен.
+  /// Call when the app shuts down or when the debugger is no longer needed.
   Future<void> dispose() async {
     _flushTimer?.cancel();
     _flushTimer = null;
@@ -86,15 +86,15 @@ class FirebaseDatabaseDebugger {
     _client.dispose();
   }
 
-  /// Логирует одну операцию Firebase и добавляет фрейм в буфер.
+  /// Logs a single Firebase operation and adds a frame to the buffer.
   ///
-  /// [path] — путь в базе данных (например, `/users/123`).
-  /// [op] — тип операции (`set`, `get`, `update`, `remove`, `onValue` и т.д.).
-  /// [direction] — направление: `client->upstream` или `upstream->client`.
-  /// [payload] — данные операции (значение, длительность и т.д.).
-  /// [query] — строка запроса (если операция через Query).
-  /// [ok] — успешна ли операция.
-  /// [error] — объект ошибки (если операция завершилась с ошибкой).
+  /// [path] — database path (e.g. `/users/123`).
+  /// [op] — operation type (`set`, `get`, `update`, `remove`, `onValue`, etc.).
+  /// [direction] — direction: `client->upstream` or `upstream->client`.
+  /// [payload] — operation data (value, duration, etc.).
+  /// [query] — query string (if operation uses Query).
+  /// [ok] — whether the operation succeeded.
+  /// [error] — error object (if the operation failed).
   Future<void> logOperation({
     required String path,
     required String op,
@@ -150,11 +150,11 @@ class FirebaseDatabaseDebugger {
     _scheduleFlush();
   }
 
-  /// Помечает сессию как закрытую (например, при отписке от слушателя).
+  /// Marks a session as closed (e.g. when unsubscribing from a listener).
   ///
-  /// [path] — путь в базе данных.
-  /// [query] — строка запроса (если есть).
-  /// [error] — текст ошибки при закрытии (если есть).
+  /// [path] — database path.
+  /// [query] — query string (if any).
+  /// [error] — error message on close (if any).
   void markSessionClosed({required String path, String? query, String? error}) {
     if (!_config.enabled) return;
     final (sessionPath, sessionQuery) =
@@ -251,7 +251,7 @@ class FirebaseDatabaseDebugger {
   }
 
   static String _makeRunId() {
-    // 8 hex chars — достаточно чтобы не конфликтовать между запусками
+    // 8 hex chars — enough to avoid conflicts between runs
     Random rnd;
     try {
       rnd = Random.secure();
@@ -311,10 +311,10 @@ class FirebaseDatabaseDebugger {
   }
 }
 
-/// Отладочная обёртка над [DatabaseReference].
+/// Debug wrapper over [DatabaseReference].
 ///
-/// Проксирует все операции (get, set, update, remove, onValue)
-/// к оригинальному [DatabaseReference] и логирует их через [FirebaseDatabaseDebugger].
+/// Proxies all operations (get, set, update, remove, onValue) to the underlying
+/// [DatabaseReference] and logs them via [FirebaseDatabaseDebugger].
 class DebugDatabaseReference {
   DebugDatabaseReference._({
     required FirebaseDatabaseDebugger owner,
@@ -325,13 +325,13 @@ class DebugDatabaseReference {
   final FirebaseDatabaseDebugger _owner;
   final DatabaseReference _inner;
 
-  /// Оригинальный [DatabaseReference] без обёртки.
+  /// The underlying [DatabaseReference] without the wrapper.
   DatabaseReference get raw => _inner;
 
-  /// Путь в базе данных, например `/users/123`.
+  /// Database path, e.g. `/users/123`.
   String get path => _inner.path;
 
-  /// Возвращает отладочную ссылку на дочерний узел по [childPath].
+  /// Returns a debug reference to a child node at [childPath].
   DebugDatabaseReference child(String childPath) {
     return DebugDatabaseReference._(
       owner: _owner,
@@ -339,7 +339,7 @@ class DebugDatabaseReference {
     );
   }
 
-  /// Записывает [value] по текущему пути и логирует операцию.
+  /// Writes [value] at the current path and logs the operation.
   Future<void> set(Object? value) async {
     final startedAt = DateTime.now().toUtc();
     try {
@@ -367,7 +367,7 @@ class DebugDatabaseReference {
     }
   }
 
-  /// Обновляет поля по текущему пути (merge) и логирует операцию.
+  /// Updates fields at the current path (merge) and logs the operation.
   Future<void> update(Map<String, Object?> value) async {
     final startedAt = DateTime.now().toUtc();
     try {
@@ -395,7 +395,7 @@ class DebugDatabaseReference {
     }
   }
 
-  /// Удаляет данные по текущему пути и логирует операцию.
+  /// Removes data at the current path and logs the operation.
   Future<void> remove() async {
     try {
       await _inner.remove();
@@ -418,7 +418,7 @@ class DebugDatabaseReference {
     }
   }
 
-  /// Читает данные по текущему пути и логирует результат.
+  /// Reads data at the current path and logs the result.
   Future<DataSnapshot> get() async {
     final startedAt = DateTime.now().toUtc();
     try {
@@ -448,9 +448,9 @@ class DebugDatabaseReference {
     }
   }
 
-  /// Подписка на изменения значения по текущему пути.
+  /// Subscribes to value changes at the current path.
   ///
-  /// Каждое обновление логируется как фрейм `onValue` с направлением
+  /// Each update is logged as an `onValue` frame with direction
   /// `upstream->client`.
   Stream<DatabaseEvent> get onValue {
     _owner.logOperation(
@@ -483,10 +483,10 @@ class DebugDatabaseReference {
   }
 }
 
-/// Отладочная обёртка над Firebase [Query].
+/// Debug wrapper over Firebase [Query].
 ///
-/// Проксирует операции чтения и подписки, логируя каждую
-/// через [FirebaseDatabaseDebugger].
+/// Proxies read and subscription operations, logging each via
+/// [FirebaseDatabaseDebugger].
 class DebugQuery {
   DebugQuery._({required FirebaseDatabaseDebugger owner, required Query inner})
       : _owner = owner,
@@ -495,13 +495,13 @@ class DebugQuery {
   final FirebaseDatabaseDebugger _owner;
   final Query _inner;
 
-  /// Оригинальный [Query] без обёртки.
+  /// The underlying [Query] without the wrapper.
   Query get raw => _inner;
 
-  /// Путь в базе данных, к которому привязан запрос.
+  /// Database path the query is bound to.
   String get path => _inner.path;
 
-  /// Выполняет запрос и возвращает снапшот данных, логируя результат.
+  /// Runs the query and returns a data snapshot, logging the result.
   Future<DataSnapshot> get() async {
     final startedAt = DateTime.now().toUtc();
     try {
@@ -531,9 +531,9 @@ class DebugQuery {
     }
   }
 
-  /// Подписка на изменения значения по запросу.
+  /// Subscribes to value changes for the query.
   ///
-  /// Каждое обновление логируется как фрейм `onValue`.
+  /// Each update is logged as an `onValue` frame.
   Stream<DatabaseEvent> get onValue {
     _owner.logOperation(
       path: path,
@@ -564,9 +564,9 @@ class DebugQuery {
     });
   }
 
-  /// Подписка на добавление дочерних узлов.
+  /// Subscribes to child additions.
   ///
-  /// Каждый новый дочерний элемент логируется как фрейм `onChildAdded`.
+  /// Each new child is logged as an `onChildAdded` frame.
   Stream<DatabaseEvent> get onChildAdded {
     _owner.logOperation(
       path: path,
@@ -588,9 +588,9 @@ class DebugQuery {
     });
   }
 
-  /// Подписка на изменение дочерних узлов.
+  /// Subscribes to child changes.
   ///
-  /// Каждое изменение логируется как фрейм `onChildChanged`.
+  /// Each change is logged as an `onChildChanged` frame.
   Stream<DatabaseEvent> get onChildChanged {
     _owner.logOperation(
       path: path,
@@ -612,9 +612,9 @@ class DebugQuery {
     });
   }
 
-  /// Подписка на удаление дочерних узлов.
+  /// Subscribes to child removals.
   ///
-  /// Каждое удаление логируется как фрейм `onChildRemoved`.
+  /// Each removal is logged as an `onChildRemoved` frame.
   Stream<DatabaseEvent> get onChildRemoved {
     _owner.logOperation(
       path: path,
@@ -637,7 +637,7 @@ class DebugQuery {
   }
 }
 
-/// Буфер фреймов для одной сессии, ожидающий отправки.
+/// Frame buffer for a single session, waiting to be sent.
 class _SessionBuffer {
   _SessionBuffer({required this.session});
 

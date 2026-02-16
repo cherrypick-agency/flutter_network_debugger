@@ -1,3 +1,6 @@
+/// Library for debugging WebSocket connections through a proxy server.
+///
+/// Allows intercepting and analyzing WebSocket traffic in forward or reverse proxy mode.
 library web_socket_channel_debugger;
 
 import 'dart:developer' as developer;
@@ -30,6 +33,7 @@ void _debugLog(String message) {
   }());
 }
 
+/// Proxy configuration for WebSocket connection.
 class WscProxyConfig {
   const WscProxyConfig({
     required this.connectUrl,
@@ -38,15 +42,27 @@ class WscProxyConfig {
     this.httpClientFactory,
   });
 
+  /// URL for connecting to WebSocket server or proxy.
   final Uri connectUrl;
+
+  /// Additional query parameters for the URL.
   final Map<String, dynamic> query;
+
+  /// Whether to use HTTP overrides for forward proxy.
   final bool useForwardOverrides;
+
+  /// Factory for creating HTTP client (used in forward mode).
   final Object Function()? httpClientFactory;
 }
 
+/// Main class for configuring WebSocket connection debugging.
 class WebSocketChannelDebugger {
   WebSocketChannelDebugger._();
 
+  /// Configures proxy for WebSocket connection.
+  ///
+  /// Returns the configuration to use for connection.
+  /// Supports forward and reverse proxy modes.
   static WscProxyConfig attach({
     required String baseUrl,
     String proxyBaseUrl = 'http://localhost:9091',
@@ -139,6 +155,9 @@ class WebSocketChannelDebugger {
     );
   }
 
+  /// Connects to WebSocket using the given configuration.
+  ///
+  /// Creates WebSocketChannel with proxy settings from the config.
   static wsc.WebSocketChannel connect({
     required WscProxyConfig config,
     Map<String, dynamic>? headers,

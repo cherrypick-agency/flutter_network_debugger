@@ -1,3 +1,11 @@
+/// Library for enabling HTTP request debugging through a proxy server.
+///
+/// Supports two modes of operation:
+/// - Reverse proxy: intercepts requests and routes them through the proxy server
+///   for viewing and debugging
+/// - Forward proxy: uses the system proxy for request routing
+///
+/// Settings can be configured via environment variables or method parameters.
 library dio_debugger;
 
 import 'package:dio/dio.dart';

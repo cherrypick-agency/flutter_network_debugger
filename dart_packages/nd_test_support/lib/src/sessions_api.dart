@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Clears all sessions in the debugger.
 Future<void> clearSessions(Uri apiBase) async {
   final client = HttpClient();
   final req = await client.deleteUrl(apiBase.resolve('/_api/v1/sessions'));
@@ -12,6 +13,9 @@ Future<void> clearSessions(Uri apiBase) async {
   }
 }
 
+/// Gets list of sessions from the debugger.
+///
+/// Returns sessions of the specified types with a limit on count.
 Future<List<Map<String, dynamic>>> listSessions(
   Uri apiBase, {
   required String types,
@@ -32,6 +36,9 @@ Future<List<Map<String, dynamic>>> listSessions(
       .toList(growable: false);
 }
 
+/// Gets list of frames for the specified session.
+///
+/// Returns frames with a limit on count.
 Future<List<Map<String, dynamic>>> listFrames(
   Uri apiBase,
   String sessionId, {
@@ -52,6 +59,7 @@ Future<List<Map<String, dynamic>>> listFrames(
       .toList(growable: false);
 }
 
+/// Gets info about a specific session by its ID.
 Future<Map<String, dynamic>> getSession(
   Uri apiBase,
   String sessionId,

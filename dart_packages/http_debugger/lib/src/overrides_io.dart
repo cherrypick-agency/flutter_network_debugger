@@ -3,14 +3,16 @@ import 'reverse_http_client_io.dart';
 
 /// Global forward-proxy configuration via HttpOverrides.
 class HttpDebuggerConfig {
-  /// host:port - what HttpClient.findProxy expects (without scheme)
+  /// Proxy server host and port in 'host:port' format (no scheme).
+  /// Used in HttpClient.findProxy to specify the proxy.
   final String proxyHostPort;
 
-  /// Allow self-signed/bad certificates - useful in dev.
+  /// Allow self-signed or invalid SSL certificates.
+  /// Useful when developing with local certificates.
   final bool allowBadCertificates;
 
-  /// List of hosts for which proxy is disabled (DIRECT).
-  /// Can be specified as exact strings or RegExp.
+  /// List of hosts for which proxy is disabled (requests go direct).
+  /// Can use exact strings or regular expressions.
   final List<Pattern> bypassHosts;
 
   const HttpDebuggerConfig({
@@ -22,16 +24,34 @@ class HttpDebuggerConfig {
 
 /// Reverse-proxy configuration for global interception via HttpOverrides.
 class HttpReverseProxyConfig {
+  /// Target server base URL that requests will be proxied to.
   final String upstreamBaseUrl;
-  final String proxyBaseUrl; // can be without scheme; normalized
-  final String proxyHttpPath; // default /httpproxy
+
+  /// Proxy server base URL. Scheme may be omitted, will be normalized automatically.
+  final String proxyBaseUrl;
+
+  /// Path on the proxy server for HTTP requests. Default '/httpproxy'.
+  final String proxyHttpPath;
+
+  /// Allow self-signed or invalid SSL certificates.
   final bool allowBadCertificates;
 
+  /// Path patterns to skip (not proxy).
   final List<Pattern>? skipPaths;
+
+  /// Host patterns to skip.
   final List<Pattern>? skipHosts;
+
+  /// HTTP methods to skip.
   final List<String>? skipMethods;
+
+  /// Path patterns allowed to proxy (takes precedence over skipPaths).
   final List<Pattern>? allowPaths;
+
+  /// Host patterns allowed to proxy (takes precedence over skipHosts).
   final List<Pattern>? allowHosts;
+
+  /// HTTP methods allowed to proxy (takes precedence over skipMethods).
   final List<String>? allowMethods;
 
   const HttpReverseProxyConfig({
@@ -49,35 +69,49 @@ class HttpReverseProxyConfig {
 }
 
 /// Enables global forward-proxy for all HTTP traffic (dart:io).
-/// All clients using standard HttpClient (including package:http, Dio by default, etc.)
-/// will start routing through the specified proxy.
+/// All clients using the default HttpClient (including package:http, Dio by default, etc.)
+/// will route requests through the specified proxy.
 class HttpDebugger {
   HttpDebugger._();
 
   static HttpOverrides? _previous;
 
-  /// Enable global proxy. Repeated calls will overwrite settings.
+  /// Enables global forward-proxy for all HTTP traffic.
+  /// Repeated calls overwrite previous settings.
   static void enableForwardProxy(HttpDebuggerConfig config) {
     _previous ??= HttpOverrides.current;
     HttpOverrides.global = _ForwardProxyOverrides(config);
   }
 
-  /// Enable global reverse-proxy.
+  /// Enables global reverse-proxy for all HTTP traffic.
   static void enableReverseProxy(HttpReverseProxyConfig config) {
     _previous ??= HttpOverrides.current;
     HttpOverrides.global = _ReverseProxyOverrides(config);
   }
 
-  /// Disable global proxy and restore previous overrides (if any).
+  /// Disables global proxy and restores previous overrides (if any).
   static void disable() {
     HttpOverrides.global = _previous;
     _previous = null;
   }
 
-  /// Universal way to enable proxy.
+  /// Generic way to enable proxy.
   ///
-  /// By default mode = 'reverse'. If [upstreamBaseUrl] is not set,
-  /// automatically uses forward-proxy with local proxy.
+  /// Uses 'reverse' mode by default. If [upstreamBaseUrl] is not set,
+  /// automatically switches to forward-proxy with local proxy.
+  ///
+  /// [mode] - operation mode: 'reverse' (default) or 'forward'.
+  /// [upstreamBaseUrl] - target server base URL for reverse-proxy mode.
+  /// [proxyBaseUrl] - proxy server base URL. If not set, default value is used.
+  /// [proxyHttpPath] - path on the proxy server for HTTP requests.
+  /// [allowBadCertificates] - allow invalid SSL certificates.
+  /// [skipPaths] - path patterns to skip (reverse-proxy mode).
+  /// [skipHosts] - host patterns to skip (reverse-proxy mode).
+  /// [skipMethods] - HTTP methods to skip (reverse-proxy mode).
+  /// [allowPaths] - allowed path patterns (reverse-proxy mode).
+  /// [allowHosts] - allowed host patterns (reverse-proxy mode).
+  /// [allowMethods] - allowed HTTP methods (reverse-proxy mode).
+  /// [bypassHosts] - hosts to bypass proxy (forward-proxy mode).
   static void enable({
     String mode = 'reverse',
     String? upstreamBaseUrl,
@@ -142,7 +176,8 @@ class HttpDebugger {
     );
   }
 
-  /// Execute [action] in a zone with proxy enabled. Convenient for isolated execution.
+  /// Runs [action] in a zone with forward-proxy enabled.
+  /// Convenient for isolated execution of code with proxy.
   static T runZonedWithForwardProxy<T>(
     HttpDebuggerConfig config,
     T Function() action,
@@ -157,7 +192,7 @@ class HttpDebugger {
     );
   }
 
-  /// Execute [action] in a zone with reverse-proxy enabled.
+  /// Runs [action] in a zone with reverse-proxy enabled.
   static T runZonedWithReverseProxy<T>(
     HttpReverseProxyConfig config,
     T Function() action,

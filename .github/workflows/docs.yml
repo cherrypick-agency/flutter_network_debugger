@@ -63,6 +63,9 @@ jobs:
           cp docs-site/.vitepress/config.ts docs-site-generated/.vitepress/config.ts
           rm -rf docs-site-generated/.vitepress/theme
           cp -R docs-site/.vitepress/theme docs-site-generated/.vitepress/theme
+          if [ -d docs-site/public ]; then
+            cp -R docs-site/public docs-site-generated/public
+          fi
 
       - name: Install docs-site dependencies
         working-directory: docs-site-generated

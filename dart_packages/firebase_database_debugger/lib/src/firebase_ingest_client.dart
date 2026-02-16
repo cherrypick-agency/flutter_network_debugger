@@ -5,14 +5,14 @@ import 'package:http/http.dart' as http;
 import 'firebase_database_debugger_config.dart';
 import 'models.dart';
 
-/// HTTP-клиент для отправки отладочных данных в ingest API дебаггера.
+/// HTTP client for sending debug data to the debugger ingest API.
 ///
-/// Все ошибки сети глотаются — отладочный канал не должен ломать приложение.
+/// Network errors are swallowed — the debug channel must not break the app.
 class FirebaseIngestClient {
-  /// Создаёт клиент с заданной конфигурацией.
+  /// Creates a client with the given configuration.
   ///
-  /// Если [httpClient] не передан, создаётся свой экземпляр `http.Client`,
-  /// который будет закрыт при вызове [dispose].
+  /// If [httpClient] is not provided, a new `http.Client` is created and will
+  /// be closed when [dispose] is called.
   FirebaseIngestClient({
     required FirebaseDatabaseDebuggerConfig config,
     http.Client? httpClient,
@@ -24,10 +24,10 @@ class FirebaseIngestClient {
   final http.Client _http;
   final bool _ownsHttp;
 
-  /// Отправляет [request] на endpoint `/_api/v1/ingest/firebase_database`.
+  /// Sends [request] to the `/_api/v1/ingest/firebase_database` endpoint.
   ///
-  /// Таймаут — 2 секунды. Если бэкенд недоступен или вернул ошибку,
-  /// исключение подавляется.
+  /// Timeout is 2 seconds. If the backend is unavailable or returns an error,
+  /// the exception is suppressed.
   Future<void> ingest(FirebaseIngestRequest request) async {
     final base = _config.debuggerBaseUrl.trim();
     if (base.isEmpty) return;
@@ -51,12 +51,12 @@ class FirebaseIngestClient {
           .timeout(const Duration(seconds: 2));
       if (response.statusCode == 204) return;
     } catch (_) {
-      // Если UI/бэкенд недоступен — не мешаем приложению.
+      // If UI/backend is unavailable — don't disrupt the app.
       return;
     }
   }
 
-  /// Закрывает HTTP-клиент, если он был создан внутри этого класса.
+  /// Closes the HTTP client if it was created by this class.
   void dispose() {
     if (_ownsHttp) {
       _http.close();

@@ -49,6 +49,10 @@ await ref.remove();                             // logged as REMOVE
 
 That's it — open `http://localhost:9092` and you'll see every operation with payload, timing and status.
 
+![RTDB sessions in the Network Debugger UI](/images/firebase-rtdb-sessions.png)
+
+![RTDB event details](/images/firebase-rtdb-details.png)
+
 ::: tip
 If the Network Debugger backend is not running, events are silently dropped — the app won't crash or slow down.
 :::

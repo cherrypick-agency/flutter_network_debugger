@@ -1,3 +1,7 @@
+/// Library for debugging WebSocket connections through a proxy server.
+///
+/// Supports two operation modes: forward proxy and reverse proxy.
+/// Allows intercepting and analyzing WebSocket traffic for network debugging.
 library web_socket_debugger;
 
 import 'dart:developer' as developer;
@@ -30,6 +34,9 @@ void _debugLog(String message) {
   }());
 }
 
+/// Configuration for connecting WebSocket through a proxy.
+///
+/// Contains all parameters needed to establish a connection with proxy settings.
 class WebSocketProxyConfig {
   const WebSocketProxyConfig({
     required this.connectUrl,
@@ -38,15 +45,53 @@ class WebSocketProxyConfig {
     this.httpClientFactory,
   });
 
+  /// URL for the WebSocket connection.
+  ///
+  /// May be either the original URL or the proxy server URL depending on mode.
   final Uri connectUrl;
+
+  /// Additional query parameters for the URL.
+  ///
+  /// Used to pass metadata to the proxy server, e.g. target address in reverse mode.
   final Map<String, dynamic> query;
+
+  /// Whether to use HTTP client overrides for forward proxy.
+  ///
+  /// If `true`, a custom HTTP client with proxy settings from [httpClientFactory]
+  /// will be used.
   final bool useForwardOverrides;
+
+  /// Factory for creating an HTTP client with proxy settings.
+  ///
+  /// Used only in forward proxy mode on platforms with dart:io support.
+  /// If `null`, the default client is used.
   final Object Function()? httpClientFactory;
 }
 
+/// Main class for WebSocket connection debugging.
+///
+/// Provides methods for configuring proxy and establishing connections.
 class WebSocketDebugger {
   WebSocketDebugger._();
 
+  /// Configures proxy settings for WebSocket connection.
+  ///
+  /// Creates the appropriate configuration based on mode (forward or reverse).
+  /// If proxy is disabled or not configured, returns direct connection config.
+  ///
+  /// Parameters can be passed via method arguments or environment variables:
+  /// - `SOCKET_PROXY_ENABLED` - enable/disable proxy (default: enabled)
+  /// - `SOCKET_PROXY_MODE` - mode: 'forward', 'reverse' or 'none'
+  /// - `SOCKET_PROXY` - proxy server address
+  /// - `SOCKET_PROXY_PATH` - path on proxy server for reverse mode
+  ///
+  /// [baseUrl] - original WebSocket connection URL.
+  /// [proxyBaseUrl] - base URL of proxy server (default: localhost:9091).
+  /// [proxyPath] - path on proxy server for reverse mode.
+  /// [enabled] - explicitly enable or disable proxy (if `null`, from env).
+  /// [mode] - mode: 'forward', 'reverse' or 'none' (if `null`, from env).
+  ///
+  /// Returns configuration for proxy or direct connection.
   static WebSocketProxyConfig attach({
     required String baseUrl,
     String proxyBaseUrl = 'http://localhost:9091',
@@ -136,6 +181,16 @@ class WebSocketDebugger {
     );
   }
 
+  /// Establishes WebSocket connection using the given configuration.
+  ///
+  /// Creates a connection with all parameters from [config] including URL,
+  /// query params and proxy settings. In dart:io environments, headers
+  /// (e.g. Authorization, Cookie) are supported; on web they are ignored.
+  ///
+  /// [config] - proxy config from [attach].
+  /// [headers] - additional HTTP headers for connection (IO only).
+  ///
+  /// Returns the established WebSocket connection.
   static Future<ws.WebSocket> connect({
     required WebSocketProxyConfig config,
     Map<String, dynamic>? headers,

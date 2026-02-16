@@ -9,6 +9,21 @@ import llmstxt, {
 
 const docsBase = process.env.DOCS_BASE ?? '/'
 
+const manualGuideItems = [
+  { text: 'Overview', link: '/guide/' },
+  { text: 'Firebase Realtime Database', link: '/guide/firebase-database' },
+]
+
+const mergedGuideSidebar = {
+  '/guide/': [
+    {
+      text: 'Guide',
+      items: manualGuideItems,
+    },
+    ...(guideSidebar['/guide/'] ?? []),
+  ],
+}
+
 export default defineConfig({
   base: docsBase,
   title: 'Network Debugger Docs',
@@ -37,7 +52,7 @@ export default defineConfig({
     ],
     sidebar: {
       ...apiSidebar,
-      ...guideSidebar,
+      ...mergedGuideSidebar,
     },
     socialLinks: [
       {

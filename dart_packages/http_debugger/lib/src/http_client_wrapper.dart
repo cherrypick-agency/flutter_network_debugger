@@ -5,6 +5,18 @@ import 'package:http/http.dart' as http;
 ///   {proxyBaseUrl}{proxyHttpPath}?_target=<FULL_UPSTREAM_URL>
 /// Works on Web and IO since rewriting happens before sending the request.
 class HttpReverseProxyClient extends http.BaseClient {
+  /// Creates a client that rewrites request URLs to reverse-proxy format.
+  ///
+  /// [inner] - the underlying HTTP client used to execute requests.
+  /// [proxyBaseUrl] - proxy server base URL (e.g. 'http://localhost:9091').
+  /// [proxyHttpPath] - path on the proxy server for HTTP requests (default '/httpproxy').
+  /// [upstreamBaseUrl] - target server base URL. If not set, the original request URL is used.
+  /// [skipPaths] - path patterns to skip (not proxy).
+  /// [skipHosts] - host patterns to skip.
+  /// [skipMethods] - HTTP methods to skip.
+  /// [allowPaths] - path patterns allowed to proxy (takes precedence over skipPaths).
+  /// [allowHosts] - host patterns allowed to proxy (takes precedence over skipHosts).
+  /// [allowMethods] - HTTP methods allowed to proxy (takes precedence over skipMethods).
   HttpReverseProxyClient({
     required http.Client inner,
     required String proxyBaseUrl,
@@ -45,6 +57,11 @@ class HttpReverseProxyClient extends http.BaseClient {
   final List<Pattern>? _allowHosts;
   final List<String>? _allowMethods;
 
+  /// Sends an HTTP request through the proxy server.
+  ///
+  /// If the request already targets the proxy or should be bypassed (per skip/allow rules),
+  /// it is sent directly via the inner client. Otherwise the URL is rewritten to
+  /// reverse-proxy format and the request is sent to the proxy server.
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final method = request.method.toUpperCase();
@@ -157,6 +174,10 @@ class HttpReverseProxyClient extends http.BaseClient {
 
 /// Utility for convenient client creation.
 class HttpDebuggerClient {
+  /// Wraps an HTTP client for reverse-proxy operation.
+  ///
+  /// Creates [HttpReverseProxyClient] with the given parameters.
+  /// Convenient way to quickly set up proxying for an existing client.
   static http.Client wrap(
     http.Client inner, {
     required String proxyBaseUrl,

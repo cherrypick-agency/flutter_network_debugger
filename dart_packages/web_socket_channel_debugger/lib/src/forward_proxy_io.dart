@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:web_socket_channel_debugger/web_socket_channel_debugger.dart';
 
+/// Configures forward proxy for WebSocket connection.
+///
+/// All connections will go through the specified proxy server.
 WscProxyConfig forwardProxyAttach({
   required String baseUrl,
   required String proxyHostPort,

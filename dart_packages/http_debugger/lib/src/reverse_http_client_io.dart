@@ -4,6 +4,20 @@ import 'dart:io';
 /// reverse-proxy endpoint of the form:
 ///   {proxyBaseUrl}{proxyHttpPath}?_target=<FULL_UPSTREAM_URL>
 class ReverseProxyHttpClient implements HttpClient {
+  /// Creates an HttpClient wrapper for reverse-proxy operation.
+  ///
+  /// [upstreamBaseUrl] - target server base URL that requests will be proxied to.
+  /// [proxyBaseUrl] - proxy server base URL (scheme may be omitted, will be normalized).
+  /// [proxyHttpPath] - path on the proxy server for HTTP requests (default '/httpproxy').
+  /// [allowBadCertificates] - allow self-signed or invalid SSL certificates (useful in development).
+  /// [skipPaths] - path patterns to skip (not proxy).
+  /// [skipHosts] - host patterns to skip.
+  /// [skipMethods] - HTTP methods to skip.
+  /// [allowPaths] - path patterns allowed to proxy (takes precedence over skipPaths).
+  /// [allowHosts] - host patterns allowed to proxy (takes precedence over skipHosts).
+  /// [allowMethods] - HTTP methods allowed to proxy (takes precedence over skipMethods).
+  /// [context] - security context for SSL/TLS connections.
+  /// [innerClient] - inner HttpClient for executing requests. If not set, a new one is created.
   ReverseProxyHttpClient({
     required String upstreamBaseUrl,
     required String proxyBaseUrl,
@@ -46,6 +60,10 @@ class ReverseProxyHttpClient implements HttpClient {
   final List<Pattern>? _allowHosts;
   final List<String>? _allowMethods; // uppercase
 
+  /// Opens an HTTP request to the specified host, port, and path.
+  ///
+  /// Automatically determines scheme (http/https) from the port and delegates
+  /// execution to [openUrl].
   @override
   Future<HttpClientRequest> open(
     String method,
@@ -60,6 +78,11 @@ class ReverseProxyHttpClient implements HttpClient {
     );
   }
 
+  /// Opens an HTTP request to the specified URL.
+  ///
+  /// If the URL is not HTTP/HTTPS, already targets the proxy, or should be bypassed
+  /// (per skip/allow rules), the request is executed directly. Otherwise the URL is rewritten
+  /// to reverse-proxy format and the request is sent to the proxy server.
   @override
   Future<HttpClientRequest> openUrl(String method, Uri url) {
     if (!_isHttpScheme(url.scheme)) {
@@ -79,45 +102,57 @@ class ReverseProxyHttpClient implements HttpClient {
     return _inner.openUrl(method, proxyUri);
   }
 
+  /// Performs a GET request to the specified host, port, and path.
   @override
   Future<HttpClientRequest> get(String host, int port, String path) =>
       open('GET', host, port, path);
 
+  /// Performs a GET request to the specified URL.
   @override
   Future<HttpClientRequest> getUrl(Uri url) => openUrl('GET', url);
 
+  /// Performs a POST request to the specified host, port, and path.
   @override
   Future<HttpClientRequest> post(String host, int port, String path) =>
       open('POST', host, port, path);
 
+  /// Performs a POST request to the specified URL.
   @override
   Future<HttpClientRequest> postUrl(Uri url) => openUrl('POST', url);
 
+  /// Performs a PUT request to the specified host, port, and path.
   @override
   Future<HttpClientRequest> put(String host, int port, String path) =>
       open('PUT', host, port, path);
 
+  /// Performs a PUT request to the specified URL.
   @override
   Future<HttpClientRequest> putUrl(Uri url) => openUrl('PUT', url);
 
+  /// Performs a DELETE request to the specified host, port, and path.
   @override
   Future<HttpClientRequest> delete(String host, int port, String path) =>
       open('DELETE', host, port, path);
 
+  /// Performs a DELETE request to the specified URL.
   @override
   Future<HttpClientRequest> deleteUrl(Uri url) => openUrl('DELETE', url);
 
+  /// Performs a PATCH request to the specified host, port, and path.
   @override
   Future<HttpClientRequest> patch(String host, int port, String path) =>
       open('PATCH', host, port, path);
 
+  /// Performs a PATCH request to the specified URL.
   @override
   Future<HttpClientRequest> patchUrl(Uri url) => openUrl('PATCH', url);
 
+  /// Performs a HEAD request to the specified host, port, and path.
   @override
   Future<HttpClientRequest> head(String host, int port, String path) =>
       open('HEAD', host, port, path);
 
+  /// Performs a HEAD request to the specified URL.
   @override
   Future<HttpClientRequest> headUrl(Uri url) => openUrl('HEAD', url);
 

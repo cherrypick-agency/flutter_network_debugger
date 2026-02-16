@@ -1,3 +1,6 @@
+/// Ensures the string starts with http:// or https://.
+///
+/// If scheme is missing, adds http:// (or https:// for port 443).
 String ensureHttpScheme(String value) {
   var v = value.trim();
   if (v.isEmpty) return v;
@@ -8,6 +11,9 @@ String ensureHttpScheme(String value) {
   return 'http://$v';
 }
 
+/// Builds target URL for Engine.IO proxy.
+///
+/// Converts ws(s) to http(s) and adds EIO=4&transport=websocket params.
 String buildEngineIoTarget(String baseUrl, String path) {
   // ws(s) -> http(s), plus EIO=4&transport=websocket
   var base = baseUrl.trim();
@@ -31,6 +37,9 @@ String buildEngineIoTarget(String baseUrl, String path) {
   return '$scheme://$authority$p';
 }
 
+/// Returns the path unchanged.
+///
+/// Proxy path may not include /socket.io, so we don't append anything.
 String maybeAppendEngineIoPath(String path) {
   // Don't append anything: proxy path may not include '/socket.io'
   return path;

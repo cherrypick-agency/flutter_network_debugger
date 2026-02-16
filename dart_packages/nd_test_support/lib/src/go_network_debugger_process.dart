@@ -5,6 +5,9 @@ import 'dart:io';
 import 'ports.dart';
 import 'repo_root.dart';
 
+/// Go network debugger process for use in tests.
+///
+/// Manages the debugger process lifecycle and provides access to its API and proxy ports.
 class GoNetworkDebuggerProcess {
   GoNetworkDebuggerProcess._({
     required this.process,
@@ -13,16 +16,27 @@ class GoNetworkDebuggerProcess {
     required this.stdoutLines,
   });
 
+  /// The debugger process.
   final Process process;
+
+  /// API server port of the debugger.
   final int apiPort;
+
+  /// Proxy server port of the debugger.
   final int proxyPort;
+
+  /// Lines from process stdout.
   final List<String> stdoutLines;
 
+  /// Base URI for debugger API.
   Uri get apiBase => Uri.parse('http://127.0.0.1:$apiPort');
+
+  /// Base URI for debugger HTTP proxy.
   Uri get proxyHttpBase => Uri.parse('http://127.0.0.1:$proxyPort');
 
   static Future<String>? _binaryPathFuture;
 
+  /// Checks if Go compiler is installed on the system.
   static bool hasGo() {
     try {
       final r = Process.runSync('go', const ['version']);
@@ -63,6 +77,9 @@ class GoNetworkDebuggerProcess {
     return _binaryPathFuture!;
   }
 
+  /// Starts the debugger process.
+  ///
+  /// Compiles the binary if needed and picks free ports.
   static Future<GoNetworkDebuggerProcess> start({
     String logLevel = 'error',
   }) async {
@@ -121,6 +138,9 @@ class GoNetworkDebuggerProcess {
     throw TimeoutException('failed to start network-debugger after retries');
   }
 
+  /// Stops the debugger process.
+  ///
+  /// Sends SIGTERM first, then SIGKILL if the process does not exit.
   Future<void> stop() async {
     process.kill(ProcessSignal.sigterm);
     try {
