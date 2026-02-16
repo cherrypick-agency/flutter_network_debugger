@@ -75,6 +75,11 @@ func (s *Store) StopCapture() int {
 func (s *Store) CreateSession(ctx context.Context, sess domain.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Idempotency guard: the same session id can arrive more than once from
+	// external ingest sources. Do not duplicate order/items in this case.
+	if _, exists := s.items[sess.ID]; exists {
+		return nil
+	}
 	// evict by ttl
 	s.evictExpiredLocked()
 	// evict by capacity

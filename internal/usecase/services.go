@@ -88,6 +88,13 @@ func (s *SessionService) DeleteImported(ctx context.Context) error {
 }
 
 func (s *SessionService) AddFrame(ctx context.Context, sessionID string, frame domain.Frame) error {
+	if frame.ID != "" {
+		if _, exists, err := s.frames.GetFrameByID(ctx, sessionID, frame.ID); err != nil {
+			return err
+		} else if exists {
+			return nil
+		}
+	}
 	if err := s.frames.AppendFrame(ctx, sessionID, frame); err != nil {
 		return err
 	}

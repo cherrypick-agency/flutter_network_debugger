@@ -437,6 +437,7 @@ func buildBaseMux(d *Deps) *http.ServeMux {
 	})
 	mux.HandleFunc("/_api/v1/sessions", d.handleV1ListSessions)
 	mux.HandleFunc("/_api/v1/sessions/aggregate", d.handleV1SessionsAggregate)
+	mux.HandleFunc("POST /_api/v1/ingest/firebase_database", d.handleV1IngestFirebaseDatabase)
 	// HAR export/import
 	mux.HandleFunc("/_api/v1/export/har", d.handleExportHAR)
 	mux.HandleFunc("/_api/v1/import/har", d.handleImportHAR)

@@ -51,6 +51,8 @@ class QuickFiltersBar extends StatelessWidget {
             'http': 'HTTP',
             'https': 'HTTPS',
             'ws': 'WebSocket',
+            'firebase': 'Firebase',
+            'rtdb': 'RTDB',
             'json': 'JSON',
             'form': 'Form',
             'xml': 'XML',

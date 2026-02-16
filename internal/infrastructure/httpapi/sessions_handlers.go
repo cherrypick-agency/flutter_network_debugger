@@ -599,6 +599,20 @@ func computeBaseTags(v sessionV1) map[string]struct{} {
 	if strings.ToLower(v.Kind) == "ws" {
 		tags["ws"] = struct{}{}
 	}
+	if strings.ToLower(v.Kind) == firebaseSessionKind {
+		tags["firebase"] = struct{}{}
+		tags["rtdb"] = struct{}{}
+		tags["firebase_database"] = struct{}{}
+	}
+	if u, err := (&urlParser{}).parse(v.Target); err == nil {
+		host := strings.ToLower(u.Host)
+		if i := strings.Index(host, ":"); i > 0 {
+			host = host[:i]
+		}
+		if strings.HasSuffix(host, "firebaseio.com") || strings.HasSuffix(host, "firebasedatabase.app") {
+			tags["firebase"] = struct{}{}
+		}
+	}
 	// mime categories
 	if v.HttpMeta != nil {
 		mime := strings.ToLower(v.HttpMeta.Mime)
@@ -1162,7 +1176,7 @@ func allAllowedFold(allowed []string, requested []string) bool {
 	for _, r := range requested {
 		ok := false
 		for _, a := range allowed {
-			if strings.ToLower(a) == strings.ToLower(r) {
+			if strings.EqualFold(a, r) {
 				ok = true
 				break
 			}
@@ -1178,9 +1192,8 @@ func getFold(h map[string]string, key string) string {
 	if h == nil {
 		return ""
 	}
-	lk := strings.ToLower(key)
 	for k, v := range h {
-		if strings.ToLower(k) == lk {
+		if strings.EqualFold(k, key) {
 			return v
 		}
 	}

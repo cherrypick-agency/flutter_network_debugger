@@ -368,7 +368,10 @@ class _SessionsColumnState extends State<SessionsColumn> {
         final corsOk = hasResponse
             ? ((meta['cors']?['ok'] ?? true) == true)
             : true;
-        final isWs = (s.kind == 'ws') || (method.isEmpty && (s.kind == null));
+        final isWs =
+            (s.kind == 'firebase_database') ||
+            (s.kind == 'ws') ||
+            (method.isEmpty && (s.kind == null));
 
         final idStr = (s.id as String);
         final isNew = !_seenSessionIds.contains(idStr);
@@ -494,9 +497,16 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                     ),
                                   if (isWs)
                                     _chip(
-                                      (s.closedAt == null)
-                                          ? 'WS open'
-                                          : 'WS closed',
+                                      (() {
+                                        if (s.kind == 'firebase_database') {
+                                          return (s.closedAt == null)
+                                              ? 'RTDB open'
+                                              : 'RTDB closed';
+                                        }
+                                        return (s.closedAt == null)
+                                            ? 'WS open'
+                                            : 'WS closed';
+                                      })(),
                                       backgroundColor: (s.closedAt == null)
                                           ? Theme.of(context)
                                                 .colorScheme
@@ -522,7 +532,9 @@ class _SessionsColumnState extends State<SessionsColumn> {
                                         ).colorScheme.error,
                                       ),
                                     ),
-                                  if (isWs && s.isSocketIo == true)
+                                  if (isWs &&
+                                      s.kind != 'firebase_database' &&
+                                      s.isSocketIo == true)
                                     _chip('socket.io'),
                                   if (!isWs && method.isNotEmpty)
                                     _chip(

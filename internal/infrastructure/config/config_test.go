@@ -165,6 +165,17 @@ func TestFromEnv_MITMDomainLists(t *testing.T) {
 	}
 }
 
+func TestFromEnv_IngestAllowRemote(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("INGEST_ALLOW_REMOTE", "true")
+
+	cfg := FromEnv()
+
+	if !cfg.IngestAllowRemote {
+		t.Fatalf("IngestAllowRemote should be true when INGEST_ALLOW_REMOTE=true")
+	}
+}
+
 func TestFromEnv_DEV_MODE_One(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("DEV_MODE", "1")

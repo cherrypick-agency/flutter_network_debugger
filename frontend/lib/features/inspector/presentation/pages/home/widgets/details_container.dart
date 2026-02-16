@@ -35,7 +35,9 @@ class DetailsContainer extends StatelessWidget {
       }
     }
     final method = (meta?['method'] ?? '').toString();
-    final isWs = (kind == 'ws') || (method.isEmpty && kind == null);
+    final isFirebase = kind == 'firebase_database';
+    final isWs =
+        isFirebase || (kind == 'ws') || (method.isEmpty && kind == null);
     selIsWs = isWs;
     selIsHttp = !isWs;
 

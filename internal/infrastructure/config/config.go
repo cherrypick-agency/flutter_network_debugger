@@ -91,6 +91,8 @@ type Config struct {
 	// Mapping (Map Local/Remote)
 	MappingEnabled     bool
 	MappingUploadMaxMB int
+	// Ingest API security
+	IngestAllowRemote bool
 }
 
 // CookiesConfig controls reverse-proxy cookie rewriting behavior
@@ -263,6 +265,9 @@ func FromEnv() Config {
 		cfg.MappingEnabled = true
 	}
 	cfg.MappingUploadMaxMB = getEnvInt("MAPPING_UPLOAD_MAX_MB", 20)
+	if os.Getenv("INGEST_ALLOW_REMOTE") == "1" || os.Getenv("INGEST_ALLOW_REMOTE") == "true" {
+		cfg.IngestAllowRemote = true
+	}
 	return cfg
 }
 

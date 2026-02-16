@@ -935,6 +935,36 @@ func TestAppendFrame(t *testing.T) {
 	}
 }
 
+func TestCreateSession_IdempotentByID(t *testing.T) {
+	store := NewStore(10, 100, 0)
+	ctx := context.Background()
+
+	sess := domain.Session{ID: "same-id", Target: "ws://example.com"}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatalf("first CreateSession failed: %v", err)
+	}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatalf("second CreateSession failed: %v", err)
+	}
+
+	items, total, err := store.ListSessions(ctx, usecase.SessionFilter{
+		Limit:             100,
+		IncludeUnassigned: true,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total=%d, want 1", total)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items)=%d, want 1", len(items))
+	}
+	if items[0].ID != "same-id" {
+		t.Fatalf("id=%s, want same-id", items[0].ID)
+	}
+}
+
 func TestAppendFrame_Eviction(t *testing.T) {
 	store := NewStore(10, 2, 0) // maxFrames = 2
 	ctx := context.Background()

@@ -1,0 +1,46 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import 'firebase_database_debugger_config.dart';
+import 'models.dart';
+
+class FirebaseIngestClient {
+  FirebaseIngestClient({
+    required FirebaseDatabaseDebuggerConfig config,
+    http.Client? httpClient,
+  })  : _config = config,
+        _http = httpClient ?? http.Client(),
+        _ownsHttp = httpClient == null;
+
+  final FirebaseDatabaseDebuggerConfig _config;
+  final http.Client _http;
+  final bool _ownsHttp;
+
+  Future<void> ingest(FirebaseIngestRequest request) async {
+    final base = _config.debuggerBaseUrl.trim();
+    if (base.isEmpty) return;
+    final uri = Uri.parse(base).replace(
+      path: '/_api/v1/ingest/firebase_database',
+      query: null,
+      queryParameters: null,
+    );
+    final headers = <String, String>{
+      'content-type': 'application/json',
+      if ((_config.adminToken ?? '').trim().isNotEmpty)
+        'X-Admin-Token': _config.adminToken!.trim(),
+    };
+    final response = await _http.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(request.toJson()),
+    );
+    if (response.statusCode == 204) return;
+  }
+
+  void dispose() {
+    if (_ownsHttp) {
+      _http.close();
+    }
+  }
+}

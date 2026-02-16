@@ -190,6 +190,16 @@ Set<String> _tagsForSession(dynamic s, Map<String, dynamic> meta) {
     if (kind == 'ws') {
       tags.add('ws');
     }
+    if (kind == 'firebase_database') {
+      tags.add('firebase');
+      tags.add('rtdb');
+      tags.add('firebase_database');
+    }
+    final host = uri.host.toLowerCase();
+    if (host.endsWith('firebaseio.com') ||
+        host.endsWith('firebasedatabase.app')) {
+      tags.add('firebase');
+    }
   } catch (_) {}
 
   final mime = (meta['mime'] ?? '').toString().toLowerCase();

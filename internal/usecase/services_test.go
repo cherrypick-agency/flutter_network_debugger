@@ -16,6 +16,11 @@ type mockSessionRepo struct {
 	sessions map[string]domain.Session
 }
 
+type counterSessionRepo struct {
+	mockSessionRepo
+	incrementCalls int
+}
+
 func (m *mockSessionRepo) CreateSession(ctx context.Context, s domain.Session) error {
 	m.sessions[s.ID] = s
 	return nil
@@ -40,6 +45,11 @@ func (m *mockSessionRepo) ListSessions(ctx context.Context, f SessionFilter) ([]
 }
 
 func (m *mockSessionRepo) IncrementCounters(ctx context.Context, id string, frame domain.Frame) error {
+	return nil
+}
+
+func (m *counterSessionRepo) IncrementCounters(ctx context.Context, id string, frame domain.Frame) error {
+	m.incrementCalls++
 	return nil
 }
 
@@ -81,6 +91,12 @@ func (m *mockFrameRepo) ListFrames(ctx context.Context, sessionID string, from s
 }
 
 func (m *mockFrameRepo) GetFrameByID(ctx context.Context, sessionID string, frameID string) (domain.Frame, bool, error) {
+	frames := m.frames[sessionID]
+	for i := range frames {
+		if frames[i].ID == frameID {
+			return frames[i], true, nil
+		}
+	}
 	return domain.Frame{}, false, nil
 }
 
@@ -249,6 +265,30 @@ func TestSessionService_AddFrame(t *testing.T) {
 	}
 	if len(frameRepo.frames["test1"]) != 1 {
 		t.Errorf("expected 1 frame, got %d", len(frameRepo.frames["test1"]))
+	}
+}
+
+func TestSessionService_AddFrame_DuplicateIDIsIgnored(t *testing.T) {
+	sessRepo := &counterSessionRepo{
+		mockSessionRepo: mockSessionRepo{sessions: make(map[string]domain.Session)},
+	}
+	frameRepo := &mockFrameRepo{frames: make(map[string][]domain.Frame)}
+	svc := NewSessionService(sessRepo, frameRepo, &mockEventRepo{})
+	ctx := context.Background()
+
+	frame := domain.Frame{ID: "frame-dup", Opcode: domain.OpcodeText}
+	if err := svc.AddFrame(ctx, "test1", frame); err != nil {
+		t.Fatalf("first AddFrame failed: %v", err)
+	}
+	if err := svc.AddFrame(ctx, "test1", frame); err != nil {
+		t.Fatalf("second AddFrame failed: %v", err)
+	}
+
+	if got := len(frameRepo.frames["test1"]); got != 1 {
+		t.Fatalf("len(frames)=%d, want=1", got)
+	}
+	if sessRepo.incrementCalls != 1 {
+		t.Fatalf("incrementCalls=%d, want=1", sessRepo.incrementCalls)
 	}
 }
 

@@ -119,10 +119,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
       final start = (times.start ?? now);
       final end = (times.end ?? now);
       _viewStart = start;
-      _viewEnd =
-          end.isAfter(_viewStart.add(const Duration(milliseconds: 100)))
-              ? end
-              : _viewStart.add(const Duration(seconds: 10));
+      _viewEnd = end.isAfter(_viewStart.add(const Duration(milliseconds: 100)))
+          ? end
+          : _viewStart.add(const Duration(seconds: 10));
     }
     _axisStart = _viewStart;
   }
@@ -236,10 +235,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
       end = start.add(Duration(milliseconds: minSpanMs));
       if (end.isAfter(maxEnd)) {
         end = maxEnd;
-        start =
-            (end.subtract(Duration(milliseconds: minSpanMs)).isBefore(ds))
-                ? ds
-                : end.subtract(Duration(milliseconds: minSpanMs));
+        start = (end.subtract(Duration(milliseconds: minSpanMs)).isBefore(ds))
+            ? ds
+            : end.subtract(Duration(milliseconds: minSpanMs));
       }
     }
     _viewStart = start;
@@ -270,11 +268,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
           SingleActivator(LogicalKeyboardKey.arrowLeft): () => _pan(-0.2),
         if (!useFixed)
           SingleActivator(LogicalKeyboardKey.arrowRight): () => _pan(0.2),
-        SingleActivator(LogicalKeyboardKey.escape):
-            () => setState(() {
-              _dragStart = null;
-              _dragCurrent = null;
-            }),
+        SingleActivator(LogicalKeyboardKey.escape): () => setState(() {
+          _dragStart = null;
+          _dragCurrent = null;
+        }),
       },
       child: Focus(
         autofocus: false,
@@ -283,8 +280,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final now = DateTime.now();
-              final windowStart =
-                  useFixed ? now.subtract(widget.fixedWindow!) : null;
+              final windowStart = useFixed
+                  ? now.subtract(widget.fixedWindow!)
+                  : null;
               final windowEnd = useFixed ? now : null;
 
               final dataBounds = _timesOf(widget.sessions);
@@ -311,11 +309,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                 }
               }
 
-              final fullMs = (dataEnd
-                      .difference(dataStart)
-                      .inMilliseconds
-                      .toDouble())
-                  .clamp(1.0, 86400000.0);
+              final fullMs =
+                  (dataEnd.difference(dataStart).inMilliseconds.toDouble())
+                      .clamp(1.0, 86400000.0);
               final minContent = math.max(
                 constraints.maxWidth - widget.padding.horizontal,
                 800.0,
@@ -327,43 +323,39 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
               );
               // With fixed window we always use fit to window
               final bool useFitAllNow = useFixed ? true : _isFitAll;
-              final double pxPerMs =
-                  useFitAllNow
-                      ? (fullMs > 0 ? (fitWidthPx / fullMs) : 1.0)
-                      : _pxPerMs(
-                        _viewEnd
-                            .difference(_viewStart)
-                            .inMilliseconds
-                            .toDouble(),
-                      );
+              final double pxPerMs = useFitAllNow
+                  ? (fullMs > 0 ? (fitWidthPx / fullMs) : 1.0)
+                  : _pxPerMs(
+                      _viewEnd.difference(_viewStart).inMilliseconds.toDouble(),
+                    );
 
               final items = _computeLayoutItems(widget.sessions);
-              final lanes =
-                  items.isEmpty
-                      ? 1
-                      : (items.map((e) => e.lane).reduce(math.max) + 1);
+              final lanes = items.isEmpty
+                  ? 1
+                  : (items.map((e) => e.lane).reduce(math.max) + 1);
               // dynamic lane height: higher timeline = higher bars
               // if auto-compression enabled (autoCompressLanes == true) — fit to available height
               double laneHeight = _laneHeight;
               final bool compressLanes =
                   (widget.autoCompressLanes ?? widget.expandToParent);
               if (compressLanes && constraints.hasBoundedHeight && lanes > 0) {
-                final available = (constraints.maxHeight -
-                        widget.padding.vertical -
-                        _axisHeight)
-                    .clamp(0.0, double.infinity);
+                final available =
+                    (constraints.maxHeight -
+                            widget.padding.vertical -
+                            _axisHeight)
+                        .clamp(0.0, double.infinity);
                 final candidate = (available / lanes) - _laneGap;
-                laneHeight =
-                    candidate.clamp(_laneHeight, _maxLaneHeight).toDouble();
+                laneHeight = candidate
+                    .clamp(_laneHeight, _maxLaneHeight)
+                    .toDouble();
               }
               final lanesHeight = lanes * (laneHeight + _laneGap);
               final contentHeight =
                   _axisHeight + lanesHeight + widget.padding.vertical;
               final vOff = _vCtrl.hasClients ? _vCtrl.offset : 0.0;
-              final contentWidth =
-                  useFitAllNow
-                      ? minContent
-                      : (fullMs * pxPerMs).clamp(minContent, 2000000.0);
+              final contentWidth = useFitAllNow
+                  ? minContent
+                  : (fullMs * pxPerMs).clamp(minContent, 2000000.0);
               // Keep mapping origin consistent with painting
               _axisStart = dataStart;
 
@@ -385,8 +377,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                         height: math.max(
                           (widget.expandToParent
                               ? (constraints.hasBoundedHeight
-                                  ? constraints.maxHeight
-                                  : widget.height)
+                                    ? constraints.maxHeight
+                                    : widget.height)
                               : widget.height),
                           contentHeight,
                         ),
@@ -406,8 +398,9 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                             // Disable Fit All only on actual zoom
                             _setFitAll(false);
                             final raw = (1 / d.scale);
-                            final spanMs =
-                                _viewEnd.difference(_viewStart).inMilliseconds;
+                            final spanMs = _viewEnd
+                                .difference(_viewStart)
+                                .inMilliseconds;
                             int div;
                             if (spanMs <= 2000)
                               div = 8; // super soft at close zoom
@@ -560,14 +553,17 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                         pxPerMs: pxPerMs,
                                         axisHeight: _axisHeight,
                                         padding: widget.padding,
-                                        colorScheme:
-                                            Theme.of(context).colorScheme,
-                                        textStyle: Theme.of(
+                                        colorScheme: Theme.of(
                                           context,
-                                        ).textTheme.labelSmall?.copyWith(
-                                          color:
-                                              context.appColors.textSecondary,
-                                        ),
+                                        ).colorScheme,
+                                        textStyle: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: context
+                                                  .appColors
+                                                  .textSecondary,
+                                            ),
                                         showMilliseconds: showMs,
                                       ),
                                     ),
@@ -581,14 +577,17 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                         pxPerMs: pxPerMs,
                                         axisHeight: _axisHeight,
                                         padding: widget.padding,
-                                        colorScheme:
-                                            Theme.of(context).colorScheme,
-                                        textStyle: Theme.of(
+                                        colorScheme: Theme.of(
                                           context,
-                                        ).textTheme.labelSmall?.copyWith(
-                                          color:
-                                              context.appColors.textSecondary,
-                                        ),
+                                        ).colorScheme,
+                                        textStyle: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: context
+                                                  .appColors
+                                                  .textSecondary,
+                                            ),
                                         showMilliseconds: showMs,
                                       ),
                                     ),
@@ -597,18 +596,18 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                   ...items.map((it) {
                                     final ts =
                                         it.session.startedAt ?? dataStart;
-                                    final startMsRaw =
-                                        ts
-                                            .difference(dataStart)
-                                            .inMilliseconds
-                                            .toDouble();
+                                    final startMsRaw = ts
+                                        .difference(dataStart)
+                                        .inMilliseconds
+                                        .toDouble();
                                     // For active — right boundary = now
                                     final endTs = it.session.closedAt ?? now;
-                                    double durMs = (endTs
-                                            .difference(ts)
-                                            .inMilliseconds
-                                            .toDouble())
-                                        .clamp(1.0, double.infinity);
+                                    double durMs =
+                                        (endTs
+                                                .difference(ts)
+                                                .inMilliseconds
+                                                .toDouble())
+                                            .clamp(1.0, double.infinity);
                                     double startMs = startMsRaw;
                                     // Hard cropping at window edges
                                     if (useFixed) {
@@ -619,11 +618,10 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                         startMs = leftEdgeMs;
                                         durMs = math.max(0.0, durMs - delta);
                                       }
-                                      final rightEdgeMs =
-                                          (dataEnd
-                                              .difference(dataStart)
-                                              .inMilliseconds
-                                              .toDouble());
+                                      final rightEdgeMs = (dataEnd
+                                          .difference(dataStart)
+                                          .inMilliseconds
+                                          .toDouble());
                                       final barEndMs = startMs + durMs;
                                       if (barEndMs > rightEdgeMs) {
                                         durMs = math.max(
@@ -661,12 +659,12 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                         it.lane * (laneHeight + _laneGap);
                                     final isSelectedExt =
                                         (widget.selectedSessionIdExt != null &&
-                                            widget.selectedSessionIdExt ==
-                                                it.session.id);
+                                        widget.selectedSessionIdExt ==
+                                            it.session.id);
                                     final isHoverExt =
                                         (widget.hoveredSessionIdExt != null &&
-                                            widget.hoveredSessionIdExt ==
-                                                it.session.id);
+                                        widget.hoveredSessionIdExt ==
+                                            it.session.id);
                                     final isHover =
                                         _hoverSessionId == it.session.id ||
                                         isHoverExt ||
@@ -684,14 +682,12 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                     );
                                     final isActive =
                                         it.session.closedAt == null;
-                                    final pulse =
-                                        isActive
-                                            ? (0.6 + 0.4 * _pulse.value)
-                                            : 1.0;
-                                    final baseAlpha =
-                                        isHover
-                                            ? (isSelectedExt ? 1.0 : 0.95)
-                                            : 0.75;
+                                    final pulse = isActive
+                                        ? (0.6 + 0.4 * _pulse.value)
+                                        : 1.0;
+                                    final baseAlpha = isHover
+                                        ? (isSelectedExt ? 1.0 : 0.95)
+                                        : 0.75;
                                     final color = tuned.withOpacity(
                                       (baseAlpha * pulse).clamp(0.0, 1.0),
                                     );
@@ -707,14 +703,12 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                           _suppressSelectionOnce = true;
                                         },
                                         child: MouseRegion(
-                                          onEnter:
-                                              (_) => setState(() {
-                                                _hoverSessionId = it.session.id;
-                                              }),
-                                          onExit:
-                                              (_) => setState(() {
-                                                _hoverSessionId = null;
-                                              }),
+                                          onEnter: (_) => setState(() {
+                                            _hoverSessionId = it.session.id;
+                                          }),
+                                          onExit: (_) => setState(() {
+                                            _hoverSessionId = null;
+                                          }),
                                           cursor: SystemMouseCursors.click,
                                           child: Tooltip(
                                             message: tooltip,
@@ -741,12 +735,11 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                                           ),
                                                       border: Border.all(
                                                         color: borderColor,
-                                                        width:
-                                                            isSelectedExt
-                                                                ? 2
-                                                                : (isHover
-                                                                    ? 1.3
-                                                                    : 1),
+                                                        width: isSelectedExt
+                                                            ? 2
+                                                            : (isHover
+                                                                  ? 1.3
+                                                                  : 1),
                                                       ),
                                                     ),
                                                   ),
@@ -758,28 +751,28 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                                             horizontal: 4,
                                                           ),
                                                       child: Align(
-                                                        alignment:
-                                                            Alignment
-                                                                .centerLeft,
+                                                        alignment: Alignment
+                                                            .centerLeft,
                                                         child: Text(
                                                           _barLabel(it.session),
                                                           overflow:
                                                               TextOverflow.fade,
                                                           softWrap: false,
-                                                          style: Theme.of(
-                                                            context,
-                                                          ).textTheme.labelSmall?.copyWith(
-                                                            color:
-                                                                ThemeData.estimateBrightnessForColor(
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .labelSmall
+                                                              ?.copyWith(
+                                                                color:
+                                                                    ThemeData.estimateBrightnessForColor(
                                                                           color,
                                                                         ) ==
                                                                         Brightness
                                                                             .dark
                                                                     ? Colors
-                                                                        .white
+                                                                          .white
                                                                     : Colors
-                                                                        .black,
-                                                          ),
+                                                                          .black,
+                                                              ),
                                                         ),
                                                       ),
                                                     ),
@@ -845,9 +838,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                               top: top,
                                               bottom: widget.padding.bottom,
                                               child: MouseRegion(
-                                                cursor:
-                                                    SystemMouseCursors
-                                                        .resizeColumn,
+                                                cursor: SystemMouseCursors
+                                                    .resizeColumn,
                                                 child: Container(
                                                   width: 6,
                                                   color: Theme.of(context)
@@ -866,9 +858,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
                                               top: top,
                                               bottom: widget.padding.bottom,
                                               child: MouseRegion(
-                                                cursor:
-                                                    SystemMouseCursors
-                                                        .resizeColumn,
+                                                cursor: SystemMouseCursors
+                                                    .resizeColumn,
                                                 child: Container(
                                                   width: 6,
                                                   color: Theme.of(context)
@@ -937,11 +928,13 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
 
   String _sessionLabel(Session s) {
     final uri = _safeUri(s.target);
-    final String pathStr =
-        (uri != null && uri.path.isNotEmpty) ? uri.path : s.target;
+    final String pathStr = (uri != null && uri.path.isNotEmpty)
+        ? uri.path
+        : s.target;
     final host = uri?.host ?? '';
-    final method =
-        (s.httpMeta != null ? (s.httpMeta!['method']?.toString() ?? '') : '');
+    final method = (s.httpMeta != null
+        ? (s.httpMeta!['method']?.toString() ?? '')
+        : '');
     final kind = s.kind ?? (method.isEmpty ? 'ws' : 'http');
     final dur = _formatDurationBrief(_durationOf(s));
     if (method.isNotEmpty) {
@@ -991,9 +984,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
 
   List<_LayoutItem> _computeLayoutItems(List<Session> sessions) {
     final items = <_LayoutItem>[];
-    final sorted =
-        sessions.where((s) => s.startedAt != null).toList()
-          ..sort((a, b) => a.startedAt!.compareTo(b.startedAt!));
+    final sorted = sessions.where((s) => s.startedAt != null).toList()
+      ..sort((a, b) => a.startedAt!.compareTo(b.startedAt!));
 
     final laneEnds = <DateTime>[];
 
@@ -1064,7 +1056,8 @@ class _WaterfallTimelineState extends State<WaterfallTimeline>
   Color _barColor(BuildContext context, Session s) {
     final cs = Theme.of(context).colorScheme;
     final status = int.tryParse((s.httpMeta?['status'] ?? '').toString()) ?? 0;
-    if (s.kind == 'ws' ||
+    if (s.kind == 'firebase_database' ||
+        s.kind == 'ws' ||
         (s.kind == null && (s.httpMeta?['method'] ?? '').toString().isEmpty)) {
       return cs.primary;
     }
@@ -1180,10 +1173,9 @@ class _GridPainter extends CustomPainter {
     final axisBottom = top + axisHeight;
     final totalMs = end.difference(start).inMilliseconds;
 
-    final gridPaint =
-        Paint()
-          ..color = colorScheme.outlineVariant.withOpacity(0.5)
-          ..strokeWidth = 1;
+    final gridPaint = Paint()
+      ..color = colorScheme.outlineVariant.withOpacity(0.5)
+      ..strokeWidth = 1;
 
     // adaptive grid/labels
     const double minGridPx = 24; // minimal px between grid lines
@@ -1226,10 +1218,9 @@ class _GridPainter extends CustomPainter {
     }
 
     // axis baseline
-    final axisPaint =
-        Paint()
-          ..color = colorScheme.outline
-          ..strokeWidth = 1.5;
+    final axisPaint = Paint()
+      ..color = colorScheme.outline
+      ..strokeWidth = 1.5;
     canvas.drawLine(
       Offset(left, axisBottom),
       Offset(size.width - padding.right, axisBottom),
