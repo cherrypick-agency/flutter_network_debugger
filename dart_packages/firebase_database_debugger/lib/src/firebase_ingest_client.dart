@@ -5,7 +5,14 @@ import 'package:http/http.dart' as http;
 import 'firebase_database_debugger_config.dart';
 import 'models.dart';
 
+/// HTTP-клиент для отправки отладочных данных в ingest API дебаггера.
+///
+/// Все ошибки сети глотаются — отладочный канал не должен ломать приложение.
 class FirebaseIngestClient {
+  /// Создаёт клиент с заданной конфигурацией.
+  ///
+  /// Если [httpClient] не передан, создаётся свой экземпляр `http.Client`,
+  /// который будет закрыт при вызове [dispose].
   FirebaseIngestClient({
     required FirebaseDatabaseDebuggerConfig config,
     http.Client? httpClient,
@@ -17,6 +24,10 @@ class FirebaseIngestClient {
   final http.Client _http;
   final bool _ownsHttp;
 
+  /// Отправляет [request] на endpoint `/_api/v1/ingest/firebase_database`.
+  ///
+  /// Таймаут — 2 секунды. Если бэкенд недоступен или вернул ошибку,
+  /// исключение подавляется.
   Future<void> ingest(FirebaseIngestRequest request) async {
     final base = _config.debuggerBaseUrl.trim();
     if (base.isEmpty) return;
@@ -40,11 +51,12 @@ class FirebaseIngestClient {
           .timeout(const Duration(seconds: 2));
       if (response.statusCode == 204) return;
     } catch (_) {
-      // Это отладочный канал: если UI/бэкенд недоступен — не мешаем приложению.
+      // Если UI/бэкенд недоступен — не мешаем приложению.
       return;
     }
   }
 
+  /// Закрывает HTTP-клиент, если он был создан внутри этого класса.
   void dispose() {
     if (_ownsHttp) {
       _http.close();

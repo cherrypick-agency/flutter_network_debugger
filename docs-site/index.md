@@ -28,14 +28,14 @@ features:
 
 | Package | Description |
 | --- | --- |
-| `network_debugger` | CLI launcher — starts the proxy and opens the UI |
-| `dio_debugger` | Attaches the proxy to a Dio HTTP client |
-| `http_debugger` | Global HTTP interception via `HttpOverrides` |
-| `web_socket_debugger` | Integration with `dart:io` WebSocket |
-| `web_socket_channel_debugger` | Integration with `package:web_socket_channel` |
-| `socket_io_debugger` | Integration with the Socket.IO client |
-| `firebase_database_debugger` | Sends Firebase Realtime Database operations to the ingest API |
-| `hex_viewer` | Flutter widget for viewing binary payloads in HEX |
+| [`network_debugger`](https://pub.dev/packages/network_debugger) | CLI launcher — starts the proxy and opens the UI |
+| [`dio_debugger`](https://pub.dev/packages/dio_debugger) | Attaches the proxy to a Dio HTTP client |
+| [`http_debugger`](https://pub.dev/packages/http_debugger) | Global HTTP interception via `HttpOverrides` |
+| [`web_socket_debugger`](https://pub.dev/packages/web_socket_debugger) | Integration with `dart:io` WebSocket |
+| [`web_socket_channel_debugger`](https://pub.dev/packages/web_socket_channel_debugger) | Integration with `package:web_socket_channel` |
+| [`socket_io_debugger`](https://pub.dev/packages/socket_io_debugger) | Integration with the Socket.IO client |
+| [`firebase_database_debugger`](https://pub.dev/packages/firebase_database_debugger) | Sends Firebase Realtime Database operations to the ingest API |
+| [`hex_viewer`](https://pub.dev/packages/hex_viewer) | Flutter widget for viewing binary payloads in HEX |
 
 ## How to use this documentation
 
