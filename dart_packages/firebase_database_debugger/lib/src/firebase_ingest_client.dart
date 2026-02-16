@@ -20,22 +20,29 @@ class FirebaseIngestClient {
   Future<void> ingest(FirebaseIngestRequest request) async {
     final base = _config.debuggerBaseUrl.trim();
     if (base.isEmpty) return;
-    final uri = Uri.parse(base).replace(
-      path: '/_api/v1/ingest/firebase_database',
-      query: null,
-      queryParameters: null,
-    );
-    final headers = <String, String>{
-      'content-type': 'application/json',
-      if ((_config.adminToken ?? '').trim().isNotEmpty)
-        'X-Admin-Token': _config.adminToken!.trim(),
-    };
-    final response = await _http.post(
-      uri,
-      headers: headers,
-      body: jsonEncode(request.toJson()),
-    );
-    if (response.statusCode == 204) return;
+    try {
+      final uri = Uri.parse(base).replace(
+        path: '/_api/v1/ingest/firebase_database',
+        query: null,
+        queryParameters: null,
+      );
+      final headers = <String, String>{
+        'content-type': 'application/json',
+        if ((_config.adminToken ?? '').trim().isNotEmpty)
+          'X-Admin-Token': _config.adminToken!.trim(),
+      };
+      final response = await _http
+          .post(
+            uri,
+            headers: headers,
+            body: jsonEncode(request.toJson()),
+          )
+          .timeout(const Duration(seconds: 2));
+      if (response.statusCode == 204) return;
+    } catch (_) {
+      // Это отладочный канал: если UI/бэкенд недоступен — не мешаем приложению.
+      return;
+    }
   }
 
   void dispose() {

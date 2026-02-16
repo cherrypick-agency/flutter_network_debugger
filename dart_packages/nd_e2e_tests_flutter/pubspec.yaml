@@ -1,0 +1,25 @@
+name: nd_e2e_tests_flutter
+publish_to: none
+
+description: "Internal Flutter e2e tests for network_debugger mono-repo."
+version: 0.0.1
+
+resolution: workspace
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_database_debugger:
+    path: ../firebase_database_debugger
+  nd_test_support:
+    path: ../nd_test_support
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+

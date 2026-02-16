@@ -26,6 +26,12 @@ class DetailsTabs extends StatelessWidget {
     required this.wsClosed,
     required this.wsClosedAt,
     this.wsError,
+    this.fbOpFilter = 'all',
+    this.fbStatusFilter = 'all',
+    this.fbPathFilter = '',
+    this.onChangeFbOp,
+    this.onChangeFbStatus,
+    this.onChangeFbPath,
   });
 
   // Which tabs to show
@@ -49,6 +55,14 @@ class DetailsTabs extends StatelessWidget {
   final bool wsClosed;
   final DateTime? wsClosedAt;
   final String? wsError;
+
+  // Firebase RTDB filters
+  final String fbOpFilter;
+  final String fbStatusFilter;
+  final String fbPathFilter;
+  final ValueChanged<String>? onChangeFbOp;
+  final ValueChanged<String>? onChangeFbStatus;
+  final ValueChanged<String>? onChangeFbPath;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +107,12 @@ class DetailsTabs extends StatelessWidget {
       isClosed: wsClosed,
       closedAt: wsClosedAt,
       error: wsError,
+      fbOpFilter: fbOpFilter,
+      fbStatusFilter: fbStatusFilter,
+      fbPathFilter: fbPathFilter,
+      onChangeFbOp: onChangeFbOp,
+      onChangeFbStatus: onChangeFbStatus,
+      onChangeFbPath: onChangeFbPath,
     );
   }
 

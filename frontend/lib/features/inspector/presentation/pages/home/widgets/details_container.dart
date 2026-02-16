@@ -91,6 +91,12 @@ class DetailsContainer extends StatelessWidget {
           wsClosed: wsClosed,
           wsClosedAt: wsClosedAt,
           wsError: wsError,
+          fbOpFilter: ui.fbOpFilter.value,
+          fbStatusFilter: ui.fbStatusFilter.value,
+          fbPathFilter: ui.fbPathFilter.value,
+          onChangeFbOp: (v) => ui.setFbOpFilter(v),
+          onChangeFbStatus: (v) => ui.setFbStatusFilter(v),
+          onChangeFbPath: (v) => ui.setFbPathFilter(v),
         );
       },
     );

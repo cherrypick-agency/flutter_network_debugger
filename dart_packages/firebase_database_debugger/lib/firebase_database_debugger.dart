@@ -203,7 +203,13 @@ class FirebaseDatabaseDebugger {
 
   static String _makeRunId() {
     // 8 hex chars: достаточно чтобы не конфликтовать между запусками
-    final rnd = Random.secure();
+    Random rnd;
+    try {
+      rnd = Random.secure();
+    } catch (_) {
+      // На Web Random.secure может быть недоступен. Нам крипто-стойкость не нужна.
+      rnd = Random();
+    }
     final v = rnd.nextInt(0xffffffff);
     return v.toRadixString(16).padLeft(8, '0');
   }

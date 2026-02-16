@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'widgets/inline_link.dart';
 
 import 'theme/app_theme.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -1218,6 +1218,34 @@ class _MyHomePageState extends State<MyHomePage> {
                                                         wsClosed: wsClosed,
                                                         wsClosedAt: wsClosedAt,
                                                         wsError: wsError,
+                                                        fbOpFilter:
+                                                            sl<HomeUiStore>()
+                                                                .fbOpFilter
+                                                                .value,
+                                                        fbStatusFilter:
+                                                            sl<HomeUiStore>()
+                                                                .fbStatusFilter
+                                                                .value,
+                                                        fbPathFilter:
+                                                            sl<HomeUiStore>()
+                                                                .fbPathFilter
+                                                                .value,
+                                                        onChangeFbOp: (v) {
+                                                          sl<HomeUiStore>()
+                                                              .setFbOpFilter(v);
+                                                        },
+                                                        onChangeFbStatus: (v) {
+                                                          sl<HomeUiStore>()
+                                                              .setFbStatusFilter(
+                                                                v,
+                                                              );
+                                                        },
+                                                        onChangeFbPath: (v) {
+                                                          sl<HomeUiStore>()
+                                                              .setFbPathFilter(
+                                                                v,
+                                                              );
+                                                        },
                                                       );
                                                     },
                                                   ),
@@ -1294,25 +1322,54 @@ class _SessionPlaceholder extends StatelessWidget {
                     WidgetSpan(
                       alignment: PlaceholderAlignment.baseline,
                       baseline: TextBaseline.alphabetic,
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: () => launchUrl(
-                            Uri.parse('https://pub.dev/packages/dio_debugger'),
-                          ),
-                          child: Text(
-                            'dio_debugger',
-                            style: tt.bodyMedium?.copyWith(
-                              color: cs.primary,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
+                      child: InlineLink(
+                        text: 'dio_debugger',
+                        url: 'https://pub.dev/packages/dio_debugger',
+                        style: tt.bodyMedium,
                       ),
                     ),
-                    const TextSpan(
-                      text: ' package (if you use dio) to see how it works.',
+                    const TextSpan(text: ' (Dio), '),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: InlineLink(
+                        text: 'http_debugger',
+                        url: 'https://pub.dev/packages/http_debugger',
+                        style: tt.bodyMedium,
+                      ),
                     ),
+                    const TextSpan(text: ' (package:http), '),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: InlineLink(
+                        text: 'web_socket_debugger',
+                        url: 'https://pub.dev/packages/web_socket_debugger',
+                        style: tt.bodyMedium,
+                      ),
+                    ),
+                    const TextSpan(text: ', '),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: InlineLink(
+                        text: 'socket_io_debugger',
+                        url: 'https://pub.dev/packages/socket_io_debugger',
+                        style: tt.bodyMedium,
+                      ),
+                    ),
+                    const TextSpan(text: ' and '),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: InlineLink(
+                        text: 'others',
+                        url:
+                            'https://github.com/cherrypick-agency/flutter_network_debugger#dart-packages',
+                        style: tt.bodyMedium,
+                      ),
+                    ),
+                    const TextSpan(text: '.'),
                   ],
                 ),
                 textAlign: TextAlign.left,

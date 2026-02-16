@@ -10,6 +10,8 @@ topics:
   - binary
   - debug
 
+resolution: workspace
+
 environment:
   sdk: ^3.8.0
 

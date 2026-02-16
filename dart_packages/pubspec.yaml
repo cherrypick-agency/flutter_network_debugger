@@ -2,7 +2,7 @@ name: network_debugger_workspace
 publish_to: none
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.5.0 <4.0.0"
 
 workspace:
   - dio_debugger
@@ -10,6 +10,7 @@ workspace:
   - hex_viewer
   - http_debugger
   - nd_e2e_tests
+  - nd_e2e_tests_flutter
   - nd_test_support
   - network_debugger
   - socket_io_debugger

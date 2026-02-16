@@ -4,8 +4,10 @@ publish_to: none
 description: "Internal e2e tests for network_debugger mono-repo."
 version: 0.0.1
 
+resolution: workspace
+
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.5.0 <4.0.0"
 
 dependencies:
   dio: ^5.4.0
@@ -27,5 +29,5 @@ dependencies:
     path: ../nd_test_support
 
 dev_dependencies:
-  lints: ^3.0.0
+  lints: ^6.0.0
   test: ^1.24.0

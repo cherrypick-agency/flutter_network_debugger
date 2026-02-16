@@ -2,11 +2,11 @@
 layout: home
 hero:
   name: "Network Debugger"
-  text: Документация по Dart/Flutter пакетам
-  tagline: Open-source набор инструментов для отладки HTTP, WebSocket и Socket.IO трафика с UI, CLI и прокси-бэкендом
+  text: Dart/Flutter package documentation
+  tagline: Open-source toolkit for debugging HTTP, WebSocket and Socket.IO traffic — with UI, CLI and a Go proxy backend
   actions:
     - theme: brand
-      text: Быстрый старт
+      text: Quick Start
       link: /guide/
     - theme: alt
       text: API Reference
@@ -16,29 +16,29 @@ hero:
       link: https://github.com/cherrypick-agency/flutter_network_debugger
 
 features:
-  - title: Что это за проект
-    details: Полноценный network-inspector для локальной разработки и тестовых окружений. Работает офлайн и подходит для WEB, desktop и CLI сценариев.
-  - title: Что внутри документации
-    details: Гайды + API reference по пакетам из monorepo `dart_packages` с локальным поиском и автогенерацией документации из кода.
-  - title: Для кого
-    details: Для Flutter/Dart разработчиков, которым нужен быстрый и удобный способ смотреть HTTP/WS трафик приложения в одном месте.
+  - title: What is Network Debugger
+    details: A full-featured network inspector for local development and test environments. Works offline, supports Web, Desktop (macOS/Windows/Linux) and CLI.
+  - title: Key capabilities
+    details: "HTTP/WebSocket/Socket.IO inspection, waterfall timeline, scripting (Go, Rust, JS, Python…), request mapping, throttling, breakpoints, compose/request builder, performance insights and more."
+  - title: What's in the docs
+    details: Guides and auto-generated API reference for every public package in the dart_packages monorepo, with full-text search.
 ---
 
-## Пакеты в этом workspace
+## Packages
 
-| Package | Назначение |
+| Package | Description |
 | --- | --- |
-| `network_debugger` | CLI launcher для локального прокси и UI |
-| `dio_debugger` | Подключение прокси к клиенту Dio |
-| `http_debugger` | Глобальный HTTP interception через `HttpOverrides` |
-| `web_socket_debugger` | Интеграция с `dart:io` WebSocket |
-| `web_socket_channel_debugger` | Интеграция с `package:web_socket_channel` |
-| `socket_io_debugger` | Интеграция с Socket.IO клиентом |
-| `firebase_database_debugger` | Интеграция Firebase Realtime Database операций в ingest API |
-| `hex_viewer` | Flutter widget для просмотра бинарных payload в HEX |
+| `network_debugger` | CLI launcher — starts the proxy and opens the UI |
+| `dio_debugger` | Attaches the proxy to a Dio HTTP client |
+| `http_debugger` | Global HTTP interception via `HttpOverrides` |
+| `web_socket_debugger` | Integration with `dart:io` WebSocket |
+| `web_socket_channel_debugger` | Integration with `package:web_socket_channel` |
+| `socket_io_debugger` | Integration with the Socket.IO client |
+| `firebase_database_debugger` | Sends Firebase Realtime Database operations to the ingest API |
+| `hex_viewer` | Flutter widget for viewing binary payloads in HEX |
 
-## Как читать документацию
+## How to use this documentation
 
-1. Начни с раздела `Guide`, чтобы быстро понять общий сценарий подключения.
-2. Перейди в `API Reference` для деталей классов и методов конкретного пакета.
-3. Используй поиск в правом верхнем углу, чтобы мгновенно находить символы.
+1. Start with the **Guide** section for a quick integration walkthrough.
+2. Jump to **API Reference** for detailed class and method docs of a specific package.
+3. Use the search bar in the top-right corner to find any symbol instantly.

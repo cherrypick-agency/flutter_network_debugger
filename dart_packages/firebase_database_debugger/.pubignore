@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+.dart_tool/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Package config
+.packages
+pubspec.lock
+
+# Flutter tooling noise
+.flutter-plugins-dependencies
+
+# Test-only local artifacts / configs
+GoogleService-Info-*.plist
+

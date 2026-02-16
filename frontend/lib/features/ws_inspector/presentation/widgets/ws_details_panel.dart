@@ -67,6 +67,12 @@ class WsDetailsPanel extends StatefulWidget {
     this.closedAt,
     this.error,
     this.onCloseFullscreen,
+    this.fbOpFilter = 'all',
+    this.fbStatusFilter = 'all',
+    this.fbPathFilter = '',
+    this.onChangeFbOp,
+    this.onChangeFbStatus,
+    this.onChangeFbPath,
   });
   final List<dynamic> frames;
   final List<dynamic> events;
@@ -81,6 +87,13 @@ class WsDetailsPanel extends StatefulWidget {
   final DateTime? closedAt;
   final String? error;
   final VoidCallback? onCloseFullscreen;
+  // Firebase RTDB filters
+  final String fbOpFilter;
+  final String fbStatusFilter;
+  final String fbPathFilter;
+  final void Function(String)? onChangeFbOp;
+  final void Function(String)? onChangeFbStatus;
+  final void Function(String)? onChangeFbPath;
 
   @override
   State<WsDetailsPanel> createState() => _WsDetailsPanelState();
@@ -88,13 +101,25 @@ class WsDetailsPanel extends StatefulWidget {
 
 class _WsDetailsPanelState extends State<WsDetailsPanel> {
   final _ui = sl<HomeUiStore>();
+
+  // Кеш типа сессии, чтобы не парсить JSON на каждый вызов _frameMatches
+  bool? _isFirebaseCache;
+  List<dynamic>? _isFirebaseCacheFrames;
+
   bool get _isFirebaseSession {
+    if (_isFirebaseCacheFrames == widget.frames && _isFirebaseCache != null) {
+      return _isFirebaseCache!;
+    }
+    _isFirebaseCacheFrames = widget.frames;
+    _isFirebaseCache = _detectFirebase();
+    return _isFirebaseCache!;
+  }
+
+  bool _detectFirebase() {
     for (final item in widget.frames) {
       final frame = item as Map<String, dynamic>;
       final preview = (frame['preview'] ?? '').toString().trim();
-      if (!(preview.startsWith('{') || preview.startsWith('['))) {
-        continue;
-      }
+      if (!(preview.startsWith('{') || preview.startsWith('['))) continue;
       try {
         final decoded = jsonDecode(preview);
         if (decoded is Map<String, dynamic> &&
@@ -102,7 +127,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
           return true;
         }
       } catch (_) {
-        // Игнорируем невалидный preview, это не мешает определить тип сессии.
+        // skip
       }
     }
     return false;
@@ -267,12 +292,32 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
   }
 
   bool _frameMatches(Map<String, dynamic> f) {
-    if (widget.opcodeFilter != 'all' &&
-        (f['opcode']?.toString() ?? '') != widget.opcodeFilter)
-      return false;
-    if (widget.directionFilter != 'all' &&
-        (f['direction']?.toString() ?? '') != widget.directionFilter)
-      return false;
+    if (_isFirebaseSession) {
+      // Firebase RTDB: свои фильтры, WS-шные не применяем
+      final preview = (f['preview'] ?? '').toString();
+      final fb = FirebaseEventData.tryParse(preview);
+      if (fb != null) {
+        if (widget.fbOpFilter != 'all' && fb.op != widget.fbOpFilter) {
+          return false;
+        }
+        if (widget.fbStatusFilter == 'ok' && !fb.ok) return false;
+        if (widget.fbStatusFilter == 'error' && fb.ok) return false;
+        if (widget.fbPathFilter.isNotEmpty &&
+            !fb.path.contains(widget.fbPathFilter)) {
+          return false;
+        }
+      }
+    } else {
+      // WS фильтры
+      if (widget.opcodeFilter != 'all' &&
+          (f['opcode']?.toString() ?? '') != widget.opcodeFilter) {
+        return false;
+      }
+      if (widget.directionFilter != 'all' &&
+          (f['direction']?.toString() ?? '') != widget.directionFilter) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -345,7 +390,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     if (oldWidget.frames != widget.frames ||
         oldWidget.hideHeartbeats != widget.hideHeartbeats ||
         oldWidget.opcodeFilter != widget.opcodeFilter ||
-        oldWidget.directionFilter != widget.directionFilter) {
+        oldWidget.directionFilter != widget.directionFilter ||
+        oldWidget.fbOpFilter != widget.fbOpFilter ||
+        oldWidget.fbStatusFilter != widget.fbStatusFilter ||
+        oldWidget.fbPathFilter != widget.fbPathFilter) {
       _updateVisibleFramesCache();
       // Reindex search when visible frames change
       if (_showGlobalSearch && _searchCtrl.text.trim().isNotEmpty) {
@@ -1503,6 +1551,9 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         isClosed: widget.isClosed,
         closedAt: widget.closedAt,
         error: widget.error,
+        initialFbOpFilter: widget.fbOpFilter,
+        initialFbStatusFilter: widget.fbStatusFilter,
+        initialFbPathFilter: widget.fbPathFilter,
       ),
     );
   }
@@ -1605,21 +1656,33 @@ class _Card extends StatelessWidget {
 }
 
 extension on WsDetailsPanel {
-  void _openFilters(BuildContext context) {
-    final isFirebase = frames.any((item) {
+  bool get _isFirebaseExt {
+    for (final item in frames) {
       final frame = item as Map<String, dynamic>;
       final preview = (frame['preview'] ?? '').toString().trim();
-      if (!(preview.startsWith('{') || preview.startsWith('['))) {
-        return false;
-      }
+      if (!(preview.startsWith('{') || preview.startsWith('['))) continue;
       try {
         final decoded = jsonDecode(preview);
-        return decoded is Map<String, dynamic> &&
-            decoded['type'] == 'firebase_database';
+        if (decoded is Map<String, dynamic> &&
+            decoded['type'] == 'firebase_database') {
+          return true;
+        }
       } catch (_) {
-        return false;
+        // skip
       }
-    });
+    }
+    return false;
+  }
+
+  void _openFilters(BuildContext context) {
+    if (_isFirebaseExt) {
+      _openFirebaseFilters(context);
+    } else {
+      _openWsFilters(context);
+    }
+  }
+
+  void _openWsFilters(BuildContext context) {
     showModalBottomSheet(
       context: context,
       builder: (_) {
@@ -1635,7 +1698,7 @@ extension on WsDetailsPanel {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isFirebase ? 'RTDB filters' : 'WebSocket filters',
+                    'WebSocket filters',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
@@ -1752,6 +1815,138 @@ extension on WsDetailsPanel {
       },
     );
   }
+
+  void _openFirebaseFilters(BuildContext context) {
+    // Собираем уникальные операции из текущих фреймов
+    final ops = <String>{};
+    for (final item in frames) {
+      final frame = item as Map<String, dynamic>;
+      final preview = (frame['preview'] ?? '').toString();
+      final fb = FirebaseEventData.tryParse(preview);
+      if (fb != null && fb.op.isNotEmpty) ops.add(fb.op);
+    }
+    final sortedOps = ops.toList()..sort();
+
+    String localOp = fbOpFilter;
+    String localStatus = fbStatusFilter;
+    final pathCtrl = TextEditingController(text: fbPathFilter);
+
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'RTDB filters',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text('Operation:'),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: sortedOps.contains(localOp) || localOp == 'all'
+                            ? localOp
+                            : 'all',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Any'),
+                          ),
+                          ...sortedOps.map(
+                            (op) =>
+                                DropdownMenuItem(value: op, child: Text(op)),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            localOp = v ?? 'all';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('Status:'),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: localStatus,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('Any')),
+                          DropdownMenuItem(value: 'ok', child: Text('OK')),
+                          DropdownMenuItem(
+                            value: 'error',
+                            child: Text('Error'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            localStatus = v ?? 'all';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: pathCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Path contains',
+                      hintText: '/users/alice',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            localOp = 'all';
+                            localStatus = 'all';
+                            pathCtrl.clear();
+                          });
+                          onChangeFbOp?.call('all');
+                          onChangeFbStatus?.call('all');
+                          onChangeFbPath?.call('');
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Reset'),
+                      ),
+                      const Spacer(),
+                      ElevatedButton(
+                        onPressed: () {
+                          onChangeFbOp?.call(localOp);
+                          onChangeFbStatus?.call(localStatus);
+                          onChangeFbPath?.call(pathCtrl.text.trim());
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() => pathCtrl.dispose());
+  }
 }
 
 bool _isJsonLocal(String s) {
@@ -1799,6 +1994,9 @@ class _WsFramesFullscreenDialog extends StatefulWidget {
     required this.isClosed,
     this.closedAt,
     this.error,
+    this.initialFbOpFilter = 'all',
+    this.initialFbStatusFilter = 'all',
+    this.initialFbPathFilter = '',
   });
   final List<dynamic> frames;
   final List<dynamic> events;
@@ -1809,6 +2007,9 @@ class _WsFramesFullscreenDialog extends StatefulWidget {
   final bool isClosed;
   final DateTime? closedAt;
   final String? error;
+  final String initialFbOpFilter;
+  final String initialFbStatusFilter;
+  final String initialFbPathFilter;
 
   @override
   State<_WsFramesFullscreenDialog> createState() =>
@@ -1820,6 +2021,9 @@ class _WsFramesFullscreenDialogState extends State<_WsFramesFullscreenDialog> {
   late String _directionFilter;
   late bool _hideHeartbeats;
   late TextEditingController _namespaceCtrl;
+  late String _fbOpFilter;
+  late String _fbStatusFilter;
+  late String _fbPathFilter;
 
   @override
   void initState() {
@@ -1828,6 +2032,9 @@ class _WsFramesFullscreenDialogState extends State<_WsFramesFullscreenDialog> {
     _directionFilter = widget.initialDirectionFilter;
     _hideHeartbeats = widget.initialHideHeartbeats;
     _namespaceCtrl = TextEditingController(text: widget.initialNamespaceText);
+    _fbOpFilter = widget.initialFbOpFilter;
+    _fbStatusFilter = widget.initialFbStatusFilter;
+    _fbPathFilter = widget.initialFbPathFilter;
   }
 
   @override
@@ -1861,6 +2068,12 @@ class _WsFramesFullscreenDialogState extends State<_WsFramesFullscreenDialog> {
           closedAt: widget.closedAt,
           error: widget.error,
           onCloseFullscreen: () => Navigator.of(context).pop(),
+          fbOpFilter: _fbOpFilter,
+          fbStatusFilter: _fbStatusFilter,
+          fbPathFilter: _fbPathFilter,
+          onChangeFbOp: (v) => setState(() => _fbOpFilter = v),
+          onChangeFbStatus: (v) => setState(() => _fbStatusFilter = v),
+          onChangeFbPath: (v) => setState(() => _fbPathFilter = v),
         ),
       ),
     );

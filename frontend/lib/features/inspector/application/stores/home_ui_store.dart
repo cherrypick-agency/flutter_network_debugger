@@ -31,6 +31,10 @@ class HomeUiStore {
     // Quick filters below the timeline
     quickTypes = mobx.ObservableSet.of(<String>{});
     quickStatusGroups = mobx.ObservableSet.of(<String>{});
+    // Firebase RTDB filters
+    fbOpFilter = mobx.Observable<String>('all');
+    fbStatusFilter = mobx.Observable<String>('all');
+    fbPathFilter = mobx.Observable<String>('');
   }
 
   late final mobx.Observable<String?> selectedSessionId;
@@ -64,6 +68,10 @@ class HomeUiStore {
   late final mobx.ObservableSet<String>
   quickTypes; // http, https, ws, json, form, ...
   late final mobx.ObservableSet<String> quickStatusGroups; // 1xx..5xx
+  // Firebase RTDB filters
+  late final mobx.Observable<String> fbOpFilter; // all | set | get | ...
+  late final mobx.Observable<String> fbStatusFilter; // all | ok | error
+  late final mobx.Observable<String> fbPathFilter; // substring match
 
   void setSelectedSessionId(String? v) =>
       mobx.runInAction(() => selectedSessionId.value = v);
@@ -144,4 +152,11 @@ class HomeUiStore {
     quickTypes.clear();
     quickStatusGroups.clear();
   });
+
+  // Firebase RTDB filters
+  void setFbOpFilter(String v) => mobx.runInAction(() => fbOpFilter.value = v);
+  void setFbStatusFilter(String v) =>
+      mobx.runInAction(() => fbStatusFilter.value = v);
+  void setFbPathFilter(String v) =>
+      mobx.runInAction(() => fbPathFilter.value = v);
 }

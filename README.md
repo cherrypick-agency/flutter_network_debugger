@@ -127,6 +127,12 @@ dart pub add dio_debugger
 dart pub add http_debugger
 ```
 
+- **Firebase Realtime Database (RTDB)**: use [`firebase_database_debugger`](https://pub.dev/packages/firebase_database_debugger)
+
+```bash
+dart pub add firebase_database_debugger
+```
+
 - **WebSocket (killer feature)**: pick the one you use in the app:
   - [`web_socket_debugger`](https://pub.dev/packages/web_socket_debugger) (dart:io WebSocket)
   - [`web_socket_channel_debugger`](https://pub.dev/packages/web_socket_channel_debugger) (package:web_socket_channel)
@@ -168,6 +174,7 @@ See [docs/CLI_SESSIONS_MODE.md](docs/CLI_SESSIONS_MODE.md).
 | [web_socket_debugger](https://pub.dev/packages/web_socket_debugger)                 | [![pub](https://img.shields.io/pub/v/web_socket_debugger.svg)](https://pub.dev/packages/web_socket_debugger)                 | [![pub points](https://img.shields.io/pub/points/web_socket_debugger)](https://pub.dev/packages/web_socket_debugger/score)                 | Wrapper for dart:io WebSocket          |
 | [web_socket_channel_debugger](https://pub.dev/packages/web_socket_channel_debugger) | [![pub](https://img.shields.io/pub/v/web_socket_channel_debugger.svg)](https://pub.dev/packages/web_socket_channel_debugger) | [![pub points](https://img.shields.io/pub/points/web_socket_channel_debugger)](https://pub.dev/packages/web_socket_channel_debugger/score) | Wrapper for package:web_socket_channel |
 | [socket_io_debugger](https://pub.dev/packages/socket_io_debugger)                   | [![pub](https://img.shields.io/pub/v/socket_io_debugger.svg)](https://pub.dev/packages/socket_io_debugger)                   | [![pub points](https://img.shields.io/pub/points/socket_io_debugger)](https://pub.dev/packages/socket_io_debugger/score)                   | Wrapper for socket.io client           |
+| [firebase_database_debugger](https://pub.dev/packages/firebase_database_debugger)   | [![pub](https://img.shields.io/pub/v/firebase_database_debugger.svg)](https://pub.dev/packages/firebase_database_debugger)   | [![pub points](https://img.shields.io/pub/points/firebase_database_debugger)](https://pub.dev/packages/firebase_database_debugger/score)   | Wrapper for Firebase Realtime Database |
 
 
 ### Settings

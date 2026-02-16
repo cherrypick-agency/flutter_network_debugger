@@ -51,7 +51,7 @@ jobs:
           dart pub global run dartdoc_vitepress
           --format vitepress
           --workspace-docs
-          --exclude-packages 'nd_e2e_tests,nd_test_support'
+          --exclude-packages 'nd_e2e_tests,nd_e2e_tests_flutter,nd_test_support'
           --output ../docs-site-generated
 
       - name: Apply docs-site template

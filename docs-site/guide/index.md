@@ -1,17 +1,17 @@
 # Guide
 
-Этот раздел помогает быстро стартовать с интеграцией пакетов из `dart_packages`.
+This section helps you get started quickly with integrating packages from `dart_packages`.
 
-## Рекомендуемый порядок
+## Recommended steps
 
-1. Выбери пакет под свой networking-стек (`dio`, `http`, `web_socket`,
-   `socket_io`).
-2. Подключи пакет в приложении и направь трафик через локальный proxy.
-3. Запусти `network_debugger` и проверь, что сессии появляются в UI.
-4. Для углубления в API переходи в `API Reference`.
+1. Pick the package that matches your networking stack (`dio`, `http`, `web_socket`,
+   `socket_io`, `firebase_database`).
+2. Add the package to your app and route traffic through the local proxy.
+3. Run `network_debugger` and verify that sessions appear in the UI.
+4. Head over to `API Reference` for detailed class and method docs.
 
-## Что есть в API Reference
+## What's in the API Reference
 
-- Публичные библиотеки и типы для каждого пакета.
-- Документация методов и параметров.
-- Перекрёстные ссылки между сущностями в рамках сгенерированной документации.
+- Public libraries and types for every package.
+- Method and parameter documentation.
+- Cross-references between entities across the generated docs.
