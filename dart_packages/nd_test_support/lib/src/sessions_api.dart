@@ -31,3 +31,38 @@ Future<List<Map<String, dynamic>>> listSessions(
       .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
       .toList(growable: false);
 }
+
+Future<List<Map<String, dynamic>>> listFrames(
+  Uri apiBase,
+  String sessionId, {
+  int limit = 200,
+}) async {
+  final client = HttpClient();
+  final req = await client.getUrl(
+    apiBase.resolve('/_api/v1/sessions/$sessionId/frames?limit=$limit'),
+  );
+  final resp = await req.close();
+  final txt = await utf8.decodeStream(resp);
+  client.close(force: true);
+
+  final decoded = jsonDecode(txt) as Map<String, dynamic>;
+  final items = (decoded['items'] as List).cast<Map>();
+  return items
+      .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+      .toList(growable: false);
+}
+
+Future<Map<String, dynamic>> getSession(
+  Uri apiBase,
+  String sessionId,
+) async {
+  final client = HttpClient();
+  final req = await client.getUrl(
+    apiBase.resolve('/_api/v1/sessions/$sessionId'),
+  );
+  final resp = await req.close();
+  final txt = await utf8.decodeStream(resp);
+  client.close(force: true);
+
+  return jsonDecode(txt) as Map<String, dynamic>;
+}

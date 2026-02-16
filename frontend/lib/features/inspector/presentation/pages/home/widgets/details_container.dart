@@ -15,34 +15,33 @@ class DetailsContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = sl<HomeUiStore>();
-    if (ui.selectedSessionId.value == null) return const SizedBox.shrink();
-    bool selIsWs = true;
-    bool selIsHttp = true;
-    final items = context.watch<SessionsStore>().items.toList();
-    Map<String, dynamic>? meta;
-    String? kind;
-    bool wsClosed = false;
-    DateTime? wsClosedAt;
-    String? wsError;
-    for (final s in items) {
-      if (s.id == ui.selectedSessionId.value) {
-        meta = s.httpMeta?.cast<String, dynamic>();
-        kind = s.kind;
-        wsClosed = s.closedAt != null;
-        wsClosedAt = s.closedAt;
-        wsError = s.error;
-        break;
-      }
-    }
-    final method = (meta?['method'] ?? '').toString();
-    final isFirebase = kind == 'firebase_database';
-    final isWs =
-        isFirebase || (kind == 'ws') || (method.isEmpty && kind == null);
-    selIsWs = isWs;
-    selIsHttp = !isWs;
-
     return Observer(
       builder: (_) {
+        final selectedId = ui.selectedSessionId.value;
+        if (selectedId == null) return const SizedBox.shrink();
+
+        final items = context.watch<SessionsStore>().items.toList();
+        Map<String, dynamic>? meta;
+        String? kind;
+        bool wsClosed = false;
+        DateTime? wsClosedAt;
+        String? wsError;
+        for (final s in items) {
+          if (s.id == selectedId) {
+            meta = s.httpMeta?.cast<String, dynamic>();
+            kind = s.kind;
+            wsClosed = s.closedAt != null;
+            wsClosedAt = s.closedAt;
+            wsError = s.error;
+            break;
+          }
+        }
+
+        final method = (meta?['method'] ?? '').toString();
+        final isFirebase = kind == 'firebase_database';
+        final isWs =
+            isFirebase || (kind == 'ws') || (method.isEmpty && kind == null);
+
         final details = context.watch<SessionDetailsStore>();
         final frames = details.frames
             .map(
@@ -68,13 +67,14 @@ class DetailsContainer extends StatelessWidget {
               },
             )
             .toList();
+
         return DetailsTabs(
-          showWs: selIsWs,
-          showHttp: selIsHttp,
+          showWs: isWs,
+          showHttp: !isWs,
           frames: frames.cast<Map<String, dynamic>>(),
           events: events.cast<Map<String, dynamic>>(),
-          selectedSessionId: ui.selectedSessionId.value,
-          httpMeta: sl<HomeUiStore>().httpMeta[ui.selectedSessionId.value],
+          selectedSessionId: selectedId,
+          httpMeta: sl<HomeUiStore>().httpMeta[selectedId],
           opcodeFilter: sl<HomeUiStore>().opcodeFilter.value,
           directionFilter: sl<HomeUiStore>().directionFilter.value,
           namespaceCtrl: namespaceCtrl,

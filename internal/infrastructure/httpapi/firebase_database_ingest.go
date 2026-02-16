@@ -249,7 +249,7 @@ func validateFirebaseIngestRequest(req firebaseIngestRequest) string {
 			return "session.captureId must be 'current' or integer string"
 		}
 	}
-	if len(req.Frames) == 0 {
+	if len(req.Frames) == 0 && !req.Close {
 		return "frames must contain at least one item"
 	}
 	if len(req.Frames) > firebaseIngestMaxFrames {

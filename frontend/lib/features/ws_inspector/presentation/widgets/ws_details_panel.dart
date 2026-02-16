@@ -8,6 +8,9 @@ import 'frames_timeline/frames_timeline_legend.dart';
 import '../../../../widgets/json_viewer.dart';
 import '../../../../widgets/common_search_bar.dart';
 import 'searchable_text_rich.dart';
+import 'firebase_event_data.dart';
+import 'firebase_event_title.dart';
+import 'inline_json_spans.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 
@@ -85,6 +88,26 @@ class WsDetailsPanel extends StatefulWidget {
 
 class _WsDetailsPanelState extends State<WsDetailsPanel> {
   final _ui = sl<HomeUiStore>();
+  bool get _isFirebaseSession {
+    for (final item in widget.frames) {
+      final frame = item as Map<String, dynamic>;
+      final preview = (frame['preview'] ?? '').toString().trim();
+      if (!(preview.startsWith('{') || preview.startsWith('['))) {
+        continue;
+      }
+      try {
+        final decoded = jsonDecode(preview);
+        if (decoded is Map<String, dynamic> &&
+            decoded['type'] == 'firebase_database') {
+          return true;
+        }
+      } catch (_) {
+        // Игнорируем невалидный preview, это не мешает определить тип сессии.
+      }
+    }
+    return false;
+  }
+
   bool get _pretty => _ui.wsPretty.value;
   set _pretty(bool v) => _ui.setWsPretty(v);
   bool get _tree => _ui.wsTree.value;
@@ -511,64 +534,8 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
     );
   }
 
-  List<InlineSpan> _buildInlineJsonSpans(BuildContext context, dynamic node) {
-    final base = context.appText.body;
-    final punct = base;
-    final keyStyle = base.copyWith(color: context.appColors.primary);
-    final stringStyle = base.copyWith(color: context.appColors.success);
-    final numberStyle = base.copyWith(color: context.appColors.warning);
-    final boolStyle = base.copyWith(color: context.appColors.warning);
-    final nullStyle = base.copyWith(color: context.appColors.danger);
-
-    List<InlineSpan> build(dynamic n) {
-      final List<InlineSpan> out = [];
-      void add(String s, TextStyle st) => out.add(TextSpan(text: s, style: st));
-
-      if (n is Map) {
-        add('{', punct);
-        int i = 0;
-        final last = n.length - 1;
-        for (final e in n.entries) {
-          add('"${e.key}"', keyStyle);
-          add(': ', punct);
-          out.addAll(build(e.value));
-          if (i != last) add(', ', punct);
-          i++;
-        }
-        add('}', punct);
-        return out;
-      }
-      if (n is List) {
-        add('[', punct);
-        for (int i = 0; i < n.length; i++) {
-          out.addAll(build(n[i]));
-          if (i != n.length - 1) add(', ', punct);
-        }
-        add(']', punct);
-        return out;
-      }
-      if (n is String) {
-        add('"$n"', stringStyle);
-        return out;
-      }
-      if (n is num) {
-        add(n.toString(), numberStyle);
-        return out;
-      }
-      if (n is bool) {
-        add(n ? 'true' : 'false', boolStyle);
-        return out;
-      }
-      if (n == null) {
-        add('null', nullStyle);
-        return out;
-      }
-      add(n.toString(), punct);
-      return out;
-    }
-
-    return build(node);
-  }
+  List<InlineSpan> _buildInlineJsonSpans(BuildContext context, dynamic node) =>
+      buildInlineJsonSpans(context, node);
 
   void _reindexGlobalMatches() {
     // Guard against concurrent reindexing (Bug #3 fix)
@@ -942,7 +909,7 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
         timelineSection,
         Expanded(
           child: _Card(
-            title: const Text('Frames'),
+            title: Text(_isFirebaseSession ? 'RTDB events' : 'Frames'),
             actions: [
               FilterChip(
                 label: const Text('Pretty', style: TextStyle(fontSize: 12)),
@@ -1050,7 +1017,10 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                     itemBuilder: (_, i) {
                       final f = visibleFrames[i];
                       final preview = (f['preview'] ?? '').toString();
-                      final extractedJson = _extractJsonPayload(preview);
+                      final fbEvent = FirebaseEventData.tryParse(preview);
+                      final String? extractedJson = fbEvent?.payload != null
+                          ? jsonEncode(fbEvent!.payload)
+                          : _extractJsonPayload(preview);
                       final dir = (f['direction'] ?? '').toString();
                       final isDown = dir == 'upstream->client';
 
@@ -1101,20 +1071,71 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                       // Use pre-computed local focused index (O(1) lookup)
                       final localFocusedIndex =
                           _frameLocalFocusedIndex[frameKey] ?? -1;
+
                       return ExpansionTile(
                         key: _tileKeyFor(frameKey),
                         controller: _tileControllerFor(frameKey),
                         tilePadding: const EdgeInsets.symmetric(horizontal: 8),
                         dense: true,
-                        leading: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            icon,
-                            const SizedBox(width: 6),
-                            Text(opcode),
-                          ],
+                        leading: fbEvent != null
+                            ? icon
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  icon,
+                                  const SizedBox(width: 6),
+                                  Text(opcode),
+                                ],
+                              ),
+                        title: Builder(
+                          builder: (context) {
+                            if (fbEvent == null) {
+                              return _buildTitleRich(context, preview);
+                            }
+                            final local = _localFor(frameKey);
+                            final String activeQuery = local.show
+                                ? local.controller.text.trim()
+                                : (_showGlobalSearch
+                                      ? _searchCtrl.text.trim()
+                                      : '');
+                            final bool activeMatchCase = local.show
+                                ? local.matchCase
+                                : _matchCase;
+                            final bool activeWholeWord = local.show
+                                ? local.wholeWord
+                                : _wholeWord;
+                            final bool activeUseRegex = local.show
+                                ? local.useRegex
+                                : _useRegex;
+                            final int activeFocusedIndex = local.show
+                                ? local.focusedIndex
+                                : (localFocusedIndex < 0
+                                      ? 0
+                                      : localFocusedIndex);
+
+                            final cfg = JsonSearchConfig(
+                              query: activeQuery,
+                              matchCase: activeMatchCase,
+                              wholeWord: activeWholeWord,
+                              useRegex: activeUseRegex,
+                              focusedIndex: activeFocusedIndex,
+                              anchorScope: null,
+                              onRebuilt: null,
+                            );
+
+                            final previewText =
+                                FirebaseEventTitle.buildCompactPreview(
+                                  fbEvent.payload,
+                                );
+
+                            return FirebaseEventTitle(
+                              event: fbEvent,
+                              contentPreview: previewText,
+                              timestamp: ts,
+                              search: cfg,
+                            );
+                          },
                         ),
-                        title: _buildTitleRich(context, preview),
                         subtitle: Row(
                           children: [
                             Expanded(
@@ -1128,13 +1149,15 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                             ),
                           ],
                         ),
-                        trailing: Text(
-                          ts,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: context.appColors.textSecondary,
+                        trailing: fbEvent != null
+                            ? null
+                            : Text(
+                                ts,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: context.appColors.textSecondary,
+                                    ),
                               ),
-                        ),
                         children: [
                           Builder(
                             builder: (context) {
@@ -1227,22 +1250,28 @@ class _WsDetailsPanelState extends State<WsDetailsPanel> {
                                       final parsed = jsonDecode(extractedJson);
                                       final normalized =
                                           _decodeNestedJsonStrings(parsed);
+                                      // Firebase: внутри показываем payload, а не envelope.
+                                      final effective =
+                                          fbEvent?.payload ?? normalized;
                                       if (_tree) {
                                         return JsonTreeRich(
-                                          data: normalized,
+                                          data: effective,
                                           search: cfg,
                                         );
                                       }
                                       if (_pretty) {
                                         return JsonPrettyRich(
-                                          data: normalized,
+                                          data: effective,
                                           search: cfg,
                                         );
                                       }
                                     } catch (_) {}
                                   }
+                                  final contentText = fbEvent?.payload != null
+                                      ? extractedJson!
+                                      : preview;
                                   return SearchableTextRich(
-                                    text: preview,
+                                    text: contentText,
                                     search: cfg,
                                     style: context.appText.monospace,
                                   );
@@ -1577,6 +1606,20 @@ class _Card extends StatelessWidget {
 
 extension on WsDetailsPanel {
   void _openFilters(BuildContext context) {
+    final isFirebase = frames.any((item) {
+      final frame = item as Map<String, dynamic>;
+      final preview = (frame['preview'] ?? '').toString().trim();
+      if (!(preview.startsWith('{') || preview.startsWith('['))) {
+        return false;
+      }
+      try {
+        final decoded = jsonDecode(preview);
+        return decoded is Map<String, dynamic> &&
+            decoded['type'] == 'firebase_database';
+      } catch (_) {
+        return false;
+      }
+    });
     showModalBottomSheet(
       context: context,
       builder: (_) {
@@ -1592,7 +1635,7 @@ extension on WsDetailsPanel {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'WebSocket filters',
+                    isFirebase ? 'RTDB filters' : 'WebSocket filters',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
@@ -1847,18 +1890,16 @@ class _WsClosedBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       decoration: BoxDecoration(
-        color: (hasError ? cs.error : cs.outline).withValues(alpha: 0.08),
+        color: cs.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border(
-          left: BorderSide(color: hasError ? cs.error : cs.outline, width: 2),
-        ),
+        border: Border(left: BorderSide(color: cs.error, width: 2)),
       ),
       child: Row(
         children: [
           Icon(
             hasError ? Icons.error_outline : Icons.info_outline,
             size: 14,
-            color: hasError ? cs.error : cs.onSurfaceVariant,
+            color: cs.error,
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -1866,10 +1907,7 @@ class _WsClosedBanner extends StatelessWidget {
               message: hasError ? error! : '',
               child: Text(
                 hasError ? '$label — $error' : '$label',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: hasError ? cs.error : cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: cs.error),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

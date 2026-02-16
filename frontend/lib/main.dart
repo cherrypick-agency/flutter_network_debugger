@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'theme/app_theme.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -1090,7 +1091,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                                   final method =
                                                       (meta?['method'] ?? '')
                                                           .toString();
+                                                  final isFirebase =
+                                                      kind ==
+                                                      'firebase_database';
                                                   final isWs =
+                                                      isFirebase ||
                                                       (kind == 'ws') ||
                                                       (method.isEmpty &&
                                                           kind == null);
@@ -1277,14 +1282,39 @@ class _SessionPlaceholder extends StatelessWidget {
                 textAlign: TextAlign.left,
               ),
               const SizedBox(height: 6),
-              Text(
-                'Pick a session on the left to see its details here.\n\n'
-                'If the list is empty, your traffic is not reaching the proxy yet:\n'
-                '• Start the proxy/backend (UI API: http://localhost:9092, proxy: http://localhost:9091)\n'
-                '• Route app requests through the proxy (recommended: attach a Flutter integration like dio_debugger)\n'
-                '  or enable Forward Proxy in Settings → Proxy for system-wide capture\n'
-                '• Make a request, then select the new session on the left',
-                style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              Text.rich(
+                TextSpan(
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                  children: [
+                    const TextSpan(
+                      text:
+                          'Pick a session on the left to see its details here.\n\n'
+                          'For example, connect your Flutter app via ',
+                    ),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () => launchUrl(
+                            Uri.parse('https://pub.dev/packages/dio_debugger'),
+                          ),
+                          child: Text(
+                            'dio_debugger',
+                            style: tt.bodyMedium?.copyWith(
+                              color: cs.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const TextSpan(
+                      text: ' package (if you use dio) to see how it works.',
+                    ),
+                  ],
+                ),
                 textAlign: TextAlign.left,
               ),
               const SizedBox(height: 14),

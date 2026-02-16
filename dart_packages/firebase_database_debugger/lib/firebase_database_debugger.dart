@@ -2,6 +2,7 @@ library firebase_database_debugger;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:firebase_database/firebase_database.dart';
 import 'package:http/http.dart' as http;
@@ -17,10 +18,12 @@ class FirebaseDatabaseDebugger {
     required FirebaseDatabaseDebuggerConfig config,
     http.Client? httpClient,
   })  : _config = config,
-        _client = FirebaseIngestClient(config: config, httpClient: httpClient);
+        _client = FirebaseIngestClient(config: config, httpClient: httpClient),
+        _runId = _makeRunId();
 
   final FirebaseDatabaseDebuggerConfig _config;
   final FirebaseIngestClient _client;
+  final String _runId;
   final Map<String, _SessionBuffer> _buffers = <String, _SessionBuffer>{};
   Timer? _flushTimer;
   int _seq = 0;
@@ -59,8 +62,10 @@ class FirebaseDatabaseDebugger {
   }) async {
     if (!_config.enabled) return;
     final now = DateTime.now().toUtc();
-    final sessionId = _sessionIdFor(path: path, query: query);
-    final target = _targetFor(path: path, query: query);
+    final (sessionPath, sessionQuery) =
+        _sessionTargetParts(path: path, query: query);
+    final sessionId = _sessionIdFor(path: sessionPath, query: sessionQuery);
+    final target = _targetFor(path: sessionPath, query: sessionQuery);
 
     final (preview, body, bodyEncoding) = _buildFramePayload(
       op: op,
@@ -103,8 +108,10 @@ class FirebaseDatabaseDebugger {
 
   void markSessionClosed({required String path, String? query, String? error}) {
     if (!_config.enabled) return;
-    final sessionId = _sessionIdFor(path: path, query: query);
-    final target = _targetFor(path: path, query: query);
+    final (sessionPath, sessionQuery) =
+        _sessionTargetParts(path: path, query: query);
+    final sessionId = _sessionIdFor(path: sessionPath, query: sessionQuery);
+    final target = _targetFor(path: sessionPath, query: sessionQuery);
     final buffer = _buffers.putIfAbsent(
       sessionId,
       () => _SessionBuffer(
@@ -142,7 +149,9 @@ class FirebaseDatabaseDebugger {
 
   String _sessionIdFor({required String path, String? query}) {
     final target = _targetFor(path: path, query: query);
-    return 'fb-${_stableHash64(target)}';
+    final base = 'fb-${_stableHash64(target)}';
+    if (!_config.includeRunIdInSessionId) return base;
+    return '$base-$_runId';
   }
 
   String _targetFor({required String path, String? query}) {
@@ -168,6 +177,35 @@ class FirebaseDatabaseDebugger {
     final p = path.trim();
     if (p.isEmpty) return '/';
     return p.startsWith('/') ? p : '/$p';
+  }
+
+  (String, String?) _sessionTargetParts({
+    required String path,
+    required String? query,
+  }) {
+    final normalized = _normalizePath(path);
+    final depth = _config.sessionPathDepth;
+    if (depth < 0) {
+      return (normalized, query);
+    }
+    if (depth == 0) {
+      return ('/', null);
+    }
+    final parts = normalized
+        .split('/')
+        .where((s) => s.trim().isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) return ('/', null);
+    final take = depth.clamp(1, parts.length);
+    final prefix = '/${parts.take(take).join('/')}';
+    return (prefix, null);
+  }
+
+  static String _makeRunId() {
+    // 8 hex chars: достаточно чтобы не конфликтовать между запусками
+    final rnd = Random.secure();
+    final v = rnd.nextInt(0xffffffff);
+    return v.toRadixString(16).padLeft(8, '0');
   }
 
   String _stableHash64(String input) {
