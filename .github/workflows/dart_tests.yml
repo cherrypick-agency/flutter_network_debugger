@@ -33,17 +33,11 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get Flutter dependencies (dio_debugger)
-        working-directory: dart_packages/dio_debugger
+      - name: Get Flutter dependencies (workspace)
+        working-directory: dart_packages
         run: flutter pub get
 
-      - name: Get Flutter dependencies (socket_io_debugger)
-        working-directory: dart_packages/socket_io_debugger
-        run: flutter pub get
 
-      - name: Get Flutter dependencies (network_debugger)
-        working-directory: dart_packages/network_debugger
-        run: flutter pub get
 
       - name: Analyze dio_debugger
         working-directory: dart_packages/dio_debugger
@@ -82,8 +76,8 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get Flutter dependencies
-        working-directory: dart_packages/network_debugger
+      - name: Get Flutter dependencies (workspace)
+        working-directory: dart_packages
         run: flutter pub get
 
       # Integration tests (these will download real binaries)

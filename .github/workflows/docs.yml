@@ -56,13 +56,14 @@ jobs:
 
       - name: Apply docs-site template
         run: |
-          mkdir -p docs-site-generated/.vitepress docs-site-generated/guide
+          mkdir -p docs-site-generated/.vitepress docs-site-generated/guide docs-site-generated/generated
           cp docs-site/index.md docs-site-generated/index.md
           cp docs-site/guide/index.md docs-site-generated/guide/index.md
           cp docs-site/package.json docs-site-generated/package.json
           cp docs-site/.vitepress/config.ts docs-site-generated/.vitepress/config.ts
           rm -rf docs-site-generated/.vitepress/theme
           cp -R docs-site/.vitepress/theme docs-site-generated/.vitepress/theme
+          touch docs-site-generated/generated/api-styles.css
 
       - name: Install docs-site dependencies
         working-directory: docs-site-generated

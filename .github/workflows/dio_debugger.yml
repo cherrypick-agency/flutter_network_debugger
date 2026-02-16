@@ -34,19 +34,20 @@ jobs:
       PUB_ENVIRONMENT: bot.github
     steps:
       - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          channel: stable
+          cache: true
       - name: Cache pub
         uses: actions/cache@v4
         with:
           path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('dart_packages/dio_debugger/pubspec.lock', 'dart_packages/dio_debugger/pubspec.yaml') }}
+          key: ${{ runner.os }}-pub-${{ hashFiles('dart_packages/pubspec.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pub-
-      - name: Pub get
-        working-directory: ${{ env.PKG_DIR }}
-        run: dart pub get
+      - name: Pub get (workspace)
+        working-directory: dart_packages
+        run: flutter pub get
       - name: Format check
         working-directory: ${{ env.PKG_DIR }}
         run: dart format --output=none --set-exit-if-changed .
@@ -83,12 +84,13 @@ jobs:
       PUB_ENVIRONMENT: bot.github
     steps:
       - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: stable
-      - name: Pub get
-        working-directory: ${{ env.PKG_DIR }}
-        run: dart pub get
+          channel: stable
+          cache: true
+      - name: Pub get (workspace)
+        working-directory: dart_packages
+        run: flutter pub get
       - name: Configure pub credentials
         run: |
           mkdir -p ~/.pub-cache
