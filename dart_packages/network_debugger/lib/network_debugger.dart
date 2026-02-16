@@ -1,5 +1,5 @@
 /// Launcher for network-debugger binary with automatic download and caching.
-library network_debugger;
+library;
 
 export 'src/debugger_process.dart' show DebuggerInstance, ProcessException;
 export 'src/binary_downloader.dart'
