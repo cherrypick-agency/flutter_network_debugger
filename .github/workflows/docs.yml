@@ -43,7 +43,7 @@ jobs:
           node-version: 20
 
       - name: Install dartdoc_vitepress
-        run: dart pub global activate dartdoc_vitepress
+        run: dart pub global activate --source git https://github.com/777genius/dartdoc_vitepress.git
 
       - name: Generate docs-site
         working-directory: dart_packages
@@ -58,12 +58,11 @@ jobs:
         run: |
           mkdir -p docs-site-generated/.vitepress/generated docs-site-generated/guide
           cp docs-site/index.md docs-site-generated/index.md
-          cp docs-site/guide/index.md docs-site-generated/guide/index.md
+          cp docs-site/guide/*.md docs-site-generated/guide/
           cp docs-site/package.json docs-site-generated/package.json
           cp docs-site/.vitepress/config.ts docs-site-generated/.vitepress/config.ts
           rm -rf docs-site-generated/.vitepress/theme
           cp -R docs-site/.vitepress/theme docs-site-generated/.vitepress/theme
-          touch docs-site-generated/.vitepress/generated/api-styles.css
 
       - name: Install docs-site dependencies
         working-directory: docs-site-generated
