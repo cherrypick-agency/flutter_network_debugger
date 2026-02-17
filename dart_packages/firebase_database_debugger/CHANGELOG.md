@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Add `example/` to improve pub documentation score
+- Add dartdoc for `FirebaseDatabaseDebuggerConfig` constructor
+- Update `firebase_database` dependency constraint to `^12.1.3`
+
 ## 0.1.1
 
 - Add platform-aware default `debuggerBaseUrl`:

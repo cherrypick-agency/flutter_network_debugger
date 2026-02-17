@@ -15,6 +15,11 @@ const String _kDefineFirebaseDatabaseDebuggerEnabled =
 ///
 /// Controls connection to the debugger, session grouping, and frame batching.
 class FirebaseDatabaseDebuggerConfig {
+  /// Creates a configuration for [FirebaseDatabaseDebugger].
+  ///
+  /// If [debuggerBaseUrl] is omitted, the platform default is used:
+  /// - Android emulator: `http://10.0.2.2:9092`
+  /// - Other platforms: `http://localhost:9092`
   FirebaseDatabaseDebuggerConfig({
     String? debuggerBaseUrl,
     this.databaseUrl = 'https://firebase.local',

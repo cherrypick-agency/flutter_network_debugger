@@ -48,8 +48,8 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  firebase_database: ^11.1.6
-  firebase_database_debugger: ^0.1.1
+  firebase_database: ^12.1.3
+  firebase_database_debugger: ^0.1.2
 ```
 
 ## Quick start

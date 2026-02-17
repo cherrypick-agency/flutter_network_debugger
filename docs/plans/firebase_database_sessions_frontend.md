@@ -146,7 +146,6 @@ Backend ограничения (см. backend‑план):
 final db = FirebaseDatabase.instance;
 final dbg = FirebaseDatabaseDebugger(
   config: FirebaseDatabaseDebuggerConfig(
-    debuggerBaseUrl: 'http://localhost:9092',
     enabled: kDebugMode,
     adminToken: const String.fromEnvironment('ND_ADMIN_TOKEN'),
     maxBatchFrames: 100,

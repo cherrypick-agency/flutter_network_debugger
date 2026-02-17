@@ -31,10 +31,13 @@
 </p>
 
 <img width="1312" height="815" alt="image" src="https://i.imgur.com/MwyvOXv.png" />
+
+<div>
 <img width="170" alt="image" src="https://i.imgur.com/AwUZ1Dv.png" />
 <img width="180" alt="image" src="https://github.com/user-attachments/assets/029cecea-cde6-466b-9e5c-06f5a78bba50" />
 <img width="180" alt="image" src="https://github.com/user-attachments/assets/c9b753a8-874a-414d-a628-4b794e1e3319" />
 <img width="180"  alt="image" src="https://github.com/user-attachments/assets/43044ece-e6b4-4702-80bc-0584e844c042"  />
+</div>
 
 
 <!-- Screen recording (2025-10-02) -->
@@ -47,48 +50,19 @@ Privacy-first. Works fully offline.
 
 ### Table of contents
 
-- [Features](#features)
+- [Table of contents](#table-of-contents)
 - [Quick start](#quick-start)
-- [Run app (Web/Desktop)](#1-run-app-webdesktop)
-- [Install the right Dart package (integration)](#2-install-the-right-dart-package-integration)
+  - [1. Run app (Web/Desktop)](#1-run-app-webdesktop)
+  - [2. Install the right Dart package (integration)](#2-install-the-right-dart-package-integration)
+  - [Docker](#docker)
+  - [From Source (Go)](#from-source-go)
+- [Features](#features)
 - [CLI sessions mode (colored console output)](#cli-sessions-mode-colored-console-output)
 - [Dart Packages](#dart-packages)
 - [Settings](#settings)
 - [Local development (without GitHub)](#local-development-without-github)
 - [TODO](#todo)
 - [Useful to know](#useful-to-know)
-
-### Features
-- Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
-- Waterfall timeline of requests
-- grouping by domain/route
-- Filters: method, status, MIME, minimum duration, by headers...
-- Convenient search with highlighting
-- HTTP details: headers (with sensitive data masking), body (pretty/JSON tree/HEX), TTFB/Total...
-- CORS/Cache hints, cookies and TLS summary
-- WebSocket details: events/frames, pings/pongs, payload preview, json highligh, nice global/local search
-- import/export HAR
-- Artificial response delay (useful for simulating "slow networks")
-- Record/stop and records management
-- HTML responses preview
-- Form Data (show files) For example Flutter devtools don't show at all
-- You can proxy only app requests or all OS requests (forward proxy)
-- Crossplatform (WEB, Desktop, CLI)
-- The fastest GO backend for processing requests compared to competitors
-- 10,000+ req/sec throughput (5x faster than Charles, 2x faster than Proxyman)
-- An independent GO backend that can be run anywhere
-- Well covered with tests
-- Compose / Request Builder + Tree Library
-- Edit requests using Compose interface
-- Mapping (Map Local / Map Remote)
-- Throttling with profiles
-- Tags & Annotations: Tag and annotate sessions for better organization
-- Performance Insights dashboard: real-time latency, throughput, error rates, and endpoint hotspots (beta)
-- Privacy-first. Works fully offline.
-- Scriping (language agnostic! Go, Rust, JS/TS, C/C++, even Swift, Kotlin, Dart and more) Currently in beta. Plugins system is planned.
-- Breakpoints
-
-...
 
 ### Quick start
 
@@ -158,6 +132,39 @@ See the full list in the [Dart Packages](#dart-packages) section below.
 #### From Source (Go)
 
 - See [docs/LOCAL_DEV_FROM_SOURCE_GO.md](docs/LOCAL_DEV_FROM_SOURCE_GO.md).
+
+### Features
+- Intercept and view HTTP(S) and WebSockets/Socket.io traffic (WS supports very nice)
+- Waterfall timeline of requests
+- grouping by domain/route
+- Filters: method, status, MIME, minimum duration, by headers...
+- Convenient search with highlighting
+- HTTP details: headers (with sensitive data masking), body (pretty/JSON tree/HEX), TTFB/Total...
+- CORS/Cache hints, cookies and TLS summary
+- WebSocket details: events/frames, pings/pongs, payload preview, json highligh, nice global/local search
+- import/export HAR
+- Artificial response delay (useful for simulating "slow networks")
+- Record/stop and records management
+- HTML responses preview
+- Form Data (show files) For example Flutter devtools don't show at all
+- You can proxy only app requests or all OS requests (forward proxy)
+- Crossplatform (WEB, Desktop, CLI)
+- The fastest GO backend for processing requests compared to competitors
+- 10,000+ req/sec throughput (5x faster than Charles, 2x faster than Proxyman)
+- An independent GO backend that can be run anywhere
+- Well covered with tests
+- Compose / Request Builder + Tree Library
+- Edit requests using Compose interface
+- Mapping (Map Local / Map Remote)
+- Throttling with profiles
+- Tags & Annotations: Tag and annotate sessions for better organization
+- Performance Insights dashboard: real-time latency, throughput, error rates, and endpoint hotspots (beta)
+- Privacy-first. Works fully offline.
+- Scriping (language agnostic! Go, Rust, JS/TS, C/C++, even Swift, Kotlin, Dart and more) Currently in beta. Plugins system is planned.
+- Breakpoints
+- [Firebase Database Debug](https://cherrypick-agency.github.io/flutter_network_debugger/guide/firebase-database.html)
+
+...
 
 ### CLI sessions mode (colored console output)
 
