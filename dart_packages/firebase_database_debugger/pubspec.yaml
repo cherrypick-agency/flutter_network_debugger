@@ -1,6 +1,6 @@
 name: firebase_database_debugger
 description: "Helper package to send Firebase Realtime Database operations to network-debugger ingest API."
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/cherrypick-agency/flutter_network_debugger
 homepage: https://github.com/cherrypick-agency/flutter_network_debugger
 issue_tracker: https://github.com/cherrypick-agency/flutter_network_debugger/issues

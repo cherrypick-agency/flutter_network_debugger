@@ -4,7 +4,6 @@
   <a href="https://pub.dev/packages/firebase_database_debugger"><img src="https://img.shields.io/pub/v/firebase_database_debugger.svg" alt="pub version" /></a>
   <a href="https://pub.dev/packages/firebase_database_debugger/score"><img src="https://img.shields.io/pub/likes/firebase_database_debugger" alt="likes" /></a>
   <a href="https://pub.dev/packages/firebase_database_debugger/score"><img src="https://img.shields.io/pub/points/firebase_database_debugger" alt="pub points" /></a>
-  <a href="https://pub.dev/packages/firebase_database_debugger/score"><img src="https://img.shields.io/pub/popularity/firebase_database_debugger" alt="popularity" /></a>
 </p>
 
 ## Getting started with Network Debugger
@@ -50,24 +49,8 @@ Add to your `pubspec.yaml`:
 ```yaml
 dependencies:
   firebase_database: ^11.1.6
-  firebase_database_debugger: ^0.1.0
+  firebase_database_debugger: ^0.1.1
 ```
-
-## Starting the Proxy
-
-Before using `firebase_database_debugger`, you need to start the network debugger. Install and run it with:
-
-```bash
-# Install the CLI globally
-dart pub global activate network_debugger
-
-# Start the proxy (proxy port 9091, UI opens on 9092)
-network_debugger
-```
-
-The web UI opens on `http://localhost:9092`.
-
-For more options and programmatic usage, see the [network_debugger package documentation](https://pub.dev/packages/network_debugger).
 
 ## Quick start
 
@@ -77,19 +60,11 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_database_debugger/firebase_database_debugger.dart';
 
 final db = FirebaseDatabase.instance;
-
-late final FirebaseDatabaseDebugger debugger;
-
-void initDebugger() {
-  if (!kDebugMode) return;
-
-  debugger = FirebaseDatabaseDebugger(
-    config: FirebaseDatabaseDebuggerConfig(
-      debuggerBaseUrl: 'http://localhost:9092',
-      // Use 'http://10.0.2.2:9092' for Android emulator
-    ),
-  );
-}
+final debugger = FirebaseDatabaseDebugger(
+  config: FirebaseDatabaseDebuggerConfig(
+    enabled: kDebugMode,
+  ),
+);
 
 // Wrap your DatabaseReference:
 Future<void> example() async {
@@ -113,7 +88,6 @@ By default, each unique path gets its own session. Use `sessionPathDepth` to gro
 
 ```dart
 FirebaseDatabaseDebuggerConfig(
-  debuggerBaseUrl: 'http://localhost:9092',
   // Group by first 2 path segments:
   // /users/alice/profile and /users/alice/settings → one session "/users/alice"
   sessionPathDepth: 2,
@@ -141,7 +115,8 @@ query.onValue.listen((event) {}); // logged as onValue
 
 ```dart
 FirebaseDatabaseDebuggerConfig(
-  debuggerBaseUrl: 'http://localhost:9092',
+  // Optional override:
+  // debuggerBaseUrl: 'http://192.168.1.100:9092',
   databaseUrl: 'https://my-project.firebaseio.com',
   enabled: kDebugMode,
   sessionPathDepth: 2,
@@ -150,6 +125,18 @@ FirebaseDatabaseDebuggerConfig(
   previewBodyThresholdBytes: 32 * 1024,  // 32 KB before base64 spill
 )
 ```
+
+You can also configure defaults via `--dart-define`:
+
+```bash
+flutter run \
+  --dart-define=FIREBASE_DATABASE_DEBUGGER_BASE_URL=http://10.0.2.2:9092 \
+  --dart-define=FIREBASE_DATABASE_DEBUGGER_ENABLED=true
+```
+
+Supported aliases:
+- `FIREBASE_DATABASE_DEBUGGER_BASE_URL` or `FIREBASE_DEBUGGER_BASE_URL`
+- `FIREBASE_DATABASE_DEBUGGER_ENABLED` or `FIREBASE_DEBUGGER_ENABLED`
 
 ### Cleanup
 
@@ -170,7 +157,9 @@ Events are batched and flushed periodically to minimize network overhead. The UI
 - If the Network Debugger backend is not running, events are silently dropped.
 - Set `enabled: false` (or use `kDebugMode`) to completely disable in production.
 - Works with Firebase Emulator — just point `databaseUrl` to your emulator URL.
+- `debuggerBaseUrl` defaults to `http://10.0.2.2:9092` on Android emulator,
+  and `http://localhost:9092` on other platforms.
 
 ## License
 
-Apache-2.0
+MIT

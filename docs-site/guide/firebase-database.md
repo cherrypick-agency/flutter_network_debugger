@@ -19,20 +19,15 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_database_debugger/firebase_database_debugger.dart';
 import 'package:flutter/foundation.dart';
 
-late final FirebaseDatabaseDebugger debugger;
+final debugger = FirebaseDatabaseDebugger(
+  config: FirebaseDatabaseDebuggerConfig(
+    enabled: kDebugMode,
+  ),
+);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // ... Firebase.initializeApp() etc.
-
-  if (kDebugMode) {
-    debugger = FirebaseDatabaseDebugger(
-      config: FirebaseDatabaseDebuggerConfig(
-        debuggerBaseUrl: 'http://localhost:9092',
-        // Android emulator: 'http://10.0.2.2:9092'
-      ),
-    );
-  }
 
   runApp(MyApp());
 }
@@ -102,7 +97,6 @@ By default each unique path is a separate session. Use `sessionPathDepth` to gro
 
 ```dart
 FirebaseDatabaseDebuggerConfig(
-  debuggerBaseUrl: 'http://localhost:9092',
   sessionPathDepth: 2,
 )
 ```
@@ -134,9 +128,13 @@ Flushes buffered events and closes all sessions.
 
 | Parameter                   | Default | Description                                        |
 | --------------------------- | ------- | -------------------------------------------------- |
-| `debuggerBaseUrl`           | —       | Network Debugger backend URL                       |
+| `debuggerBaseUrl`           | `http://10.0.2.2:9092` on Android emulator, otherwise `http://localhost:9092` | Network Debugger backend URL |
 | `enabled`                   | `true`  | Set `false` to disable logging entirely            |
 | `sessionPathDepth`          | `-1`    | Session grouping (see above)                       |
 | `flushInterval`             | `200ms` | How often buffered events are sent                 |
 | `maxBatchFrames`            | `100`   | Max events per batch                               |
 | `previewBodyThresholdBytes` | `16 KB` | Threshold before large payloads are base64-spilled |
+
+You can override defaults with `--dart-define`:
+- `FIREBASE_DATABASE_DEBUGGER_BASE_URL` (or `FIREBASE_DEBUGGER_BASE_URL`)
+- `FIREBASE_DATABASE_DEBUGGER_ENABLED` (or `FIREBASE_DEBUGGER_ENABLED`)

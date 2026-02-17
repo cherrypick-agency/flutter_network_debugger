@@ -1,9 +1,22 @@
+import 'package:firebase_database_debugger/src/platform_stub.dart'
+    if (dart.library.io) 'package:firebase_database_debugger/src/platform_io.dart'
+    as platform;
+
+const String _kDefineFirebaseDebuggerBaseUrl =
+    String.fromEnvironment('FIREBASE_DEBUGGER_BASE_URL');
+const String _kDefineFirebaseDatabaseDebuggerBaseUrl =
+    String.fromEnvironment('FIREBASE_DATABASE_DEBUGGER_BASE_URL');
+const String _kDefineFirebaseDebuggerEnabled =
+    String.fromEnvironment('FIREBASE_DEBUGGER_ENABLED');
+const String _kDefineFirebaseDatabaseDebuggerEnabled =
+    String.fromEnvironment('FIREBASE_DATABASE_DEBUGGER_ENABLED');
+
 /// Configuration for [FirebaseDatabaseDebugger].
 ///
 /// Controls connection to the debugger, session grouping, and frame batching.
 class FirebaseDatabaseDebuggerConfig {
   FirebaseDatabaseDebuggerConfig({
-    required this.debuggerBaseUrl,
+    String? debuggerBaseUrl,
     this.databaseUrl = 'https://firebase.local',
     this.enabled = true,
     this.adminToken,
@@ -13,7 +26,10 @@ class FirebaseDatabaseDebuggerConfig {
     Duration? flushInterval,
     int maxBatchFrames = 100,
     int previewBodyThresholdBytes = 16 * 1024,
-  })  : flushInterval = flushInterval ?? const Duration(milliseconds: 200),
+  })  : debuggerBaseUrl = _normalizeDebuggerBaseUrl(
+          debuggerBaseUrl ?? _defaultDebuggerBaseUrl(),
+        ),
+        flushInterval = flushInterval ?? const Duration(milliseconds: 200),
         sessionPathDepth = sessionPathDepth.clamp(-1, 20),
         includeRunIdInSessionId = includeRunIdInSessionId,
         maxBatchFrames = maxBatchFrames.clamp(1, 200),
@@ -25,14 +41,16 @@ class FirebaseDatabaseDebuggerConfig {
   /// Configuration with default values for local development.
   factory FirebaseDatabaseDebuggerConfig.defaults() {
     return FirebaseDatabaseDebuggerConfig(
-      debuggerBaseUrl: 'http://localhost:9092',
-      enabled: true,
+      debuggerBaseUrl: _defaultDebuggerBaseUrlFromDefine(),
+      enabled: _defaultEnabledFromDefine(),
     );
   }
 
   /// Base URL of the debugger where frames are sent.
   ///
-  /// E.g. `http://localhost:9092`.
+  /// Defaults to:
+  /// - `http://10.0.2.2:9092` on Android emulator
+  /// - `http://localhost:9092` on other platforms
   final String debuggerBaseUrl;
 
   /// Firebase Realtime Database URL, used to form the session target.
@@ -78,4 +96,47 @@ class FirebaseDatabaseDebuggerConfig {
   ///
   /// Valid range: 1 KB – 256 KB.
   final int previewBodyThresholdBytes;
+
+  static String _defaultDebuggerBaseUrl() {
+    return platform.isAndroid
+        ? 'http://10.0.2.2:9092'
+        : 'http://localhost:9092';
+  }
+
+  static String _defaultDebuggerBaseUrlFromDefine() {
+    final fromDefine = _firstNonEmpty([
+      _kDefineFirebaseDatabaseDebuggerBaseUrl,
+      _kDefineFirebaseDebuggerBaseUrl,
+    ]);
+    return fromDefine ?? _defaultDebuggerBaseUrl();
+  }
+
+  static bool _defaultEnabledFromDefine() {
+    final fromDefine = _firstNonEmpty([
+      _kDefineFirebaseDatabaseDebuggerEnabled,
+      _kDefineFirebaseDebuggerEnabled,
+    ]);
+    if (fromDefine == null) return true;
+    final v = fromDefine.trim().toLowerCase();
+    return v == '1' || v == 'true' || v == 'yes' || v == 'on';
+  }
+
+  static String? _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      if (value != null && value.trim().isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  static String _normalizeDebuggerBaseUrl(String value) {
+    var normalized = value.trim();
+    if (normalized.isEmpty) return normalized;
+    if (!normalized.contains('://')) {
+      normalized = 'http://$normalized';
+    }
+    if (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
 }

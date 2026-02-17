@@ -4,7 +4,6 @@
   <a href="https://pub.dev/packages/dio_debugger"><img src="https://img.shields.io/pub/v/dio_debugger.svg" alt="pub version" /></a>
   <a href="https://pub.dev/packages/dio_debugger/score"><img src="https://img.shields.io/pub/likes/dio_debugger" alt="likes" /></a>
   <a href="https://pub.dev/packages/dio_debugger/score"><img src="https://img.shields.io/pub/points/dio_debugger" alt="pub points" /></a>
-  <a href="https://pub.dev/packages/dio_debugger/score"><img src="https://img.shields.io/pub/popularity/dio_debugger" alt="popularity" /></a>
   <a href="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml"><img src="https://github.com/cherrypick-agency/flutter_network_debugger/actions/workflows/dio_debugger.yml/badge.svg?branch=main" alt="CI" /></a>
 </p>
 
@@ -152,4 +151,4 @@ If `options.path` is already an absolute `http(s)://…`, it is proxied without 
 - If the proxy is provided without scheme and with port `:443`, `https` will be used automatically.
 
 ## License
-Apache-2.0
+MIT

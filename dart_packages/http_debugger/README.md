@@ -4,7 +4,6 @@
   <a href="https://pub.dev/packages/http_debugger"><img src="https://img.shields.io/pub/v/http_debugger.svg" alt="pub version" /></a>
   <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/likes/http_debugger" alt="likes" /></a>
   <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/points/http_debugger" alt="pub points" /></a>
-  <a href="https://pub.dev/packages/http_debugger/score"><img src="https://img.shields.io/pub/popularity/http_debugger" alt="popularity" /></a>
 </p>
 
 ## Getting started with Network Debugger

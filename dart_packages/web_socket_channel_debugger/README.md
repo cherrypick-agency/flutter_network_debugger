@@ -109,4 +109,4 @@ Creates a configuration for connecting through the proxy.
 
 ## License
 
-Apache-2.0
+MIT

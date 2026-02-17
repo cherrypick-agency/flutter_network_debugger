@@ -246,4 +246,4 @@ There's a bug in `socket_io_client`: if no port is specified in URL, `Uri.port` 
 
 ## License
 
-Apache-2.0
+MIT
