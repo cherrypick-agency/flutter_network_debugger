@@ -19,6 +19,7 @@ Network Debugger is a local proxy server that intercepts and records HTTP and We
 ## Documentation Index
 
 - [Quick Start Guide](./quick-start.md) - Get up and running in 5 minutes
+- [Desktop Setup Guide](./desktop-setup.md) - Install and run desktop app
 - [Configuration Guide](./configuration.md) - Environment variables, dart-define, and runtime config
 - [Proxy Modes](./proxy-modes.md) - Understanding reverse vs forward proxy
 - [Platform Support](./platform-support.md) - dart:io vs Web platform differences

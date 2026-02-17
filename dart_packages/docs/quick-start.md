@@ -18,6 +18,9 @@ The proxy server starts on:
 - **Proxy endpoint**: `http://localhost:9091`
 - **Web UI**: `http://localhost:9092`
 
+If you want to use the desktop app, follow:
+- [Desktop Setup Guide](./desktop-setup.md)
+
 ## Step 2: Add the Package to Your Project
 
 Choose the package that matches your networking library:
@@ -153,6 +156,7 @@ dio.interceptors.add(
 
 ## Next Steps
 
+- [Desktop Setup Guide](./desktop-setup.md) - Install and run desktop app
 - [Configuration Guide](./configuration.md) - Advanced configuration options
 - [Proxy Modes](./proxy-modes.md) - Learn about reverse vs forward proxy
 - [Platform Support](./platform-support.md) - Platform-specific considerations

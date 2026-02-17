@@ -1,6 +1,8 @@
-# Firebase Realtime Database
+# Firebase Realtime Database - The most convenient way to debug on Flutter
 
 Intercept Firebase RTDB operations and see them in the Network Debugger UI.
+
+![RTDB sessions in the Network Debugger UI](/images/firebase-rtdb-sessions.png)
 
 ## Quick start
 
@@ -50,8 +52,6 @@ await ref.remove();                             // logged as REMOVE
 That's it — open the Network Debugger app (web UI or desktop app) and you'll
 see every operation with payload, timing and status. For setup instructions,
 see the [Quick Start Guide](https://cherrypick-agency.github.io/flutter_network_debugger/guide/_generated/network_debugger_workspace/quick-start.html).
-
-![RTDB sessions in the Network Debugger UI](/images/firebase-rtdb-sessions.png)
 
 ![RTDB event details](/images/firebase-rtdb-details.png)
 
@@ -107,12 +107,12 @@ FirebaseDatabaseDebuggerConfig(
 )
 ```
 
-| `sessionPathDepth` | Behavior | Example |
-| --- | --- | --- |
-| `-1` (default) | One session per full path | `/users/alice` and `/users/bob` — two sessions |
-| `0` | Single session for entire database | Everything in one session |
-| `1` | Group by first segment | `/users/alice` and `/users/bob` → session `/users` |
-| `2` | Group by two segments | `/users/alice/profile` and `/users/alice/settings` → `/users/alice` |
+| `sessionPathDepth` | Behavior                           | Example                                                             |
+| ------------------ | ---------------------------------- | ------------------------------------------------------------------- |
+| `-1` (default)     | One session per full path          | `/users/alice` and `/users/bob` — two sessions                      |
+| `0`                | Single session for entire database | Everything in one session                                           |
+| `1`                | Group by first segment             | `/users/alice` and `/users/bob` → session `/users`                  |
+| `2`                | Group by two segments              | `/users/alice/profile` and `/users/alice/settings` → `/users/alice` |
 
 ## UI filters
 
@@ -132,11 +132,11 @@ Flushes buffered events and closes all sessions.
 
 ## Configuration reference
 
-| Parameter | Default | Description |
-| --- | --- | --- |
-| `debuggerBaseUrl` | — | Network Debugger backend URL |
-| `enabled` | `true` | Set `false` to disable logging entirely |
-| `sessionPathDepth` | `-1` | Session grouping (see above) |
-| `flushInterval` | `200ms` | How often buffered events are sent |
-| `maxBatchFrames` | `100` | Max events per batch |
+| Parameter                   | Default | Description                                        |
+| --------------------------- | ------- | -------------------------------------------------- |
+| `debuggerBaseUrl`           | —       | Network Debugger backend URL                       |
+| `enabled`                   | `true`  | Set `false` to disable logging entirely            |
+| `sessionPathDepth`          | `-1`    | Session grouping (see above)                       |
+| `flushInterval`             | `200ms` | How often buffered events are sent                 |
+| `maxBatchFrames`            | `100`   | Max events per batch                               |
 | `previewBodyThresholdBytes` | `16 KB` | Threshold before large payloads are base64-spilled |
