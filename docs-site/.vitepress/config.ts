@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 import { apiSidebar } from './generated/api-sidebar'
 import { guideSidebar } from './generated/guide-sidebar'
 import { dartpadPlugin } from './theme/plugins/dartpad'
@@ -28,7 +29,7 @@ const mergedGuideSidebar = {
   ],
 }
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   base: docsBase,
   title: 'Network Debugger Docs',
   description: 'API и гайды для пакетов из dart_packages',
@@ -65,4 +66,4 @@ export default defineConfig({
       },
     ],
   },
-})
+}))

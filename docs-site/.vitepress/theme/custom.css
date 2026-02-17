@@ -1,14 +1,87 @@
 :root {
   --vp-nav-bg-color: rgba(255, 255, 255, 0.5);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #00C853 0%, #00897B 40%, #00BCD4 100%);
 }
 
 .dark {
   --vp-nav-bg-color: rgba(30, 30, 32, 0.5);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #00E676 0%, #00C853 50%, #00BCD4 100%);
 }
 
+/* Gradient text on hero name */
+.VPHero .name.clip {
+  background: var(--vp-home-hero-name-background) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Glassmorphism navbar */
 .VPNavBar {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* Screenshot background behind hero */
+.VPHero {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.VPHero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url('/images/hero-screenshot.png') center top / cover no-repeat;
+  filter: blur(3px);
+  opacity: 0.12;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.dark .VPHero::before {
+  opacity: 0.18;
+}
+
+/* Gradient fade at bottom of hero bg */
+.VPHero::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(to top, var(--vp-c-bg), transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Feature cards: icon + title on same line */
+.VPFeature .box {
+  display: grid !important;
+  grid-template-columns: 48px 1fr !important;
+  grid-template-rows: auto auto !important;
+  column-gap: 12px !important;
+  align-items: center !important;
+}
+
+.VPFeature .box > .icon {
+  grid-row: 1 !important;
+  grid-column: 1 !important;
+  margin-bottom: 0 !important;
+}
+
+.VPFeature .box > .title {
+  grid-row: 1 !important;
+  grid-column: 2 !important;
+}
+
+.VPFeature .box > .details {
+  grid-row: 2 !important;
+  grid-column: 1 / -1 !important;
 }
 
 /* DartPad interactive playground */
