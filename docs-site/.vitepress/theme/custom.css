@@ -74,6 +74,11 @@
   margin-bottom: 0 !important;
 }
 
+.VPFeature .box > .icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
 .VPFeature .box > .title {
   grid-row: 1 !important;
   grid-column: 2 !important;

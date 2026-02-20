@@ -10,23 +10,58 @@ import llmstxt, {
 
 const docsBase = process.env.DOCS_BASE ?? '/'
 
-const manualGuideItems = [
-  {
-    text: 'Quick Start Guide',
-    link: '/guide/_generated/network_debugger_workspace/quick-start',
-  },
-  { text: 'Overview', link: '/guide/' },
-  { text: 'Firebase Realtime Database', link: '/guide/firebase-database' },
-]
+// Organize sidebar into logical sections
+const organizeSidebar = () => {
+  const generated = guideSidebar['/guide/']?.[0]?.items || []
+
+  // Extract packages
+  const packages = generated.filter((item: any) =>
+    item.link?.includes('/packages/')
+  ).map((item: any) => ({
+    text: item.text,
+    link: item.link
+  }))
+
+  return [
+    {
+      text: 'Getting Started',
+      items: [
+        { text: 'Overview', link: '/guide/' },
+        { text: 'Quick Start', link: '/guide/network_debugger_workspace/quick-start' },
+        { text: 'Desktop Setup', link: '/guide/network_debugger_workspace/desktop-setup' },
+      ]
+    },
+    {
+      text: 'Configuration',
+      items: [
+        { text: 'Configuration Guide', link: '/guide/network_debugger_workspace/configuration' },
+        { text: 'Proxy Modes', link: '/guide/network_debugger_workspace/proxy-modes' },
+        { text: 'Platform Support', link: '/guide/network_debugger_workspace/platform-support' },
+      ]
+    },
+    {
+      text: 'Packages',
+      collapsed: true,
+      items: packages
+    },
+    {
+      text: 'Specialized Debuggers',
+      items: [
+        { text: 'Firebase Realtime Database', link: '/guide/firebase-database' },
+      ]
+    },
+    {
+      text: 'Reference',
+      items: [
+        { text: 'API Reference', link: '/guide/network_debugger_workspace/api-reference' },
+        { text: 'Troubleshooting', link: '/guide/network_debugger_workspace/troubleshooting' },
+      ]
+    },
+  ]
+}
 
 const mergedGuideSidebar = {
-  '/guide/': [
-    {
-      text: 'Guide',
-      items: manualGuideItems,
-    },
-    ...(guideSidebar['/guide/'] ?? []),
-  ],
+  '/guide/': organizeSidebar(),
 }
 
 export default withMermaid(defineConfig({

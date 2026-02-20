@@ -242,3 +242,14 @@ desktop-flutter-clean:
 	cd frontend && flutter pub get
 	@echo "✓ Flutter cleaned and dependencies updated"
 
+
+# Documentation generation
+.PHONY: docs docs-dev
+
+docs:
+	@echo "Generating documentation from git version of dartdoc_vitepress..."
+	@./scripts/generate-docs.sh
+
+docs-dev:
+	@echo "Starting VitePress dev server..."
+	@cd docs-site && npm run dev

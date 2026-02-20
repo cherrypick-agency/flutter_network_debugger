@@ -101,6 +101,51 @@ make build-app
 make build-cross
 ```
 
+## Documentation
+
+The documentation site is generated using [dartdoc_vitepress](https://github.com/777genius/dartdoc_vitepress), which creates a VitePress site from Dart package documentation.
+
+### Generating Docs
+
+```bash
+# Generate documentation (uses latest git version)
+make docs
+
+# Preview documentation locally
+make docs-dev
+# Opens at http://localhost:5173
+```
+
+The `make docs` command will:
+1. Activate the latest version of `dartdoc_vitepress` from git (not pub.dev)
+2. Generate VitePress markdown files from all packages in `dart_packages/`
+3. Output to `docs-site/`
+
+**Important:** The docs are generated from the **git version** of `dartdoc_vitepress` to ensure the latest features and fixes are always used.
+
+### Manual Generation
+
+If you need more control:
+
+```bash
+# Activate from git
+dart pub global activate --source git https://github.com/777genius/dartdoc_vitepress.git --git-ref main
+
+# Generate docs
+cd dart_packages
+dart pub global run dartdoc_vitepress \
+  --format vitepress \
+  --workspace-docs \
+  --output ../docs-site
+```
+
+### Docs Structure
+
+- `docs-site/api/` — Auto-generated API reference
+- `docs-site/guide/` — Package guides and tutorials
+- `docs-site/index.md` — Landing page (customizable)
+- `docs-site/.vitepress/config.ts` — VitePress config (customizable)
+
 ## Development Workflow
 
 1. Create a feature branch:
