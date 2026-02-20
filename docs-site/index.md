@@ -45,6 +45,7 @@ features:
 
 <script setup>
 import { ref } from 'vue'
+import { withBase } from 'vitepress'
 const tab = ref('install')
 </script>
 
@@ -69,7 +70,7 @@ dart pub global activate network_debugger
 network_debugger
 ```
 
-<a class="setup-guide-link" href="/guide/network_debugger_workspace/quick-start">📚 Quick Start Guide →</a>
+<a class="setup-guide-link" :href="withBase('/guide/network_debugger_workspace/quick-start')">📚 Quick Start Guide →</a>
 
 </div>
 <div v-show="tab === 'dio'">
@@ -80,7 +81,7 @@ import 'package:dio_debugger/dio_debugger.dart';
 final dio = Dio()..interceptors.add(DioDebugger());
 ```
 
-<a class="setup-guide-link" href="/guide/network_debugger_workspace/packages/dio_debugger">📚 Dio Debugger documentation →</a>
+<a class="setup-guide-link" :href="withBase('/guide/network_debugger_workspace/packages/dio_debugger')">📚 Dio Debugger documentation →</a>
 
 </div>
 <div v-show="tab === 'http'">
@@ -91,7 +92,7 @@ import 'package:http_debugger/http_debugger.dart';
 HttpOverrides.global = DebuggerHttpOverrides();
 ```
 
-<a class="setup-guide-link" href="/guide/network_debugger_workspace/packages/http_debugger">📚 HTTP Debugger documentation →</a>
+<a class="setup-guide-link" :href="withBase('/guide/network_debugger_workspace/packages/http_debugger')">📚 HTTP Debugger documentation →</a>
 
 </div>
 <div v-show="tab === 'ws'">
@@ -103,7 +104,7 @@ final cfg = WebSocketDebugger.attach(baseUrl: 'wss://echo.websocket.events');
 final socket = await WebSocketDebugger.connect(config: cfg);
 ```
 
-<a class="setup-guide-link" href="/guide/network_debugger_workspace/packages/web_socket_debugger">📚 WebSocket Debugger documentation →</a>
+<a class="setup-guide-link" :href="withBase('/guide/network_debugger_workspace/packages/web_socket_debugger')">📚 WebSocket Debugger documentation →</a>
 
 </div>
 <div v-show="tab === 'wsc'">
@@ -115,7 +116,7 @@ final cfg = WebSocketChannelDebugger.attach(baseUrl: 'wss://echo.websocket.event
 final channel = WebSocketChannelDebugger.connect(config: cfg);
 ```
 
-<a class="setup-guide-link" href="/guide/network_debugger_workspace/packages/web_socket_channel_debugger">📚 WebSocketChannel Debugger documentation →</a>
+<a class="setup-guide-link" :href="withBase('/guide/network_debugger_workspace/packages/web_socket_channel_debugger')">📚 WebSocketChannel Debugger documentation →</a>
 
 </div>
 <div v-show="tab === 'sio'">
@@ -132,7 +133,7 @@ final socket = io.io(cfg.effectiveBaseUrl,
     .build());
 ```
 
-<a class="setup-guide-link" href="/guide/network_debugger_workspace/packages/socket_io_debugger">📚 Socket.IO Debugger documentation →</a>
+<a class="setup-guide-link" :href="withBase('/guide/network_debugger_workspace/packages/socket_io_debugger')">📚 Socket.IO Debugger documentation →</a>
 
 </div>
 <div v-show="tab === 'firebase'">
@@ -144,7 +145,7 @@ final debugger = FirebaseDatabaseDebugger();
 final ref = debugger.ref(FirebaseDatabase.instance.ref('users'));
 ```
 
-<a class="setup-guide-link" href="/guide/firebase-database">📚 Firebase RTDB Debugger documentation →</a>
+<a class="setup-guide-link" :href="withBase('/guide/firebase-database')">📚 Firebase RTDB Debugger documentation →</a>
 
 </div>
 
