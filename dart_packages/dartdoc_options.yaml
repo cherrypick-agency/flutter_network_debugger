@@ -1,0 +1,4 @@
+dartdoc:
+  linkToSource:
+    root: '.'
+    uriTemplate: 'https://github.com/cherrypick-agency/flutter_network_debugger/blob/main/dart_packages/%f%#L%l%'
