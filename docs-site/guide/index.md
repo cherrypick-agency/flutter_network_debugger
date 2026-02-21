@@ -1,25 +1,32 @@
 # Guide
 
-This section helps you get started quickly with integrating packages from `dart_packages`.
+Network Debugger captures HTTP, WebSocket, Socket.IO, and Firebase RTDB traffic from your Flutter/Dart app and displays it in a real-time UI.
 
-## Recommended steps
+## Getting Started
 
-Start here:
+1. **[Quick Start Guide](./network_debugger_workspace/quick-start.md)** — install the CLI, add a package, and see your first captured request in under 2 minutes.
+2. **[Desktop Setup](./network_debugger_workspace/desktop-setup.md)** — download the native macOS / Windows / Linux app.
 
-- [Quick Start Guide](./_generated/network_debugger_workspace/quick-start.md)
+## Pick Your Package
 
-1. Pick the package that matches your networking stack (`dio`, `http`, `web_socket`,
-   `socket_io`, `firebase_database`).
-2. Add the package to your app and route traffic through the local proxy.
-3. Run `network_debugger` and verify that sessions appear in the UI.
-4. Head over to `API Reference` for detailed class and method docs.
+Choose the package that matches your networking stack:
 
-## Integration guides
+| Stack | Package | Install |
+|---|---|---|
+| **Dio** | [dio_debugger](./network_debugger_workspace/packages/dio_debugger.md) | `dart pub add dio_debugger` |
+| **package:http** | [http_debugger](./network_debugger_workspace/packages/http_debugger.md) | `dart pub add http_debugger` |
+| **WebSocket** | [web_socket_debugger](./network_debugger_workspace/packages/web_socket_debugger.md) | `dart pub add web_socket_debugger` |
+| **WebSocketChannel** | [web_socket_channel_debugger](./network_debugger_workspace/packages/web_socket_channel_debugger.md) | `dart pub add web_socket_channel_debugger` |
+| **Socket.IO** | [socket_io_debugger](./network_debugger_workspace/packages/socket_io_debugger.md) | `dart pub add socket_io_debugger` |
+| **Firebase RTDB** | [firebase_database_debugger](./firebase-database.md) | `dart pub add firebase_database_debugger` |
 
-- [Firebase Realtime Database](./firebase-database.md) — `firebase_database_debugger`
+## Configuration & Modes
 
-## What's in the API Reference
+- **[Configuration Guide](./network_debugger_workspace/configuration.md)** — all settings, environment variables, and `--dart-define` options.
+- **[Proxy Modes](./network_debugger_workspace/proxy-modes.md)** — reverse vs forward proxy, when to use which.
+- **[Platform Support](./network_debugger_workspace/platform-support.md)** — what works on iOS, Android, Web, and Desktop.
 
-- Public libraries and types for every package.
-- Method and parameter documentation.
-- Cross-references between entities across the generated docs.
+## Reference
+
+- **[API Reference](/api/)** — generated class and method documentation for every package.
+- **[Troubleshooting](./network_debugger_workspace/troubleshooting.md)** — common issues and solutions.

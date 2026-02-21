@@ -46,7 +46,7 @@ await ref.remove();                             // logged as REMOVE
 
 That's it — open the Network Debugger app (web UI or desktop app) and you'll
 see every operation with payload, timing and status. For setup instructions,
-see the [Quick Start Guide](https://cherrypick-agency.github.io/flutter_network_debugger/guide/_generated/network_debugger_workspace/quick-start.html).
+see the [Quick Start Guide](./network_debugger_workspace/quick-start.md).
 
 ![RTDB event details](/images/firebase-rtdb-details.png)
 
