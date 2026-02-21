@@ -1,7 +1,7 @@
 /// Library for intercepting and sending Firebase Realtime Database operations
 /// to network-debugger for visual debugging.
 ///
-/// Wraps standard [DatabaseReference] and [Query] in debug wrappers that log
+/// Wraps standard [DatabaseReference] and [Query](https://pub.dev/documentation/firebase_database/latest/firebase_database/Query-class.html) in debug wrappers that log
 /// every operation (get, set, update, remove, listen) and send frames to the
 /// debugger ingest API in batches.
 library firebase_database_debugger;
@@ -21,7 +21,7 @@ export 'src/firebase_database_debugger_config.dart';
 
 /// Main class for Firebase Realtime Database debugger.
 ///
-/// Creates debug wrappers over [DatabaseReference] and [Query], buffers frames,
+/// Creates debug wrappers over [DatabaseReference] and [Query](https://pub.dev/documentation/firebase_database/latest/firebase_database/Query-class.html), buffers frames,
 /// and periodically sends them to the ingest API.
 ///
 /// Example usage:
@@ -483,7 +483,7 @@ class DebugDatabaseReference {
   }
 }
 
-/// Debug wrapper over Firebase [Query].
+/// Debug wrapper over Firebase [Query](https://pub.dev/documentation/firebase_database/latest/firebase_database/Query-class.html).
 ///
 /// Proxies read and subscription operations, logging each via
 /// [FirebaseDatabaseDebugger].
@@ -495,7 +495,7 @@ class DebugQuery {
   final FirebaseDatabaseDebugger _owner;
   final Query _inner;
 
-  /// The underlying [Query] without the wrapper.
+  /// The underlying [Query](https://pub.dev/documentation/firebase_database/latest/firebase_database/Query-class.html) without the wrapper.
   Query get raw => _inner;
 
   /// Database path the query is bound to.
