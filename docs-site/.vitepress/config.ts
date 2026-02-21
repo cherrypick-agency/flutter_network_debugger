@@ -4,9 +4,7 @@ import { apiSidebar } from './generated/api-sidebar'
 import { guideSidebar } from './generated/guide-sidebar'
 import { dartpadPlugin } from './theme/plugins/dartpad'
 import { apiLinkerPlugin } from './theme/plugins/api-linker'
-import llmstxt, {
-  copyOrDownloadAsMarkdownButtons,
-} from 'vitepress-plugin-llms'
+import llmstxt from 'vitepress-plugin-llms'
 
 const docsBase = process.env.DOCS_BASE ?? '/'
 
@@ -72,12 +70,17 @@ export default withMermaid(defineConfig({
   lastUpdated: true,
   vite: {
     plugins: [llmstxt()],
+    optimizeDeps: {
+      include: ['mermaid'],
+    },
+    ssr: {
+      noExternal: ['mermaid'],
+    },
   },
   markdown: {
     config: (md) => {
       md.use(dartpadPlugin)
       md.use(apiLinkerPlugin)
-      md.use(copyOrDownloadAsMarkdownButtons)
     },
   },
   themeConfig: {
