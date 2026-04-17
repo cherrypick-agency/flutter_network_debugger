@@ -19,6 +19,7 @@
 /dart_packages/**/.dart_tool/
 /dart_packages/**/pubspec.lock
 /dart_packages/**/build/
+/dart_packages/doc/
 /dart_packages/**/pubspec_overrides.yaml
 /dart_packages/**/data/
 
@@ -124,11 +125,7 @@ cmd/network-debugger-web/_web/
 # ===============
 # Rust / Cargo
 # ===============
-**/target/**/deps/
-**/target/**/build/
-**/target/**/.fingerprint/
-**/target/**/incremental/
-**/target/**/.cargo-lock
+**/target/
 
 # E2E test cache
 internal/e2e/cache/

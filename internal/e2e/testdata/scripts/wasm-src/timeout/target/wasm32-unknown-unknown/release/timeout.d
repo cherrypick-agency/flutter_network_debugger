@@ -1,1 +1,0 @@
-/Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/timeout/target/wasm32-unknown-unknown/release/timeout.wasm: /Users/belief/dev/projects/go-proxy/internal/e2e/testdata/scripts/wasm-src/timeout/src/lib.rs
