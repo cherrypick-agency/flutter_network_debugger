@@ -265,6 +265,99 @@ func TestHandleV1ProxyConfig_POST_WithAuth(t *testing.T) {
 	}
 }
 
+func TestHandleV1ProxyConfig_GET_OmitsStoredCredentials(t *testing.T) {
+	d := setupProxyDeps(t)
+
+	payload := map[string]any{
+		"forward": map[string]any{"enabled": false, "port": 0},
+		"socks": map[string]any{
+			"enabled":  true,
+			"port":     0,
+			"addr":     "127.0.0.1:0",
+			"authMode": "userpass",
+			"user":     "secret-user",
+			"pass":     "secret-pass",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/proxy/config", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	d.handleV1ProxyConfig(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("post status=%d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/_api/v1/proxy/config", nil)
+	w = httptest.NewRecorder()
+	d.handleV1ProxyConfig(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get status=%d", w.Code)
+	}
+
+	var raw map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	socks, _ := raw["socks"].(map[string]any)
+	if _, ok := socks["user"]; ok {
+		t.Fatalf("GET response leaked socks.user")
+	}
+	if _, ok := socks["pass"]; ok {
+		t.Fatalf("GET response leaked socks.pass")
+	}
+}
+
+func TestHandleV1ProxyConfig_POST_PreservesStoredCredentialsWhenOmitted(t *testing.T) {
+	d := setupProxyDeps(t)
+
+	initial := map[string]any{
+		"forward": map[string]any{"enabled": false, "port": 0},
+		"socks": map[string]any{
+			"enabled":  true,
+			"port":     0,
+			"addr":     "127.0.0.1:0",
+			"authMode": "userpass",
+			"user":     "persist-user",
+			"pass":     "persist-pass",
+		},
+	}
+	body, _ := json.Marshal(initial)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/proxy/config", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	d.handleV1ProxyConfig(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("initial post status=%d", w.Code)
+	}
+
+	update := map[string]any{
+		"forward": map[string]any{"enabled": true, "port": 0, "addr": "127.0.0.1:0"},
+		"socks": map[string]any{
+			"enabled":  true,
+			"port":     0,
+			"addr":     "127.0.0.1:0",
+			"authMode": "userpass",
+		},
+	}
+	body, _ = json.Marshal(update)
+	req = httptest.NewRequest(http.MethodPost, "/_api/v1/proxy/config", bytes.NewReader(body))
+	w = httptest.NewRecorder()
+	d.handleV1ProxyConfig(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update post status=%d", w.Code)
+	}
+
+	cfg, err := d.ProxySvc.Load(contextWithNoCancel())
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.SocksUser != "persist-user" {
+		t.Fatalf("SocksUser=%q want persist-user", cfg.SocksUser)
+	}
+	if cfg.SocksPass != "persist-pass" {
+		t.Fatalf("SocksPass=%q want persist-pass", cfg.SocksPass)
+	}
+}
+
 func TestHandleV1ProxyConfig_MethodNotAllowed(t *testing.T) {
 	d := setupProxyDeps(t)
 

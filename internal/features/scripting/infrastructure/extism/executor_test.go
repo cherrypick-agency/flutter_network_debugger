@@ -167,6 +167,33 @@ func TestExtismExecutor_Execute_Timeout(t *testing.T) {
 	}
 }
 
+// TestExtismExecutor_Execute_TimeoutFixture ensures an infinite-loop fixture is
+// interrupted by the runtime deadline instead of hanging the caller.
+func TestExtismExecutor_Execute_TimeoutFixture(t *testing.T) {
+	skipIfNoWASMFixtures(t)
+
+	executor := createTestExecutor(t)
+	script := createTimeoutScript(t)
+	script.Config.TimeoutMs = 100
+
+	start := time.Now()
+	result, err := executor.Execute(context.Background(), domain.ExecutionRequest{
+		Script: script,
+		Input:  []byte(`{"test":"data"}`),
+	})
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil result error", err)
+	}
+	if result.Error == "" {
+		t.Fatal("Execute() result.Error should describe the timeout")
+	}
+	if duration > 5*time.Second {
+		t.Fatalf("Execute() took too long: %v", duration)
+	}
+}
+
 // TestExtismExecutor_Execute_Cancellation tests Execute with cancellation
 func TestExtismExecutor_Execute_Cancellation(t *testing.T) {
 	skipIfNoWASMFixtures(t)

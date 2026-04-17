@@ -17,12 +17,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"network-debugger/internal/adapters/storage/memory"
-	mappingp "network-debugger/internal/features/mapping/infrastructure/persistence"
-	processp "network-debugger/internal/features/process/infrastructure/persistence"
-	proxyp "network-debugger/internal/features/proxy/infrastructure/persistence"
-	settingsp "network-debugger/internal/features/settings/infrastructure/persistence"
 	"network-debugger/internal/infrastructure/config"
-	dbpkg "network-debugger/internal/infrastructure/db"
 	httpapi "network-debugger/internal/infrastructure/httpapi"
 	obs "network-debugger/internal/infrastructure/observability"
 	"network-debugger/internal/usecase"
@@ -111,20 +106,7 @@ func startAppServer(t *testing.T) (*httptest.Server, *httpapi.Deps) {
 	store := memory.NewStore(500, 10000, 2*time.Hour)
 	svc := usecase.NewSessionService(store, store, store)
 	deps := &httpapi.Deps{Cfg: config.Config{CORSAllowOrigin: "*"}, Logger: &logger, Metrics: metrics, Svc: svc, Monitor: httpapi.NewMonitorHub()}
-	// Set up temporary SQLite so that ProxySvc/ProxyRt is available
-	tmp := t.TempDir()
-	dbPath := tmp + "/test.db"
-	if gdb, err := dbpkg.NewSQLite(dbPath); err == nil {
-		_ = gdb.AutoMigrate(
-			&proxyp.ProxyConfigModel{},
-			&settingsp.RuntimeSettingsModel{},
-			&settingsp.ThrottleProfileModel{},
-			&mappingp.MapRuleModel{},
-			&processp.ProcessDetectionConfigModel{},
-			&processp.IconCacheModel{},
-		)
-		deps.DB = gdb
-	}
+	attachTestSQLite(t, deps)
 	srv := httptest.NewServer(httpapi.NewRouterWithDeps(deps))
 	return srv, deps
 }

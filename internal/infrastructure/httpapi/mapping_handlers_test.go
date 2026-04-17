@@ -15,6 +15,8 @@ import (
 	mdomain "network-debugger/internal/features/mapping/domain"
 	mappingrt "network-debugger/internal/features/mapping/runtime"
 	mappinguc "network-debugger/internal/features/mapping/usecase"
+	sdomain "network-debugger/internal/features/settings/domain"
+	settingsuc "network-debugger/internal/features/settings/usecase"
 	"network-debugger/internal/infrastructure/config"
 )
 
@@ -155,6 +157,60 @@ func TestHandleMappingConfig_POST_BadJSON(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleMappingConfig_GET_PrefersStoredRuntime(t *testing.T) {
+	deps := setupMappingDeps()
+	settingsSvc := settingsuc.NewService(&mockSettingsRepoForThrottle{
+		loadValue: sdomain.RuntimeSettings{
+			MappingEnabled:     false,
+			MappingUploadMaxMB: 64,
+		},
+	}, &mockThrottleProfilesRepo{})
+	deps.Settings = settingsSvc
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/mapping/config", nil)
+	req.Header.Set("X-Admin-Token", "t")
+	w := httptest.NewRecorder()
+
+	deps.handleMappingConfig(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp mappingConfigDTO
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if resp.Enabled != false || resp.UploadMaxMB != 64 {
+		t.Fatalf("unexpected stored runtime overlay: %+v", resp)
+	}
+}
+
+func TestHandleMappingConfig_POST_PersistsRuntimeSettings(t *testing.T) {
+	deps := setupMappingDeps()
+	settingsRepo := &mockSettingsRepoForThrottle{}
+	deps.Settings = settingsuc.NewService(settingsRepo, &mockThrottleProfilesRepo{})
+
+	input := mappingConfigDTO{Enabled: false, UploadMaxMB: 40}
+	body, _ := json.Marshal(input)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/mapping/config", bytes.NewReader(body))
+	req.Header.Set("X-Admin-Token", "t")
+	w := httptest.NewRecorder()
+
+	deps.handleMappingConfig(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if settingsRepo.saved == nil {
+		t.Fatal("expected runtime settings to be saved")
+	}
+	if settingsRepo.saved.MappingEnabled != false || settingsRepo.saved.MappingUploadMaxMB != 40 {
+		t.Fatalf("mapping config not persisted: %+v", *settingsRepo.saved)
 	}
 }
 

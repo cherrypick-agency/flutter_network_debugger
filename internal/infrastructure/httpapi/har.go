@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"network-debugger/internal/domain"
-	obs "network-debugger/internal/infrastructure/observability"
-	"network-debugger/internal/usecase"
 )
 
 // HAR 1.2 specification structures
@@ -178,78 +176,15 @@ func exportHARForSession(w http.ResponseWriter, r *http.Request, d *Deps, sessio
 
 // exportHARWithOptions exports HTTP transactions to HAR format with specified options
 func exportHARWithOptions(w http.ResponseWriter, r *http.Request, d *Deps, opts HARExportOptions) {
-	ctx := r.Context()
-
-	// Collect all sessions if no specific IDs provided
-	sessionIDs := opts.SessionIDs
-	if len(sessionIDs) == 0 {
-		sessions, _, err := d.Svc.List(ctx, usecase.SessionFilter{Limit: 10000})
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "SESSION_LIST_FAILED", err.Error(), nil)
-			return
-		}
-		for _, s := range sessions {
-			if s.Kind == "http" {
-				sessionIDs = append(sessionIDs, s.ID)
-			}
-		}
-	}
-
-	entries := make([]harEntry, 0, 256)
-
-	// Process each session
-	for _, sessionID := range sessionIDs {
-		// Get session for WebSocket frames
-		session, found, err := d.Svc.Get(ctx, sessionID)
-		if err != nil || !found {
-			continue
-		}
-
-		// Collect HTTP transactions
-		from := ""
-		for {
-			txs, next, err := d.Svc.ListHTTPTransactions(ctx, sessionID, from, 1000)
-			if err != nil {
-				break
-			}
-
-			for _, tx := range txs {
-				entry, err := convertToHAREntry(ctx, tx, opts, d)
-				if err != nil {
-					continue
-				}
-				entries = append(entries, entry)
-			}
-
-			if next == "" {
-				break
-			}
-			from = next
-		}
-
-		// Add WebSocket messages if this is a WS session
-		if session.Kind == "ws" && len(entries) > 0 {
-			wsMessages, err := loadWebSocketMessages(ctx, d, sessionID)
-			if err == nil && len(wsMessages) > 0 {
-				// Attach WS messages to the last HTTP entry (the upgrade request)
-				entries[len(entries)-1].WebSocketMessages = wsMessages
-			}
-		}
+	log, apiErr := newHARService(d).exportLog(r.Context(), opts)
+	if apiErr != nil {
+		writeSessionAPIError(w, apiErr)
+		return
 	}
 
 	har := struct {
 		Log harLog `json:"log"`
-	}{
-		Log: harLog{
-			Version: "1.2",
-			Creator: harCreator{
-				Name:    "network-debugger",
-				Version: obs.Version,
-				Comment: "Network Debugger - HTTP/WebSocket Inspector",
-			},
-			Entries: entries,
-		},
-	}
+	}{Log: log}
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")

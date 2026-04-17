@@ -22,14 +22,14 @@ func TestLoadCertAuthorityFromPEM_ValidRSAPrivateKey(t *testing.T) {
 	if ca == nil {
 		t.Fatal("ca should not be nil")
 	}
-	if ca.caCert == nil {
-		t.Error("caCert should not be nil")
+	if ca.RootCertificate() == nil {
+		t.Error("RootCertificate should not be nil")
 	}
-	if ca.caKey == nil {
-		t.Error("caKey should not be nil")
+	if ca.PrivateKey() == nil {
+		t.Error("PrivateKey should not be nil")
 	}
-	if ca.cache == nil {
-		t.Error("cache should be initialized")
+	if ca.CacheSize() != 0 {
+		t.Errorf("CacheSize = %d, want 0", ca.CacheSize())
 	}
 }
 
@@ -65,8 +65,8 @@ func TestLoadCertAuthorityFromPEM_ValidPKCS8PrivateKey(t *testing.T) {
 	if ca == nil {
 		t.Fatal("ca should not be nil")
 	}
-	if ca.caKey == nil {
-		t.Error("caKey should not be nil")
+	if ca.PrivateKey() == nil {
+		t.Error("PrivateKey should not be nil")
 	}
 }
 
@@ -477,11 +477,11 @@ func TestLoadCertAuthority_Success(t *testing.T) {
 	if ca == nil {
 		t.Fatal("ca should not be nil")
 	}
-	if ca.caCert == nil {
-		t.Error("caCert should not be nil")
+	if ca.RootCertificate() == nil {
+		t.Error("RootCertificate should not be nil")
 	}
-	if ca.caKey == nil {
-		t.Error("caKey should not be nil")
+	if ca.PrivateKey() == nil {
+		t.Error("PrivateKey should not be nil")
 	}
 }
 

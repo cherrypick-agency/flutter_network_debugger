@@ -3,8 +3,6 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
-	"strings"
 )
 
 type responseDelayDTO struct {
@@ -13,132 +11,42 @@ type responseDelayDTO struct {
 }
 
 type settingsDTO struct {
-	ResponseDelay  responseDelayDTO `json:"responseDelay"`
-	FontScale      float64          `json:"fontScale,omitempty"`
-	HighlightTheme string           `json:"highlightTheme,omitempty"`
+	ResponseDelay       responseDelayDTO `json:"responseDelay"`
+	FontScale           float64          `json:"fontScale,omitempty"`
+	HighlightTheme      string           `json:"highlightTheme,omitempty"`
+	HighlightThemeLight string           `json:"highlightThemeLight,omitempty"`
+	HighlightThemeDark  string           `json:"highlightThemeDark,omitempty"`
 }
 
-// handleV1Settings — simple runtime endpoint for reading/writing proxy settings.
-// Currently only Response Delay is supported (fixed or range in ms).
+type settingsUpdateDTO struct {
+	ResponseDelay       *responseDelayDTO `json:"responseDelay,omitempty"`
+	FontScale           float64           `json:"fontScale,omitempty"`
+	HighlightTheme      string            `json:"highlightTheme,omitempty"`
+	HighlightThemeLight string            `json:"highlightThemeLight,omitempty"`
+	HighlightThemeDark  string            `json:"highlightThemeDark,omitempty"`
+}
+
 func (d *Deps) handleV1Settings(w http.ResponseWriter, r *http.Request) {
+	service := newSettingsAdminService(d)
 	switch r.Method {
 	case http.MethodGet:
-		rd := responseDelayDTO{}
-		curMin := d.Cfg.ResponseDelayMinMs
-		curMax := d.Cfg.ResponseDelayMaxMs
-		curVal := d.Cfg.ResponseDelayMs
-		fs := 1.0
-		ht := ""
-		if d.Settings != nil {
-			if rs, err := d.Settings.Load(contextWithNoCancel()); err == nil {
-				curMin, curMax, curVal = rs.ResponseDelayMinMs, rs.ResponseDelayMaxMs, rs.ResponseDelayMs
-				if rs.FontScale > 0 {
-					fs = rs.FontScale
-				}
-				if rs.HighlightTheme != "" {
-					ht = rs.HighlightTheme
-				}
-			}
-		}
-		if curMin > 0 && curMax > 0 {
-			rd.Enabled = true
-			rd.Value = strconv.Itoa(curMin) + "-" + strconv.Itoa(curMax)
-		} else if curVal > 0 {
-			rd.Enabled = true
-			rd.Value = strconv.Itoa(curVal)
-		} else {
-			rd.Enabled = false
-			rd.Value = ""
-		}
+		out := service.load(contextWithNoCancel())
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(settingsDTO{ResponseDelay: rd, FontScale: fs, HighlightTheme: ht})
+		_ = json.NewEncoder(w).Encode(out)
 		return
 	case http.MethodPost:
-		var in settingsDTO
+		var in settingsUpdateDTO
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid json", nil)
 			return
 		}
-		rd := in.ResponseDelay
-		// Disabled — reset everything. Otherwise parse value (number or range min-max in ms)
-		if !rd.Enabled || strings.TrimSpace(rd.Value) == "" || strings.TrimSpace(rd.Value) == "0" {
-			d.Cfg.ResponseDelayMs = 0
-			d.Cfg.ResponseDelayMinMs = 0
-			d.Cfg.ResponseDelayMaxMs = 0
-		} else {
-			v := strings.TrimSpace(rd.Value)
-			if strings.Contains(v, "-") {
-				parts := strings.SplitN(v, "-", 2)
-				minStr := strings.TrimSpace(parts[0])
-				maxStr := strings.TrimSpace(parts[1])
-				min, err1 := strconv.Atoi(minStr)
-				max, err2 := strconv.Atoi(maxStr)
-				if err1 != nil || err2 != nil || min < 0 || max < 0 {
-					writeError(w, http.StatusBadRequest, "BAD_VALUE", "value must be number or range like 1000-3000", nil)
-					return
-				}
-				if max < min {
-					min, max = max, min
-				}
-				d.Cfg.ResponseDelayMs = 0
-				d.Cfg.ResponseDelayMinMs = min
-				d.Cfg.ResponseDelayMaxMs = max
-			} else {
-				n, err := strconv.Atoi(v)
-				if err != nil || n < 0 {
-					writeError(w, http.StatusBadRequest, "BAD_VALUE", "value must be non-negative integer or range", nil)
-					return
-				}
-				d.Cfg.ResponseDelayMinMs = 0
-				d.Cfg.ResponseDelayMaxMs = 0
-				d.Cfg.ResponseDelayMs = n
-			}
+		out, apiErr := service.save(contextWithNoCancel(), in)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
+			return
 		}
-
-		// Persist to DB if available; save fontScale and highlightTheme if provided
-		if d.Settings != nil {
-			cur, _ := d.Settings.Load(contextWithNoCancel())
-			cur.ResponseDelayMs = d.Cfg.ResponseDelayMs
-			cur.ResponseDelayMinMs = d.Cfg.ResponseDelayMinMs
-			cur.ResponseDelayMaxMs = d.Cfg.ResponseDelayMaxMs
-			if in.FontScale > 0 {
-				cur.FontScale = in.FontScale
-			}
-			if strings.TrimSpace(in.HighlightTheme) != "" {
-				cur.HighlightTheme = strings.TrimSpace(in.HighlightTheme)
-			}
-			cur.ThrottleEnabled = d.Cfg.ThrottleEnabled
-			cur.ThrottleDownKbps = d.Cfg.ThrottleDownKbps
-			cur.ThrottleUpKbps = d.Cfg.ThrottleUpKbps
-			cur.ThrottlePacketLoss = d.Cfg.ThrottlePacketLoss
-			cur.ThrottleOffline = d.Cfg.ThrottleOffline
-			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), cur)
-		}
-
-		// Return current values similar to GET
 		w.Header().Set("Content-Type", "application/json")
-		cur := settingsDTO{}
-		if d.Cfg.ResponseDelayMinMs > 0 && d.Cfg.ResponseDelayMaxMs > 0 {
-			cur.ResponseDelay.Enabled = true
-			cur.ResponseDelay.Value = strconv.Itoa(d.Cfg.ResponseDelayMinMs) + "-" + strconv.Itoa(d.Cfg.ResponseDelayMaxMs)
-		} else if d.Cfg.ResponseDelayMs > 0 {
-			cur.ResponseDelay.Enabled = true
-			cur.ResponseDelay.Value = strconv.Itoa(d.Cfg.ResponseDelayMs)
-		} else {
-			cur.ResponseDelay.Enabled = false
-			cur.ResponseDelay.Value = ""
-		}
-		if d.Settings != nil {
-			if rs, err := d.Settings.Load(contextWithNoCancel()); err == nil {
-				if rs.FontScale > 0 {
-					cur.FontScale = rs.FontScale
-				}
-				if rs.HighlightTheme != "" {
-					cur.HighlightTheme = rs.HighlightTheme
-				}
-			}
-		}
-		_ = json.NewEncoder(w).Encode(cur)
+		_ = json.NewEncoder(w).Encode(out)
 		return
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

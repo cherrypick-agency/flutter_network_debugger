@@ -121,6 +121,9 @@ frontend/windows/flutter/ephemeral/
 
 # Embedded web build for desktop wrapper
 cmd/network-debugger-web/_web/
+!cmd/network-debugger-web/_web/
+cmd/network-debugger-web/_web/*
+!cmd/network-debugger-web/_web/index.html
 
 # ===============
 # Rust / Cargo

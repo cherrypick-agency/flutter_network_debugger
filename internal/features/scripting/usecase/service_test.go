@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -711,6 +712,62 @@ func TestScriptService_ExecuteForRequest(t *testing.T) {
 
 	if result == nil {
 		t.Error("ExecuteForRequest() result should not be nil")
+	}
+}
+
+// Composer 1.
+func TestScriptService_ExecuteForRequest_WatchdogTimeout(t *testing.T) {
+	repo := &mockScriptRepository{}
+	service := NewScriptService(repo)
+
+	release := make(chan struct{})
+	executor := &mockExecutorFunc{
+		runtime: domain.RuntimeExtism,
+		execFunc: func(context.Context, domain.ExecutionRequest) (domain.ExecutionResult, error) {
+			<-release
+			return domain.ExecutionResult{Output: []byte(`{"modified":false}`)}, nil
+		},
+	}
+	service.RegisterExecutor(executor)
+
+	script := &domain.Script{
+		ID:          "script-timeout",
+		Name:        "Hung Script",
+		Runtime:     domain.RuntimeExtism,
+		TriggerType: domain.TriggerRequest,
+		Code:        []byte{1, 2, 3},
+		Language:    "rust",
+		Enabled:     true,
+		Config: domain.ScriptConfig{
+			TimeoutMs: 10,
+		},
+	}
+
+	repo.listFunc = func(context.Context, domain.ScriptFilter) ([]*domain.Script, error) {
+		return []*domain.Script{script}, nil
+	}
+
+	req := &domain.HTTPRequest{
+		Method: "GET",
+		URL:    "https://example.com/api/test",
+	}
+	session := &domain.SessionInfo{
+		ID:         "test-session",
+		ClientAddr: "127.0.0.1",
+	}
+
+	start := time.Now()
+	result, err := service.ExecuteForRequest(context.Background(), req, session)
+	close(release)
+
+	if err != nil {
+		t.Fatalf("ExecuteForRequest() error = %v, want nil", err)
+	}
+	if result == nil {
+		t.Fatal("ExecuteForRequest() result should not be nil")
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("ExecuteForRequest() took too long: %v", took)
 	}
 }
 

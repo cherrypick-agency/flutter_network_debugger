@@ -317,6 +317,19 @@ func TestHandlePredefinedTags_InvalidMethod(t *testing.T) {
 	}
 }
 
+func TestHandlePredefinedTags_FeatureDisabled(t *testing.T) {
+	deps := &Deps{TagsSvc: nil}
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/tags/predefined", nil)
+	w := httptest.NewRecorder()
+
+	deps.handlePredefinedTags(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 // Composer 1.
 // Tests for handlePredefinedTagByID
 
@@ -709,6 +722,27 @@ func TestHandleBulkTags_InvalidMethod(t *testing.T) {
 	}
 }
 
+func TestHandleBulkTags_FeatureDisabled(t *testing.T) {
+	deps := &Deps{TagsSvc: nil}
+
+	body := map[string]any{
+		"operation":  "add",
+		"sessionIds": []string{"session-1"},
+		"tagNames":   []string{"tag1"},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/tags/bulk", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handleBulkTags(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 // Composer 1.
 // Tests for handleSessionAnnotations
 
@@ -866,5 +900,18 @@ func TestHandleSessionAnnotations_DELETE_Success(t *testing.T) {
 	}
 	if deletedKey != "note" {
 		t.Errorf("Key = %q, want 'note'", deletedKey)
+	}
+}
+
+func TestHandleSessionAnnotations_FeatureDisabled(t *testing.T) {
+	deps := &Deps{TagsSvc: nil}
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/sessions/session-123/annotations", nil)
+	w := httptest.NewRecorder()
+
+	deps.handleSessionAnnotations(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }

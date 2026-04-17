@@ -3,7 +3,7 @@ package httpapi
 import (
 	"time"
 
-	sio "network-debugger/internal/adapters/decoders/socketio"
+	sio "github.com/777genius/proxykit/socketio"
 	"network-debugger/internal/domain"
 	"network-debugger/pkg/shared/id"
 )

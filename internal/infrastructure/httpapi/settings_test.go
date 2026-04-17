@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	sdomain "network-debugger/internal/features/settings/domain"
+	settingsuc "network-debugger/internal/features/settings/usecase"
 	cfgpkg "network-debugger/internal/infrastructure/config"
 	"testing"
 )
@@ -267,6 +269,129 @@ func TestHandleV1Settings_POST_FontScaleAndTheme(t *testing.T) {
 
 	// FontScale and HighlightTheme are only returned if Settings service is available
 	// Without Settings service, they won't be persisted or returned
+}
+
+func TestHandleV1Settings_GET_PrefersStoredUISettings(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{
+		loadValue: sdomain.RuntimeSettings{
+			ResponseDelayMs:     120,
+			FontScale:           1.3,
+			HighlightTheme:      "monokai",
+			HighlightThemeLight: "github",
+			HighlightThemeDark:  "dracula",
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, &mockThrottleProfilesRepo{})
+	d := &Deps{
+		Cfg:      cfgpkg.Config{ResponseDelayMs: 10},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+
+	var resp settingsDTO
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.ResponseDelay.Value != "120" || resp.FontScale != 1.3 {
+		t.Fatalf("unexpected settings payload: %+v", resp)
+	}
+	if resp.HighlightTheme != "monokai" || resp.HighlightThemeLight != "github" || resp.HighlightThemeDark != "dracula" {
+		t.Fatalf("unexpected theme payload: %+v", resp)
+	}
+}
+
+func TestHandleV1Settings_POST_PreservesThrottleAndStoresDualThemes(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{
+		loadValue: sdomain.RuntimeSettings{
+			ThrottleEnabled:       true,
+			ThrottleDownKbps:      900,
+			ThrottleUpKbps:        450,
+			ThrottlePacketLoss:    3,
+			ThrottleLatencyMs:     60,
+			ThrottleLatencyJitter: 20,
+			ThrottleOffline:       false,
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, &mockThrottleProfilesRepo{})
+	d := &Deps{
+		Cfg: cfgpkg.Config{
+			ThrottleEnabled:       true,
+			ThrottleDownKbps:      900,
+			ThrottleUpKbps:        450,
+			ThrottlePacketLoss:    3,
+			ThrottleLatencyMs:     60,
+			ThrottleLatencyJitter: 20,
+			ThrottleOffline:       false,
+		},
+		Settings: settingsSvc,
+	}
+
+	body := []byte(`{"responseDelay":{"enabled":true,"value":"200-400"},"fontScale":1.5,"highlightThemeLight":"github","highlightThemeDark":"dracula","highlightTheme":"monokai"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if mockSettingsRepo.saved == nil {
+		t.Fatal("expected settings to be saved")
+	}
+	if mockSettingsRepo.saved.ThrottleDownKbps != 900 || mockSettingsRepo.saved.ThrottleLatencyMs != 60 {
+		t.Fatalf("throttle settings were not preserved: %+v", *mockSettingsRepo.saved)
+	}
+	if mockSettingsRepo.saved.HighlightTheme != "monokai" || mockSettingsRepo.saved.HighlightThemeLight != "github" || mockSettingsRepo.saved.HighlightThemeDark != "dracula" {
+		t.Fatalf("theme fields not saved: %+v", *mockSettingsRepo.saved)
+	}
+	if mockSettingsRepo.saved.ResponseDelayMinMs != 200 || mockSettingsRepo.saved.ResponseDelayMaxMs != 400 || mockSettingsRepo.saved.ResponseDelayMs != 0 {
+		t.Fatalf("response delay not saved correctly: %+v", *mockSettingsRepo.saved)
+	}
+}
+
+func TestHandleV1Settings_POST_ThemeOnly_PreservesResponseDelay(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{
+		loadValue: sdomain.RuntimeSettings{
+			ResponseDelayMs:     175,
+			HighlightTheme:      "old",
+			HighlightThemeLight: "old-light",
+			HighlightThemeDark:  "old-dark",
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, &mockThrottleProfilesRepo{})
+	d := &Deps{
+		Cfg: cfgpkg.Config{
+			ResponseDelayMs: 175,
+		},
+		Settings: settingsSvc,
+	}
+
+	body := []byte(`{"highlightThemeLight":"github","highlightThemeDark":"dracula"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	d.handleV1Settings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if mockSettingsRepo.saved == nil {
+		t.Fatal("expected settings to be saved")
+	}
+	if mockSettingsRepo.saved.ResponseDelayMs != 175 || mockSettingsRepo.saved.ResponseDelayMinMs != 0 || mockSettingsRepo.saved.ResponseDelayMaxMs != 0 {
+		t.Fatalf("response delay changed on theme-only update: %+v", *mockSettingsRepo.saved)
+	}
+	if mockSettingsRepo.saved.HighlightThemeLight != "github" || mockSettingsRepo.saved.HighlightThemeDark != "dracula" {
+		t.Fatalf("dual themes not saved: %+v", *mockSettingsRepo.saved)
+	}
 }
 
 func TestHandleV1Settings_POST_WhitespaceInValue(t *testing.T) {

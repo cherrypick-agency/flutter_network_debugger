@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
-	"strings"
 	"syscall"
 	"time"
 
@@ -44,19 +42,7 @@ func main() {
 		logger.Error().Err(err).Msg("failed to mount embedded web FS")
 		os.Exit(1)
 	}
-	spa := spaHandler{root: sub, index: "index.html"}
-
-	mux := http.NewServeMux()
-	// Route API first
-	mux.Handle("/_api/", apiRouter)
-	mux.Handle("/api/", apiRouter)
-	// Forward proxy/compat endpoints
-	mux.Handle("/httpproxy", apiRouter)
-	mux.Handle("/httpproxy/", apiRouter)
-	mux.Handle("/_ws", apiRouter)
-	mux.Handle("/_ws/", apiRouter)
-	// Static last
-	mux.Handle("/", spa)
+	mux := httpapi.NewEmbeddedWebMux(apiRouter, sub)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -84,41 +70,4 @@ func main() {
 		logger.Error().Err(err).Msg("server shutdown error")
 	}
 	logger.Info().Msg("wsapp stopped")
-}
-
-type spaHandler struct {
-	root  fs.FS
-	index string
-}
-
-func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	upath := r.URL.Path
-	if upath == "" || upath == "/" {
-		h.serveFile(w, h.index)
-		return
-	}
-	// Trim leading '/'
-	p := strings.TrimPrefix(path.Clean(upath), "/")
-	// Try asset
-	f, err := h.root.Open(p)
-	if err == nil {
-		_ = f.Close()
-		http.FileServer(http.FS(h.root)).ServeHTTP(w, r)
-		return
-	}
-	// Fallback to index for SPA routes
-	h.serveFile(w, h.index)
-}
-
-func (h spaHandler) serveFile(w http.ResponseWriter, name string) {
-	data, err := fs.ReadFile(h.root, name)
-	if err != nil {
-		http.NotFound(w, &http.Request{})
-		return
-	}
-	// Minimal content-type for index.html
-	if strings.HasSuffix(strings.ToLower(name), ".html") {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	}
-	_, _ = w.Write(data)
 }

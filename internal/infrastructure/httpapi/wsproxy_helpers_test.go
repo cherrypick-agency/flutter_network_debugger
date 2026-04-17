@@ -1,8 +1,11 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"testing"
+
+	"github.com/gorilla/websocket"
 )
 
 func Test_copyHeaderIfPresent(t *testing.T) {
@@ -55,5 +58,22 @@ func Test_tryExtractAckID(t *testing.T) {
 		if got := tryExtractAckID(s); got != want {
 			t.Errorf("%q -> want %d got %d", s, want, got)
 		}
+	}
+}
+
+func Test_shouldSuppressWSCloseError(t *testing.T) {
+	t.Parallel()
+
+	if !shouldSuppressWSCloseError(&websocket.CloseError{Code: websocket.CloseNormalClosure, Text: "done"}) {
+		t.Fatalf("normal close should be suppressed")
+	}
+	if !shouldSuppressWSCloseError(&websocket.CloseError{Code: websocket.CloseNoStatusReceived}) {
+		t.Fatalf("no-status close should be suppressed")
+	}
+	if shouldSuppressWSCloseError(&websocket.CloseError{Code: websocket.CloseAbnormalClosure}) {
+		t.Fatalf("abnormal close should not be suppressed")
+	}
+	if shouldSuppressWSCloseError(errors.New("boom")) {
+		t.Fatalf("generic error should not be suppressed")
 	}
 }

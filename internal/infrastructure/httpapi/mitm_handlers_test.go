@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	cfgpkg "network-debugger/internal/infrastructure/config"
@@ -171,7 +172,7 @@ func TestHandleV1MITMStatus_CAWithoutSerialNumber(t *testing.T) {
 	}
 
 	// Set serial number to nil to test that branch
-	ca.caCert.SerialNumber = nil
+	ca.RootCertificate().SerialNumber = nil
 
 	deps := &Deps{
 		Cfg: cfgpkg.Config{
@@ -307,16 +308,13 @@ func TestPemEncodeCert_ValidDER(t *testing.T) {
 	}
 
 	// Extract DER from PEM
-	ca, err := LoadCertAuthorityFromPEM(certPEM, nil)
-	if err == nil && ca != nil && ca.caCert != nil {
-		// This will fail because we can't load without key, so let's use raw cert
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		t.Fatal("failed to decode generated certificate PEM")
 	}
 
-	// Just test with a mock DER
 	w := httptest.NewRecorder()
-	der := []byte{0x30, 0x82, 0x01, 0x00} // Mock DER data
-
-	err = pemEncodeCert(w, der)
+	err = pemEncodeCert(w, block.Bytes)
 
 	if err != nil {
 		t.Errorf("pemEncodeCert failed: %v", err)

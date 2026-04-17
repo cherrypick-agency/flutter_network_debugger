@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -13,7 +12,6 @@ import (
 	stdpath "path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -294,66 +292,26 @@ func (d *Deps) handleMappingConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
 		return
 	}
+	service := newMappingAdminService(d)
 	switch r.Method {
 	case http.MethodGet:
-		d.CfgMu.RLock()
-		cfgEnabled := d.Cfg.MappingEnabled
-		cfgUploadMaxMB := d.Cfg.MappingUploadMaxMB
-		d.CfgMu.RUnlock()
-		cfg := mappingConfigDTO{
-			Enabled:     cfgEnabled,
-			UploadMaxMB: cfgUploadMaxMB,
-		}
-		// If DB is available — get actual values from runtime_settings
-		if d.Settings != nil {
-			if rs, err := d.Settings.Load(contextWithNoCancel()); err == nil {
-				cfg.Enabled = rs.MappingEnabled
-				if rs.MappingUploadMaxMB > 0 {
-					cfg.UploadMaxMB = rs.MappingUploadMaxMB
-				}
-			}
-		}
-		if cfg.UploadMaxMB <= 0 {
-			cfg.UploadMaxMB = 20
-		}
+		cfg := service.loadConfig(contextWithNoCancel())
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(cfg); err != nil {
-			log.Printf("[MappingHandler] encode error: %v", err)
-		}
+		_ = json.NewEncoder(w).Encode(cfg)
 	case http.MethodPost:
-		// Accept and save to runtime_settings (if available)
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var in mappingConfigDTO
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
 			return
 		}
-		if in.UploadMaxMB <= 0 {
-			in.UploadMaxMB = 20
-		}
-		// upper limit — to avoid accidentally setting gigabytes and killing disk
-		if in.UploadMaxMB > 512 {
-			writeError(w, http.StatusBadRequest, "BAD_VALUE", "uploadMaxMB must be <= 512", nil)
+		out, apiErr := service.saveConfig(contextWithNoCancel(), in)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
-
-		d.CfgMu.Lock()
-		d.Cfg.MappingEnabled = in.Enabled
-		d.Cfg.MappingUploadMaxMB = in.UploadMaxMB
-		d.CfgMu.Unlock()
-
-		if d.Settings != nil {
-			cur, _ := d.Settings.Load(contextWithNoCancel())
-			cur.MappingEnabled = in.Enabled
-			cur.MappingUploadMaxMB = in.UploadMaxMB
-			_, _ = d.Settings.SaveRuntime(contextWithNoCancel(), cur)
-		}
-
-		log.Printf("[MappingHandler] config updated: enabled=%v uploadMaxMB=%d", in.Enabled, in.UploadMaxMB)
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(in); err != nil {
-			log.Printf("[MappingHandler] encode error: %v", err)
-		}
+		_ = json.NewEncoder(w).Encode(out)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 	}
@@ -365,26 +323,16 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
 		return
 	}
-	if d.Mapping == nil {
-		writeError(w, http.StatusServiceUnavailable, "NO_SERVICE", "mapping service unavailable", nil)
-		return
-	}
+	service := newMappingAdminService(d)
 	switch r.Method {
 	case http.MethodGet:
-		list, err := d.Mapping.List(r.Context())
-		if err != nil {
-			log.Printf("[MappingHandler] list rules: %v", err)
-			writeError(w, http.StatusInternalServerError, "LIST_FAILED", "internal error", nil)
+		out, apiErr := service.listRules(r.Context())
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
-		out := make([]mapRuleDTO, 0, len(list))
-		for _, it := range list {
-			out = append(out, toDTO(it))
-		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			log.Printf("[MappingHandler] encode error: %v", err)
-		}
+		_ = json.NewEncoder(w).Encode(out)
 	case http.MethodPost:
 		// either upsert single record, or reorder (if path ends with /reorder)
 		if strings.HasSuffix(r.URL.Path, "/reorder") {
@@ -394,68 +342,10 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
 				return
 			}
-			for i := range ids {
-				ids[i] = strings.TrimSpace(ids[i])
-			}
-			seen := make(map[string]struct{}, len(ids))
-			for _, idv := range ids {
-				if idv == "" {
-					writeError(w, http.StatusBadRequest, "BAD_IDS", "ids must not contain empty values", map[string]any{"field": "ids"})
-					return
-				}
-				if _, ok := seen[idv]; ok {
-					writeError(w, http.StatusBadRequest, "BAD_IDS", "ids must not contain duplicates", map[string]any{"field": "ids", "id": idv})
-					return
-				}
-				seen[idv] = struct{}{}
-			}
-			// validate that submitted IDs contain ALL existing rule IDs
-			allRules, err := d.Mapping.List(r.Context())
-			if err != nil {
-				log.Printf("[MappingHandler] reorder: failed to list rules: %v", err)
-				writeError(w, http.StatusInternalServerError, "LIST_FAILED", "internal error", nil)
+			if apiErr := service.reorderRules(r.Context(), ids); apiErr != nil {
+				writeSessionAPIError(w, apiErr)
 				return
 			}
-			if len(ids) != len(allRules) {
-				writeError(w, http.StatusBadRequest, "BAD_IDS", "submitted IDs must contain all existing rule IDs", map[string]any{
-					"field":    "ids",
-					"expected": len(allRules),
-					"got":      len(ids),
-				})
-				return
-			}
-			for _, rule := range allRules {
-				if _, ok := seen[rule.ID]; !ok {
-					writeError(w, http.StatusBadRequest, "BAD_IDS", "submitted IDs must contain all existing rule IDs", map[string]any{
-						"field":     "ids",
-						"missingId": rule.ID,
-					})
-					return
-				}
-			}
-			if err := d.Mapping.Reorder(r.Context(), ids); err != nil {
-				var nf mdomain.RuleNotFoundError
-				if errors.As(err, &nf) {
-					writeError(
-						w,
-						http.StatusConflict,
-						"BAD_IDS",
-						"rule was deleted by another user during reorder, please reload",
-						map[string]any{"field": "ids", "id": nf.ID},
-					)
-					return
-				}
-				log.Printf("[MappingHandler] reorder rules: %v", err)
-				writeError(w, http.StatusInternalServerError, "REORDER_FAILED", "internal error", nil)
-				return
-			}
-			// update runtime
-			if d.MapRt != nil {
-				if rules, err := d.Mapping.List(r.Context()); err == nil {
-					d.MapRt.Update(rules)
-				}
-			}
-			log.Printf("[MappingHandler] rules reordered: count=%d", len(ids))
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -465,53 +355,13 @@ func (d *Deps) handleMappingRules(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid JSON", nil)
 			return
 		}
-
-		// for orphan blob cleanup and optimistic locking: find existing rule if editing
-		oldBlob := ""
-		if strings.TrimSpace(in.ID) != "" {
-			if old, err := d.Mapping.GetByID(r.Context(), strings.TrimSpace(in.ID)); err == nil && old != nil {
-				if old.BlobPath != nil && strings.TrimSpace(*old.BlobPath) != "" {
-					oldBlob = *old.BlobPath
-				}
-				// optimistic locking: compare updatedAt timestamps
-				if in.UpdatedAt != nil {
-					if !old.UpdatedAt.Truncate(time.Second).Equal(in.UpdatedAt.Truncate(time.Second)) {
-						writeError(w, http.StatusConflict, "CONFLICT", "rule was modified by another user, please reload", map[string]any{
-							"field":           "updatedAt",
-							"serverUpdatedAt": old.UpdatedAt,
-							"clientUpdatedAt": *in.UpdatedAt,
-						})
-						return
-					}
-				}
-			}
-		}
-
-		rule := fromDTO(in)
-		if code, msg, det, ok := validateRule(rule); !ok {
-			writeError(w, http.StatusBadRequest, code, msg, det)
+		out, apiErr := service.upsertRule(r.Context(), in)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
-		saved, err := d.Mapping.Upsert(r.Context(), rule)
-		if err != nil {
-			log.Printf("[MappingHandler] upsert rule: %v", err)
-			writeError(w, http.StatusInternalServerError, "UPSERT_FAILED", "internal error", nil)
-			return
-		}
-		if d.MapRt != nil {
-			if rules, err := d.Mapping.List(r.Context()); err == nil {
-				d.MapRt.Update(rules)
-			}
-		}
-		// if blobPath changed/removed — try to delete old file (safely)
-		if oldBlob != "" && (saved.BlobPath == nil || strings.TrimSpace(*saved.BlobPath) == "" || strings.TrimSpace(*saved.BlobPath) != strings.TrimSpace(oldBlob)) {
-			d.tryRemoveOrphanMappingBlob(r.Context(), oldBlob)
-		}
-		log.Printf("[MappingHandler] rule upserted: id=%s kind=%s", saved.ID, saved.Kind)
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(toDTO(saved)); err != nil {
-			log.Printf("[MappingHandler] encode error: %v", err)
-		}
+		_ = json.NewEncoder(w).Encode(out)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 	}
@@ -522,41 +372,15 @@ func (d *Deps) handleMappingRuleByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "admin token required", nil)
 		return
 	}
-	if d.Mapping == nil {
-		writeError(w, http.StatusServiceUnavailable, "NO_SERVICE", "mapping service unavailable", nil)
-		return
-	}
 	if r.Method != http.MethodDelete {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, "/_api/v1/mapping/rules/")
-	id = strings.TrimSpace(id)
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "MISSING_ID", "", nil)
+	if apiErr := newMappingAdminService(d).deleteRule(r.Context(), id); apiErr != nil {
+		writeSessionAPIError(w, apiErr)
 		return
 	}
-	// remember blobPath before deletion (to remove orphan file)
-	oldBlob := ""
-	if old, err := d.Mapping.GetByID(r.Context(), id); err == nil && old != nil {
-		if old.BlobPath != nil && strings.TrimSpace(*old.BlobPath) != "" {
-			oldBlob = *old.BlobPath
-		}
-	}
-	if err := d.Mapping.Delete(r.Context(), id); err != nil {
-		log.Printf("[MappingHandler] delete rule: %v", err)
-		writeError(w, http.StatusInternalServerError, "DELETE_FAILED", err.Error(), nil)
-		return
-	}
-	if d.MapRt != nil {
-		if rules, err := d.Mapping.List(r.Context()); err == nil {
-			d.MapRt.Update(rules)
-		}
-	}
-	if oldBlob != "" {
-		d.tryRemoveOrphanMappingBlob(r.Context(), oldBlob)
-	}
-	log.Printf("[MappingHandler] rule deleted: id=%s", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -616,74 +440,13 @@ func (d *Deps) handleMappingUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "", nil)
 		return
 	}
-	// Determine limit (MB → bytes). Source of truth — runtime settings / config.
-	d.CfgMu.RLock()
-	uploadMaxMB := d.Cfg.MappingUploadMaxMB
-	d.CfgMu.RUnlock()
-	if uploadMaxMB <= 0 {
-		uploadMaxMB = 20
-	}
-	// For dev-mode you can decrease limit via query param, but not increase
-	if v := r.URL.Query().Get("maxMB"); v != "" {
-		if n, _ := strconv.Atoi(v); n > 0 && n < uploadMaxMB {
-			uploadMaxMB = n
-		}
-	}
-	maxBytes := int64(uploadMaxMB) * 1024 * 1024
-
-	maxMem := int64(32 << 20)
-	if maxBytes > 0 && maxBytes < maxMem {
-		maxMem = maxBytes
-	}
-	if err := r.ParseMultipartForm(maxMem); err != nil {
-		log.Printf("[MappingHandler] bad multipart: %v", err)
-		writeError(w, http.StatusBadRequest, "BAD_MULTIPART", err.Error(), nil)
+	out, apiErr := newMappingAdminService(d).uploadBlob(r)
+	if apiErr != nil {
+		writeSessionAPIError(w, apiErr)
 		return
 	}
-	file, hdr, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "NO_FILE", "file part is required", nil)
-		return
-	}
-	defer file.Close()
-
-	path, tooLarge, err := d.spoolMultipartFile(file, maxBytes, "map")
-	if err != nil {
-		if errors.Is(err, errSpoolTooLarge) || tooLarge {
-			writeError(
-				w,
-				http.StatusRequestEntityTooLarge,
-				"FILE_TOO_LARGE",
-				"file exceeds upload limit",
-				map[string]any{"maxBytes": maxBytes, "maxMB": uploadMaxMB, "fileName": hdr.Filename},
-			)
-			return
-		}
-		log.Printf("[MappingHandler] spool file: %v", err)
-		writeError(w, http.StatusInternalServerError, "SPOOL_FAILED", "failed to store file", nil)
-		return
-	}
-	if path == "" {
-		log.Printf("[MappingHandler] spool file: empty path")
-		writeError(w, http.StatusInternalServerError, "SPOOL_FAILED", "failed to store file", nil)
-		return
-	}
-
-	// Very rough content-type estimate based on filename extension
-	ct := hdr.Header.Get("Content-Type")
-	if ct == "" {
-		ct = guessContentTypeByName(hdr.Filename)
-	}
-
-	log.Printf("[MappingHandler] file uploaded: path=%s name=%s", path, hdr.Filename)
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]any{
-		"blobPath":    path,
-		"fileName":    hdr.Filename,
-		"contentType": ct,
-	}); err != nil {
-		log.Printf("[MappingHandler] encode error: %v", err)
-	}
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 func guessContentTypeByName(name string) string {

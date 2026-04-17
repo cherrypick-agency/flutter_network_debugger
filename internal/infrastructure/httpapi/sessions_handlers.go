@@ -1,17 +1,13 @@
 package httpapi
 
 import (
-	"compress/gzip"
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	mem "network-debugger/internal/adapters/storage/memory"
 	"network-debugger/internal/domain"
 	"network-debugger/internal/usecase"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,60 +16,14 @@ import (
 
 func (d *Deps) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
-		if err := d.Svc.ClearAll(r.Context()); err != nil {
+		if err := d.clearSessionsAndNotify(r.Context()); err != nil {
 			writeError(w, http.StatusInternalServerError, "SESSIONS_CLEAR_FAILED", err.Error(), nil)
 			return
-		}
-		// also close live WS sessions to prevent further events
-		if d.Live != nil {
-			d.Live.CloseAll()
-		}
-		// and broadcast a synthetic event so frontends can refresh
-		if d.Monitor != nil {
-			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	q := r.URL.Query().Get("q")
-	target := r.URL.Query().Get("_target")
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 50
-	}
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-
-	// Parse tags filter (comma-separated)
-	var sessionIDs []string
-	tagsParam := r.URL.Query().Get("tags")
-	if tagsParam != "" && d.TagsSvc != nil {
-		tagNames := strings.Split(tagsParam, ",")
-		// Trim whitespace from tag names
-		for i := range tagNames {
-			tagNames[i] = strings.TrimSpace(tagNames[i])
-		}
-		// Filter out empty tags
-		filtered := make([]string, 0, len(tagNames))
-		for _, t := range tagNames {
-			if t != "" {
-				filtered = append(filtered, t)
-			}
-		}
-		if len(filtered) > 0 {
-			ids, err := d.TagsSvc.FindSessionIDsByTags(r.Context(), filtered)
-			if err == nil {
-				sessionIDs = ids
-			}
-		}
-	}
-
-	f := usecase.SessionFilter{
-		Q:          q,
-		Target:     target,
-		Limit:      limit,
-		Offset:     offset,
-		SessionIDs: sessionIDs,
-	}
+	f := newLegacySessionListQuery(r, d)
 	items, total, err := d.Svc.List(r.Context(), f)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "SESSIONS_LIST_FAILED", err.Error(), nil)
@@ -88,6 +38,7 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
 	parts := strings.Split(path, "/")
 	id := parts[0]
+	details := newSessionDetailService(d)
 	if id == "" {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
 		return
@@ -98,13 +49,12 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		sess, ok, err := d.Svc.Get(r.Context(), id)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "SESSION_GET_FAILED", err.Error(), map[string]any{"id": id})
+		sess, ok, apiErr := details.getLegacySession(r.Context(), id)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
 		if !ok {
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "session not found", map[string]any{"id": id})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -123,155 +73,46 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			limit = 100
 		}
 		from := r.URL.Query().Get("from")
-		frames, next, err := d.Svc.ListFrames(r.Context(), id, from, limit)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "FRAMES_LIST_FAILED", err.Error(), map[string]any{"id": id})
+		frames, apiErr := details.listFrames(r.Context(), id, from, limit)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": frames, "next": next})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": frames.Items, "next": frames.Next})
 	case "events":
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		if limit <= 0 {
 			limit = 100
 		}
 		from := r.URL.Query().Get("from")
-		events, next, err := d.Svc.ListEvents(r.Context(), id, from, limit)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "EVENTS_LIST_FAILED", err.Error(), map[string]any{"id": id})
+		events, apiErr := details.listLegacyEvents(r.Context(), id, from, limit)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
-		// Backward-compat: include both "event" and alias "name" fields
-		type evView struct {
-			ID          string    `json:"id"`
-			Ts          time.Time `json:"ts"`
-			Namespace   string    `json:"namespace"`
-			Event       string    `json:"event"`
-			Name        string    `json:"name"`
-			AckID       *int64    `json:"ackId,omitempty"`
-			ArgsPreview string    `json:"argsPreview"`
-		}
-		out := make([]evView, 0, len(events))
-		for _, e := range events {
-			out = append(out, evView{
-				ID:          e.ID,
-				Ts:          e.Ts,
-				Namespace:   e.Namespace,
-				Event:       e.Name,
-				Name:        e.Name,
-				AckID:       e.AckID,
-				ArgsPreview: e.ArgsPreview,
-			})
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": out, "next": next})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": events.Items, "next": events.Next})
 	case "http":
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		if limit <= 0 {
 			limit = 100
 		}
 		from := r.URL.Query().Get("from")
-		txs, next, err := d.Svc.ListHTTPTransactions(r.Context(), id, from, limit)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "HTTP_LIST_FAILED", err.Error(), map[string]any{"id": id})
+		txs, apiErr := details.listHTTPTransactions(r.Context(), id, from, limit)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": txs, "next": next})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": txs.Items, "next": txs.Next})
 	case "har":
 		// Export HAR 1.2 for this session (HTTP transactions only)
 		exportHARForSession(w, r, d, id)
 		return
 	case "export":
-		// streaming export to reduce memory footprint
-		sess, ok, err := d.Svc.Get(r.Context(), id)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "SESSION_GET_FAILED", err.Error(), map[string]any{"id": id})
-			return
-		}
-		if !ok {
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "session not found", map[string]any{"id": id})
-			return
-		}
-		// decide gzip by flag or Accept-Encoding
-		useGzip := false
-		if g := r.URL.Query().Get("gzip"); g == "1" || strings.ToLower(g) == "true" {
-			useGzip = true
-		} else if strings.Contains(strings.ToLower(r.Header.Get("Accept-Encoding")), "gzip") {
-			useGzip = true
-		}
-		var outWriter interface{ Write([]byte) (int, error) }
-		var gz *gzip.Writer
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Disposition", "attachment; filename=network-debugger_session_"+id+".json")
-		if useGzip {
-			w.Header().Set("Content-Encoding", "gzip")
-			gz = gzip.NewWriter(w)
-			outWriter = gz
-		} else {
-			outWriter = w
-		}
-		flush := func() {
-			if gz != nil {
-				_ = gz.Flush()
-			}
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-		}
-		write := func(b []byte) { _, _ = outWriter.Write(b) }
-		b, _ := json.Marshal(sess)
-		write([]byte("{\"session\":"))
-		write(b)
-		write([]byte(",\"frames\":["))
-		from := ""
-		first := true
-		for {
-			frames, next, err := d.Svc.ListFrames(r.Context(), id, from, 1000)
-			if err != nil {
-				break
-			}
-			for _, fr := range frames {
-				fb, _ := json.Marshal(fr)
-				if !first {
-					write([]byte(","))
-				} else {
-					first = false
-				}
-				write(fb)
-			}
-			flush()
-			if next == "" {
-				break
-			}
-			from = next
-		}
-		write([]byte("],\"events\":["))
-		from = ""
-		first = true
-		for {
-			ev, next, err := d.Svc.ListEvents(r.Context(), id, from, 1000)
-			if err != nil {
-				break
-			}
-			for _, e := range ev {
-				eb, _ := json.Marshal(e)
-				if !first {
-					write([]byte(","))
-				} else {
-					first = false
-				}
-				write(eb)
-			}
-			flush()
-			if next == "" {
-				break
-			}
-			from = next
-		}
-		write([]byte("]}"))
-		if gz != nil {
-			_ = gz.Close()
+		if apiErr := details.writeLegacyExport(w, r, id); apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 		}
 		return
 	default:
@@ -286,130 +127,24 @@ func (d *Deps) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 // handleV1ListSessions implements GET /_api/v1/sessions with cursor pagination and sorting.
 func (d *Deps) handleV1ListSessions(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
-		if err := d.Svc.ClearAll(r.Context()); err != nil {
+		if err := d.clearSessionsAndNotify(r.Context()); err != nil {
 			writeError(w, http.StatusInternalServerError, "SESSIONS_CLEAR_FAILED", err.Error(), nil)
 			return
-		}
-		// Close active WS sessions and notify frontends so new events don't arrive in old sessions
-		if d.Live != nil {
-			d.Live.CloseAll()
-		}
-		if d.Monitor != nil {
-			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	q := r.URL.Query().Get("q")
-	target := r.URL.Query().Get("_target")
-	rawTypes := r.URL.Query().Get("types")
-	rawStatus := r.URL.Query().Get("status")
-	types := splitCSV(rawTypes)
-	statusGroups := splitCSV(rawStatus)
-	// Tags filter (comma-separated)
-	var sessionIDs []string
-	if raw := strings.TrimSpace(r.URL.Query().Get("tags")); raw != "" && d.TagsSvc != nil {
-		names := strings.Split(raw, ",")
-		for i := range names {
-			names[i] = strings.TrimSpace(names[i])
-		}
-		filtered := make([]string, 0, len(names))
-		for _, t := range names {
-			if t != "" {
-				filtered = append(filtered, t)
-			}
-		}
-		if len(filtered) > 0 {
-			if ids, err := d.TagsSvc.FindSessionIDsByTags(r.Context(), filtered); err == nil {
-				sessionIDs = ids
-			}
-		}
-	}
-	// enable deep GraphQL body check only if explicitly requested
-	rawScan := r.URL.Query().Get("scan")
-	scan := splitCSV(rawScan)
-	scanGraphQL := false
-	for _, s := range scan {
-		if s == "graphql" {
-			scanGraphQL = true
-			break
-		}
-	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 || limit > 1000 {
-		limit = 100
-	}
-	// For MVP we reuse offset-based List and synthesize a cursor as last id.
-	// A real cursor would be a stable token (e.g., startedAt+id).
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	f := usecase.SessionFilter{Q: q, Target: target, Limit: limit, Offset: offset, SessionIDs: sessionIDs}
-	// capture filters
-	capStr := r.URL.Query().Get("captureId")
-	if capStr != "" {
-		if capStr == "current" {
-			v := -1
-			f.CaptureID = &v
-		} else if n, err := strconv.Atoi(capStr); err == nil {
-			f.CaptureID = &n
-		}
-	}
-	if inc := r.URL.Query().Get("includeUnassigned"); inc == "true" || inc == "1" {
-		f.IncludeUnassigned = true
-	}
-	if r.URL.Query().Get("captures") == "all" {
-		f.CaptureID = nil
-		f.IncludeUnassigned = true
-	}
-	items, total, err := d.Svc.List(r.Context(), f)
+	query := newV1SessionListQuery(r, d)
+	projector := newSessionProjector(d)
+	views, total, err := projector.listViews(r.Context(), query.Filter, query.Project)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "SESSIONS_LIST_FAILED", err.Error(), nil)
 		return
 	}
-	// Enrich with httpMeta/sizes best-effort and apply quick filters
-	views := make([]sessionV1, 0, len(items))
-	for _, s := range items {
-		view := sessionV1{Session: s}
-		meta, sz := d.enrichWithHTTPMeta(r.Context(), s)
-		if meta != nil {
-			view.HttpMeta = meta
-		}
-		if sz != nil {
-			view.Sizes = sz
-		}
-		// Quick filters by types (with optional deep-scan for GraphQL)
-		if len(types) > 0 {
-			tags := getBaseTags(view)
-			// If graphql is requested but not in base tags — at client's request do deep body check
-			needsGraphQL := false
-			for _, t := range types {
-				if t == "graphql" {
-					needsGraphQL = true
-					break
-				}
-			}
-			if needsGraphQL && scanGraphQL {
-				if _, ok := tags["graphql"]; !ok {
-					if ok2 := detectGraphQLByBody(r.Context(), d, s.ID); ok2 {
-						tags["graphql"] = struct{}{}
-					}
-				}
-			}
-			if !hasAnyTag(types, tags) {
-				continue
-			}
-		}
-		// Quick filters by status groups
-		if len(statusGroups) > 0 {
-			if !matchesAnyStatusGroup(statusGroups, view.HttpMeta) {
-				continue
-			}
-		}
-		views = append(views, view)
-	}
 	w.Header().Set("Content-Type", "application/json")
 	next := ""
-	if offset+limit < total {
-		next = strconv.Itoa(offset + limit)
+	if query.Filter.Offset+query.Filter.Limit < total {
+		next = strconv.Itoa(query.Filter.Offset + query.Filter.Limit)
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"items": views, "next": next})
 }
@@ -419,54 +154,24 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/_api/v1/sessions/")
 	parts := strings.Split(path, "/")
 	id := parts[0]
+	details := newSessionDetailService(d)
 	if id == "" {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "resource not found", nil)
 		return
 	}
 	if len(parts) == 1 {
 		if r.Method == http.MethodDelete {
-			// CASCADE DELETE: Remove tags and annotations before deleting session
-			if d.TagsSvc != nil {
-				// Best effort deletion - ignore errors
-				_ = d.TagsSvc.DeleteAllSessionTags(r.Context(), id)
-				_ = d.TagsSvc.DeleteAllAnnotations(r.Context(), id)
-			}
-
-			_ = d.Svc.Delete(r.Context(), id)
+			details.deleteProjectedSession(r.Context(), id)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		sess, ok, err := d.Svc.Get(r.Context(), id)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "SESSION_GET_FAILED", err.Error(), nil)
+		view, ok, apiErr := details.getProjectedSession(r.Context(), id)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
 		if !ok {
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "session not found", map[string]any{"id": id})
 			return
-		}
-		view := sessionV1{Session: sess}
-		meta, sz := d.computeHTTPMeta(r.Context(), id)
-		if meta == nil && sess.Error != nil {
-			info := classifyProxyErrorString(*sess.Error)
-			meta = &httpMetaV1{
-				Method:           "",
-				Status:           0,
-				Mime:             "",
-				DurationMs:       0,
-				Streaming:        false,
-				Headers:          map[string]string{},
-				ErrorCategory:    info.Category,
-				ErrorCode:        info.Code,
-				ErrorUserMessage: info.UserMessage,
-				ErrorMessage:     info.UserMessage,
-			}
-		}
-		if meta != nil {
-			view.HttpMeta = meta
-		}
-		if sz != nil {
-			view.Sizes = sz
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(view)
@@ -484,26 +189,26 @@ func (d *Deps) handleV1SessionByID(w http.ResponseWriter, r *http.Request) {
 			limit = 100
 		}
 		from := r.URL.Query().Get("from")
-		frames, next, err := d.Svc.ListFrames(r.Context(), id, from, limit)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "FRAMES_LIST_FAILED", err.Error(), map[string]any{"id": id})
+		frames, apiErr := details.listFrames(r.Context(), id, from, limit)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": frames, "next": next})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": frames.Items, "next": frames.Next})
 	case "events":
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		if limit <= 0 {
 			limit = 100
 		}
 		from := r.URL.Query().Get("from")
-		events, next, err := d.Svc.ListEvents(r.Context(), id, from, limit)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "EVENTS_LIST_FAILED", err.Error(), map[string]any{"id": id})
+		events, apiErr := details.listEvents(r.Context(), id, from, limit)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": events, "next": next})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": events.Items, "next": events.Next})
 	case "body":
 		// Placeholder: body storage not implemented in memory store => 404 with reason
 		w.Header().Set("Content-Type", "application/json")
@@ -887,19 +592,9 @@ func (d *Deps) handleV1CaptureReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clear all sessions
-	if err := d.Svc.ClearAll(r.Context()); err != nil {
+	if err := d.clearSessionsAndNotify(r.Context()); err != nil {
 		writeError(w, http.StatusInternalServerError, "CLEAR_FAILED", err.Error(), nil)
 		return
-	}
-
-	// Close live connections
-	if d.Live != nil {
-		d.Live.CloseAll()
-	}
-
-	// Broadcast clear event
-	if d.Monitor != nil {
-		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
 	}
 
 	// Start new capture
@@ -925,18 +620,7 @@ func (d *Deps) resetCaptureBeforeRequest() {
 		return
 	}
 
-	// Clear all sessions
-	_ = d.Svc.ClearAll(context.Background())
-
-	// Close live connections
-	if d.Live != nil {
-		d.Live.CloseAll()
-	}
-
-	// Broadcast clear event
-	if d.Monitor != nil {
-		d.broadcastMonitorEvent(domain.MonitorEvent{Type: "sessions_cleared", ID: "*"})
-	}
+	_ = d.clearSessionsAndNotify(context.Background())
 
 	// Start new capture
 	newCapture := mem.StartCapture()
@@ -1357,66 +1041,10 @@ func (d *Deps) enrichWithHTTPMeta(ctx context.Context, sess domain.Session) (*ht
 
 // handleFrameBody serves the raw body content for a specific frame
 func (d *Deps) handleFrameBody(w http.ResponseWriter, r *http.Request, sessionID string, frameID string) {
-	// Use direct GetFrameByID for O(1) lookup instead of O(n) ListFrames
-	frame, found, err := d.Svc.GetFrameByID(r.Context(), sessionID, frameID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "FRAME_GET_FAILED", err.Error(), map[string]any{"sessionId": sessionID, "frameId": frameID})
+	body, apiErr := newSessionDetailService(d).frameBody(r.Context(), sessionID, frameID)
+	if apiErr != nil {
+		writeSessionAPIError(w, apiErr)
 		return
 	}
-
-	if !found {
-		writeError(w, http.StatusNotFound, "FRAME_NOT_FOUND", "frame not found", map[string]any{"frameId": frameID})
-		return
-	}
-
-	targetFrame := &frame
-
-	// Check if BodyFile exists
-	if targetFrame.BodyFile == "" {
-		// No body file - return preview as fallback
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("X-Body-Source", "preview")
-		if _, err := w.Write([]byte(targetFrame.Preview)); err != nil {
-			// Log error but response already started
-			log.Printf("Error writing preview response: %v", err)
-		}
-		return
-	}
-
-	// Check file size before reading to prevent OOM
-	fileInfo, err := os.Stat(targetFrame.BodyFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// File was cleaned up by GC or DeleteSession
-			writeError(w, http.StatusGone, "BODY_FILE_EXPIRED", "Body file no longer available (cleaned up)", map[string]any{"frameId": frameID})
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "BODY_STAT_FAILED", err.Error(), map[string]any{"frameId": frameID, "bodyFile": targetFrame.BodyFile})
-		return
-	}
-
-	const maxBodySize = 100 * 1024 * 1024 // 100 MB limit
-	if fileInfo.Size() >= maxBodySize {
-		writeError(w, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE",
-			fmt.Sprintf("body file size (%d bytes) exceeds maximum allowed size (%d bytes)", fileInfo.Size(), maxBodySize),
-			map[string]any{"frameId": frameID, "fileSize": fileInfo.Size(), "maxSize": maxBodySize})
-		return
-	}
-
-	// Read from BodyFile
-	bodyData, err := os.ReadFile(targetFrame.BodyFile)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "BODY_READ_FAILED", err.Error(), map[string]any{"frameId": frameID, "bodyFile": targetFrame.BodyFile})
-		return
-	}
-
-	// Return raw bytes
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("X-Body-Source", "file")
-	w.Header().Set("X-Frame-Id", frameID)
-	w.Header().Set("Content-Length", strconv.Itoa(len(bodyData)))
-	if _, err := w.Write(bodyData); err != nil {
-		// Log error but response already started
-		log.Printf("Error writing body response: %v", err)
-	}
+	writeSessionFrameBody(w, body)
 }

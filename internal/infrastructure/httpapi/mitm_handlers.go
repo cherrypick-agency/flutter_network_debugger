@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -27,12 +26,12 @@ func (d *Deps) handleV1MITMStatus(w http.ResponseWriter, r *http.Request) {
 		CACertPath    string   `json:"caCertPath,omitempty"`
 	}
 	out := resp{Enabled: d.Cfg.MITMEnabled, HasCA: d.MITM != nil && d.MITM.CA != nil, Allow: d.Cfg.MITMDomainsAllow, Deny: d.Cfg.MITMDomainsDeny, CACertPath: d.Cfg.MITMCACertFile}
-	if d.MITM != nil && d.MITM.CA != nil && d.MITM.CA.caCert != nil {
-		out.CASubject = d.MITM.CA.caCert.Subject.String()
-		if d.MITM.CA.caCert.SerialNumber != nil {
-			out.CASerial = d.MITM.CA.caCert.SerialNumber.Text(16)
+	if root := authorityRootCertificate(caOrNil(d)); root != nil {
+		out.CASubject = root.Subject.String()
+		if root.SerialNumber != nil {
+			out.CASerial = root.SerialNumber.Text(16)
 		}
-		sum := sha1.Sum(d.MITM.CA.caCert.Raw)
+		sum := sha1.Sum(root.Raw)
 		out.CAFingerprint = hex.EncodeToString(sum[:])
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -45,14 +44,15 @@ func (d *Deps) handleV1MITMGetCA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "use GET", nil)
 		return
 	}
-	if d.MITM == nil || d.MITM.CA == nil || len(d.MITM.CA.tlsCert.Certificate) == 0 {
+	tlsCert := authorityTLSCertificate(caOrNil(d))
+	if len(tlsCert.Certificate) == 0 {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "no CA configured", nil)
 		return
 	}
 	// First cert in chain is leaf (root CA here)
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	w.Header().Set("Content-Disposition", "attachment; filename=network-debugger-dev-ca.crt")
-	for _, b := range d.MITM.CA.tlsCert.Certificate {
+	for _, b := range tlsCert.Certificate {
 		// write all certs as PEM blocks
 		if len(b) == 0 {
 			continue
@@ -132,8 +132,8 @@ func (d *Deps) handleV1MITMRegeneratePersist(w http.ResponseWriter, r *http.Requ
 	d.Cfg.MITMCACertFile = certPath
 	d.Cfg.MITMCAKeyFile = keyPath
 	fp := ""
-	if d.MITM != nil && d.MITM.CA != nil && d.MITM.CA.caCert != nil {
-		sum := sha1.Sum(d.MITM.CA.caCert.Raw)
+	if root := authorityRootCertificate(caOrNil(d)); root != nil {
+		sum := sha1.Sum(root.Raw)
 		fp = hex.EncodeToString(sum[:])
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -144,27 +144,9 @@ func (d *Deps) handleV1MITMRegeneratePersist(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// helper: write DER to PEM
-func pemEncodeCert(w http.ResponseWriter, der []byte) error {
-	_, err := w.Write([]byte("-----BEGIN CERTIFICATE-----\n"))
-	if err != nil {
-		return err
+func caOrNil(d *Deps) *CertAuthority {
+	if d == nil || d.MITM == nil {
+		return nil
 	}
-	b := make([]byte, base64.StdEncoding.EncodedLen(len(der)))
-	base64.StdEncoding.Encode(b, der)
-	// wrap at 64 columns
-	for i := 0; i < len(b); i += 64 {
-		j := i + 64
-		if j > len(b) {
-			j = len(b)
-		}
-		if _, err := w.Write(b[i:j]); err != nil {
-			return err
-		}
-		if _, err := w.Write([]byte("\n")); err != nil {
-			return err
-		}
-	}
-	_, err = w.Write([]byte("-----END CERTIFICATE-----\n"))
-	return err
+	return d.MITM.CA
 }
