@@ -36,7 +36,15 @@ func TestSettingsRepo_SaveLoad(t *testing.T) {
 		t.Fatalf("want id=1 got %d", got.ID)
 	}
 	// save
-	want := sdomain.RuntimeSettings{ID: 1, ResponseDelayMs: 777, ThrottleEnabled: true, ThrottleDownKbps: 1000}
+	want := sdomain.RuntimeSettings{
+		ID:                  1,
+		ResponseDelayMs:     777,
+		ThrottleEnabled:     true,
+		ThrottleDownKbps:    1000,
+		HighlightTheme:      "monokai",
+		HighlightThemeLight: "github",
+		HighlightThemeDark:  "dracula",
+	}
 	if err := r.Save(ctx, want); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -44,7 +52,7 @@ func TestSettingsRepo_SaveLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got.ResponseDelayMs != 777 || !got.UpdatedAt.After(time.Time{}) {
+	if got.ResponseDelayMs != 777 || got.HighlightThemeLight != "github" || got.HighlightThemeDark != "dracula" || !got.UpdatedAt.After(time.Time{}) {
 		t.Fatalf("unexpected %+v", got)
 	}
 }

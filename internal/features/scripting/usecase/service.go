@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"network-debugger/internal/features/scripting/domain"
 )
@@ -24,6 +25,7 @@ type ScriptService struct {
 const maxScriptBodyBytes = 64 * 1024
 const maxScriptContextJSONBytes = 1024 * 1024
 const maxScriptResultJSONBytes = 1024 * 1024
+const scriptExecutionWatchdogSlack = 250 * time.Millisecond
 
 func trimBodyForScript(body []byte) (trimmed []byte, originalSize int, truncated bool) {
 	originalSize = len(body)
@@ -31,6 +33,48 @@ func trimBodyForScript(body []byte) (trimmed []byte, originalSize int, truncated
 		return body, originalSize, false
 	}
 	return body[:maxScriptBodyBytes], originalSize, true
+}
+
+type executionOutcome struct {
+	result domain.ExecutionResult
+	err    error
+}
+
+func scriptTimeoutDuration(script domain.Script) time.Duration {
+	timeout := time.Duration(script.Config.TimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	return timeout
+}
+
+func scriptWatchdogDuration(script domain.Script) time.Duration {
+	return scriptTimeoutDuration(script) + scriptExecutionWatchdogSlack
+}
+
+func (s *ScriptService) executeWithWatchdog(ctx context.Context, executor domain.ScriptExecutor, req domain.ExecutionRequest) (domain.ExecutionResult, error) {
+	done := make(chan executionOutcome, 1)
+
+	go func() {
+		result, err := executor.Execute(ctx, req)
+		done <- executionOutcome{result: result, err: err}
+	}()
+
+	timer := time.NewTimer(scriptWatchdogDuration(req.Script))
+	defer timer.Stop()
+
+	select {
+	case outcome := <-done:
+		return outcome.result, outcome.err
+	case <-ctx.Done():
+		return domain.ExecutionResult{}, ctx.Err()
+	case <-timer.C:
+		log.Printf("[ScriptService] Watchdog timeout for script %s (%s) after %v", req.Script.Name, req.Script.ID, scriptWatchdogDuration(req.Script))
+		return domain.ExecutionResult{
+			Duration: scriptWatchdogDuration(req.Script),
+			Error:    fmt.Sprintf("script timeout after %dms", req.Script.Config.TimeoutMs),
+		}, nil
+	}
 }
 
 // NewScriptService creates a new script service
@@ -118,7 +162,7 @@ func (s *ScriptService) ExecuteForRequest(ctx context.Context, req *domain.HTTPR
 		}
 
 		// Execute script
-		result, err := executor.Execute(ctx, domain.ExecutionRequest{
+		result, err := s.executeWithWatchdog(ctx, executor, domain.ExecutionRequest{
 			Script: *script,
 			Input:  input,
 		})
@@ -226,7 +270,7 @@ func (s *ScriptService) ExecuteForResponse(ctx context.Context, req *domain.HTTP
 			continue
 		}
 
-		result, err := executor.Execute(ctx, domain.ExecutionRequest{
+		result, err := s.executeWithWatchdog(ctx, executor, domain.ExecutionRequest{
 			Script: *script,
 			Input:  input,
 		})
@@ -528,13 +572,16 @@ func (s *ScriptService) TestScript(ctx context.Context, script *domain.Script, t
 	}
 
 	// Execute script
-	result, err := executor.Execute(ctx, domain.ExecutionRequest{
+	result, err := s.executeWithWatchdog(ctx, executor, domain.ExecutionRequest{
 		Script: *script,
 		Input:  input,
 	})
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("execution failed: %w", err)
+	}
+	if result.Error != "" {
+		return nil, result.Logs, fmt.Errorf("execution failed: %s", result.Error)
 	}
 	if len(result.Output) > maxScriptResultJSONBytes {
 		return nil, result.Logs, fmt.Errorf("script output is too large: %d bytes", len(result.Output))

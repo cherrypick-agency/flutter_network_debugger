@@ -67,16 +67,20 @@ func TestToSettingsDomain(t *testing.T) {
 		{
 			name: "with UI settings",
 			model: &RuntimeSettingsModel{
-				ID:             1,
-				FontScale:      1.2,
-				HighlightTheme: "monokai",
-				UpdatedAt:      now,
+				ID:                  1,
+				FontScale:           1.2,
+				HighlightTheme:      "monokai",
+				HighlightThemeLight: "github",
+				HighlightThemeDark:  "dracula",
+				UpdatedAt:           now,
 			},
 			want: sdomain.RuntimeSettings{
-				ID:             1,
-				FontScale:      1.2,
-				HighlightTheme: "monokai",
-				UpdatedAt:      now,
+				ID:                  1,
+				FontScale:           1.2,
+				HighlightTheme:      "monokai",
+				HighlightThemeLight: "github",
+				HighlightThemeDark:  "dracula",
+				UpdatedAt:           now,
 			},
 		},
 	}
@@ -95,6 +99,15 @@ func TestToSettingsDomain(t *testing.T) {
 			}
 			if got.FontScale != tt.want.FontScale {
 				t.Errorf("toSettingsDomain().FontScale = %v, want %v", got.FontScale, tt.want.FontScale)
+			}
+			if got.HighlightTheme != tt.want.HighlightTheme {
+				t.Errorf("toSettingsDomain().HighlightTheme = %v, want %v", got.HighlightTheme, tt.want.HighlightTheme)
+			}
+			if got.HighlightThemeLight != tt.want.HighlightThemeLight {
+				t.Errorf("toSettingsDomain().HighlightThemeLight = %v, want %v", got.HighlightThemeLight, tt.want.HighlightThemeLight)
+			}
+			if got.HighlightThemeDark != tt.want.HighlightThemeDark {
+				t.Errorf("toSettingsDomain().HighlightThemeDark = %v, want %v", got.HighlightThemeDark, tt.want.HighlightThemeDark)
 			}
 		})
 	}

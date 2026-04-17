@@ -20,7 +20,9 @@ type RuntimeSettings struct {
 
 	FontScale float64
 
-	HighlightTheme string
+	HighlightTheme      string
+	HighlightThemeLight string
+	HighlightThemeDark  string
 
 	// Mapping (Map Local/Remote)
 	MappingEnabled     bool

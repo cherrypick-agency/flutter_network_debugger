@@ -18,6 +18,11 @@ const (
 	helperVersion     = "1.0.0"
 )
 
+var (
+	darwinExecCommand        = exec.Command
+	darwinExecCommandContext = exec.CommandContext
+)
+
 var plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -85,7 +90,7 @@ func (i *darwinInstaller) Install(helperBinaryPath string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	cmd := darwinExecCommandContext(ctx, "osascript", "-e", script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -100,7 +105,7 @@ func (i *darwinInstaller) Install(helperBinaryPath string) error {
 // Uninstall - uninstall helper tool
 func (i *darwinInstaller) Uninstall() error {
 	// Unload daemon (doesn't require password if daemon is already running as root)
-	cmd := exec.Command("launchctl", "unload", plistPath)
+	cmd := darwinExecCommand("launchctl", "unload", plistPath)
 	_ = cmd.Run() // ignore error if already unloaded
 
 	// Delete files (requires password)
@@ -110,7 +115,7 @@ func (i *darwinInstaller) Uninstall() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd = exec.CommandContext(ctx, "osascript", "-e", script)
+	cmd = darwinExecCommandContext(ctx, "osascript", "-e", script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

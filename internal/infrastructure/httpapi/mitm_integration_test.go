@@ -388,12 +388,10 @@ func TestMITM_CertificateCaching(t *testing.T) {
 	}
 
 	// Verify cache contains the entry
-	ca.mu.Lock()
-	if _, ok := ca.cache[hostname]; !ok {
+	if !ca.HasCached(hostname) {
 		t.Error("certificate not found in cache")
 	}
-	cacheSize := len(ca.cache)
-	ca.mu.Unlock()
+	cacheSize := ca.CacheSize()
 
 	if cacheSize != 1 {
 		t.Errorf("unexpected cache size: got %d, want 1", cacheSize)
@@ -411,9 +409,7 @@ func TestMITM_CertificateCaching(t *testing.T) {
 	}
 
 	// Cache should now have 2 entries
-	ca.mu.Lock()
-	cacheSize = len(ca.cache)
-	ca.mu.Unlock()
+	cacheSize = ca.CacheSize()
 
 	if cacheSize != 2 {
 		t.Errorf("unexpected cache size: got %d, want 2", cacheSize)
@@ -467,9 +463,7 @@ func TestMITM_ConcurrentCertificateIssuance(t *testing.T) {
 	}
 
 	// Cache should have only 1 entry
-	ca.mu.Lock()
-	cacheSize := len(ca.cache)
-	ca.mu.Unlock()
+	cacheSize := ca.CacheSize()
 
 	if cacheSize != 1 {
 		t.Errorf("unexpected cache size: got %d, want 1", cacheSize)

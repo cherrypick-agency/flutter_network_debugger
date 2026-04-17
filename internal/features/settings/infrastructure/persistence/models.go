@@ -23,8 +23,10 @@ type RuntimeSettingsModel struct {
 	ThrottleLatencyJitter int
 	ThrottleOffline       bool
 
-	FontScale      float64
-	HighlightTheme string `gorm:"type:text"`
+	FontScale           float64
+	HighlightTheme      string `gorm:"type:text"`
+	HighlightThemeLight string `gorm:"type:text"`
+	HighlightThemeDark  string `gorm:"type:text"`
 
 	MappingEnabled     bool
 	MappingUploadMaxMB int
@@ -65,6 +67,8 @@ func toSettingsModel(s sdomain.RuntimeSettings) *RuntimeSettingsModel {
 		ThrottleOffline:       s.ThrottleOffline,
 		FontScale:             s.FontScale,
 		HighlightTheme:        s.HighlightTheme,
+		HighlightThemeLight:   s.HighlightThemeLight,
+		HighlightThemeDark:    s.HighlightThemeDark,
 		MappingEnabled:        s.MappingEnabled,
 		MappingUploadMaxMB:    s.MappingUploadMaxMB,
 		UpdatedAt:             s.UpdatedAt,
@@ -89,6 +93,8 @@ func toSettingsDomain(m *RuntimeSettingsModel) sdomain.RuntimeSettings {
 		ThrottleOffline:       m.ThrottleOffline,
 		FontScale:             m.FontScale,
 		HighlightTheme:        m.HighlightTheme,
+		HighlightThemeLight:   m.HighlightThemeLight,
+		HighlightThemeDark:    m.HighlightThemeDark,
 		MappingEnabled:        m.MappingEnabled,
 		MappingUploadMaxMB:    m.MappingUploadMaxMB,
 		UpdatedAt:             m.UpdatedAt,

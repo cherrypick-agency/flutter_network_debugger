@@ -7,6 +7,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -102,6 +103,16 @@ func TestDarwinInstaller_Install_BinaryExists(t *testing.T) {
 		t.Skip("Skipping test that uses os/exec in race detector mode")
 	}
 
+	origCmd := darwinExecCommand
+	origCmdCtx := darwinExecCommandContext
+	defer func() {
+		darwinExecCommand = origCmd
+		darwinExecCommandContext = origCmdCtx
+	}()
+	darwinExecCommandContext = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sh", "-c", "printf 'stubbed install' >&2; exit 1")
+	}
+
 	tmpDir := t.TempDir()
 	binaryPath := filepath.Join(tmpDir, "helper")
 
@@ -136,6 +147,19 @@ func TestDarwinInstaller_Install_BinaryExists(t *testing.T) {
 func TestDarwinInstaller_Uninstall(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping test that uses os/exec in race detector mode")
+	}
+
+	origCmd := darwinExecCommand
+	origCmdCtx := darwinExecCommandContext
+	defer func() {
+		darwinExecCommand = origCmd
+		darwinExecCommandContext = origCmdCtx
+	}()
+	darwinExecCommand = func(name string, arg ...string) *exec.Cmd {
+		return exec.Command("sh", "-c", "exit 0")
+	}
+	darwinExecCommandContext = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sh", "-c", "printf 'stubbed uninstall' >&2; exit 1")
 	}
 
 	installer := &darwinInstaller{}

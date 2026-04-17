@@ -3,8 +3,6 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
-
-	"network-debugger/internal/features/process/domain"
 )
 
 // processConfigDTO - DTO for process detection configuration
@@ -19,65 +17,30 @@ type processConfigDTO struct {
 
 // handleV1ProcessConfig - GET/POST /_api/v1/process/config
 func (d *Deps) handleV1ProcessConfig(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
+	service := newProcessAdminService(d)
 	switch r.Method {
 	case http.MethodGet:
-		// Get current configuration
-		cfg, err := d.ProcessSvc.GetConfig(ctx)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		dto, apiErr := service.loadConfig(r.Context())
+		if apiErr != nil {
+			http.Error(w, apiErr.Message, apiErr.Status)
 			return
 		}
-
-		dto := processConfigDTO{
-			Enabled:         cfg.Enabled,
-			UseHelperTool:   cfg.UseHelperTool,
-			HelperInstalled: cfg.HelperInstalled,
-			CacheEnabled:    cfg.CacheEnabled,
-			CacheTTL:        cfg.CacheTTLSeconds,
-			FallbackEnabled: cfg.FallbackEnabled,
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(dto)
 
 	case http.MethodPost:
-		// Update configuration
 		var dto processConfigDTO
 		if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		// Convert DTO to domain entity
-		cfg := &domain.DetectionConfig{
-			ID:              1, // singleton
-			Enabled:         dto.Enabled,
-			UseHelperTool:   dto.UseHelperTool,
-			HelperInstalled: dto.HelperInstalled,
-			CacheEnabled:    dto.CacheEnabled,
-			CacheTTLSeconds: dto.CacheTTL,
-			FallbackEnabled: dto.FallbackEnabled,
-		}
-
-		if err := d.ProcessSvc.SaveConfig(ctx, cfg); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		updated, apiErr := service.saveConfig(r.Context(), dto)
+		if apiErr != nil {
+			http.Error(w, apiErr.Message, apiErr.Status)
 			return
 		}
-
-		// Return updated configuration
-		updatedDto := processConfigDTO{
-			Enabled:         cfg.Enabled,
-			UseHelperTool:   cfg.UseHelperTool,
-			HelperInstalled: cfg.HelperInstalled,
-			CacheEnabled:    cfg.CacheEnabled,
-			CacheTTL:        cfg.CacheTTLSeconds,
-			FallbackEnabled: cfg.FallbackEnabled,
-		}
-
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(updatedDto)
+		_ = json.NewEncoder(w).Encode(updated)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -91,14 +54,14 @@ func (d *Deps) handleV1ProcessHelperStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	status := d.ProcessSvc.CheckHelperStatus()
+	status, apiErr := newProcessAdminService(d).helperStatus()
+	if apiErr != nil {
+		http.Error(w, apiErr.Message, apiErr.Status)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"running":   status.Running,
-		"installed": status.Installed,
-		"version":   status.Version,
-	})
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 // handleV1ProcessHelperInstall - POST /_api/v1/process/helper/install
@@ -108,15 +71,12 @@ func (d *Deps) handleV1ProcessHelperInstall(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ctx := r.Context()
-
-	if err := d.ProcessSvc.InstallHelper(ctx); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	resp, apiErr := newProcessAdminService(d).installHelper(r.Context())
+	if apiErr != nil {
+		http.Error(w, apiErr.Message, apiErr.Status)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status": "installed",
-	})
+	_ = json.NewEncoder(w).Encode(resp)
 }

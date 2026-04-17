@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	proxyruntime "github.com/777genius/proxykit/proxyruntime"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 
@@ -39,7 +40,6 @@ import (
 	settingsuc "network-debugger/internal/features/settings/usecase"
 	tagsp "network-debugger/internal/features/tags/infrastructure/persistence"
 	tagsuc "network-debugger/internal/features/tags/usecase"
-	pruntime "network-debugger/internal/infrastructure/proxyruntime"
 )
 
 type Deps struct {
@@ -56,7 +56,7 @@ type Deps struct {
 	DB                      *gorm.DB
 	Settings                *settingsuc.Service
 	ProxySvc                *proxyuc.Service
-	ProxyRt                 *pruntime.Manager
+	ProxyRt                 *proxyruntime.Manager
 	Mapping                 *mappinguc.Service
 	MapRt                   *mappingrt.Manager
 	ProcessSvc              *processuc.Service
@@ -180,7 +180,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 			l := obs.NewLogger("info")
 			zl = l
 		}
-		d.ProxyRt = pruntime.New(zl)
+		d.ProxyRt = proxyruntime.New(zl)
 	}
 	// Apply ports/modes configuration
 	if d.ProxySvc != nil && d.ProxyRt != nil {
@@ -212,7 +212,7 @@ func NewRouterWithDeps(d *Deps) http.Handler {
 				}
 				d.handleForwardOrNotFound(w, r)
 			})
-			err := d.ProxyRt.Apply(contextWithNoCancel(), pruntime.ApplyConfig{
+			err := d.ProxyRt.Apply(contextWithNoCancel(), proxyruntime.ApplyConfig{
 				ForwardEnabled: pc.ForwardEnabled,
 				ForwardAddr:    pc.ForwardAddr,
 				SocksEnabled:   pc.SocksEnabled,

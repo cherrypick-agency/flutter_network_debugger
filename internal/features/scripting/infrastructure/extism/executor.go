@@ -92,8 +92,9 @@ func (e *ExtismExecutor) Execute(ctx context.Context, req domain.ExecutionReques
 	go func() {
 		var callErr error
 		var exitCode uint32
-		// Extism v1.7.1+ API returns 3 values: exitCode, output, error
-		exitCode, output, callErr = instance.plugin.Call("process", req.Input)
+		// Use CallWithContext so Wazero can close the module when the script
+		// context deadline is reached instead of spinning forever inside Wasm.
+		exitCode, output, callErr = instance.plugin.CallWithContext(execCtx, "process", req.Input)
 		// Exit code from WASM module (0 = success, non-zero = error)
 		// Currently not used - we rely on the error return value instead
 		_ = exitCode
@@ -225,6 +226,7 @@ func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script)
 		Wasm: []extism.Wasm{
 			extism.WasmData{Data: script.Code},
 		},
+		Timeout: uint64(script.Config.TimeoutMs),
 		Memory: &extism.ManifestMemory{
 			MaxPages: uint32(uint64(script.Config.MemoryLimitMB) * 16), // 64KB per page
 		},
@@ -233,12 +235,13 @@ func (e *ExtismExecutor) createPlugin(ctx context.Context, script domain.Script)
 
 	// Configure plugin with compilation cache
 	config := extism.PluginConfig{
-		EnableWasi: false, // Security: disable WASI by default
+		EnableWasi:    false, // Security: disable WASI by default
+		RuntimeConfig: wazero.NewRuntimeConfig().WithCloseOnContextDone(true),
 	}
 
 	// Apply compilation cache if available
 	if e.compilationCache != nil {
-		config.RuntimeConfig = wazero.NewRuntimeConfig().WithCompilationCache(e.compilationCache)
+		config.RuntimeConfig = config.RuntimeConfig.WithCompilationCache(e.compilationCache)
 		log.Printf("[Extism] Using compilation cache for script %s", script.Name)
 	}
 

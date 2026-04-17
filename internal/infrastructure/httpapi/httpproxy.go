@@ -7,10 +7,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptrace"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,10 +19,11 @@ import (
 	"time"
 
 	"bufio"
+	proxyhttp "github.com/777genius/proxykit/proxyhttp"
+	reverseproxy "github.com/777genius/proxykit/reverse"
 	"mime/multipart"
 	"network-debugger/internal/domain"
 	processdomain "network-debugger/internal/features/process/domain"
-	scriptdomain "network-debugger/internal/features/scripting/domain"
 	"network-debugger/pkg/shared/id"
 	"network-debugger/pkg/shared/redact"
 	"sync/atomic"
@@ -49,72 +50,27 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "OFFLINE", "proxy offline (simulated)", nil)
 		return
 	}
-	tgt := r.URL.Query().Get("_target")
-	if tgt == "" {
-		// fallback to default target from config
-		if d.Cfg.DefaultTarget != "" {
-			tgt = d.Cfg.DefaultTarget
-		} else {
-			writeError(w, http.StatusBadRequest, "MISSING_TARGET", "missing target", nil)
-			return
-		}
-	}
-	u, err := url.Parse(tgt)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		writeError(w, http.StatusBadRequest, "INVALID_TARGET", "invalid target", map[string]any{"target": tgt})
-		return
-	}
-
-	// Build upstream URL by joining path suffix after /httpproxy or /proxy
 	prefix := "/httpproxy"
 	if strings.HasPrefix(r.URL.Path, "/proxy") {
 		prefix = "/proxy"
 	}
-	suffix := strings.TrimPrefix(r.URL.Path, prefix)
-	// If client hit /httpproxy/ (or /proxy/) without extra suffix, treat it as /httpproxy.
-	// Otherwise we would incorrectly append an extra "/" to the upstream target.
-	if suffix == "/" {
-		suffix = ""
+	resolver := reverseproxy.QueryTargetResolver{
+		Param:         "_target",
+		DefaultTarget: d.Cfg.DefaultTarget,
+		DropParams:    []string{"_resetCapture"},
+		MountPath:     prefix,
 	}
-	// If suffix is empty — don't add trailing "/" to target path
-	if suffix != "" && !strings.HasPrefix(suffix, "/") {
-		suffix = "/" + suffix
-	}
-	upstream := *u
-	// Join paths
-	if suffix != "" {
-		upstream.Path = strings.TrimRight(upstream.Path, "/") + suffix
-	}
-
-	// Merge query from target and incoming request (except `_target`)
-	// Important: incoming request params have priority over target params
-	// There are cases when keys in target or incoming params have leading '?'
-	// (e.g., if client mistakenly included '?' in param name). Normalize such keys.
-	rawTargetQ := strings.TrimPrefix(u.RawQuery, "?")
-	targetQ, _ := url.ParseQuery(rawTargetQ)
-
-	incomingQ := r.URL.Query()
-	incomingQ.Del("_target")
-	incomingQ.Del("_resetCapture")
-	// Normalize incoming param keys: remove leading '?'
-	cleanedIncoming := url.Values{}
-	for k, vv := range incomingQ {
-		ck := strings.TrimPrefix(k, "?")
-		for _, v := range vv {
-			cleanedIncoming.Add(ck, v)
+	upstream, err := resolver.Resolve(r)
+	if err != nil {
+		switch {
+		case errors.Is(err, reverseproxy.ErrMissingTarget):
+			writeError(w, http.StatusBadRequest, "MISSING_TARGET", "missing target", nil)
+		case errors.Is(err, reverseproxy.ErrInvalidTarget):
+			writeError(w, http.StatusBadRequest, "INVALID_TARGET", "invalid target", nil)
+		default:
+			writeError(w, http.StatusInternalServerError, "TARGET_RESOLVE_FAILED", err.Error(), nil)
 		}
-	}
-	for k, vv := range cleanedIncoming {
-		// overwrite existing target values with incoming request values
-		delete(targetQ, k)
-		for _, v := range vv {
-			targetQ.Add(k, v)
-		}
-	}
-	upstream.RawQuery = targetQ.Encode()
-	if upstream.RawQuery == "" {
-		// if resulting query is empty, don't force `?`
-		upstream.ForceQuery = false
+		return
 	}
 
 	// Resolve cookie/stealth options (can be overridden per-request via query)
@@ -136,7 +92,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ns := computeNamespaceFromURL(&upstream)
+	ns := computeNamespaceFromURL(upstream)
 	opts := CookieRewriteOptions{
 		Mode:            cookieMode,
 		DomainStrategy:  d.Cfg.Cookies.DomainStrategy,
@@ -183,7 +139,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	d.CfgMu.RUnlock()
 	if mappingEnabled && d.MapRt != nil {
 		prevReq := r.Clone(r.Context())
-		u2 := upstream
+		u2 := *upstream
 		prevReq.URL = &u2
 		prevReq.Host = u2.Host
 		if dec, ok := d.MapRt.EvalRequest(prevReq); ok {
@@ -262,7 +218,7 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if u, err := url.Parse(dec.RemoteURL); err == nil {
-				upstream = *u
+				upstream = u
 				mappedPreserveHost = dec.PreserveHost
 				// mapping_applied (remote) - always broadcast
 				d.broadcastMonitorEvent(domain.MonitorEvent{Type: "mapping_applied", ID: sessionID, Ref: dec.RuleID})
@@ -273,30 +229,20 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create reverse proxy
-	director := func(req *http.Request) {
-		req.URL = &upstream
-		if mappedPreserveHost {
-			// keep original Host
-		} else {
-			req.Host = upstream.Host
-		}
-		// Clean hop-by-hop headers; httputil will remove most, but ensure here for clarity
-		removeHopHeaders(req.Header)
-		// In isolate mode rewrite Cookie: keep only current namespace and unwrap names
-		rewriteOutboundCookieHeaderForUpstream(req.Header, opts)
+	startedAt := time.Now()
+	flow := &reverseProxyFlow{
+		deps:         d,
+		prefix:       prefix,
+		upstream:     upstream,
+		preserveHost: mappedPreserveHost,
+		cookieOpts:   opts,
+		stealth:      stealth,
+		sessionID:    sessionID,
+		startedAt:    startedAt,
 	}
 
-	transport := newTransport(d.Cfg)
-	// timings via httptrace
-	var tStart = time.Now()
-	var tDNSNs, tConnStartNs, tTLSStartNs, tFirstByteNs int64
-	hadError := false
-
 	// Safely peek a small portion of request body and keep stream intact for upstream.
-	// This must be done BEFORE creating the proxy, as ModifyResponse callback needs access to it.
-	var reqBodyBuf []byte
-	var reqFrameID string // Will be set when request frame is created, used for body file update
+	// This must be done before scripts/interception and before the public reverse handler clones the request.
 	if r.Body != nil {
 		peekSize := int(previewMaxBytes.Load())
 		if peekSize <= 0 {
@@ -308,262 +254,10 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 		peek := make([]byte, peekSize)
 		n, _ := io.ReadFull(r.Body, peek)
 		if n > 0 {
-			reqBodyBuf = peek[:n]
-			r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(reqBodyBuf), r.Body))
+			flow.reqBodyBuf = peek[:n]
+			flow.scriptReqBodyBuf = append([]byte(nil), flow.reqBodyBuf...)
+			r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(flow.reqBodyBuf), r.Body))
 		}
-	}
-
-	proxy := &httputil.ReverseProxy{
-		Director:  director,
-		Transport: transport,
-		ModifyResponse: func(resp *http.Response) error {
-			// Bandwidth throttling (download): wrap upstream body
-			if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleDownKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && resp.Body != nil {
-				bps := kbpsToBytesPerSec(d.Cfg.ThrottleDownKbps)
-				resp.Body = io.NopCloser(wrapReaderThrottleLoss(resp.Body, bps, d.Cfg.ThrottlePacketLoss))
-			}
-			// Artificial response delay (to visualize timeline)
-			sleepResponseDelay(d.Cfg)
-			// Rewrite Set-Cookie for proxy domain/path (and isolate names if needed)
-			origCookies := append([]string(nil), resp.Header.Values("Set-Cookie")...)
-			rewriteSetCookiesForProxy(resp.Header, opts)
-			// If header disappeared for some reason — restore originals
-			if len(resp.Header.Values("Set-Cookie")) == 0 && len(origCookies) > 0 {
-				for _, c := range origCookies {
-					resp.Header.Add("Set-Cookie", c)
-				}
-			}
-			// Last resort: on some environments header may be stripped by the stack.
-			// Add neutral cookie with SameSite=None to preserve HTTPS test semantics.
-			if len(resp.Header.Values("Set-Cookie")) == 0 && opts.HTTPS {
-				resp.Header.Add("Set-Cookie", "ndebug=1; Path=/; SameSite=None")
-			}
-			// Rewrite Location for 3xx so client continues chain through proxy
-			if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-				loc := resp.Header.Get("Location")
-				if loc != "" {
-					if lurl, err := url.Parse(loc); err == nil {
-						base := &upstream
-						if lurl.IsAbs() {
-							base = lurl
-						}
-						resolved := base.ResolveReference(lurl)
-						// Construct proxy URL: <prefix><path>?_target=<scheme://host>[&origQuery]
-						proxyURL := url.URL{Path: prefix + resolved.EscapedPath()}
-						q := url.Values{}
-						q.Set("_target", base.Scheme+"://"+base.Host)
-						if rq := resolved.RawQuery; rq != "" {
-							// Add original redirect params
-							if rqVals, err := url.ParseQuery(rq); err == nil {
-								for k, vv := range rqVals {
-									for _, v := range vv {
-										q.Add(k, v)
-									}
-								}
-							}
-						}
-						proxyURL.RawQuery = q.Encode()
-						resp.Header.Set("Location", proxyURL.String())
-					}
-				}
-			}
-
-			// Execute response scripts (FIRST - before interceptor)
-			if d.ScriptSvc != nil && resp != nil {
-				var respBodyBuf []byte
-				if resp.Body != nil {
-					buf, _ := io.ReadAll(resp.Body)
-					respBodyBuf = buf
-					resp.Body = io.NopCloser(bytes.NewReader(buf))
-				}
-
-				scriptReq := toScriptHTTPRequest(r, reqBodyBuf)
-				scriptResp := toScriptHTTPResponse(resp, respBodyBuf)
-				if modifiedResp, err := d.ScriptSvc.ExecuteForResponse(r.Context(), scriptReq, scriptResp, nil); err == nil && modifiedResp != nil {
-					resp = applyScriptResponseModifications(resp, modifiedResp)
-				}
-			}
-
-			// Interception: response (MVP)
-			if d.InterceptSvc != nil {
-				mgr := d.InterceptSvc.Manager()
-				mgrCfg := mgr.Config()
-				if mgrCfg.Enabled && mgrCfg.Responses {
-					var capBuf []byte
-					if resp.Body != nil {
-						lim := mgrCfg.BodyMaxBytes
-						if lim <= 0 {
-							lim = 1 << 20
-						}
-						buf := make([]byte, lim)
-						if n, _ := io.ReadFull(resp.Body, buf); n > 0 {
-							capBuf = append(capBuf[:0], buf[:n]...)
-							resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(capBuf), resp.Body))
-						}
-					}
-					// Decompression for preview/editing
-					origEnc := strings.ToLower(resp.Header.Get("Content-Encoding"))
-					decCap, _ := decodeForIntercept(capBuf, origEnc, mgrCfg.BodyMaxBytes)
-					ct := strings.ToLower(resp.Header.Get("Content-Type"))
-					respInput := toResponseMatchInput(resp)
-					respInput.BodyPreview = string(decCap)
-					if dec, _ := mgr.InterceptResponse(r.Context(), sessionID, respInput, capBuf, ct); dec != nil {
-						if dec.Status > 0 {
-							resp.StatusCode = dec.Status
-							if txt := http.StatusText(dec.Status); txt != "" {
-								resp.Status = strconv.Itoa(dec.Status) + " " + txt
-							} else {
-								resp.Status = strconv.Itoa(dec.Status)
-							}
-						}
-						if dec.Headers != nil {
-							resp.Header = http.Header(dec.Headers)
-						}
-						if dec.Body != nil {
-							bodyToWrite := dec.Body
-							if mgrCfg.Reencode && (origEnc == "gzip" || origEnc == "deflate") {
-								if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
-									bodyToWrite = encBody
-									resp.Header.Set("Content-Encoding", origEnc)
-								} else {
-									resp.Header.Del("Content-Encoding")
-								}
-							} else {
-								resp.Header.Del("Content-Encoding")
-							}
-							resp.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
-							resp.ContentLength = int64(len(bodyToWrite))
-							resp.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
-						}
-					}
-				}
-			}
-
-			// Log response frame with timings embedded - always
-			basePreview := buildHTTPResponsePreview(resp)
-			firstByte := timeFromUnixNanoOrZero(atomic.LoadInt64(&tFirstByteNs))
-			ttfb := durationMs(tStart, firstByte)
-			total := durationMs(tStart, time.Now())
-			preview := augmentPreviewWithTimings(basePreview, ttfb, total)
-			respFrameID := id.New()
-			fr := domain.Frame{ID: respFrameID, Ts: time.Now().UTC(), Direction: domain.DirectionUpstreamToClient, Opcode: domain.OpcodeText, Size: int(resp.ContentLength), Preview: preview}
-			_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
-			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
-			d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionUpstreamToClient), string(domain.OpcodeText)).Inc()
-
-			// Persist HTTP transaction summary
-			dnsStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tDNSNs))
-			connStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tConnStartNs))
-			tlsStart := timeFromUnixNanoOrZero(atomic.LoadInt64(&tTLSStartNs))
-			firstByte = timeFromUnixNanoOrZero(atomic.LoadInt64(&tFirstByteNs))
-			tx := domain.HTTPTransaction{
-				ID: id.New(), SessionID: sessionID, Method: r.Method, URL: strings.TrimSuffix(upstream.String(), "?"),
-				Status:  resp.StatusCode,
-				ReqSize: int(r.ContentLength), RespSize: int(resp.ContentLength),
-				StartedAt: tStart, EndedAt: time.Now().UTC(),
-				Timings: domain.HTTPTimings{
-					DNS:     durationMs(dnsStart, connStart),
-					Connect: durationMs(connStart, useOrFallback(tlsStart, firstByte)),
-					TLS:     durationMs(useOrFallback(tlsStart, firstByte), firstByte),
-					TTFB:    durationMs(tStart, firstByte),
-					Total:   durationMs(tStart, time.Now()),
-				},
-				// HAR export support
-				ReqHeaders:      cloneHeader(r.Header),
-				RespHeaders:     cloneHeader(resp.Header),
-				Cookies:         r.Cookies(),
-				QueryParams:     r.URL.Query(),
-				ReqHTTPVersion:  r.Proto,
-				RespHTTPVersion: resp.Proto,
-			}
-			// Best-effort content-type
-			if ct := resp.Header.Get("Content-Type"); ct != "" {
-				tx.ContentType = ct
-			}
-			// Optional body spooling
-			if d.Cfg.CaptureBodies {
-				// Spool request body if available
-				if len(reqBodyBuf) > 0 {
-					if f, err := d.spoolBodyBytes(reqBodyBuf, "req"); err == nil && f != "" {
-						tx.ReqBodyFile = f
-						d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
-						// Update request frame with body file path
-						if reqFrameID != "" {
-							_ = d.Svc.UpdateFrameBodyFile(contextWithNoCancel(), sessionID, reqFrameID, f)
-						}
-					}
-				}
-				// Spool response body - read into buffer, then restore for client
-				if resp.Body != nil {
-					bodyData, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(d.Cfg.BodyMaxBytes)))
-					if readErr == nil && len(bodyData) > 0 {
-						// Restore body for client - CRITICAL: without this client gets empty response
-						resp.Body = io.NopCloser(bytes.NewReader(bodyData))
-						// Spool to file
-						if f, err := d.spoolBodyBytes(bodyData, "resp"); err == nil && f != "" {
-							tx.RespBodyFile = f
-							d.Svc.AddSpoolFile(contextWithNoCancel(), sessionID, f)
-							// Update response frame with body file path
-							_ = d.Svc.UpdateFrameBodyFile(contextWithNoCancel(), sessionID, respFrameID, f)
-						}
-					}
-				}
-			}
-			// Always add HTTP transaction
-			_ = d.Svc.AddHTTPTransaction(contextWithNoCancel(), tx)
-			d.broadcastMonitorEvent(domain.MonitorEvent{Type: "http_tx_added", ID: sessionID, Ref: tx.ID})
-			return nil
-		},
-		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
-			hadError = true
-			// Always set session closed on error
-			_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr(err.Error()))
-
-			// Get human-readable error message and code
-			info := classifyProxyError(err)
-			errorCode := info.Code
-			errorMessage := info.UserMessage
-
-			// "context canceled" is almost always a client abort. Keep it in the session,
-			// but don't spam error notifications.
-			if errorCode == "CANCELED" {
-				d.Logger.Info().
-					Str("sessionID", sessionID).
-					Str("target", upstream.String()).
-					Str("method", r.Method).
-					Str("clientAddr", clientHost(r.RemoteAddr)).
-					Msg(errorMessage)
-				// Best-effort response for the cases when client is still connected.
-				writeError(rw, 499, errorCode, errorMessage, map[string]any{"target": upstream.String(), "raw": err.Error()})
-				return
-			}
-
-			// Enhanced logging with context
-			d.Logger.Error().
-				Err(err).
-				Str("sessionID", sessionID).
-				Str("target", upstream.String()).
-				Str("method", r.Method).
-				Str("clientAddr", clientHost(r.RemoteAddr)).
-				Str("errorCode", errorCode).
-				Msg(errorMessage)
-
-			// Broadcast error to frontend with user-friendly message
-			d.broadcastMonitorEvent(domain.MonitorEvent{
-				Type: "session_error",
-				ID:   sessionID,
-				Error: &domain.ErrorDetails{
-					Category:    info.Category,
-					Code:        errorCode,
-					UserMessage: info.UserMessage,
-					Message:     errorMessage,
-					Raw:         err.Error(),
-					Target:      upstream.String(),
-					Method:      r.Method,
-				},
-			})
-			writeError(rw, http.StatusBadGateway, errorCode, errorMessage, map[string]any{"target": upstream.String(), "raw": err.Error()})
-		},
 	}
 
 	// Emit lightweight session-start heartbeat frame so UI can draw in-progress bar immediately.
@@ -586,146 +280,36 @@ func (d *Deps) handleHTTPProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	// For preview, show the real upstream URL (not the /httpproxy path)
 	rPrev := *r
-	rPrev.URL = &upstream
-	reqPreview := buildHTTPRequestPreview(&rPrev, reqBodyBuf)
+	rPrev.URL = cloneURL(upstream)
+	reqPreview := buildHTTPRequestPreview(&rPrev, flow.reqBodyBuf)
 	// Always log request frame
-	reqFrameID = id.New()
-	fr = domain.Frame{ID: reqFrameID, Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
+	flow.reqFrameID = id.New()
+	fr = domain.Frame{ID: flow.reqFrameID, Ts: time.Now().UTC(), Direction: domain.DirectionClientToUpstream, Opcode: domain.OpcodeText, Size: int64ToInt(r.ContentLength), Preview: reqPreview}
 	_ = d.Svc.AddFrame(contextWithNoCancel(), sessionID, fr)
 	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "frame_added", ID: sessionID, Ref: fr.ID})
 	d.Metrics.FramesTotal.WithLabelValues(string(domain.DirectionClientToUpstream), string(domain.OpcodeText)).Inc()
 
-	// Also broadcast a lightweight event for frontend session_started consistency in HTTP flows
-	// (ws flow already broadcasts in network-debugger)
-	// d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_started", ID: sessionID}) // already sent above
-
-	// Execute request scripts (FIRST - before interceptor)
-	if d.ScriptSvc != nil {
-		scriptReq := toScriptHTTPRequest(r, reqBodyBuf)
-		sessionInfo := &scriptdomain.SessionInfo{
-			ID:         sessionID,
-			ClientAddr: r.RemoteAddr,
-		}
-		if modifiedReq, err := d.ScriptSvc.ExecuteForRequest(r.Context(), scriptReq, sessionInfo); err == nil && modifiedReq != nil {
-			r, reqBodyBuf = applyScriptRequestModifications(r, modifiedReq)
-		}
-	}
-
-	// Interception: request (MVP) — after preview, before sending
-	if d.InterceptSvc != nil {
-		mgr := d.InterceptSvc.Manager()
-		mgrCfg := mgr.Config()
-		if mgrCfg.Enabled && mgrCfg.Requests {
-			capBody := reqBodyBuf
-			if max := mgrCfg.BodyMaxBytes; max > 0 && len(capBody) > max {
-				capBody = capBody[:max]
-			}
-			origEnc := strings.ToLower(r.Header.Get("Content-Encoding"))
-			decCap, _ := decodeForIntercept(capBody, origEnc, mgrCfg.BodyMaxBytes)
-			ct := strings.ToLower(r.Header.Get("Content-Type"))
-			input := toRequestMatchInput(r)
-			input.BodyPreview = string(decCap)
-			if dec, _ := mgr.InterceptRequest(r.Context(), sessionID, input, decCap, ct); dec != nil {
-				if strings.ToLower(dec.Action) == "drop" {
-					writeError(w, http.StatusForbidden, "INTERCEPT_DROPPED", "request dropped by interceptor", nil)
-					_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), strPtr("dropped by interceptor"))
-					d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
-					d.Metrics.ActiveSessions.Dec()
-					return
-				}
-				if dec.Method != "" {
-					r.Method = dec.Method
-				}
-				if dec.URL != "" {
-					if u, err := url.Parse(dec.URL); err == nil {
-						if u.Scheme != "" && u.Host != "" {
-							r.URL = u
-							r.Host = u.Host
-						} else {
-							newURL := *r.URL
-							newURL.Path = u.Path
-							newURL.RawQuery = u.RawQuery
-							r.URL = &newURL
-						}
-					}
-				}
-				if dec.Headers != nil {
-					r.Header = http.Header(dec.Headers)
-				}
-				if dec.Body != nil {
-					bodyToWrite := dec.Body
-					if mgrCfg.Reencode && (origEnc == "gzip" || origEnc == "deflate") {
-						if encBody, ok := encodeForIntercept(dec.Body, origEnc); ok {
-							bodyToWrite = encBody
-							r.Header.Set("Content-Encoding", origEnc)
-						} else {
-							r.Header.Del("Content-Encoding")
-						}
-					} else {
-						r.Header.Del("Content-Encoding")
-					}
-					r.Body = io.NopCloser(bytes.NewReader(bodyToWrite))
-					r.ContentLength = int64(len(bodyToWrite))
-					r.Header.Del("Transfer-Encoding")
-					r.Header.Set("Content-Length", strconv.Itoa(len(bodyToWrite)))
-				}
-			}
-		}
-	}
-
-	// Apply upload throttling to client->upstream if enabled
-	if d.Cfg.ThrottleEnabled && (d.Cfg.ThrottleUpKbps > 0 || d.Cfg.ThrottlePacketLoss > 0) && r.Body != nil {
-		bps := kbpsToBytesPerSec(d.Cfg.ThrottleUpKbps)
-		r.Body = io.NopCloser(wrapReaderThrottleLoss(r.Body, bps, d.Cfg.ThrottlePacketLoss))
-	}
-
 	// Attach httptrace to catch milestones (write times atomically; parallel dial may trigger concurrently)
 	r = r.WithContext(httptrace.WithClientTrace(r.Context(), &httptrace.ClientTrace{
 		DNSStart: func(info httptrace.DNSStartInfo) {
-			atomic.CompareAndSwapInt64(&tDNSNs, 0, time.Now().UnixNano())
+			atomic.CompareAndSwapInt64(&flow.dnsStartNs, 0, time.Now().UnixNano())
 		},
 		ConnectStart: func(network, addr string) {
-			atomic.CompareAndSwapInt64(&tConnStartNs, 0, time.Now().UnixNano())
+			atomic.CompareAndSwapInt64(&flow.connectStartNs, 0, time.Now().UnixNano())
 		},
 		TLSHandshakeStart: func() {
-			atomic.CompareAndSwapInt64(&tTLSStartNs, 0, time.Now().UnixNano())
+			atomic.CompareAndSwapInt64(&flow.tlsStartNs, 0, time.Now().UnixNano())
 		},
 		GotFirstResponseByte: func() {
-			atomic.CompareAndSwapInt64(&tFirstByteNs, 0, time.Now().UnixNano())
+			atomic.CompareAndSwapInt64(&flow.firstResponseNs, 0, time.Now().UnixNano())
 		},
 	}))
-
-	// Standard forwarding headers (optional in stealth mode)
-	if !stealth {
-		// X-Forwarded-For — client IP
-		if ip := clientHost(r.RemoteAddr); ip != "" {
-			r.Header.Set("X-Forwarded-For", ip)
-		}
-		// X-Forwarded-Proto — as received (client's scheme)
-		if r.TLS != nil {
-			r.Header.Set("X-Forwarded-Proto", "https")
-		} else {
-			r.Header.Set("X-Forwarded-Proto", "http")
-		}
-		// Via — indicates proxy
-		r.Header.Set("Via", "network-debugger")
-	}
-
-	// Serve
-	proxy.ServeHTTP(w, r)
-	// Always close session after serving
-	if !hadError {
-		_ = d.Svc.SetClosed(contextWithNoCancel(), sessionID, time.Now().UTC(), nil)
-	}
-	d.broadcastMonitorEvent(domain.MonitorEvent{Type: "session_ended", ID: sessionID})
-	d.Metrics.ActiveSessions.Dec()
+	flow.request = r
+	flow.serve(w)
 }
 
 func removeHopHeaders(h http.Header) {
-	hop := []string{"Connection", "Proxy-Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade"}
-	for _, k := range hop {
-		h.Del(k)
-	}
+	proxyhttp.RemoveHopHeaders(h)
 }
 
 // (moved to preview.go) var previewMaxBytes = 1024
@@ -1053,6 +637,14 @@ func tryCompactJSON(b []byte) string {
 		return string(out)
 	}
 	return ""
+}
+
+func cloneURL(u *url.URL) *url.URL {
+	if u == nil {
+		return nil
+	}
+	out := *u
+	return &out
 }
 
 // augmentPreviewWithTimings injects {timings:{ttfbMs,totalMs}} into JSON preview.

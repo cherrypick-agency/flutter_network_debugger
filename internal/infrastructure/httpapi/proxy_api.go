@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
-	pruntime "network-debugger/internal/infrastructure/proxyruntime"
 )
 
 type proxyCfgDTO struct {
@@ -26,26 +24,14 @@ type proxyCfgDTO struct {
 }
 
 func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
-	if d.ProxySvc == nil || d.ProxyRt == nil {
-		writeError(w, http.StatusServiceUnavailable, "FEATURE_DISABLED", "proxy feature not available", nil)
-		return
-	}
+	service := newProxyConfigAdminService(d)
 	switch r.Method {
 	case http.MethodGet:
-		pc, err := d.ProxySvc.Load(contextWithNoCancel())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "LOAD_FAILED", err.Error(), nil)
+		out, apiErr := service.load(contextWithNoCancel())
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
-		out := proxyCfgDTO{}
-		out.Forward.Enabled = pc.ForwardEnabled
-		out.Forward.Addr = pc.ForwardAddr
-		out.Forward.Port = addrPort(pc.ForwardAddr)
-		out.Socks.Enabled = pc.SocksEnabled
-		out.Socks.Addr = pc.SocksAddr
-		out.Socks.Port = addrPort(pc.SocksAddr)
-		out.Socks.AuthMode = pc.SocksAuthMode
-		// don't return user/pass, only if set and explicitly needed – omit for UX simplicity
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
 		return
@@ -55,76 +41,11 @@ func (d *Deps) handleV1ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "BAD_JSON", "invalid json", nil)
 			return
 		}
-		// Validation
-		if in.Forward.Port < 0 || in.Forward.Port > 65535 || in.Socks.Port < 0 || in.Socks.Port > 65535 {
-			writeError(w, http.StatusBadRequest, "BAD_PORT", "port must be 0..65535", nil)
+		out, apiErr := service.saveAndApply(contextWithNoCancel(), in)
+		if apiErr != nil {
+			writeSessionAPIError(w, apiErr)
 			return
 		}
-		if in.Socks.AuthMode != "" && in.Socks.AuthMode != "none" && in.Socks.AuthMode != "userpass" {
-			writeError(w, http.StatusBadRequest, "BAD_AUTH_MODE", "authMode must be none or userpass", nil)
-			return
-		}
-		// Don't allow accidentally putting SOCKS and forward on the same port:
-		// in that case clients will successfully connect via TCP, but HTTP to proxy port won't work.
-		if in.Forward.Enabled && in.Socks.Enabled && in.Forward.Port > 0 && in.Forward.Port == in.Socks.Port {
-			writeError(w, http.StatusBadRequest, "PORT_CONFLICT", "forward and socks ports must be different", nil)
-			return
-		}
-
-		pc, err := d.ProxySvc.Load(contextWithNoCancel())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "LOAD_FAILED", err.Error(), nil)
-			return
-		}
-		pc.ForwardEnabled = in.Forward.Enabled
-		if in.Forward.Port > 0 {
-			pc.ForwardAddr = ":" + strconv.Itoa(in.Forward.Port)
-		} else if strings.TrimSpace(in.Forward.Addr) != "" {
-			pc.ForwardAddr = strings.TrimSpace(in.Forward.Addr)
-		}
-		pc.SocksEnabled = in.Socks.Enabled
-		if in.Socks.Port > 0 {
-			pc.SocksAddr = ":" + strconv.Itoa(in.Socks.Port)
-		} else if strings.TrimSpace(in.Socks.Addr) != "" {
-			pc.SocksAddr = strings.TrimSpace(in.Socks.Addr)
-		}
-		if in.Socks.AuthMode != "" {
-			pc.SocksAuthMode = in.Socks.AuthMode
-		}
-		if in.Socks.User != "" {
-			pc.SocksUser = in.Socks.User
-		}
-		if in.Socks.Pass != "" {
-			pc.SocksPass = in.Socks.Pass
-		}
-		// Save and apply
-		saved, err := d.ProxySvc.Save(contextWithNoCancel(), pc)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "SAVE_FAILED", err.Error(), nil)
-			return
-		}
-		if err := d.ProxyRt.Apply(contextWithNoCancel(), pruntime.ApplyConfig{
-			ForwardEnabled: saved.ForwardEnabled,
-			ForwardAddr:    saved.ForwardAddr,
-			SocksEnabled:   saved.SocksEnabled,
-			SocksAddr:      saved.SocksAddr,
-			SocksAuthMode:  saved.SocksAuthMode,
-			SocksUser:      saved.SocksUser,
-			SocksPass:      saved.SocksPass,
-		}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { d.handleForwardOrNotFound(w, r) })); err != nil {
-			writeError(w, http.StatusInternalServerError, "APPLY_FAILED", err.Error(), nil)
-			return
-		}
-
-		// Respond with current configuration
-		out := proxyCfgDTO{}
-		out.Forward.Enabled = saved.ForwardEnabled
-		out.Forward.Addr = saved.ForwardAddr
-		out.Forward.Port = addrPort(saved.ForwardAddr)
-		out.Socks.Enabled = saved.SocksEnabled
-		out.Socks.Addr = saved.SocksAddr
-		out.Socks.Port = addrPort(saved.SocksAddr)
-		out.Socks.AuthMode = saved.SocksAuthMode
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
 		return

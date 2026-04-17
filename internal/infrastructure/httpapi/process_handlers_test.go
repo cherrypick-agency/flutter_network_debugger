@@ -343,6 +343,19 @@ func TestHandleV1ProcessConfig_InvalidMethod(t *testing.T) {
 	}
 }
 
+func TestHandleV1ProcessConfig_FeatureDisabled(t *testing.T) {
+	deps := &Deps{ProcessSvc: nil}
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/process/config", nil)
+	w := httptest.NewRecorder()
+
+	deps.handleV1ProcessConfig(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 // Composer 1.
 // Tests for handleV1ProcessHelperStatus
 
@@ -414,6 +427,19 @@ func TestHandleV1ProcessHelperStatus_InvalidMethod(t *testing.T) {
 	}
 }
 
+func TestHandleV1ProcessHelperStatus_FeatureDisabled(t *testing.T) {
+	deps := &Deps{ProcessSvc: nil}
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/process/helper/status", nil)
+	w := httptest.NewRecorder()
+
+	deps.handleV1ProcessHelperStatus(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 // Composer 1.
 // Tests for handleV1ProcessHelperInstall
 
@@ -478,5 +504,18 @@ func TestHandleV1ProcessHelperInstall_InvalidMethod(t *testing.T) {
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestHandleV1ProcessHelperInstall_FeatureDisabled(t *testing.T) {
+	deps := &Deps{ProcessSvc: nil}
+
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/process/helper/install", nil)
+	w := httptest.NewRecorder()
+
+	deps.handleV1ProcessHelperInstall(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }

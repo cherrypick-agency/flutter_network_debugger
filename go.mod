@@ -3,7 +3,7 @@ module network-debugger
 go 1.24.0
 
 require (
-	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
+	github.com/777genius/proxykit v0.1.1
 	github.com/extism/go-pdk v1.1.3
 	github.com/extism/go-sdk v1.7.1
 	github.com/glebarez/sqlite v1.11.0
@@ -17,12 +17,12 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/ulikunitz/xz v0.5.15
 	github.com/zishang520/socket.io/v2 v2.0.0
-	golang.org/x/net v0.33.0
 	gorm.io/gorm v1.25.7
 )
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -57,6 +57,7 @@ require (
 	github.com/zishang520/engine.io-go-parser v1.2.0 // indirect
 	github.com/zishang520/socket.io-go-parser v1.0.2 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
+	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect

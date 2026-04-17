@@ -19,7 +19,7 @@ func TestManager_Apply_StartStop(t *testing.T) {
 	if err := m.Apply(context.Background(), ApplyConfig{ForwardEnabled: true, ForwardAddr: "127.0.0.1:0"}, h); err != nil {
 		t.Fatalf("apply start: %v", err)
 	}
-	if m.fwdLn == nil {
+	if m.ForwardAddr() == "" {
 		t.Fatalf("no forward listener")
 	}
 
@@ -27,7 +27,7 @@ func TestManager_Apply_StartStop(t *testing.T) {
 	if err := m.Apply(context.Background(), ApplyConfig{ForwardEnabled: true, ForwardAddr: "127.0.0.1:0", SocksEnabled: true, SocksAddr: "127.0.0.1:0"}, h); err != nil {
 		t.Fatalf("apply update: %v", err)
 	}
-	if m.socksLn == nil {
+	if m.SocksAddr() == "" {
 		t.Fatalf("no socks listener")
 	}
 

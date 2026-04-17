@@ -18,10 +18,12 @@ var testWASMFixtures = struct {
 	Noop      string
 	AddHeader string
 	Failing   string
+	Timeout   string
 }{
 	Noop:      "../../../../e2e/testdata/scripts/wasm/noop.wasm",
 	AddHeader: "../../../../e2e/testdata/scripts/wasm/add_header.wasm",
 	Failing:   "../../../../e2e/testdata/scripts/wasm/failing.wasm",
+	Timeout:   "../../../../e2e/testdata/scripts/wasm/timeout.wasm",
 }
 
 // createTestScript creates a test script with WASM code
@@ -63,6 +65,12 @@ func createSuccessScript(t *testing.T) domain.Script {
 func createFailingScript(t *testing.T) domain.Script {
 	t.Helper()
 	return createTestScript(t, testWASMFixtures.Failing)
+}
+
+// createTimeoutScript creates a script that spins until the runtime deadline is hit.
+func createTimeoutScript(t *testing.T) domain.Script {
+	t.Helper()
+	return createTestScript(t, testWASMFixtures.Timeout)
 }
 
 // createSlowScript creates a script that takes time to execute
@@ -128,7 +136,7 @@ func executeScriptWithContext(t *testing.T, pool *PluginPool, input []byte, ctx 
 	}()
 
 	var output []byte
-	_, output, execErr = instance.plugin.Call("process", input)
+	_, output, execErr = instance.plugin.CallWithContext(ctx, "process", input)
 
 	return output, execErr
 }

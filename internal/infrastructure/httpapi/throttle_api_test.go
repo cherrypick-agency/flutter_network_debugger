@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,13 +14,27 @@ import (
 	"network-debugger/internal/infrastructure/config"
 )
 
-type mockSettingsRepoForThrottle struct{}
+type mockSettingsRepoForThrottle struct {
+	loadValue sdomain.RuntimeSettings
+	loadErr   error
+	saveErr   error
+	saved     *sdomain.RuntimeSettings
+}
 
 func (m *mockSettingsRepoForThrottle) Load(ctx context.Context) (sdomain.RuntimeSettings, error) {
-	return sdomain.RuntimeSettings{}, nil
+	if m.loadErr != nil {
+		return sdomain.RuntimeSettings{}, m.loadErr
+	}
+	return m.loadValue, nil
 }
 
 func (m *mockSettingsRepoForThrottle) Save(ctx context.Context, s sdomain.RuntimeSettings) error {
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+	copy := s
+	m.saved = &copy
+	m.loadValue = copy
 	return nil
 }
 
@@ -103,6 +118,54 @@ func TestHandleV1Throttle_GET(t *testing.T) {
 	}
 }
 
+func TestHandleV1Throttle_GET_PrefersStoredRuntime(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{
+		loadValue: sdomain.RuntimeSettings{
+			ThrottleEnabled:       true,
+			ThrottleDownKbps:      1500,
+			ThrottleUpKbps:        700,
+			ThrottlePacketLoss:    4,
+			ThrottleLatencyMs:     80,
+			ThrottleLatencyJitter: 25,
+			ThrottleOffline:       true,
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, &mockThrottleProfilesRepo{})
+	d := &Deps{
+		Cfg: config.Config{
+			ThrottleEnabled:       false,
+			ThrottleDownKbps:      100,
+			ThrottleUpKbps:        100,
+			ThrottlePacketLoss:    1,
+			ThrottleLatencyMs:     5,
+			ThrottleLatencyJitter: 1,
+			ThrottleOffline:       false,
+		},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/throttle", nil)
+	w := httptest.NewRecorder()
+
+	d.handleV1Throttle(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp throttleDTO
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if !resp.Enabled || resp.DownKbps != 1500 || resp.UpKbps != 700 || resp.PacketLossPct != 4 {
+		t.Fatalf("unexpected runtime overlay: %+v", resp)
+	}
+	if resp.LatencyMs != 80 || resp.LatencyJitter != 25 || !resp.Offline {
+		t.Fatalf("unexpected latency/offline overlay: %+v", resp)
+	}
+}
+
 func TestHandleV1Throttle_POST(t *testing.T) {
 	d := &Deps{
 		Cfg: config.Config{},
@@ -136,6 +199,54 @@ func TestHandleV1Throttle_POST(t *testing.T) {
 	}
 	if d.Cfg.ThrottleUpKbps != 1500 {
 		t.Errorf("ThrottleUpKbps = %d, want 1500", d.Cfg.ThrottleUpKbps)
+	}
+}
+
+func TestHandleV1Throttle_POST_PreservesResponseDelaySettings(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{
+		loadValue: sdomain.RuntimeSettings{
+			ResponseDelayMs:    175,
+			ResponseDelayMinMs: 25,
+			ResponseDelayMaxMs: 125,
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, &mockThrottleProfilesRepo{})
+	d := &Deps{
+		Cfg: config.Config{
+			ResponseDelayMs:    175,
+			ResponseDelayMinMs: 25,
+			ResponseDelayMaxMs: 125,
+		},
+		Settings: settingsSvc,
+	}
+
+	payload := throttleDTO{
+		Enabled:       true,
+		DownKbps:      2200,
+		UpKbps:        1100,
+		PacketLossPct: 3,
+		LatencyMs:     90,
+		LatencyJitter: 15,
+		Offline:       false,
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/throttle", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	d.handleV1Throttle(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if mockSettingsRepo.saved == nil {
+		t.Fatal("expected runtime settings to be saved")
+	}
+	if mockSettingsRepo.saved.ResponseDelayMs != 175 || mockSettingsRepo.saved.ResponseDelayMinMs != 25 || mockSettingsRepo.saved.ResponseDelayMaxMs != 125 {
+		t.Fatalf("response delay settings were not preserved: %+v", *mockSettingsRepo.saved)
+	}
+	if !mockSettingsRepo.saved.ThrottleEnabled || mockSettingsRepo.saved.ThrottleDownKbps != 2200 || mockSettingsRepo.saved.ThrottleUpKbps != 1100 {
+		t.Fatalf("throttle settings were not saved: %+v", *mockSettingsRepo.saved)
 	}
 }
 
@@ -194,6 +305,29 @@ func TestHandleV1ThrottleProfiles_GET_NoSettings(t *testing.T) {
 	}
 }
 
+func TestHandleV1ThrottleProfiles_GET_ListFailure(t *testing.T) {
+	mockSettingsRepo := &mockSettingsRepoForThrottle{}
+	mockProfilesRepo := &mockThrottleProfilesRepo{
+		listFunc: func(ctx context.Context) ([]sdomain.ThrottleProfile, error) {
+			return nil, errors.New("boom")
+		},
+	}
+	settingsSvc := settingsuc.NewService(mockSettingsRepo, mockProfilesRepo)
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: settingsSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/_api/v1/throttle/profiles", nil)
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
 func TestHandleV1ThrottleProfiles_POST_Success(t *testing.T) {
 	mockSettingsRepo := &mockSettingsRepoForThrottle{}
 	mockProfilesRepo := &mockThrottleProfilesRepo{
@@ -245,6 +379,23 @@ func TestHandleV1ThrottleProfiles_POST_BadJSON(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleV1ThrottleProfiles_POST_NoSettings(t *testing.T) {
+	d := &Deps{
+		Cfg:      config.Config{},
+		Settings: nil,
+	}
+
+	body := bytes.NewReader([]byte(`{"name":"3G"}`))
+	req := httptest.NewRequest(http.MethodPost, "/_api/v1/throttle/profiles", body)
+	w := httptest.NewRecorder()
+
+	d.handleV1ThrottleProfiles(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }
 
