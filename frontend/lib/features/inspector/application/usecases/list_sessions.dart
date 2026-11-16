@@ -4,6 +4,22 @@ import '../../domain/repositories/inspector_repository.dart';
 class ListSessionsUseCase {
   ListSessionsUseCase(this._repo);
   final InspectorRepository _repo;
-  Future<List<Session>> call({String? q, String? target, List<String>? tags}) =>
-      _repo.listSessions(q: q, target: target, tags: tags);
+  Future<List<Session>> call({
+    String? q,
+    String? target,
+    List<String>? tags,
+    Set<String>? types,
+    Set<String>? statusGroups,
+    String captureScope = 'current',
+    bool includePaused = false,
+  }) =>
+      _repo.listSessions(
+        q: q,
+        target: target,
+        tags: tags,
+        types: types,
+        statusGroups: statusGroups,
+        captureScope: captureScope,
+        includePaused: includePaused,
+      );
 }

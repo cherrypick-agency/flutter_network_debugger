@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobx/mobx.dart';
 import 'package:frontend/features/inspector/application/stores/sessions_store.dart';
+import 'package:frontend/features/inspector/application/stores/home_ui_store.dart';
 import 'package:frontend/features/inspector/application/usecases/list_sessions.dart';
 import 'package:frontend/features/inspector/domain/repositories/inspector_repository.dart';
 import 'package:frontend/features/inspector/domain/entities/session.dart';
@@ -10,12 +11,27 @@ import 'package:frontend/features/filters/application/stores/sessions_filters_st
 import 'package:frontend/features/inspector/presentation/utils/sessions_filtering.dart';
 
 class _FakeRepo implements InspectorRepository {
+  Set<String>? lastTypes;
+  Set<String>? lastStatusGroups;
+  String? lastScope;
+  bool? lastIncludePaused;
+
   @override
   Future<List<Session>> listSessions({
     String? q,
     String? target,
     List<String>? tags,
-  }) async => [];
+    Set<String>? types,
+    Set<String>? statusGroups,
+    String captureScope = 'current',
+    bool includePaused = false,
+  }) async {
+    lastTypes = types;
+    lastStatusGroups = statusGroups;
+    lastScope = captureScope;
+    lastIncludePaused = includePaused;
+    return [];
+  }
   @override
   Future<List<Map<String, dynamic>>> aggregateSessions({
     String groupBy = 'domain',
@@ -53,6 +69,26 @@ class _FakeRepo implements InspectorRepository {
 }
 
 void main() {
+  test('session load forwards capture scope and quick filters', () async {
+    final ui = HomeUiStore();
+    ui.setCaptureScope('all');
+    ui.setIncludePaused(true);
+    ui.toggleQuickType('graphql');
+    ui.toggleQuickStatusGroup('5xx');
+    final repo = _FakeRepo();
+    final sessionStore = SessionsStore(ListSessionsUseCase(repo), uiStore: ui);
+
+    await sessionStore.load();
+    expect(repo.lastScope, 'all');
+    expect(repo.lastIncludePaused, isTrue);
+    expect(repo.lastTypes, {'graphql'});
+    expect(repo.lastStatusGroups, {'5xx'});
+
+    await sessionStore.load(types: {'http'}, statusGroups: {'4xx'});
+    expect(repo.lastTypes, {'http'});
+    expect(repo.lastStatusGroups, {'4xx'});
+  });
+
   late SessionsStore store;
   late SessionsFiltersStore filters;
   late Map<String, Map<String, dynamic>> httpMeta;

@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:app_http_client/application/app_http_client.dart';
-import '../../../core/di/di.dart';
 import '../../../core/network/error_utils.dart';
-import '../../inspector/application/stores/home_ui_store.dart';
 import '../domain/repositories/inspector_repository.dart';
 import '../domain/entities/session.dart';
 import '../domain/entities/frame.dart';
@@ -19,25 +17,10 @@ class InspectorRepositoryImpl implements InspectorRepository {
     List<String>? tags,
     Set<String>? types,
     Set<String>? statusGroups,
+    String captureScope = 'current',
+    bool includePaused = false,
   }) async {
     try {
-      // Build capture scope params via HomeUiStore
-      String scope = '';
-      bool includePaused = false;
-      try {
-        final ui = sl<HomeUiStore>();
-        scope = ui.captureScope.value;
-        includePaused = ui.includePaused.value;
-      } catch (_) {}
-      // Collect quick filters directly from UI store to avoid proliferating parameters
-      Set<String> uiTypes = const {};
-      Set<String> uiStatusGroups = const {};
-      try {
-        final ui = sl<HomeUiStore>();
-        uiTypes = ui.quickTypes.toSet();
-        uiStatusGroups = ui.quickStatusGroups.toSet();
-      } catch (_) {}
-
       final res = await _api.get(
         host: null,
         path: '/_api/v1/sessions',
@@ -46,16 +29,14 @@ class InspectorRepositoryImpl implements InspectorRepository {
           if (q != null && q.isNotEmpty) 'q': q,
           if (target != null && target.isNotEmpty) '_target': target,
           if (tags != null && tags.isNotEmpty) 'tags': tags.join(','),
-          if (scope == 'all') 'captures': 'all',
-          if (scope != 'all') 'captureId': 'current',
+          if (captureScope == 'all') 'captures': 'all',
+          if (captureScope != 'all') 'captureId': 'current',
           if (includePaused) 'includeUnassigned': 'true',
-          if ((types != null && types.isNotEmpty) || uiTypes.isNotEmpty)
-            'types': (types ?? uiTypes).join(','),
-          if ((statusGroups != null && statusGroups.isNotEmpty) ||
-              uiStatusGroups.isNotEmpty)
-            'status': (statusGroups ?? uiStatusGroups).join(','),
+          if (types != null && types.isNotEmpty) 'types': types.join(','),
+          if (statusGroups != null && statusGroups.isNotEmpty)
+            'status': statusGroups.join(','),
           // Enable deep GraphQL scan only when explicitly selected
-          if (((types ?? uiTypes).contains('graphql'))) 'scan': 'graphql',
+          if (types?.contains('graphql') ?? false) 'scan': 'graphql',
         },
       );
       final data = (res.data is Map<String, dynamic>)
