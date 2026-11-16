@@ -217,6 +217,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
 
   /// Export sessions to HAR format
   /// Returns the URL to download the HAR file
+  @override
   Future<String> exportHAR({
     List<String>? sessionIds,
     bool includeBodies = true,
@@ -248,6 +249,7 @@ class InspectorRepositoryImpl implements InspectorRepository {
   /// Parses the HAR JSON string and sends it to the backend.
   /// Validation is performed in the store before calling this method.
   /// Returns statistics about the import operation.
+  @override
   Future<Map<String, dynamic>> importHAR(
     String harJson, {
     required String mode,

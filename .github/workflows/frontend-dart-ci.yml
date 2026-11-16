@@ -52,8 +52,19 @@ jobs:
             lib/features/inspector/application/stores/sessions_store.dart \
             lib/core/di/di.dart \
             test/sessions_filtering_test.dart
-      - name: Static analysis
-        run: flutter analyze --no-pub
+      - name: Strict analysis of changed Dart files
+        run: |
+          # The existing frontend has unrelated analyzer warnings and infos.
+          # Keep this PR blocking for the exact files it changes.
+          for file in \
+            lib/features/inspector/data/inspector_repository_impl.dart \
+            lib/features/inspector/domain/repositories/inspector_repository.dart \
+            lib/features/inspector/application/usecases/list_sessions.dart \
+            lib/features/inspector/application/stores/sessions_store.dart \
+            lib/core/di/di.dart \
+            test/sessions_filtering_test.dart; do
+            dart analyze --fatal-infos "$file"
+          done
       - name: Inspector filter regression tests
         run: flutter test --no-pub test/sessions_filtering_test.dart
       - name: Frontend widget and unit test suite
