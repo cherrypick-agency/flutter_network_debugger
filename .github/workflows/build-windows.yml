@@ -13,7 +13,9 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    # webview_windows uses a vendored experimental/coroutine header rejected by VS 2026.
+    # Windows 2022 retains MSVC 17.x until the upstream plugin migrates.
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
