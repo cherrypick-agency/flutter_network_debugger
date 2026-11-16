@@ -116,10 +116,7 @@ Future<void> setupDI({
   );
   // Stores
   sl.registerLazySingleton<SessionsStore>(
-    () => SessionsStore(
-      sl<ListSessionsUseCase>(),
-      uiStore: sl<HomeUiStore>(),
-    ),
+    () => SessionsStore(sl<ListSessionsUseCase>(), uiStore: sl<HomeUiStore>()),
   );
   sl.registerLazySingleton<SessionDetailsStore>(
     () => SessionDetailsStore(sl<ListFramesUseCase>(), sl<ListEventsUseCase>()),

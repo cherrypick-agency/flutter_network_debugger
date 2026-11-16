@@ -12,7 +12,7 @@ class SessionsStore = _SessionsStore with _$SessionsStore;
 
 abstract class _SessionsStore with Store {
   _SessionsStore(this._listSessions, {HomeUiStore? uiStore})
-      : _uiStore = uiStore;
+    : _uiStore = uiStore;
   final ListSessionsUseCase _listSessions;
   final HomeUiStore? _uiStore;
 

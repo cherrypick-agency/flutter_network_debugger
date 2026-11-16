@@ -32,6 +32,7 @@ class _FakeRepo implements InspectorRepository {
     lastIncludePaused = includePaused;
     return [];
   }
+
   @override
   Future<List<Map<String, dynamic>>> aggregateSessions({
     String groupBy = 'domain',

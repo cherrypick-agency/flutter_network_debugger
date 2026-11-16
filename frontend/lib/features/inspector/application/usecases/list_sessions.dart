@@ -12,14 +12,13 @@ class ListSessionsUseCase {
     Set<String>? statusGroups,
     String captureScope = 'current',
     bool includePaused = false,
-  }) =>
-      _repo.listSessions(
-        q: q,
-        target: target,
-        tags: tags,
-        types: types,
-        statusGroups: statusGroups,
-        captureScope: captureScope,
-        includePaused: includePaused,
-      );
+  }) => _repo.listSessions(
+    q: q,
+    target: target,
+    tags: tags,
+    types: types,
+    statusGroups: statusGroups,
+    captureScope: captureScope,
+    includePaused: includePaused,
+  );
 }
