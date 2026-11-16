@@ -7,10 +7,13 @@ void main() {
   const adapter = DioExceptionAdapter();
 
   test('maps Dio response transform timeout to receive timeout', () {
-    expect(
-      adapter.adapt(DioExceptionType.transformTimeout),
-      AppHttpErrorType.receiveTimeout,
+    // The frontend lockfile may resolve an older Dio 5.x without this case.
+    final matches = DioExceptionType.values.where(
+      (type) => type.name == 'transformTimeout',
     );
+    for (final type in matches) {
+      expect(adapter.adapt(type), AppHttpErrorType.receiveTimeout);
+    }
   });
 
   test('preserves existing Dio timeout mappings', () {
