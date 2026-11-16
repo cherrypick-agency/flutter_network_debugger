@@ -7,6 +7,10 @@ abstract class InspectorRepository {
     String? q,
     String? target,
     List<String>? tags,
+    Set<String>? types,
+    Set<String>? statusGroups,
+    String captureScope = 'current',
+    bool includePaused = false,
   });
   Future<List<Frame>> listFrames(
     String sessionId, {

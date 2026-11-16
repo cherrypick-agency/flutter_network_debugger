@@ -1,0 +1,71 @@
+name: Frontend Dart/Flutter CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-dart-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-dart-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-dart-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    name: Frontend Dart analyze and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Check formatting of changed Dart sources
+        run: |
+          dart format \
+            lib/features/inspector/data/inspector_repository_impl.dart \
+            lib/features/inspector/domain/repositories/inspector_repository.dart \
+            lib/features/inspector/application/usecases/list_sessions.dart \
+            lib/features/inspector/application/stores/sessions_store.dart \
+            lib/core/di/di.dart \
+            test/sessions_filtering_test.dart
+          # Log the formatter's precise diff for review. Never commit from CI.
+          git diff --exit-code -- \
+            lib/features/inspector/data/inspector_repository_impl.dart \
+            lib/features/inspector/domain/repositories/inspector_repository.dart \
+            lib/features/inspector/application/usecases/list_sessions.dart \
+            lib/features/inspector/application/stores/sessions_store.dart \
+            lib/core/di/di.dart \
+            test/sessions_filtering_test.dart
+      - name: Strict analysis of changed Dart files
+        run: |
+          # The existing frontend has unrelated analyzer warnings and infos.
+          # Keep this PR blocking for the exact files it changes.
+          for file in \
+            lib/features/inspector/data/inspector_repository_impl.dart \
+            lib/features/inspector/domain/repositories/inspector_repository.dart \
+            lib/features/inspector/application/usecases/list_sessions.dart \
+            lib/features/inspector/application/stores/sessions_store.dart \
+            lib/core/di/di.dart \
+            test/sessions_filtering_test.dart; do
+            dart analyze --fatal-infos "$file"
+          done
+      - name: Inspector filter regression tests
+        run: flutter test --no-pub test/sessions_filtering_test.dart
+      - name: Frontend widget and unit test suite
+        run: flutter test --no-pub

@@ -11,8 +11,10 @@ part 'sessions_store.g.dart';
 class SessionsStore = _SessionsStore with _$SessionsStore;
 
 abstract class _SessionsStore with Store {
-  _SessionsStore(this._listSessions);
+  _SessionsStore(this._listSessions, {HomeUiStore? uiStore})
+    : _uiStore = uiStore;
   final ListSessionsUseCase _listSessions;
+  final HomeUiStore? _uiStore;
 
   @observable
   ObservableList<Session> items = ObservableList.of([]);
@@ -65,7 +67,15 @@ abstract class _SessionsStore with Store {
     if (loading) return;
     loading = true;
     try {
-      final res = await _listSessions(q: q, target: target, tags: tags);
+      final res = await _listSessions(
+        q: q,
+        target: target,
+        tags: tags,
+        types: types ?? _uiStore?.quickTypes.toSet(),
+        statusGroups: statusGroups ?? _uiStore?.quickStatusGroups.toSet(),
+        captureScope: _uiStore?.captureScope.value ?? 'current',
+        includePaused: _uiStore?.includePaused.value ?? false,
+      );
       items = ObservableList.of(res);
     } catch (e, st) {
       final msg = resolveErrorMessage(e, st);

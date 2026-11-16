@@ -6,6 +6,10 @@ class DioExceptionAdapter {
   const DioExceptionAdapter();
 
   AppHttpErrorType adapt(DioExceptionType e) {
+    // Dio added transformTimeout after 5.7; keep both lockfiles compatible.
+    if (e.name == 'transformTimeout') {
+      return AppHttpErrorType.receiveTimeout;
+    }
     switch (e) {
       case DioExceptionType.connectionTimeout:
         return AppHttpErrorType.connectionTimeout;
@@ -22,6 +26,8 @@ class DioExceptionAdapter {
       case DioExceptionType.connectionError:
         return AppHttpErrorType.connectionError;
       case DioExceptionType.unknown:
+        return AppHttpErrorType.unknown;
+      default:
         return AppHttpErrorType.unknown;
     }
   }

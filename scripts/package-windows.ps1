@@ -48,7 +48,7 @@ Write-Host "`nStep 3/5: Building Flutter Windows app..." -ForegroundColor Yellow
 Set-Location frontend
 flutter clean
 flutter pub get
-flutter build windows --release
+flutter build windows --release --no-tree-shake-icons
 
 $BUILD_DIR = "build\windows\x64\runner\Release"
 if (-not (Test-Path $BUILD_DIR)) {
