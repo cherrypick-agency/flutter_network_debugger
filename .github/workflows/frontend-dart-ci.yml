@@ -37,7 +37,15 @@ jobs:
         run: flutter pub get
       - name: Check formatting of changed Dart sources
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
+            lib/features/inspector/data/inspector_repository_impl.dart \
+            lib/features/inspector/domain/repositories/inspector_repository.dart \
+            lib/features/inspector/application/usecases/list_sessions.dart \
+            lib/features/inspector/application/stores/sessions_store.dart \
+            lib/core/di/di.dart \
+            test/sessions_filtering_test.dart
+          # Log the formatter's precise diff for review. Never commit from CI.
+          git diff --exit-code -- \
             lib/features/inspector/data/inspector_repository_impl.dart \
             lib/features/inspector/domain/repositories/inspector_repository.dart \
             lib/features/inspector/application/usecases/list_sessions.dart \
