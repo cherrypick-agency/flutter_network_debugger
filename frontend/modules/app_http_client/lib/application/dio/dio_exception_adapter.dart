@@ -13,6 +13,9 @@ class DioExceptionAdapter {
         return AppHttpErrorType.sendTimeout;
       case DioExceptionType.receiveTimeout:
         return AppHttpErrorType.receiveTimeout;
+      case DioExceptionType.transformTimeout:
+        // Map response-transform timeouts to the existing receive timeout type.
+        return AppHttpErrorType.receiveTimeout;
       case DioExceptionType.cancel:
         return AppHttpErrorType.cancel;
       case DioExceptionType.badCertificate:
