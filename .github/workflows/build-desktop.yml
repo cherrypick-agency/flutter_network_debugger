@@ -112,7 +112,8 @@ jobs:
   # This allows independent execution and better CI/CD organization
 
   build-linux:
-    runs-on: ubuntu-latest
+    # Flutter secure storage's vendored C++ header is not Clang-20 clean on Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         arch: [amd64]
